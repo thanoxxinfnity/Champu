@@ -1,0 +1,180 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { renderMarkdown } from './markdown';
+import type { ChatMessageView } from '@/lib/store';
+
+function Avatar({ role, lane }: { role: string; lane?: 'A' | 'B' }) {
+  const isUser = role === 'user';
+  return (
+    <div
+      className="mono flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold"
+      style={{
+        background: isUser ? 'var(--surface)' : 'color-mix(in oklab, var(--accent) 14%, var(--surface))',
+        border: `1px solid ${isUser ? 'var(--line)' : 'color-mix(in oklab, var(--accent) 30%, var(--line))'}`,
+        color: isUser ? 'var(--ink-dim)' : 'var(--accent)',
+      }}
+      title={isUser ? 'You' : `Chomugiri · Lane ${lane ?? 'A'}`}
+    >
+      {isUser ? 'YOU' : 'CHO'}
+    </div>
+  );
+}
+
+/** Collapsible chain-of-thought drawer for reasoning models. */
+function ReasoningDrawer({ reasoning, streaming }: { reasoning: string; streaming?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const lines = reasoning.split('\n').filter(Boolean).length;
+
+  return (
+    <div className="mb-2.5 overflow-hidden rounded-lg border" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors"
+        style={{ color: 'var(--ink-dim)' }}
+        aria-expanded={open}
+      >
+        <span
+          className="mono text-[10px] transition-transform duration-200"
+          style={{ transform: open ? 'rotate(90deg)' : 'none', color: 'var(--accent-alt)' }}
+          aria-hidden
+        >
+          ▶
+        </span>
+        <span className="mono text-[10.5px] uppercase tracking-[0.12em]">Reasoning</span>
+        <span className="mono text-[10px]" style={{ color: 'var(--ink-faint)' }}>
+          {streaming ? 'streaming…' : `${lines} line${lines === 1 ? '' : 's'}`}
+        </span>
+        {streaming && <span className="thinking-dot ml-auto" aria-hidden />}
+      </button>
+
+      {open && (
+        <div
+          className="mono max-h-72 overflow-y-auto whitespace-pre-wrap border-t px-3 py-2.5 text-[11.5px] leading-[1.62]"
+          style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
+        >
+          {reasoning}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AttachmentChips({ attachments }: { attachments: NonNullable<ChatMessageView['attachments']> }) {
+  return (
+    <div className="mb-2 flex flex-wrap gap-1.5">
+      {attachments.map((a) => (
+        <span
+          key={a.id}
+          className="mono flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10.5px]"
+          style={{ borderColor: 'var(--line)', background: 'var(--surface)', color: 'var(--ink-dim)' }}
+          title={`${a.kind} · ${a.bytes} bytes`}
+        >
+          {a.dataUrl && a.kind.startsWith('image/') ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={a.dataUrl} alt="" className="h-4 w-4 rounded-sm object-cover" />
+          ) : (
+            <span style={{ color: 'var(--accent)' }}>◆</span>
+          )}
+          {a.name}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export function Message({ message }: { message: ChatMessageView }) {
+  const html = useMemo(
+    () => (message.role === 'user' ? null : renderMarkdown(message.content)),
+    [message.content, message.role],
+  );
+
+  const isUser = message.role === 'user';
+
+  return (
+    <article className="flex gap-3 px-4 py-3.5">
+      <Avatar role={message.role} lane={message.lane} />
+
+      <div className="min-w-0 flex-1">
+        <div className="mb-1.5 flex flex-wrap items-center gap-2">
+          <span className="text-[12px] font-semibold">{isUser ? 'You' : 'Chomugiri'}</span>
+
+          {!isUser && message.lane && (
+            <span
+              className="mono rounded px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider"
+              style={{
+                background:
+                  message.lane === 'B'
+                    ? 'color-mix(in oklab, var(--accent) 16%, transparent)'
+                    : 'color-mix(in oklab, var(--color-indigo) 16%, transparent)',
+                color: message.lane === 'B' ? 'var(--accent)' : 'var(--color-indigo)',
+              }}
+              title={message.lane === 'B' ? 'Autonomous execution' : 'Technical discourse'}
+            >
+              Lane {message.lane}
+            </span>
+          )}
+
+          {!isUser && message.model && (
+            <span className="mono text-[10px]" style={{ color: 'var(--ink-faint)' }}>
+              {message.model.split('/').pop()}
+            </span>
+          )}
+
+          {message.durationMs != null && message.durationMs > 0 && !message.streaming && (
+            <span className="mono text-[10px]" style={{ color: 'var(--ink-faint)' }}>
+              {(message.durationMs / 1000).toFixed(1)}s
+            </span>
+          )}
+
+          {message.usage?.totalTokens != null && (
+            <span className="mono text-[10px]" style={{ color: 'var(--ink-faint)' }}>
+              {message.usage.totalTokens.toLocaleString()} tok
+            </span>
+          )}
+        </div>
+
+        {message.attachments?.length ? <AttachmentChips attachments={message.attachments} /> : null}
+
+        {message.reasoning ? (
+          <ReasoningDrawer reasoning={message.reasoning} streaming={message.streaming} />
+        ) : null}
+
+        {isUser ? (
+          <p className="whitespace-pre-wrap text-[14px] leading-[1.6]" style={{ color: 'var(--ink)' }}>
+            {message.content}
+          </p>
+        ) : (
+          <div
+            className={`prose-chomu ${message.streaming && !message.content ? '' : message.streaming ? 'stream-caret' : ''}`}
+            dangerouslySetInnerHTML={{ __html: html ?? '' }}
+          />
+        )}
+
+        {message.streaming && !message.content && !message.reasoning && (
+          <div className="flex items-center gap-1.5 py-1">
+            <span className="thinking-dot" style={{ animationDelay: '0ms' }} aria-hidden />
+            <span className="thinking-dot" style={{ animationDelay: '180ms' }} aria-hidden />
+            <span className="thinking-dot" style={{ animationDelay: '360ms' }} aria-hidden />
+          </div>
+        )}
+
+        {message.error && (
+          <div
+            className="mt-2 rounded-lg border px-3 py-2 text-[12px] leading-5"
+            style={{
+              borderColor: 'color-mix(in oklab, var(--color-rose) 40%, var(--line))',
+              background: 'color-mix(in oklab, var(--color-rose) 8%, transparent)',
+              color: 'var(--color-rose)',
+            }}
+            role="alert"
+          >
+            <span className="mono mr-1.5 text-[10px] uppercase tracking-wider">error</span>
+            {message.error}
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}

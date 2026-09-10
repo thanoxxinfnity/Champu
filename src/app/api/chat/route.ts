@@ -1,0 +1,141 @@
+import { NextRequest } from 'next/server';
+import { streamChat } from '@/lib/providers/openai-compat';
+import { nimChatConfig, resolveNimModel, hasNimKey } from '@/lib/providers/nim';
+import { pollinationsChatConfig } from '@/lib/providers/pollinations';
+import { customChatConfig } from '@/lib/providers/custom';
+import { ProviderError, type ChatRequest, type StreamFrame } from '@/lib/providers/types';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
+
+/**
+ * Unified chat gateway.
+ *
+ * Everything model-facing goes through here for three reasons:
+ *   1. NIM sends no CORS headers — a browser cannot call it directly.
+ *   2. The NIM key must never reach the client bundle.
+ *   3. One normalised SSE frame shape keeps the agent core vendor-agnostic.
+ */
+
+function encodeFrame(frame: StreamFrame): Uint8Array {
+  return new TextEncoder().encode(`data: ${JSON.stringify(frame)}\n\n`);
+}
+
+export async function POST(req: NextRequest) {
+  let body: ChatRequest;
+  try {
+    body = (await req.json()) as ChatRequest;
+  } catch {
+    return Response.json({ error: 'Request body is not valid JSON.' }, { status: 400 });
+  }
+
+  if (!Array.isArray(body.messages) || body.messages.length === 0) {
+    return Response.json({ error: '`messages` must be a non-empty array.' }, { status: 400 });
+  }
+  if (!body.model) {
+    return Response.json({ error: '`model` is required.' }, { status: 400 });
+  }
+
+  const provider = body.provider ?? 'nim';
+
+  let config;
+  let modelId = body.model;
+
+  try {
+    switch (provider) {
+      case 'nim': {
+        if (!hasNimKey()) {
+          return Response.json(
+            {
+              error:
+                'NVIDIA_NIM_API_KEY is not set on the server. Add it to .env.local, or switch the active model to Pollinations (zero-key) or a custom endpoint.',
+              code: 'nim_key_missing',
+            },
+            { status: 503 },
+          );
+        }
+        modelId = await resolveNimModel(body.model);
+        config = nimChatConfig();
+        break;
+      }
+      case 'pollinations':
+        config = pollinationsChatConfig();
+        break;
+      case 'custom': {
+        if (!body.custom?.baseUrl) {
+          return Response.json({ error: 'A custom provider request needs `custom.baseUrl`.' }, { status: 400 });
+        }
+        config = customChatConfig(body.custom);
+        break;
+      }
+      default:
+        return Response.json({ error: `Unknown provider "${provider}".` }, { status: 400 });
+    }
+  } catch (err) {
+    const pe = err as ProviderError;
+    return Response.json({ error: pe.message, code: pe.code ?? 'config_error' }, { status: pe.status ?? 400 });
+  }
+
+  // Non-streaming callers (planner, classifier) get plain JSON back.
+  if (body.stream === false) {
+    let content = '';
+    let reasoning = '';
+    let failure: StreamFrame | null = null;
+
+    for await (const frame of streamChat(config, body, modelId, req.signal)) {
+      if (frame.type === 'delta') content += frame.delta;
+      else if (frame.type === 'reasoning') reasoning += frame.delta;
+      else if (frame.type === 'error') failure = frame;
+    }
+
+    if (failure && failure.type === 'error' && !content) {
+      return Response.json(
+        { error: failure.message, code: failure.code, retryable: failure.retryable },
+        { status: failure.code?.startsWith('http_') ? Number(failure.code.slice(5)) || 502 : 502 },
+      );
+    }
+    return Response.json({ content, reasoning, model: modelId, provider });
+  }
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const push = (frame: StreamFrame) => {
+        try {
+          controller.enqueue(encodeFrame(frame));
+        } catch {
+          /* client disconnected */
+        }
+      };
+
+      push({ type: 'meta', provider, model: modelId, runId: body.runId });
+
+      try {
+        for await (const frame of streamChat(config, body, modelId, req.signal)) push(frame);
+      } catch (err) {
+        // A throw here means a bug in the transport, not an upstream refusal.
+        push({
+          type: 'error',
+          message: `Gateway failure: ${(err as Error).message}`,
+          code: 'gateway_exception',
+        });
+        push({ type: 'done', finishReason: 'error' });
+      } finally {
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
+}
