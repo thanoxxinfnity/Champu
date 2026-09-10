@@ -225,16 +225,22 @@ function ModelSwitcher() {
                 </div>
                 {list.map((model) => {
                   const isActive = model.provider === selection.provider && model.id === selection.model;
+                  const unreachable = model.origin === 'partner-only';
                   return (
                     <button
                       key={`${model.provider}:${model.id}`}
                       type="button"
+                      disabled={unreachable}
                       onClick={() => {
                         setSelection({ provider: model.provider, model: model.id });
                         setOpen(false);
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors"
-                      style={{ background: isActive ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : undefined }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors disabled:cursor-not-allowed"
+                      style={{
+                        background: isActive ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : undefined,
+                        opacity: unreachable ? 0.45 : 1,
+                      }}
+                      title={model.note}
                     >
                       <span
                         className="mono truncate text-[11.5px]"
@@ -256,6 +262,11 @@ function ModelSwitcher() {
                         {model.origin === 'alias' && (
                           <span className="mono text-[9px]" style={{ color: 'var(--ink-faint)' }} title={model.note}>
                             alias
+                          </span>
+                        )}
+                        {unreachable && (
+                          <span className="mono text-[9px]" style={{ color: 'var(--color-amber)' }} title={model.note}>
+                            partner
                           </span>
                         )}
                       </span>

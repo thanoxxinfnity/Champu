@@ -33,11 +33,13 @@ export interface ModelDescriptor {
   /** Emits `reasoning_content` deltas that feed the reasoning drawer. */
   emitsReasoning?: boolean;
   /**
-   * `catalogue` — present in the live provider catalogue at boot.
-   * `static`    — from the bundled registry, not confirmed against the live API.
-   * `alias`     — a friendly name the user asked for that resolves to `resolvesTo`.
+   * `catalogue`    — present in the live provider catalogue at boot.
+   * `static`       — from the bundled registry, not confirmed against the live API.
+   * `alias`        — a friendly name that resolves to `resolvesTo`.
+   * `partner-only` — real, but not served by the configured base URL. Selectable
+   *                  only once the user adds the partner endpoint themselves.
    */
-  origin: 'catalogue' | 'static' | 'alias';
+  origin: 'catalogue' | 'static' | 'alias' | 'partner-only';
   resolvesTo?: string;
   note?: string;
 }

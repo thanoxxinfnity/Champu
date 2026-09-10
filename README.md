@@ -14,7 +14,7 @@ endpoint you point it at.
 
 | | |
 |---|---|
-| **Models** | NVIDIA NIM (Kimi, GLM, DeepSeek-R1/V3, Nemotron, Qwen3-Coder), Pollinations.ai (zero-key), any OpenAI-compatible base URL with custom headers |
+| **Models** | NVIDIA NIM — 80 live, incl. Kimi K3, DeepSeek V4 Pro/Flash, Nemotron 3 Ultra/Super/Lightning, Muse Glimmer, GPT-OSS — plus Pollinations.ai (zero-key) and any OpenAI-compatible base URL with custom headers |
 | **Reasoning** | `reasoning_content` deltas stream into a collapsible drawer |
 | **Execution** | Terminal bridge daemon on your machine, exposed via ngrok / Cloudflare Tunnel — real `gradlew assembleDebug`, real APKs |
 | **Android** | Desktop-source analysis → Compose/Gradle project → compiled APK + source ZIP |
@@ -140,10 +140,26 @@ These are real constraints, not roadmap items:
   blocks, items, entity attributes, recipes, lang. Capabilities, mixins, block
   entities, custom dimensions, GUIs and renderers have no Bedrock equivalent. The
   converter reports coverage and names every construct it could not carry across.
-- **Model ids rotate.** `/api/models` probes NIM's live catalogue at runtime.
-  Names the brief asked for that NVIDIA does not publish (Kimi K3, GLM-5) are kept
-  as *aliases* that resolve to the newest shipping build in that family and say so
-  in the UI, rather than 404-ing at request time.
+- **The model registry is verified, not guessed.** Every NIM id shipped in
+  `registry.ts` was confirmed against a live `GET /v1/models` probe *and* a real
+  completion call. `moonshotai/kimi-k3` is real and emits `reasoning_content`.
+  `/api/models` still re-probes at runtime, because NVIDIA rotates ids constantly.
+- **GLM-5.2 is not reachable from the free endpoint.** It is listed on
+  build.nvidia.com, but `integrate.api.nvidia.com` answers **HTTP 410 Gone — end
+  of life**; it is partner-endpoint only. The switcher shows it greyed out with
+  that reason instead of letting a request fail. Add the partner base URL under
+  Settings → Custom Endpoints to use it.
+- **NVIDIA's hosted rerankers are retired** (HTTP 410, verified). The retrieval
+  pipeline ranks by embedding cosine similarity and runs a cross-encoder pass only
+  when `NVIDIA_NIM_RERANK_URL` points at a self-hosted reranker NIM.
+- **Embedding entitlements are per-account.** An id can appear in `/v1/models` and
+  still 404 with "not found for account". The client walks a candidate list and
+  caches whichever answers — `nvidia/nemotron-3-embed-1b` (2048 dims) on the key
+  this was built against.
+- **Free HTML search rate-limits hard.** Search is a provider chain: Brave,
+  Tavily, Serper or SearXNG when a key is configured, then Bing HTML, DuckDuckGo
+  HTML and Wikipedia as best-effort fallbacks. Every attempt is reported in the
+  retrieval notes, so a dead pipeline is diagnosable rather than silent.
 - **Pollinations' keyless tier is rate-limited.** It returns `402` inside an
   HTTP 500. Chomugiri surfaces that as an actionable message and points at
   `POLLINATIONS_TOKEN` or another provider instead of retrying into the wall.
@@ -159,11 +175,21 @@ npm run typecheck
 npm run build
 ```
 
-The suite engines were validated by generating real artifacts and checking them
-with external tools: `.mcaddon` archives open in Python's `zipfile` with every
-JSON parsing and manifests cross-referencing by UUID; the Android generator emits
-a complete AGP 8.7 / Kotlin 2.1 project; MCP scaffolds parse and carry valid
-draft-07 schemas; decks are self-contained HTML with zero external references.
+70 functional checks run against the suite engines, plus live end-to-end
+verification against a real NVIDIA NIM key:
+
+| Checked | Result |
+|---|---|
+| `GET /v1/models` | 80 models; registry rebuilt from the response |
+| Chat + reasoning | `kimi-k3`, `nemotron-3.5-lightning`, `muse-glimmer`, `deepseek-v4` all return `content` + `reasoning_content` |
+| Streaming | `reasoning_content` deltas confirmed; exactly one terminal `done` frame |
+| Embeddings | `nemotron-3-embed-1b` → 2048 dims |
+| Image | FLUX.1-dev → real 1024×1024 JPEG (`mode`/`cfg_scale` cause a 500; dimensions must be 768–1280 ×64) |
+| Research | Bing → 4 pages → 100 passages → NIM-ranked, cited context |
+| Artifact extraction | Real Kimi-K3 output parsed into 1 file + 1 terminal command |
+| `.mcaddon` | Opens in Python `zipfile`; all JSON parses; manifests cross-reference by UUID |
+| Bridge | exec, SSE streaming with replay, path-jail escape rejected, zip, artifact download |
+| Decks | Self-contained HTML, zero external references, `@page` print rules |
 
 ---
 

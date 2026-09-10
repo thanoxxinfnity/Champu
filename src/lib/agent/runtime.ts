@@ -7,6 +7,7 @@ import { extractArtifacts, filesOf, commandsOf, mergeFiles, type FileArtifact } 
 import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types';
 import type { CustomEndpointConfig } from '@/lib/providers/types';
 import { useWorkspace, type ChatAttachment, THINKING_PHRASES, LANE_B_PHRASES } from '@/lib/store';
+import { PLANNER_NIM_MODEL } from '@/lib/providers/registry';
 import { appendMessage, createSession, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
 import type { SuiteId } from '@/lib/db/schema';
 import { BridgeOfflineError } from '@/lib/bridge/client';
@@ -352,11 +353,16 @@ async function buildPlan(
   custom: CustomEndpointConfig | undefined,
   signal: AbortSignal,
 ): Promise<Plan> {
+  // Decomposition is a cheap structured task. Spending a 2.8T flagship's latency
+  // on it before the real work even starts is waste, so NIM runs plan through the
+  // fast Nemotron; other providers keep the selected model.
+  const plannerModel = selection.provider === 'nim' ? PLANNER_NIM_MODEL : selection.model;
+
   try {
     const raw = await complete(
       {
         provider: selection.provider,
-        model: selection.model,
+        model: plannerModel,
         messages: [
           { role: 'system', content: PLANNER_PROMPT },
           { role: 'user', content: input.slice(0, 8000) },

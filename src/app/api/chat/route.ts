@@ -95,6 +95,22 @@ export async function POST(req: NextRequest) {
         { status: failure.code?.startsWith('http_') ? Number(failure.code.slice(5)) || 502 : 502 },
       );
     }
+
+    // A 200 with nothing in it is a failure, not an answer. The internal callers
+    // here (classifier, planner) parse JSON from `content`, and handing them an
+    // empty string produces a confusing downstream parse error instead of a
+    // legible cause.
+    if (!content && !reasoning) {
+      return Response.json(
+        {
+          error: `${modelId} returned an empty completion. Cold-start models can exceed the gateway timeout on their first call — retry, or pick a smaller model.`,
+          code: 'empty_completion',
+          retryable: true,
+        },
+        { status: 502 },
+      );
+    }
+
     return Response.json({ content, reasoning, model: modelId, provider });
   }
 

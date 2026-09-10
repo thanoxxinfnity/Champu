@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { BridgeClient, HeartbeatMonitor, INITIAL_HEARTBEAT, type HeartbeatState } from '@/lib/bridge/client';
 import type { ModelDescriptor, ProviderId } from '@/lib/providers/types';
+import { DEFAULT_NIM_MODEL } from '@/lib/providers/registry';
 import type { Plan, Task, TaskStatus } from '@/lib/agent/planner';
 import { AntiLoopGuard, type Fingerprint } from '@/lib/agent/fingerprint';
 import type { EndpointRecord, SuiteId } from '@/lib/db/schema';
@@ -164,7 +165,7 @@ const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(
 
 const DEFAULT_SELECTION: ModelSelection = {
   provider: 'nim',
-  model: 'moonshotai/kimi-k2-thinking',
+  model: DEFAULT_NIM_MODEL,
 };
 
 /** Capability → dedicated workspace tab. */
@@ -207,10 +208,13 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       const current = get().selection;
       const stillValid = models.some((m) => m.provider === current.provider && m.id === current.model);
       if (!stillValid && models.length) {
+        const selectable = models.filter((m) => m.origin !== 'partner-only');
         const preferred =
-          models.find((m) => m.capabilities.includes('reasoning') && m.provider === 'nim') ??
-          models.find((m) => m.capabilities.includes('chat')) ??
-          models[0];
+          selectable.find((m) => m.id === DEFAULT_NIM_MODEL) ??
+          selectable.find((m) => m.capabilities.includes('reasoning') && m.provider === 'nim') ??
+          selectable.find((m) => m.capabilities.includes('chat')) ??
+          selectable[0];
+        if (!preferred) return;
         set({ selection: { provider: preferred.provider, model: preferred.id } });
         void setSetting('selection', { provider: preferred.provider, model: preferred.id });
       }
