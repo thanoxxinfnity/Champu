@@ -27,6 +27,7 @@ const AGP = '8.7.3';
 const KOTLIN = '2.1.0';
 const COMPOSE_BOM = '2024.12.01';
 const GRADLE_WRAPPER = '8.11.1';
+const BUILD_TOOLS = '35.0.0';
 
 const pascal = (s: string) => s.replace(/[^A-Za-z0-9]+(.)?/g, (_, c: string) => (c ? c.toUpperCase() : '')).replace(/^(.)/, (c) => c.toUpperCase());
 
@@ -310,6 +311,10 @@ zipStorePath=wrapper/dists
 android {
     namespace = "${pkg}"
     compileSdk = ${targetSdk}
+    // Pinned deliberately. Without it AGP falls back to its own default
+    // build-tools version and downloads it mid-build, which stalls on restricted
+    // networks and makes the build non-reproducible.
+    buildToolsVersion = "${BUILD_TOOLS}"
 
     defaultConfig {
         applicationId = "${pkg}"
@@ -388,6 +393,7 @@ ${needsInternet ? '    <uses-permission android:name="android.permission.INTERNE
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.${app}"
@@ -417,6 +423,91 @@ ${needsInternet ? '    <uses-permission android:name="android.permission.INTERNE
 </resources>
 `,
   });
+
+  // ── Launcher icon ─────────────────────────────────────────────────────────
+  // The manifest references @mipmap/ic_launcher, so it must exist or resource
+  // linking fails outright. Emitted as vector XML rather than the usual PNG
+  // density buckets: no binary assets to carry, and it stays crisp at every
+  // density. `mipmap-anydpi` covers API 24+, `mipmap-anydpi-v26` upgrades to a
+  // real adaptive icon where the platform supports it.
+  const chevronPath =
+    'M38,38 L52,54 L38,70 M58,70 L74,70';
+
+  files.push({
+    path: 'app/src/main/res/values/ic_launcher_colors.xml',
+    content: `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#09090B</color>
+    <color name="ic_launcher_accent">#10B981</color>
+</resources>
+`,
+  });
+
+  files.push({
+    path: 'app/src/main/res/drawable/ic_launcher_foreground.xml',
+    content: `<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="${chevronPath}"
+        android:strokeColor="@color/ic_launcher_accent"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
+`,
+  });
+
+  files.push({
+    path: 'app/src/main/res/drawable/ic_launcher_background.xml',
+    content: `<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M0,0 H108 V108 H0 Z"
+        android:fillColor="@color/ic_launcher_background" />
+</vector>
+`,
+  });
+
+  // API 24-25: a plain vector, which mipmap accepts as an XML drawable.
+  const legacyIcon = `<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M12,12 H96 V96 H12 Z"
+        android:fillColor="@color/ic_launcher_background" />
+    <path
+        android:pathData="${chevronPath}"
+        android:strokeColor="@color/ic_launcher_accent"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
+`;
+
+  // API 26+: a true adaptive icon the launcher can mask and animate.
+  const adaptiveIcon = `<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>
+`;
+
+  for (const name of ['ic_launcher', 'ic_launcher_round']) {
+    files.push({ path: `app/src/main/res/mipmap-anydpi/${name}.xml`, content: legacyIcon });
+    files.push({ path: `app/src/main/res/mipmap-anydpi-v26/${name}.xml`, content: adaptiveIcon });
+  }
 
   files.push({
     path: 'app/src/main/res/values/themes.xml',
@@ -607,6 +698,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -660,7 +754,7 @@ fun DropdownField(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var expanded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
 
     Column(modifier.fillMaxWidth()) {
         Text(label, style = MaterialTheme.typography.labelMedium)

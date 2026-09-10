@@ -14,3 +14,5 @@ npm-debug.log*
 .chomugiri/
 agent/.workspace/
 agent/.artifacts/
+dist/*.apk
+dist/*.aab
