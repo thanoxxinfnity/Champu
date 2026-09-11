@@ -10,22 +10,35 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#09090b',
+  // Matches the paper/desk backgrounds so the browser chrome does not flash a
+  // colour the app never uses.
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#fdf7ee' },
+    { media: '(prefers-color-scheme: dark)', color: '#17120e' },
+  ],
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
 };
 
+/**
+ * Applies the saved theme before first paint.
+ *
+ * The real setting lives in IndexedDB with everything else, but that is async —
+ * reading it in React would let one frame of the wrong theme through, which on a
+ * dark-mode phone is a full-screen white flash. So the choice is mirrored into
+ * localStorage purely as a synchronous boot hint, and a failure to read it just
+ * falls through to the OS preference.
+ */
+const THEME_BOOT = `(function(){try{var t=localStorage.getItem('chomugiri:theme');if(t==='light'||t==='dark'){document.documentElement.dataset.theme=t;}}catch(e){}})();`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
-          rel="stylesheet"
-        />
+        {/* Self-hosted: the APK serves this from 127.0.0.1 with no network. */}
+        <link rel="stylesheet" href="/fonts/fonts.css" />
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
       </head>
       <body>{children}</body>
     </html>

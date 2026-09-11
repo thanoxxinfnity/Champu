@@ -1,43 +1,48 @@
 /**
- * Chomugiri identity.
+ * Chomugiri identity — inked, not printed.
  *
- * The mark is a terminal prompt read as a cut: a chevron whose strokes taper
- * like a blade, with the cursor bar sitting where a shell would put it. "giri"
- * is a cut, and the product is a CLI — one shape says both.
+ * A pen-drawn ring that overshoots where it closes, with a terminal prompt
+ * inside it: the chevron read as a cut, and the cursor bar where a shell would
+ * put it. "giri" is a cut and the product is a CLI, so one shape says both.
  *
- * Built from strokes rather than a filled glyph so it stays legible at 16px in a
- * browser tab, which is where most marks fall apart.
+ * Every path is a curve with a slight waver rather than a straight segment — a
+ * mathematically straight line is the single thing that gives a "hand-drawn"
+ * mark away. Strokes, not fills, so it survives 16px in a browser tab.
  */
 
 export const LOGO_PATHS = {
-  /** Chevron, on a 32×32 grid. */
-  chevron: 'M11 9.5 L18.5 16 L11 22.5',
-  /** Cursor bar. */
-  bar: 'M21.5 22.5 L25 22.5',
-  /** The cut — a hairline sweeping across the mark. */
-  cut: 'M24.5 7 L14 26',
+  /**
+   * The pen ring, on a 32×32 grid. Deliberately not closed: it starts at the
+   * top-right, comes all the way round and overshoots past its own start, the
+   * way a circle drawn in one motion actually does.
+   */
+  ring:
+    'M22.4 4.7 C28.6 8.1 30.7 17.9 26.2 24.2 C21.8 30.4 11.4 30.9 6 25.7 C0.7 20.6 1.6 10.3 8.2 5.7 C12.2 2.9 18.4 2.6 23.6 6.2',
+  /** Chevron — two strokes that bow slightly, as a wrist does. */
+  chevron: 'M11.2 10.4 C13.6 12.2 16.2 14.1 18.4 16.1 C16.3 18.2 13.7 20 11.4 21.9',
+  /** Cursor bar, drawn with a wobble so it does not read as a rule. */
+  bar: 'M20.6 21.8 C21.8 22.3 23.4 21.7 24.8 22.2',
 } as const;
 
 export const BRAND = {
-  emerald: '#10B981',
-  indigo: '#6366F1',
-  void: '#09090B',
+  /** The one colour the identity carries. Matches --color-orange. */
+  orange: '#EA580C',
+  orangeBright: '#FB923C',
 } as const;
 
 export function LogoMark({
   size = 32,
+  /** Kept for callers that used the old tiled mark; the ink mark needs no tile. */
   rounded = true,
   id = 'chomu',
   className,
 }: {
   size?: number;
-  /** Draw the dark tile behind the mark. Off for monochrome contexts. */
   rounded?: boolean;
-  /** Unique per instance — gradient ids collide across inlined SVGs otherwise. */
   id?: string;
   className?: string;
 }) {
-  const stroke = Math.max(2.2, size * 0.082);
+  const stroke = Math.max(1.9, size * 0.072);
 
   return (
     <svg
@@ -50,67 +55,59 @@ export function LogoMark({
       aria-label="Chomugiri"
     >
       <defs>
-        <linearGradient id={`${id}-tile`} x1="0" y1="0" x2="32" y2="32">
-          <stop offset="0%" stopColor="#141418" />
-          <stop offset="100%" stopColor="#0B0B0E" />
-        </linearGradient>
-        <linearGradient id={`${id}-stroke`} x1="8" y1="8" x2="26" y2="24">
-          <stop offset="0%" stopColor={BRAND.emerald} />
-          <stop offset="100%" stopColor="#34D399" />
-        </linearGradient>
-        <linearGradient id={`${id}-cut`} x1="24" y1="7" x2="14" y2="26">
-          <stop offset="0%" stopColor={BRAND.indigo} stopOpacity="0" />
-          <stop offset="45%" stopColor={BRAND.indigo} stopOpacity="0.95" />
-          <stop offset="100%" stopColor={BRAND.indigo} stopOpacity="0" />
+        <linearGradient id={`${id}-ink`} x1="4" y1="4" x2="28" y2="28">
+          <stop offset="0%" stopColor={BRAND.orangeBright} />
+          <stop offset="100%" stopColor={BRAND.orange} />
         </linearGradient>
       </defs>
 
+      {/* A wash inside the ring, so the mark still reads as a badge at a glance. */}
       {rounded && (
-        <>
-          <rect width="32" height="32" rx="8.5" fill={`url(#${id}-tile)`} />
-          <rect
-            x="0.6"
-            y="0.6"
-            width="30.8"
-            height="30.8"
-            rx="8"
-            fill="none"
-            stroke={BRAND.emerald}
-            strokeOpacity="0.15"
-            strokeWidth="1"
-          />
-        </>
+        <path
+          d={LOGO_PATHS.ring}
+          fill="var(--marker, rgba(234, 88, 12, 0.16))"
+          stroke="none"
+        />
       )}
 
-      {/* Drawn under the chevron so the cut reads as passing behind it. */}
-      <path d={LOGO_PATHS.cut} stroke={`url(#${id}-cut)`} strokeWidth={stroke * 0.5} strokeLinecap="round" />
-
+      <path
+        d={LOGO_PATHS.ring}
+        stroke={`url(#${id}-ink)`}
+        strokeWidth={stroke * 0.78}
+        strokeLinecap="round"
+        fill="none"
+      />
       <path
         d={LOGO_PATHS.chevron}
-        stroke={`url(#${id}-stroke)`}
+        stroke="currentColor"
         strokeWidth={stroke}
         strokeLinecap="round"
         strokeLinejoin="round"
+        fill="none"
       />
-      <path d={LOGO_PATHS.bar} stroke={BRAND.emerald} strokeWidth={stroke} strokeLinecap="round" />
+      <path
+        d={LOGO_PATHS.bar}
+        stroke="currentColor"
+        strokeWidth={stroke}
+        strokeLinecap="round"
+        fill="none"
+      />
     </svg>
   );
 }
 
 export function LogoWordmark({ size = 20, className }: { size?: number; className?: string }) {
   return (
-    <span className={`flex items-center gap-2.5 ${className ?? ''}`}>
-      <LogoMark size={size * 1.6} id="chomu-word" />
+    <span className={`flex items-center gap-2.5 ${className ?? ''}`} style={{ color: 'var(--ink)' }}>
+      <LogoMark size={size * 1.7} id="chomu-word" />
       <span className="flex flex-col leading-none">
-        <span
-          className="font-semibold tracking-tight"
-          style={{ fontSize: size * 0.72, letterSpacing: '-0.02em' }}
-        >
+        {/* The product name is the app's own voice, so it is handwritten. */}
+        <span className="hand" style={{ fontSize: size * 1.15, lineHeight: 0.95 }}>
           Chomugiri
         </span>
         <span
           className="mono uppercase"
-          style={{ fontSize: size * 0.44, letterSpacing: '0.16em', color: 'var(--ink-faint)', marginTop: 2 }}
+          style={{ fontSize: size * 0.42, letterSpacing: '0.16em', color: 'var(--ink-faint)', marginTop: 3 }}
         >
           autonomous workspace
         </span>
@@ -119,18 +116,18 @@ export function LogoWordmark({ size = 20, className }: { size?: number; classNam
   );
 }
 
-/** Standalone SVG, for the favicon and anywhere outside React. */
+/**
+ * Standalone SVG for the favicon and anywhere outside React.
+ * Colours are literal here — there is no cascade to inherit from.
+ */
 export function logoSvgMarkup(size = 32): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 32 32" fill="none">
   <defs>
-    <linearGradient id="t" x1="0" y1="0" x2="32" y2="32"><stop offset="0%" stop-color="#141418"/><stop offset="100%" stop-color="#0B0B0E"/></linearGradient>
-    <linearGradient id="s" x1="8" y1="8" x2="26" y2="24"><stop offset="0%" stop-color="${BRAND.emerald}"/><stop offset="100%" stop-color="#34D399"/></linearGradient>
-    <linearGradient id="c" x1="24" y1="7" x2="14" y2="26"><stop offset="0%" stop-color="${BRAND.indigo}" stop-opacity="0"/><stop offset="45%" stop-color="${BRAND.indigo}" stop-opacity=".95"/><stop offset="100%" stop-color="${BRAND.indigo}" stop-opacity="0"/></linearGradient>
+    <linearGradient id="i" x1="4" y1="4" x2="28" y2="28"><stop offset="0%" stop-color="${BRAND.orangeBright}"/><stop offset="100%" stop-color="${BRAND.orange}"/></linearGradient>
   </defs>
-  <rect width="32" height="32" rx="8.5" fill="url(#t)"/>
-  <rect x=".6" y=".6" width="30.8" height="30.8" rx="8" fill="none" stroke="${BRAND.emerald}" stroke-opacity=".15" stroke-width="1"/>
-  <path d="${LOGO_PATHS.cut}" stroke="url(#c)" stroke-width="1.3" stroke-linecap="round"/>
-  <path d="${LOGO_PATHS.chevron}" stroke="url(#s)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="${LOGO_PATHS.bar}" stroke="${BRAND.emerald}" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="${LOGO_PATHS.ring}" fill="${BRAND.orange}" fill-opacity=".14"/>
+  <path d="${LOGO_PATHS.ring}" stroke="url(#i)" stroke-width="1.9" stroke-linecap="round" fill="none"/>
+  <path d="${LOGO_PATHS.chevron}" stroke="${BRAND.orange}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="${LOGO_PATHS.bar}" stroke="${BRAND.orange}" stroke-width="2.4" stroke-linecap="round" fill="none"/>
 </svg>`;
 }

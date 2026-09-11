@@ -112,7 +112,7 @@ export function TodoHud({ compact = false }: { compact?: boolean }) {
     return (
       <div className="flex h-full items-center justify-center p-8 text-center">
         <div>
-          <p className="text-[13px]" style={{ color: 'var(--ink-dim)' }}>
+          <p className="hand text-[26px] leading-none" style={{ color: 'var(--ink-dim)' }}>
             No active plan.
           </p>
           <p className="mt-1.5 text-[11.5px] leading-4" style={{ color: 'var(--ink-faint)' }}>

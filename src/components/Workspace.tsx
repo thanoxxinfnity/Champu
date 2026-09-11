@@ -15,6 +15,7 @@ import { DeployButton } from './DeployButton';
 import { DraftPicker } from './DraftPicker';
 import { AssetStudio } from './suites/AssetStudio';
 import { LogoMark, LogoWordmark } from './Logo';
+import { ThemeToggle } from './ThemeToggle';
 import { BedrockBuilder } from './suites/BedrockBuilder';
 import { BlockbenchStudio } from './suites/Blockbench';
 import { AndroidStudio } from './suites/AndroidStudio';
@@ -171,7 +172,7 @@ export function Workspace() {
   );
 
   return (
-    <div className="flex h-dvh overflow-hidden" style={{ background: 'var(--bg)' }}>
+    <div className="sketch-ui flex h-dvh overflow-hidden" style={{ background: 'var(--bg)' }}>
       {sidebarOpen && (
         <div className="hidden md:block">
           <Sidebar onOpenSettings={() => setSettingsOpen(true)} />
@@ -194,11 +195,12 @@ export function Workspace() {
             ☰
           </button>
 
-          <span className="mono text-[11px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-dim)' }}>
+          <span className="hand text-[17px] leading-none" style={{ color: 'var(--ink-dim)' }}>
             {activeSuite}
           </span>
 
           <div className="ml-auto flex items-center gap-2">
+            <ThemeToggle />
             <DeployButton />
             <button
               type="button"
@@ -250,7 +252,7 @@ export function Workspace() {
                       <span className="thinking-aurora" aria-hidden />
                       <LogoMark size={56} id="empty-state" />
                     </div>
-                    <h2 className="text-[17px] font-semibold tracking-tight">Chomugiri</h2>
+                    <h2 className="hand text-[34px] leading-none">Chomugiri</h2>
                     <p className="mt-2 text-[12.5px] leading-[1.65]" style={{ color: 'var(--ink-dim)', textWrap: 'balance' }}>
                       Ask a technical question and it routes to <strong>Lane A</strong> — direct answers, no filler.
                       <br />

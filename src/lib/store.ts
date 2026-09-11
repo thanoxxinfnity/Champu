@@ -86,6 +86,36 @@ export interface DeployResult {
   at: number;
 }
 
+export type ThemePref = 'system' | 'light' | 'dark';
+
+/**
+ * Writes the choice onto <html> and mirrors it to localStorage.
+ *
+ * The mirror is not the source of truth — IndexedDB is — it exists only so the
+ * boot script in layout.tsx can apply the theme synchronously before first
+ * paint. 'system' removes the attribute entirely so the CSS media query takes
+ * over again rather than being pinned to whatever was last chosen.
+ */
+function applyTheme(theme: ThemePref) {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+
+  // Colour transitions are enabled only for the duration of the switch, so the
+  // whole app does not carry a transition on every background for all time.
+  root.classList.add('theme-shifting');
+  window.setTimeout(() => root.classList.remove('theme-shifting'), 300);
+
+  if (theme === 'system') delete root.dataset.theme;
+  else root.dataset.theme = theme;
+
+  try {
+    if (theme === 'system') localStorage.removeItem('chomugiri:theme');
+    else localStorage.setItem('chomugiri:theme', theme);
+  } catch {
+    // Private mode or blocked storage: the theme still applies for this session.
+  }
+}
+
 interface WorkspaceState {
   // ── Navigation ────────────────────────────────────────────────────────────
   activeSuite: SuiteId;
@@ -170,6 +200,9 @@ interface WorkspaceState {
   setDrafts: (drafts: Draft[] | null) => void;
   patchDraft: (id: string, patch: Partial<Draft>) => void;
   draftsEnabled: boolean;
+  /** 'system' follows the OS; the other two are an explicit override. */
+  theme: ThemePref;
+  setTheme: (theme: ThemePref) => void;
   setDraftsEnabled: (enabled: boolean) => void;
 
   // ── Run control ───────────────────────────────────────────────────────────
@@ -388,6 +421,14 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   patchDraft: (id, patch) =>
     set((s) => ({ drafts: s.drafts?.map((d) => (d.id === id ? { ...d, ...patch } : d)) ?? null })),
   draftsEnabled: false,
+
+  theme: 'system',
+  setTheme: (theme) => {
+    applyTheme(theme);
+    set({ theme });
+    void setSetting('theme', theme);
+  },
+
   setDraftsEnabled: (enabled) => {
     set({ draftsEnabled: enabled });
     void setSetting('draftsEnabled', enabled);
@@ -417,6 +458,12 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     if (bridgeConfig?.url) get().bridge.update(bridgeConfig);
     if (vercel?.token) set({ vercelToken: vercel.token, vercelTeamId: vercel.teamId ?? '' });
     set({ draftsEnabled: await getSetting<boolean>('draftsEnabled', false) });
+
+    // The boot script already painted the stored theme; this re-syncs the store
+    // with it and covers the case where the localStorage mirror was cleared.
+    const theme = await getSetting<ThemePref>('theme', 'system');
+    set({ theme });
+    applyTheme(theme);
 
     get().startHeartbeat();
     await get().loadModels();

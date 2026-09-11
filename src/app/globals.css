@@ -1,34 +1,69 @@
 @import 'tailwindcss';
 
 /*
- * Chomugiri design tokens.
- * High-contrast developer terminal theme. Dark is the primary surface; the light
- * scheme exists so a projector or a bright room does not make the app unusable.
+ * Chomugiri design tokens — hand-drawn, orange, paper-and-ink.
+ *
+ * The look is a marker sketch on warm paper rather than a glass console: uneven
+ * inked corners, a faint paper tooth, and handwriting for anything the app says
+ * in its own voice. Code and data stay in a clean mono, because a workspace that
+ * is charming but unreadable is not a workspace.
+ *
+ * Light and dark are equal citizens. Both are warm — dark is a lamp-lit desk,
+ * not a black terminal — so orange sits naturally on either.
  */
 
 @theme {
-  --color-void: #09090b;
-  --color-panel: #0e0e11;
-  --color-surface: #131316;
-  --color-raised: #18181b;
-  --color-line: rgba(255, 255, 255, 0.08);
-  --color-line-strong: rgba(255, 255, 255, 0.14);
+  /* Paper (light) */
+  --color-paper: #fdf7ee;
+  --color-paper-panel: #fffdf8;
+  --color-paper-surface: #f6ecdd;
+  --color-paper-raised: #eee0cb;
 
-  --color-ink: #fafafa;
-  --color-ink-dim: #a1a1aa;
-  --color-ink-faint: #71717a;
+  /* Desk (dark) */
+  --color-desk: #17120e;
+  --color-desk-panel: #1f1813;
+  --color-desk-surface: #271e17;
+  --color-desk-raised: #32261c;
 
-  --color-emerald: #10b981;
-  --color-emerald-dim: #059669;
-  --color-indigo: #6366f1;
-  --color-indigo-dim: #4f46e5;
-  --color-amber: #f59e0b;
-  --color-rose: #f43f5e;
+  /* Orange is the voice of the app — the one colour that carries meaning. */
+  --color-orange: #ea580c;
+  --color-orange-bright: #fb923c;
+  --color-orange-deep: #c2410c;
 
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /*
+   * Support colours. Each is legible on warm paper AND on the dark desk, so a
+   * single value serves both themes and nothing has to be redefined per mode.
+   */
+  --color-success: #4f9d5d;
+  --color-info: #2a9d8f;
+  --color-warn: #d98324;
+  --color-danger: #dc4c3f;
+
+  /*
+   * Historical names. Components across the app still reach for these directly;
+   * they now point at the warm set so the palette stays coherent.
+   */
+  --color-emerald: #4f9d5d;
+  --color-emerald-dim: #3d7d49;
+  --color-indigo: #2a9d8f;
+  --color-indigo-dim: #1f7a6f;
+  --color-amber: #d98324;
+  --color-rose: #dc4c3f;
+
+  --font-sans: 'Nunito', ui-rounded, 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-hand: 'Caveat', 'Nunito', ui-rounded, cursive;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
 
-  --radius-panel: 12px;
+  --radius-panel: 14px;
+
+  /*
+   * Hand-drawn corners. Wildly uneven horizontal/vertical radii make a box read
+   * as inked in one stroke instead of stamped by a renderer. Three variants so
+   * adjacent boxes are not identical — repetition is what gives the trick away.
+   */
+  --sketch-a: 255px 15px 225px 15px / 15px 225px 15px 255px;
+  --sketch-b: 15px 225px 15px 255px / 255px 15px 225px 15px;
+  --sketch-c: 125px 12px 24px 185px / 24px 200px 200px 24px;
 
   /* Motion. Springs for anything the user initiated, ease-out for anything
      the system initiated — the distinction is what makes an interface feel
@@ -41,51 +76,85 @@
   --dur-slow: 420ms;
 }
 
+/*
+ * Light is the base definition, so a token can never be missing: the dark blocks
+ * below only ever re-point the same names.
+ */
 :root {
-  color-scheme: dark;
-  --bg: var(--color-void);
-  --panel: var(--color-panel);
-  --surface: var(--color-surface);
-  --raised: var(--color-raised);
-  --line: var(--color-line);
-  --line-strong: var(--color-line-strong);
-  --ink: var(--color-ink);
-  --ink-dim: var(--color-ink-dim);
-  --ink-faint: var(--color-ink-faint);
-  --accent: var(--color-emerald);
-  --accent-alt: var(--color-indigo);
+  color-scheme: light;
+  --bg: var(--color-paper);
+  --panel: var(--color-paper-panel);
+  --surface: var(--color-paper-surface);
+  --raised: var(--color-paper-raised);
+  --line: rgba(72, 47, 28, 0.20);
+  --line-strong: rgba(72, 47, 28, 0.38);
+  --ink: #2c2018;
+  --ink-dim: #6a5443;
+  --ink-faint: #9b846e;
+  --accent: var(--color-orange);
+  --accent-alt: var(--color-orange-deep);
+  /* Ink used for the drawn strokes themselves (borders, underlines, arrows). */
+  --stroke: rgba(72, 47, 28, 0.55);
+  --grain: 0.035;
+  --marker: color-mix(in oklab, var(--color-orange) 22%, transparent);
 }
 
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) {
-    color-scheme: light;
-    --bg: #fafafa;
-    --panel: #ffffff;
-    --surface: #f4f4f5;
-    --raised: #e9e9ec;
-    --line: rgba(0, 0, 0, 0.09);
-    --line-strong: rgba(0, 0, 0, 0.16);
-    --ink: #09090b;
-    --ink-dim: #52525b;
-    --ink-faint: #71717a;
-    --accent: #059669;
-    --accent-alt: #4f46e5;
+/* System preference, only while the user has not chosen explicitly. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: var(--color-desk);
+    --panel: var(--color-desk-panel);
+    --surface: var(--color-desk-surface);
+    --raised: var(--color-desk-raised);
+    --line: rgba(255, 224, 189, 0.15);
+    --line-strong: rgba(255, 224, 189, 0.30);
+    --ink: #f8eee2;
+    --ink-dim: #c4ad97;
+    --ink-faint: #94806c;
+    --accent: var(--color-orange-bright);
+    --accent-alt: var(--color-orange);
+    --stroke: rgba(255, 224, 189, 0.48);
+    --grain: 0.05;
+    --marker: color-mix(in oklab, var(--color-orange-bright) 26%, transparent);
   }
 }
 
+/* An explicit choice wins over the system in both directions. */
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #09090b;
-  --panel: #0e0e11;
-  --surface: #131316;
-  --raised: #18181b;
-  --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.14);
-  --ink: #fafafa;
-  --ink-dim: #a1a1aa;
-  --ink-faint: #71717a;
-  --accent: #10b981;
-  --accent-alt: #6366f1;
+  --bg: var(--color-desk);
+  --panel: var(--color-desk-panel);
+  --surface: var(--color-desk-surface);
+  --raised: var(--color-desk-raised);
+  --line: rgba(255, 224, 189, 0.15);
+  --line-strong: rgba(255, 224, 189, 0.30);
+  --ink: #f8eee2;
+  --ink-dim: #c4ad97;
+  --ink-faint: #94806c;
+  --accent: var(--color-orange-bright);
+  --accent-alt: var(--color-orange);
+  --stroke: rgba(255, 224, 189, 0.48);
+  --grain: 0.05;
+  --marker: color-mix(in oklab, var(--color-orange-bright) 26%, transparent);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: var(--color-paper);
+  --panel: var(--color-paper-panel);
+  --surface: var(--color-paper-surface);
+  --raised: var(--color-paper-raised);
+  --line: rgba(72, 47, 28, 0.20);
+  --line-strong: rgba(72, 47, 28, 0.38);
+  --ink: #2c2018;
+  --ink-dim: #6a5443;
+  --ink-faint: #9b846e;
+  --accent: var(--color-orange);
+  --accent-alt: var(--color-orange-deep);
+  --stroke: rgba(72, 47, 28, 0.55);
+  --grain: 0.035;
+  --marker: color-mix(in oklab, var(--color-orange) 22%, transparent);
 }
 
 * {
@@ -103,6 +172,36 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overscroll-behavior: none;
+}
+
+/*
+ * Paper tooth. A tiled fractal-noise SVG rather than a raster: it costs no
+ * request, never blurs, and is painted once behind everything. `fixed` keeps it
+ * from repainting on scroll, which is what would otherwise make it expensive.
+ */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: var(--grain);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Everything the app renders sits above the grain. */
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Theme changes should read as the lamp being switched, not as a repaint. */
+html.theme-shifting,
+html.theme-shifting * {
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out) !important;
 }
 
 /* ── Scrollbars ─────────────────────────────────────────────────────────── */
@@ -160,6 +259,127 @@ select {
 @utility mono {
   font-family: var(--font-mono);
   font-variant-ligatures: none;
+}
+
+/* The app's own voice: headings, badges, status lines. Never body copy. */
+@utility hand {
+  font-family: var(--font-hand);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/*
+ * A box that looks inked. The three variants exist so a column of them does not
+ * repeat the same "random" outline down the page.
+ */
+@utility sketch {
+  border: 1.5px solid var(--stroke);
+  border-radius: var(--sketch-a);
+  background: var(--panel);
+}
+
+@utility sketch-b {
+  border: 1.5px solid var(--stroke);
+  border-radius: var(--sketch-b);
+  background: var(--panel);
+}
+
+@utility sketch-c {
+  border: 1.5px solid var(--stroke);
+  border-radius: var(--sketch-c);
+  background: var(--panel);
+}
+
+/* A highlighter stroke behind text, drawn slightly off-square like a real one. */
+@utility marker {
+  background-image: linear-gradient(100deg, transparent 1%, var(--marker) 2%, var(--marker) 96%, transparent 98%);
+  background-repeat: no-repeat;
+  background-size: 100% 62%;
+  background-position: 0 72%;
+}
+
+/* ── Hand-drawn strokes ─────────────────────────────────────────────────── */
+
+/*
+ * A wobbly rule. An SVG path rather than a border, because a straight 1px line
+ * is the single thing that most breaks the illusion of a drawn interface.
+ */
+.ink-rule {
+  height: 7px;
+  border: 0;
+  margin: 0;
+  background-color: var(--stroke);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 7' preserveAspectRatio='none'%3E%3Cpath d='M1 4.2c28-2.4 56 1.6 84-.4s56-3 83-.6 44 1.4 71-1' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 7' preserveAspectRatio='none'%3E%3Cpath d='M1 4.2c28-2.4 56 1.6 84-.4s56-3 83-.6 44 1.4 71-1' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+/* The same stroke in orange, used under the active thing. */
+.ink-underline {
+  position: relative;
+}
+
+.ink-underline::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  bottom: -5px;
+  height: 6px;
+  background-color: var(--accent);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 6' preserveAspectRatio='none'%3E%3Cpath d='M1 3.6c18-2 38 1.4 57-.5s42-2.2 61 .3' fill='none' stroke='%23000' stroke-width='2.1' stroke-linecap='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 6' preserveAspectRatio='none'%3E%3Cpath d='M1 3.6c18-2 38 1.4 57-.5s42-2.2 61 .3' fill='none' stroke='%23000' stroke-width='2.1' stroke-linecap='round'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  transform-origin: left center;
+  animation: ink-draw var(--dur-slow) var(--ease-out);
+}
+
+@keyframes ink-draw {
+  from { transform: scaleX(0); opacity: 0; }
+  to   { transform: scaleX(1); opacity: 1; }
+}
+
+/*
+ * Pen-lift hover: a drawn control settles a hair when touched rather than
+ * sliding, which is what a pen on paper actually does.
+ */
+.sketch-press {
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    border-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+.sketch-press:hover {
+  transform: translateY(-1px) rotate(-0.35deg);
+  border-color: var(--accent);
+}
+
+.sketch-press:active {
+  transform: translateY(0) scale(0.98) rotate(0.2deg);
+}
+
+/*
+ * Smoothness is a promise, and animation is the first thing to break it on a
+ * mid-range phone — which is where the APK runs. Honour the OS setting.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  body::before { display: none; }
 }
 
 /* ── Gemini-style thinking indicator ────────────────────────────────────── */
@@ -717,3 +937,99 @@ select {
 
 /* Ragged centred copy reads as sloppy; balance evens the line lengths. */
 .balance { text-wrap: balance; }
+
+/* ── Inking the whole surface ───────────────────────────────────────────── */
+
+/*
+ * Every box the app draws gets an uneven, inked outline instead of a printed
+ * corner. Doing it here rather than in twenty class strings keeps the rule in
+ * one place — and keeps it honest, because the alternative is a component that
+ * *says* rounded-lg and silently does not.
+ *
+ * Scoped under .sketch-ui (the app root) so nothing outside the workspace is
+ * touched, and the three radii alternate by position so a column of panels does
+ * not repeat one identical "random" outline down the page.
+ */
+.sketch-ui :where(.rounded-lg, .rounded-xl, .rounded-2xl) {
+  border-radius: var(--sketch-a);
+}
+
+.sketch-ui :where(.rounded-lg, .rounded-xl, .rounded-2xl):nth-of-type(2n) {
+  border-radius: var(--sketch-b);
+}
+
+.sketch-ui :where(.rounded-lg, .rounded-xl, .rounded-2xl):nth-of-type(3n) {
+  border-radius: var(--sketch-c);
+}
+
+/* Small chips wobble far less — at 20px tall the big radii swallow the label. */
+.sketch-ui :where(.rounded-sm, .rounded-md) {
+  border-radius: 9px 3px 8px 4px / 4px 8px 3px 9px;
+}
+
+/* Circles are circles. A "hand-drawn" status dot just looks like a bug. */
+.sketch-ui .rounded-full {
+  border-radius: 9999px;
+}
+
+/* Inked borders read as pen pressure rather than a hairline rule. */
+.sketch-ui :where(.rounded-lg, .rounded-xl, .rounded-2xl).border,
+.sketch-ui :where(.rounded-lg, .rounded-xl, .rounded-2xl)[class*='border-'] {
+  border-width: 1.5px;
+}
+
+/*
+ * The active-tab underline, redrawn as a pen stroke. The base .tab-rail::after
+ * already slides between tabs on --tab-x/--tab-w; this only changes what is
+ * drawn, so the movement stays exactly as smooth as it was.
+ */
+.sketch-ui .tab-rail::after {
+  height: 6px;
+  border-radius: 0;
+  background-color: var(--accent);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 6' preserveAspectRatio='none'%3E%3Cpath d='M1 3.6c18-2 38 1.4 57-.5s42-2.2 61 .3' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 6' preserveAspectRatio='none'%3E%3Cpath d='M1 3.6c18-2 38 1.4 57-.5s42-2.2 61 .3' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+/*
+ * Panel dividers. A 1px border is the most "printed" thing in any UI, so the
+ * app's long horizontal rules become drawn strokes instead — using a masked
+ * pseudo-element, since a border cannot itself be given a texture.
+ */
+.sketch-ui .border-b {
+  border-bottom-color: transparent;
+  position: relative;
+}
+
+.sketch-ui .border-b::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 5px;
+  pointer-events: none;
+  background-color: var(--line-strong);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 5' preserveAspectRatio='none'%3E%3Cpath d='M0 2.6c40-1.8 80 1.2 120-.4s75-2 105-.4 55 1 75-.6' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 5' preserveAspectRatio='none'%3E%3Cpath d='M0 2.6c40-1.8 80 1.2 120-.4s75-2 105-.4 55 1 75-.6' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+/*
+ * Opt-out. A drawn rule under a scrolling list or inside a bordered card reads
+ * as a stray pen mark, so those keep the plain hairline.
+ */
+.sketch-ui .no-ink.border-b::after {
+  display: none;
+}
+
+.sketch-ui .no-ink.border-b {
+  border-bottom-color: var(--line);
+}

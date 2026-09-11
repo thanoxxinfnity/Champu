@@ -1,25 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Mirrors LOGO_PATHS in src/components/Logo.tsx: the pen ring with the terminal
+  prompt inside it. Every path is a curve rather than a straight segment, which
+  is what makes the mark read as drawn instead of rendered.
+
+  The group scales the 32-unit logo grid into the 108dp adaptive-icon canvas and
+  centres it inside the 66% safe zone, so no stroke is clipped by a round,
+  squircle or squircle-cutout launcher mask.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group android:translateX="27" android:translateY="27" android:scaleX="1.6875" android:scaleY="1.6875">
+    <group android:translateX="28.8" android:translateY="28.8" android:scaleX="1.575" android:scaleY="1.575">
+        <!-- Wash inside the ring. -->
         <path
-            android:pathData="M24.5,7 L14,26"
+            android:pathData="M22.4,4.7 C28.6,8.1 30.7,17.9 26.2,24.2 C21.8,30.4 11.4,30.9 6,25.7 C0.7,20.6 1.6,10.3 8.2,5.7 C12.2,2.9 18.4,2.6 23.6,6.2"
+            android:fillColor="@color/ic_launcher_accent"
+            android:fillAlpha="0.14" />
+        <!-- The ring itself, left open where the stroke overshoots. -->
+        <path
+            android:pathData="M22.4,4.7 C28.6,8.1 30.7,17.9 26.2,24.2 C21.8,30.4 11.4,30.9 6,25.7 C0.7,20.6 1.6,10.3 8.2,5.7 C12.2,2.9 18.4,2.6 23.6,6.2"
             android:strokeColor="@color/ic_launcher_alt"
-            android:strokeWidth="1.5"
+            android:strokeWidth="1.9"
             android:strokeLineCap="round" />
         <path
-            android:pathData="M11,9.5 L18.5,16 L11,22.5"
+            android:pathData="M11.2,10.4 C13.6,12.2 16.2,14.1 18.4,16.1 C16.3,18.2 13.7,20 11.4,21.9"
             android:strokeColor="@color/ic_launcher_accent"
-            android:strokeWidth="2.8"
+            android:strokeWidth="2.4"
             android:strokeLineCap="round"
             android:strokeLineJoin="round" />
         <path
-            android:pathData="M21.5,22.5 L25,22.5"
+            android:pathData="M20.6,21.8 C21.8,22.3 23.4,21.7 24.8,22.2"
             android:strokeColor="@color/ic_launcher_accent"
-            android:strokeWidth="2.8"
+            android:strokeWidth="2.4"
             android:strokeLineCap="round" />
     </group>
 </vector>
