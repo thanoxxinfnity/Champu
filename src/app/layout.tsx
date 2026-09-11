@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   description:
     'Autonomous developer workspace. NVIDIA NIM + Pollinations + universal OpenAI-compatible gateway, with a terminal tunnel bridge for real builds.',
   applicationName: 'Chomugiri',
+  icons: { icon: [{ url: '/icon.svg', type: 'image/svg+xml' }] },
 };
 
 export const viewport: Viewport = {

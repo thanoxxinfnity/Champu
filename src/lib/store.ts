@@ -65,6 +65,18 @@ export interface ThinkingState {
   since: number;
 }
 
+/** One of the parallel drafts offered for a prompt. */
+export interface Draft {
+  id: string;
+  label: string;
+  angle: string;
+  content: string;
+  reasoning: string;
+  streaming: boolean;
+  error?: string;
+  model: string;
+}
+
 export interface DeployResult {
   url: string | null;
   inspectorUrl: string | null;
@@ -152,6 +164,13 @@ interface WorkspaceState {
   setVercelCredentials: (token: string, teamId?: string) => void;
   lastDeploy: DeployResult | null;
   setLastDeploy: (result: DeployResult | null) => void;
+
+  // ── Drafts ────────────────────────────────────────────────────────────────
+  drafts: Draft[] | null;
+  setDrafts: (drafts: Draft[] | null) => void;
+  patchDraft: (id: string, patch: Partial<Draft>) => void;
+  draftsEnabled: boolean;
+  setDraftsEnabled: (enabled: boolean) => void;
 
   // ── Run control ───────────────────────────────────────────────────────────
   abortController: AbortController | null;
@@ -362,6 +381,16 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   lastDeploy: null,
   setLastDeploy: (result) => set({ lastDeploy: result }),
 
+  drafts: null,
+  setDrafts: (drafts) => set({ drafts }),
+  patchDraft: (id, patch) =>
+    set((s) => ({ drafts: s.drafts?.map((d) => (d.id === id ? { ...d, ...patch } : d)) ?? null })),
+  draftsEnabled: false,
+  setDraftsEnabled: (enabled) => {
+    set({ draftsEnabled: enabled });
+    void setSetting('draftsEnabled', enabled);
+  },
+
   abortController: null,
   setAbortController: (controller) => set({ abortController: controller }),
   cancelRun: () => {
@@ -369,6 +398,9 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     abortController?.abort();
     if (runningExecId) void bridge.kill(runningExecId).catch(() => undefined);
     set({ abortController: null, runningExecId: null });
+    // Any draft still streaming is dead the moment the controller aborts; leaving
+    // them marked `streaming` would spin their placeholders forever.
+    set((s) => ({ drafts: s.drafts?.map((d) => (d.streaming ? { ...d, streaming: false } : d)) ?? null }));
     get().setThinking(false);
   },
 
@@ -382,6 +414,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     if (selection) set({ selection });
     if (bridgeConfig?.url) get().bridge.update(bridgeConfig);
     if (vercel?.token) set({ vercelToken: vercel.token, vercelTeamId: vercel.teamId ?? '' });
+    set({ draftsEnabled: await getSetting<boolean>('draftsEnabled', false) });
 
     get().startHeartbeat();
     await get().loadModels();

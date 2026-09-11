@@ -15,6 +15,11 @@ export interface GeneratedFile {
 
 export interface GenerateOptions {
   analysis: AnalysisResult;
+  /**
+   * The one value an APK is allowed to carry. Anything secret stays behind this
+   * URL — see `BuildConfig.BACKEND_URL` in the generated module.
+   */
+  backendUrl?: string;
   minSdk?: number;
   targetSdk?: number;
   /** For the WebView target. */
@@ -198,6 +203,7 @@ function viewModelHandlers(elements: UiElement[]): string {
 export function generateAndroidProject(opts: GenerateOptions): { files: GeneratedFile[]; notes: string[] } {
   const { analysis } = opts;
   const minSdk = opts.minSdk ?? 24;
+  const backendUrl = opts.backendUrl ?? '';
   const targetSdk = opts.targetSdk ?? 35;
   const pkg = analysis.packageName;
   const pkgPath = pkg.replace(/\./g, '/');
@@ -283,6 +289,12 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 org.gradle.parallel=true
 org.gradle.caching=true
 android.useAndroidX=true
+
+# The only build input this app needs. Override per build:
+#   ./gradlew assembleRelease -PBACKEND_URL=https://api.example.com
+# Never add API keys here — gradle.properties is committed, and anything it
+# injects ends up readable inside the APK.
+BACKEND_URL=${backendUrl}
 android.nonTransitiveRClass=true
 kotlin.code.style=official
 `,
@@ -323,6 +335,14 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // The ONLY configuration baked into the APK.
+        //
+        // An Android package is a zip anyone can unzip — strings, jadx and
+        // apktool read every constant in it, so a key compiled into BuildConfig
+        // is a published key. Secrets live behind this URL on a server you
+        // control, and the app authenticates to that instead.
+        buildConfigField("String", "BACKEND_URL", "\"\${BACKEND_URL}\"")
     }
 
     buildTypes {
@@ -347,6 +367,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -397,6 +418,7 @@ ${needsInternet ? '    <uses-permission android:name="android.permission.INTERNE
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.${app}"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"
@@ -826,6 +848,62 @@ ${viewModelHandlers(uiElements) || '    fun noop() = Unit'}
     });
   }
 
+  // ── Backend seam ──────────────────────────────────────────────────────────
+  files.push({
+    path: `app/src/main/java/${pkgPath}/BackendConfig.kt`,
+    content: `package ${pkg}
+
+import ${pkg}.BuildConfig
+
+/**
+ * The app's single point of contact with anything privileged.
+ *
+ * Nothing secret is compiled into this APK. An .apk is a zip: \`unzip\`, jadx and
+ * apktool will read every string constant out of it in seconds, so an API key in
+ * BuildConfig is a key you have published. Keys belong on the server behind
+ * [baseUrl], which authenticates the request itself.
+ */
+object BackendConfig {
+
+    /** Injected at build time from the BACKEND_URL Gradle property. */
+    val baseUrl: String = BuildConfig.BACKEND_URL.trimEnd('/')
+
+    val isConfigured: Boolean
+        get() = baseUrl.isNotBlank() && (baseUrl.startsWith("https://") || baseUrl.startsWith("http://"))
+
+    /**
+     * Cleartext is refused outside debug builds: a plain-http backend exposes
+     * every request on the network the device happens to be on.
+     */
+    val isSecure: Boolean
+        get() = baseUrl.startsWith("https://") || BuildConfig.DEBUG
+
+    fun endpoint(path: String): String = baseUrl + if (path.startsWith("/")) path else "/\$path"
+
+    fun requireReady() {
+        check(isConfigured) {
+            "BACKEND_URL is not set. Pass -PBACKEND_URL=https://api.example.com to the build, " +
+                "or set it in gradle.properties."
+        }
+        check(isSecure) { "BACKEND_URL must be https outside debug builds." }
+    }
+}
+`,
+  });
+
+  files.push({
+    path: 'app/src/main/res/xml/network_security_config.xml',
+    content: `<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
+`,
+  });
+
   // ── Migration report ──────────────────────────────────────────────────────
   files.push({
     path: 'MIGRATION.md',
@@ -866,6 +944,20 @@ ${analysis.logicModules.filter((m) => m.kind === 'business-logic').length
 ${analysis.dependencies.length ? analysis.dependencies.map((d) => `- \`${d}\``).join('\n') : '_none_'}
 
 These are **not** auto-mapped to Android equivalents; each needs a deliberate decision.
+
+## Configuration
+
+This APK carries exactly one build input — \`BACKEND_URL\` — and no credentials.
+
+\`\`\`bash
+./gradlew assembleRelease -PBACKEND_URL=https://api.example.com
+\`\`\`
+
+An \`.apk\` is a zip. \`unzip\`, \`jadx\` and \`apktool\` will recover every string
+constant in it, so an API key compiled into \`BuildConfig\` is a published key —
+including in a release build, since R8 renames symbols but keeps string literals
+intact. Put the key on the server behind \`BACKEND_URL\` and let it authenticate
+the request. \`BackendConfig.kt\` is the seam.
 
 ## Build
 

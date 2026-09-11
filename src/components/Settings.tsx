@@ -5,8 +5,11 @@ import { useWorkspace } from '@/lib/store';
 import { db, isBrowser, type EndpointRecord } from '@/lib/db/schema';
 import { uid } from '@/lib/db/history';
 import type { CapabilityProbe } from '@/lib/providers/custom';
+import type { VaultRecord } from '@/lib/db/schema';
+import { isClientExposed, maskSecret, toEnvExample, toEnvFile, validateSecretName } from '@/lib/security/secrets';
+import { downloadText } from '@/lib/zip';
 
-type Tab = 'bridge' | 'endpoints' | 'deploy' | 'guard';
+type Tab = 'bridge' | 'secrets' | 'endpoints' | 'deploy' | 'guard';
 
 function Field({
   label,
@@ -392,6 +395,200 @@ function EndpointsTab() {
   );
 }
 
+/**
+ * Secrets vault.
+ *
+ * Environment variables live here rather than in a prompt or a generated file,
+ * and are injected into a Vercel deployment at build time. Deliberately blunt
+ * about the storage guarantee: IndexedDB is origin-scoped and device-local —
+ * the same promise a .env.local makes, and nothing stronger.
+ */
+function SecretsTab() {
+  const [secrets, setSecrets] = useState<VaultRecord[]>([]);
+  const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  const [name, setName] = useState('');
+  const [value, setValue] = useState('');
+  const [scope, setScope] = useState<VaultRecord['scope']>('both');
+  const [note, setNote] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    if (!isBrowser()) return;
+    setSecrets(await db().vault.orderBy('name').toArray().catch(() => []));
+  }, []);
+
+  useEffect(() => { void reload(); }, [reload]);
+
+  const add = async () => {
+    const invalid = validateSecretName(name);
+    if (invalid) { setError(invalid); return; }
+    if (!value.trim()) { setError('A value is required.'); return; }
+    if (secrets.some((s) => s.name === name)) { setError(`${name} already exists — remove it first.`); return; }
+
+    const now = Date.now();
+    await db().vault.put({
+      id: `vault_${now.toString(36)}`,
+      name,
+      value: value.trim(),
+      scope,
+      targets: ['production', 'preview', 'development'],
+      note: note.trim() || undefined,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    setName(''); setValue(''); setNote(''); setError(null);
+    await reload();
+  };
+
+  const toggleReveal = (id: string) =>
+    setRevealed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  return (
+    <div className="space-y-4">
+      <p className="text-[11.5px] leading-[1.55]" style={{ color: 'var(--ink-dim)' }}>
+        Variables stored here are injected into a Vercel build and never enter a prompt, a generated file, or a history
+        export. They are held in this browser&apos;s IndexedDB — origin-scoped and local to this device, the same
+        guarantee a <code>.env.local</code> gives. Not a managed secret store.
+      </p>
+
+      <div className="rounded-lg border p-3" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
+        <div className="flex flex-wrap items-end gap-1.5">
+          <label className="min-w-40 flex-1">
+            <span className="mono block text-[9px] uppercase" style={{ color: 'var(--ink-faint)' }}>name</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_'))}
+              placeholder="STRIPE_SECRET_KEY"
+              className={inputClass}
+              style={inputStyle}
+            />
+          </label>
+          <label className="w-28">
+            <span className="mono block text-[9px] uppercase" style={{ color: 'var(--ink-faint)' }}>scope</span>
+            <select
+              value={scope}
+              onChange={(e) => setScope(e.target.value as VaultRecord['scope'])}
+              className={inputClass}
+              style={{ ...inputStyle, background: 'var(--surface)' }}
+            >
+              <option value="both">build + runtime</option>
+              <option value="build">build only</option>
+              <option value="runtime">runtime only</option>
+            </select>
+          </label>
+        </div>
+
+        <label className="mt-1.5 block">
+          <span className="mono block text-[9px] uppercase" style={{ color: 'var(--ink-faint)' }}>value</span>
+          <input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            type="password"
+            placeholder="…"
+            className={inputClass}
+            style={inputStyle}
+            spellCheck={false}
+          />
+        </label>
+
+        <label className="mt-1.5 block">
+          <span className="mono block text-[9px] uppercase" style={{ color: 'var(--ink-faint)' }}>note (optional)</span>
+          <input value={note} onChange={(e) => setNote(e.target.value)} className={inputClass} style={inputStyle} />
+        </label>
+
+        {name && isClientExposed(name) && (
+          <p className="mt-1.5 text-[10.5px] leading-[1.45]" style={{ color: 'var(--color-amber)' }}>
+            ⚠ {name.split('_')[0]}_ prefixed variables are inlined into the client bundle and shipped to every visitor.
+            Only put values here that are safe to publish.
+          </p>
+        )}
+
+        {error && (
+          <p className="mt-1.5 text-[10.5px]" style={{ color: 'var(--color-rose)' }}>{error}</p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => void add()}
+          className="press mono mt-2 w-full rounded-lg px-3 py-2 text-[11.5px] font-semibold"
+          style={{ background: 'var(--accent)', color: '#04150e' }}
+        >
+          add variable
+        </button>
+      </div>
+
+      {secrets.length > 0 && (
+        <>
+          <div className="space-y-1.5">
+            {secrets.map((secret) => (
+              <div key={secret.id} className="rounded-lg border px-2.5 py-2" style={{ borderColor: 'var(--line)' }}>
+                <div className="flex items-center gap-2">
+                  <span className="mono truncate text-[11.5px]" style={{ color: 'var(--ink)' }}>{secret.name}</span>
+                  {isClientExposed(secret.name) && (
+                    <span
+                      className="mono rounded px-1 py-0.5 text-[8.5px] uppercase"
+                      style={{ background: 'color-mix(in oklab, var(--color-amber) 18%, transparent)', color: 'var(--color-amber)' }}
+                    >
+                      public
+                    </span>
+                  )}
+                  <span className="mono text-[9px]" style={{ color: 'var(--ink-faint)' }}>{secret.scope}</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleReveal(secret.id)}
+                    className="press mono ml-auto text-[10px]"
+                    style={{ color: 'var(--ink-faint)' }}
+                  >
+                    {revealed.has(secret.id) ? 'hide' : 'reveal'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => { await db().vault.delete(secret.id); await reload(); }}
+                    className="press mono text-[10px]"
+                    style={{ color: 'var(--color-rose)' }}
+                  >
+                    remove
+                  </button>
+                </div>
+                <code className="mono mt-1 block truncate text-[10px]" style={{ color: 'var(--ink-faint)' }}>
+                  {revealed.has(secret.id) ? secret.value : maskSecret(secret.value)}
+                </code>
+                {secret.note && (
+                  <p className="mt-0.5 text-[10px]" style={{ color: 'var(--ink-faint)' }}>{secret.note}</p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => downloadText(toEnvFile(secrets), '.env.local', 'text/plain')}
+              className="press mono flex-1 rounded-lg border px-3 py-2 text-[10.5px]"
+              style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
+            >
+              ↓ .env.local (with values)
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadText(toEnvExample(secrets), '.env.example', 'text/plain')}
+              className="press mono flex-1 rounded-lg border px-3 py-2 text-[10.5px]"
+              style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
+            >
+              ↓ .env.example (names only)
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function DeployTab() {
   const vercelToken = useWorkspace((s) => s.vercelToken);
   const vercelTeamId = useWorkspace((s) => s.vercelTeamId);
@@ -522,6 +719,7 @@ function GuardTab() {
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'bridge', label: 'Terminal Bridge' },
+  { id: 'secrets', label: 'Secrets' },
   { id: 'endpoints', label: 'Custom Endpoints' },
   { id: 'deploy', label: 'Deployment' },
   { id: 'guard', label: 'Anti-Loop Ledger' },
@@ -581,6 +779,7 @@ export function Settings({ open, onClose }: { open: boolean; onClose: () => void
 
         <div className="flex-1 overflow-y-auto p-4">
           {tab === 'bridge' && <BridgeTab />}
+          {tab === 'secrets' && <SecretsTab />}
           {tab === 'endpoints' && <EndpointsTab />}
           {tab === 'deploy' && <DeployTab />}
           {tab === 'guard' && <GuardTab />}

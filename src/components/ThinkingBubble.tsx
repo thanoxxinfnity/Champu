@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useWorkspace } from '@/lib/store';
+import { CloneAvatar } from './CloneAvatar';
 
 /**
  * Gemini-style processing indicator.
@@ -81,7 +82,9 @@ export function ThinkingBubble() {
   if (!thinking.active) return null;
 
   return (
-    <div className="enter-pop flex items-center gap-2 py-1">
+    <div className="enter-pop flex items-center gap-2.5 py-1">
+      <CloneAvatar active size={38} />
+
       <div className="thinking-shell" role="status" aria-live="polite" aria-label={current || 'Working'}>
         <span className="thinking-aurora" aria-hidden />
 

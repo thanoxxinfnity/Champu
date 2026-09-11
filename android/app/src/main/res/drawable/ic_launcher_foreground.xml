@@ -4,15 +4,22 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:pathData="M36,38 L52,54 L36,70"
-        android:strokeColor="@color/ic_launcher_accent"
-        android:strokeWidth="7.5"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
-    <path
-        android:pathData="M58,70 L74,70"
-        android:strokeColor="@color/ic_launcher_alt"
-        android:strokeWidth="7.5"
-        android:strokeLineCap="round" />
+    <group android:translateX="27" android:translateY="27" android:scaleX="1.6875" android:scaleY="1.6875">
+        <path
+            android:pathData="M24.5,7 L14,26"
+            android:strokeColor="@color/ic_launcher_alt"
+            android:strokeWidth="1.5"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M11,9.5 L18.5,16 L11,22.5"
+            android:strokeColor="@color/ic_launcher_accent"
+            android:strokeWidth="2.8"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M21.5,22.5 L25,22.5"
+            android:strokeColor="@color/ic_launcher_accent"
+            android:strokeWidth="2.8"
+            android:strokeLineCap="round" />
+    </group>
 </vector>

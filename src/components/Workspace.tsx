@@ -12,6 +12,9 @@ import { FileManager } from './FileManager';
 import { CommandDock } from './CommandDock';
 import { Settings } from './Settings';
 import { DeployButton } from './DeployButton';
+import { DraftPicker } from './DraftPicker';
+import { AssetStudio } from './suites/AssetStudio';
+import { LogoMark, LogoWordmark } from './Logo';
 import { BedrockBuilder } from './suites/BedrockBuilder';
 import { BlockbenchStudio } from './suites/Blockbench';
 import { AndroidStudio } from './suites/AndroidStudio';
@@ -62,12 +65,14 @@ function SuiteTool() {
       return <Workdrive />;
     case 'skills':
       return <SkillsManager />;
+    case 'assets':
+      return <AssetStudio />;
     default:
       return null;
   }
 }
 
-const HAS_TOOL = new Set(['android', 'minecraft', 'studio', 'mcp', 'image', 'workdrive', 'skills']);
+const HAS_TOOL = new Set(['android', 'minecraft', 'studio', 'mcp', 'image', 'workdrive', 'skills', 'assets']);
 
 export function Workspace() {
   const activeSuite = useWorkspace((s) => s.activeSuite);
@@ -241,19 +246,9 @@ export function Workspace() {
               {messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center p-8">
                   <div className="enter-rise max-w-md text-center">
-                    <div className="thinking-shell mx-auto mb-5 block h-12 w-12">
+                    <div className="thinking-shell mx-auto mb-5 block h-14 w-14">
                       <span className="thinking-aurora" aria-hidden />
-                      <div
-                        className="mono flex h-12 w-12 items-center justify-center rounded-2xl text-[17px] font-bold"
-                        style={{
-                          background: 'linear-gradient(135deg, var(--accent), var(--accent-alt))',
-                          color: '#04150e',
-                          boxShadow: '0 10px 30px -12px color-mix(in oklab, var(--accent) 75%, transparent)',
-                        }}
-                        aria-hidden
-                      >
-                        C
-                      </div>
+                      <LogoMark size={56} id="empty-state" />
                     </div>
                     <h2 className="text-[17px] font-semibold tracking-tight">Chomugiri</h2>
                     <p className="mt-2 text-[12.5px] leading-[1.65]" style={{ color: 'var(--ink-dim)', textWrap: 'balance' }}>
@@ -276,9 +271,10 @@ export function Workspace() {
                   ))}
                   {/* Indented to the message text column so the pill reads as
                       part of the assistant's turn, not a floating toast. */}
-                  <div className="pb-3 pl-[52px] pr-4">
+                  <div className="pb-3 pl-4 pr-4">
                     <ThinkingBubble />
                   </div>
+                  <DraftPicker />
                 </>
               )}
             </div>

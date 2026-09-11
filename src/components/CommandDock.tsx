@@ -6,6 +6,8 @@ import { send } from '@/lib/agent/runtime';
 import { BUILTIN_SKILLS, expandSkill, parseSlash, searchSkills, type SkillDefinition } from '@/lib/skills/registry';
 import { classifyLocal } from '@/lib/agent/router';
 import { formatBytes } from '@/lib/zip';
+import { hasBlockingSecret, maskSecret, redact, scanForSecrets, suggestEnvName, validateSecretName, type SecretMatch } from '@/lib/security/secrets';
+import type { VaultRecord } from '@/lib/db/schema';
 import type { SkillRecord } from '@/lib/db/schema';
 import { db, isBrowser } from '@/lib/db/schema';
 
@@ -42,6 +44,108 @@ async function readAttachment(file: File): Promise<ChatAttachment> {
   }
 
   return base;
+}
+
+/**
+ * Credential guard.
+ *
+ * Sits between the input and the send button. A key pasted into a chat box is
+ * the most common way one leaks, and by the time it reaches a model provider it
+ * has to be treated as compromised — so this blocks the send outright rather
+ * than warning after the fact.
+ */
+function SecretGuard({
+  matches,
+  onRedact,
+  onVault,
+  onDismiss,
+}: {
+  matches: SecretMatch[];
+  onRedact: () => void;
+  onVault: (match: SecretMatch) => void;
+  onDismiss: () => void;
+}) {
+  const blocking = hasBlockingSecret(matches);
+
+  return (
+    <div
+      className="enter-pop mb-2 overflow-hidden rounded-xl border"
+      style={{
+        borderColor: blocking
+          ? 'color-mix(in oklab, var(--color-rose) 45%, var(--line))'
+          : 'color-mix(in oklab, var(--color-amber) 45%, var(--line))',
+        background: blocking
+          ? 'color-mix(in oklab, var(--color-rose) 8%, var(--panel))'
+          : 'color-mix(in oklab, var(--color-amber) 7%, var(--panel))',
+      }}
+      role="alert"
+    >
+      <div className="flex items-start gap-2.5 px-3 py-2.5">
+        <span className="mt-px shrink-0 text-[13px]" aria-hidden>
+          {blocking ? '🔒' : '⚠'}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p
+            className="text-[12px] font-medium leading-5"
+            style={{ color: blocking ? 'var(--color-rose)' : 'var(--color-amber)' }}
+          >
+            {blocking
+              ? 'Sending is blocked — this message contains a credential.'
+              : 'This looks like it might contain a credential.'}
+          </p>
+
+          <ul className="mt-1.5 space-y-1">
+            {matches.map((match, i) => (
+              <li key={`${match.start}-${i}`} className="flex flex-wrap items-center gap-1.5">
+                <span className="mono text-[10.5px]" style={{ color: 'var(--ink)' }}>
+                  {match.label}
+                </span>
+                <code
+                  className="mono rounded px-1.5 py-0.5 text-[10px]"
+                  style={{ background: 'var(--surface)', color: 'var(--ink-faint)' }}
+                >
+                  {maskSecret(match.value)}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => onVault(match)}
+                  className="press mono rounded px-1.5 py-0.5 text-[10px]"
+                  style={{ background: 'color-mix(in oklab, var(--accent) 15%, transparent)', color: 'var(--accent)' }}
+                >
+                  → Secrets
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          <p className="mt-1.5 text-[10.5px] leading-[1.45]" style={{ color: 'var(--ink-faint)' }}>
+            {matches[0]?.advice}
+          </p>
+
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={onRedact}
+              className="press mono rounded-lg px-2.5 py-1.5 text-[10.5px] font-medium"
+              style={{ background: 'var(--accent)', color: '#04150e' }}
+            >
+              redact and continue
+            </button>
+            {!blocking && (
+              <button
+                type="button"
+                onClick={onDismiss}
+                className="press mono rounded-lg border px-2.5 py-1.5 text-[10.5px]"
+                style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
+              >
+                it is a placeholder — send anyway
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /** Slash-command palette. */
@@ -309,6 +413,8 @@ export function CommandDock() {
   const thinking = useWorkspace((s) => s.thinking);
   const activeSuite = useWorkspace((s) => s.activeSuite);
   const heartbeat = useWorkspace((s) => s.heartbeat);
+  const draftsEnabled = useWorkspace((s) => s.draftsEnabled);
+  const setDraftsEnabled = useWorkspace((s) => s.setDraftsEnabled);
 
   const [value, setValue] = useState('');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -316,6 +422,7 @@ export function CommandDock() {
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [laneOverride, setLaneOverride] = useState<'A' | 'B' | null>(null);
+  const [guardDismissed, setGuardDismissed] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -343,6 +450,45 @@ export function CommandDock() {
     [value, showPalette, attachments.length],
   );
 
+  // Scans the draft text and every attached text file — a key pasted into an
+  // attached .env is the same leak as one typed into the box.
+  const secretMatches = useMemo(() => {
+    const bodies = [value, ...attachments.map((a) => a.text ?? '')].filter(Boolean);
+    return bodies.flatMap((body) => scanForSecrets(body));
+  }, [value, attachments]);
+
+  const blocked = hasBlockingSecret(secretMatches) || (secretMatches.length > 0 && !guardDismissed);
+
+  useEffect(() => {
+    if (secretMatches.length === 0) setGuardDismissed(false);
+  }, [secretMatches.length]);
+
+  const vaultSecret = useCallback(async (match: SecretMatch) => {
+    if (!isBrowser()) return;
+    const name = window.prompt('Store as which environment variable?', suggestEnvName(match));
+    if (!name) return;
+
+    const invalid = validateSecretName(name);
+    if (invalid) {
+      window.alert(invalid);
+      return;
+    }
+
+    const now = Date.now();
+    const record: VaultRecord = {
+      id: `vault_${now.toString(36)}`,
+      name,
+      value: match.value,
+      scope: 'both',
+      targets: ['production', 'preview', 'development'],
+      note: `Captured from the chat input (${match.label}).`,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db().vault.put(record).catch(() => undefined);
+    setValue((v) => redact(v, scanForSecrets(v)));
+  }, []);
+
   const effectiveLane = laneOverride ?? classification?.lane ?? null;
 
   // Autosize the textarea.
@@ -369,6 +515,8 @@ export function CommandDock() {
 
   const submit = useCallback(async () => {
     if (thinking.active) return;
+    // Belt and braces — the button is disabled, but Enter must not bypass it.
+    if (hasBlockingSecret(scanForSecrets(value))) return;
     const raw = value.trim();
     if (!raw && !attachments.length) return;
 
@@ -456,6 +604,18 @@ export function CommandDock() {
               applySkill(skill);
               setPaletteIndex(0);
             }}
+          />
+        )}
+
+        {secretMatches.length > 0 && !guardDismissed && (
+          <SecretGuard
+            matches={secretMatches}
+            onRedact={() => {
+              setValue((v) => redact(v, scanForSecrets(v)));
+              setAttachments((prev) => prev.map((a) => (a.text ? { ...a, text: redact(a.text, scanForSecrets(a.text)) } : a)));
+            }}
+            onVault={(m) => void vaultSecret(m)}
+            onDismiss={() => setGuardDismissed(true)}
           />
         )}
 
@@ -569,6 +729,25 @@ export function CommandDock() {
               </button>
             )}
 
+            <button
+              type="button"
+              onClick={() => setDraftsEnabled(!draftsEnabled)}
+              aria-pressed={draftsEnabled}
+              className="press mono rounded-lg border px-2 py-1.5 text-[10.5px]"
+              style={{
+                borderColor: draftsEnabled ? 'color-mix(in oklab, var(--accent-alt) 50%, var(--line))' : 'var(--line)',
+                color: draftsEnabled ? 'var(--accent-alt)' : 'var(--ink-faint)',
+                background: draftsEnabled ? 'color-mix(in oklab, var(--accent-alt) 10%, transparent)' : undefined,
+              }}
+              title={
+                draftsEnabled
+                  ? 'Two alternatives, you pick one. Costs two completions per turn — and on NVIDIA NIM they run one after the other, because its free tier allows only one request at a time.'
+                  : 'Generate two alternative answers and pick one.'
+              }
+            >
+              ⑂ drafts
+            </button>
+
             {bridgeDown && (
               <span
                 className="mono hidden items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] sm:flex"
@@ -585,7 +764,7 @@ export function CommandDock() {
               <button
                 type="button"
                 onClick={() => void submit()}
-                disabled={thinking.active || (!value.trim() && !attachments.length)}
+                disabled={thinking.active || blocked || (!value.trim() && !attachments.length)}
                 className="press mono rounded-lg px-3.5 py-1.5 text-[11.5px] font-semibold disabled:opacity-30"
                 style={{
                   background: 'linear-gradient(135deg, var(--accent), color-mix(in oklab, var(--accent) 62%, var(--accent-alt)))',
@@ -593,16 +772,18 @@ export function CommandDock() {
                   boxShadow: '0 4px 16px -6px color-mix(in oklab, var(--accent) 70%, transparent)',
                 }}
               >
-                {thinking.active ? '…' : 'run'}
+                {thinking.active ? '…' : blocked ? '🔒' : 'run'}
               </button>
             </div>
           </div>
         </div>
 
         <p className="mono mt-1.5 text-center text-[9.5px]" style={{ color: 'var(--ink-faint)' }}>
-          {classification && !showPalette
-            ? `routed to Lane ${classification.lane} — ${classification.reason}`
-            : 'Chomugiri · talk less, work more'}
+          {blocked
+            ? 'blocked — remove or vault the credential above'
+            : classification && !showPalette
+              ? `routed to Lane ${classification.lane} — ${classification.reason}`
+              : 'Chomugiri · talk less, work more'}
         </p>
       </div>
     </div>

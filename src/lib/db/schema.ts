@@ -23,7 +23,8 @@ export type SuiteId =
   | 'image'
   | 'video'
   | 'audio'
-  | 'model3d';
+  | 'model3d'
+  | 'assets';
 
 export interface SessionRecord {
   id: string;
@@ -161,6 +162,24 @@ export interface ResearchRunRecord {
   notified?: 0 | 1;
 }
 
+/**
+ * Deployment environment variables.
+ *
+ * Kept in its own table, never touched by `exportSuite`, so a shared history
+ * export cannot carry credentials out with it.
+ */
+export interface VaultRecord {
+  id: string;
+  name: string;
+  value: string;
+  scope: 'build' | 'runtime' | 'both';
+  targets: Array<'production' | 'preview' | 'development'>;
+  note?: string;
+  createdAt: number;
+  updatedAt: number;
+  lastUsedAt?: number;
+}
+
 export interface SettingRecord {
   key: string;
   value: unknown;
@@ -177,6 +196,7 @@ export class ChomugiriDB extends Dexie {
   endpoints!: Table<EndpointRecord, string>;
   research!: Table<ResearchRunRecord, string>;
   settings!: Table<SettingRecord, string>;
+  vault!: Table<VaultRecord, string>;
 
   constructor() {
     super('chomugiri');
@@ -192,6 +212,12 @@ export class ChomugiriDB extends Dexie {
       endpoints: 'id, label, enabled, createdAt',
       research: 'id, sessionId, status, createdAt, dueAt, updatedAt',
       settings: 'key',
+    });
+
+    // Secrets vault. A new store rather than a settings row so it can be wiped
+    // independently and never joins a history export.
+    this.version(2).stores({
+      vault: 'id, name, updatedAt',
     });
   }
 }
@@ -213,6 +239,7 @@ export function isBrowser(): boolean {
 
 export const SUITE_LABELS: Record<SuiteId, string> = {
   chat: 'Chat',
+  assets: 'Asset Studio',
   android: 'Android & Cross-Platform',
   minecraft: 'Minecraft Engineering',
   studio: 'Presentations & Canvas',

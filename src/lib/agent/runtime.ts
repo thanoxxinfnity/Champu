@@ -8,6 +8,8 @@ import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types
 import type { CustomEndpointConfig } from '@/lib/providers/types';
 import { useWorkspace, type ChatAttachment, THINKING_PHRASES, LANE_B_PHRASES } from '@/lib/store';
 import { PLANNER_NIM_MODEL } from '@/lib/providers/registry';
+import { draftSystemSuffix, pickAngles } from './drafts';
+import { scanForSecrets, hasBlockingSecret } from '@/lib/security/secrets';
 import { appendMessage, createSession, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
 import type { SuiteId } from '@/lib/db/schema';
 import { BridgeOfflineError } from '@/lib/bridge/client';
@@ -380,6 +382,92 @@ async function buildPlan(
   }
 }
 
+/**
+ * Generate two alternatives in parallel and let the user choose.
+ *
+ * Both share the abort controller, so the Stop button kills the pair — a draft
+ * left streaming after cancel is the bug that makes Stop feel broken.
+ */
+async function runDrafts(opts: {
+  input: string;
+  systemPrompt: string;
+  history: ChatMessage[];
+  userContent: ChatMessage['content'];
+  lane: 'A' | 'B';
+  suite: SuiteId;
+  selection: { provider: ProviderId; model: string };
+  custom?: CustomEndpointConfig;
+  signal: AbortSignal;
+}): Promise<void> {
+  const { setDrafts, patchDraft } = useWorkspace.getState();
+  const [angleA, angleB] = pickAngles(opts.lane, opts.suite);
+
+  const drafts = [angleA, angleB].map((angle, i) => ({
+    id: uid(`draft${i}`),
+    label: angle.label,
+    angle: angle.angle,
+    content: '',
+    reasoning: '',
+    streaming: true,
+    model: opts.selection.model,
+  }));
+  setDrafts(drafts);
+
+  const request = (angle: typeof angleA, id: string) =>
+    streamCompletion(
+      {
+        provider: opts.selection.provider,
+        model: opts.selection.model,
+        messages: [
+          { role: 'system', content: `${opts.systemPrompt}\n\n${draftSystemSuffix(angle)}` },
+          ...opts.history,
+          { role: 'user', content: opts.userContent },
+        ],
+        temperature: angle.temperature,
+        maxTokens: 4096,
+        custom: opts.custom,
+      },
+      {
+        onDelta: (_d, full) => patchDraft(id, { content: full }),
+        onReasoning: (_d, full) => patchDraft(id, { reasoning: full }),
+        onError: () => undefined, // surfaced below, after the retry decides
+      },
+      opts.signal,
+    );
+
+  const runOne = async (angle: typeof angleA, id: string) => {
+    let result = await request(angle, id);
+
+    // One retry for a genuinely transient limit. Not a loop: a key that is over
+    // quota stays over quota, and hammering it just delays the error.
+    if (result.error && /rate limit|429|quota|too many/i.test(result.error) && !opts.signal.aborted) {
+      patchDraft(id, { error: undefined, content: '' });
+      await new Promise((r) => setTimeout(r, 3000));
+      result = await request(angle, id);
+    }
+
+    patchDraft(id, {
+      content: result.content,
+      reasoning: result.reasoning,
+      streaming: false,
+      error: result.content ? undefined : result.error,
+    });
+  };
+
+  // Verified against the live API: NVIDIA NIM's free tier permits exactly one
+  // in-flight completion per key — a second concurrent request 429s immediately,
+  // every time. So drafts run sequentially there and in parallel everywhere
+  // else, rather than firing two requests the provider was never going to serve.
+  const parallelSafe = opts.selection.provider !== 'nim';
+
+  if (parallelSafe) {
+    await Promise.all([runOne(angleA, drafts[0].id), runOne(angleB, drafts[1].id)]);
+  } else {
+    await runOne(angleA, drafts[0].id);
+    if (!opts.signal.aborted) await runOne(angleB, drafts[1].id);
+  }
+}
+
 // ── Main entry point ────────────────────────────────────────────────────────
 
 export async function send(opts: SendOptions): Promise<void> {
@@ -393,6 +481,26 @@ export async function send(opts: SendOptions): Promise<void> {
   const attachments = opts.attachments ?? [];
   const input = opts.input.trim();
   if (!input && !attachments.length) return;
+
+  // Last line of defence. The dock blocks this at the keystroke, but a skill
+  // template or a programmatic call could still route a credential here, and
+  // sending it would hand the user's key to a third-party model provider.
+  const leaked = scanForSecrets(input);
+  if (hasBlockingSecret(leaked)) {
+    pushMessage({
+      id: uid('msg'),
+      role: 'system',
+      content:
+        `Blocked before sending: this message contains ${leaked
+          .filter((m) => m.confidence === 'certain')
+          .map((m) => m.label)
+          .join(', ')}. ` +
+        'Chomugiri will not transmit a credential to a model provider. Remove it, or store it under Settings → Secrets.',
+      createdAt: Date.now(),
+      error: 'secret_blocked',
+    });
+    return;
+  }
 
   // Session bootstrap.
   let sessionId = state.sessionId;
@@ -481,10 +589,36 @@ export async function send(opts: SendOptions): Promise<void> {
       workspaceFiles: [...useWorkspace.getState().files.keys()],
     });
 
+    const history = historyFor(10);
+    const userContent = buildUserContent(input, attachments);
+
+    // Drafts replace the single answer entirely; the chosen one is committed
+    // into the transcript when the user picks it.
+    if (useWorkspace.getState().draftsEnabled && !opts.forceLane) {
+      patchMessage(assistantId, { streaming: false, content: '' });
+      useWorkspace.getState().setThinking(true, 'Drafting two approaches...');
+
+      await runDrafts({
+        input,
+        systemPrompt,
+        history,
+        userContent,
+        lane,
+        suite,
+        selection,
+        custom: opts.custom,
+        signal: controller.signal,
+      });
+
+      // The placeholder turn is a slot the chosen draft fills in.
+      patchMessage(assistantId, { content: '', streaming: false });
+      return;
+    }
+
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
-      ...historyFor(10),
-      { role: 'user', content: buildUserContent(input, attachments) },
+      ...history,
+      { role: 'user', content: userContent },
     ];
 
     let seenFiles = new Map<string, FileArtifact>();
@@ -611,6 +745,37 @@ export async function send(opts: SendOptions): Promise<void> {
           // A ban or a hard failure stops the sequence; continuing would run
           // dependent commands against a broken state.
           if (!outcome.ok && outcome.skipped !== 'offline') break;
+        }
+
+        // A built artifact buried in terminal scrollback may as well not exist.
+        // Collect and post it as a tappable link in the transcript.
+        try {
+          const collected = await useWorkspace.getState().bridge.collect(['.apk', '.aab', '.zip', '.mcpack', '.mcaddon']);
+          if (collected.count) {
+            const bridgeClient = useWorkspace.getState().bridge;
+            const lines = collected.collected.map(
+              (a) => `- [\`${a.name}\`](${bridgeClient.artifactUrl(a.name)}) — ${(a.bytes / 1024 / 1024).toFixed(1)} MB`,
+            );
+            const body = [
+              `### Build artifacts (${collected.count})`,
+              '',
+              ...lines,
+              '',
+              '_Served from your bridge. The link works while the tunnel is up._',
+            ].join('\n');
+
+            const artifactId = uid('msg');
+            pushMessage({
+              id: artifactId,
+              role: 'assistant',
+              content: body,
+              lane,
+              createdAt: Date.now(),
+            });
+            void appendMessage({ id: artifactId, sessionId, suite, role: 'assistant', content: body, createdAt: Date.now(), lane });
+          }
+        } catch {
+          // Collection is a convenience; a failure here must not fail the run.
         }
       }
 

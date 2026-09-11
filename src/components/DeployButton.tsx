@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { db, isBrowser, type VaultRecord } from '@/lib/db/schema';
+import { secretsToEnvObject } from '@/lib/security/secrets';
 import { useWorkspace } from '@/lib/store';
 
 /**
@@ -20,6 +22,16 @@ export function DeployButton() {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const [projectName, setProjectName] = useState('chomugiri-app');
+  const [vault, setVault] = useState<VaultRecord[]>([]);
+
+  // Environment comes from the vault, never from the generated bundle — the
+  // whole point of the vault is that a key is not in a file someone can read.
+  useEffect(() => {
+    if (!open || !isBrowser()) return;
+    void db().vault.toArray().then(setVault).catch(() => undefined);
+  }, [open]);
+
+  const buildEnv = secretsToEnvObject(vault, 'build');
 
   const list = [...files.values()];
   const hasEntry = list.some((f) =>
@@ -41,6 +53,7 @@ export function DeployButton() {
           name: projectName,
           files: list.map((f) => ({ path: f.path, content: f.content })),
           target: 'production',
+          env: Object.keys(buildEnv).length ? buildEnv : undefined,
           wait: true,
         }),
       });
@@ -111,6 +124,7 @@ export function DeployButton() {
 
           <p className="mono mt-1.5 text-[10px] leading-[1.45]" style={{ color: 'var(--ink-faint)' }}>
             {list.length} file{list.length === 1 ? '' : 's'} in the bundle
+            {vault.length > 0 && ` · ${Object.keys(buildEnv).length} env var${Object.keys(buildEnv).length === 1 ? '' : 's'} from the vault`}
           </p>
 
           {!vercelToken && (

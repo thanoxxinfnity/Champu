@@ -5,6 +5,7 @@ import { useWorkspace } from '@/lib/store';
 import { deleteSession, exportSuite, listMessages, listSessions, searchSessions, storageEstimate } from '@/lib/db/history';
 import { SUITE_LABELS, type SessionRecord, type SuiteId } from '@/lib/db/schema';
 import { downloadText, formatBytes } from '@/lib/zip';
+import { LogoWordmark } from './Logo';
 
 interface SuiteEntry {
   id: SuiteId;
@@ -20,6 +21,7 @@ const CORE_SUITES: SuiteEntry[] = [
   { id: 'studio', label: 'Studio', icon: '◫', hint: 'Decks, canvas, documents, images' },
   { id: 'mcp', label: 'MCP Builder', icon: '⬡', hint: 'Model Context Protocol servers' },
   { id: 'workdrive', label: 'Workdrive', icon: '◎', hint: 'Autonomous research and milestones' },
+  { id: 'assets', label: 'Asset Studio', icon: '◆', hint: 'Background removal, icons and drawables' },
   { id: 'skills', label: 'Skills', icon: '✦', hint: 'Slash commands and custom skills' },
 ];
 
@@ -172,21 +174,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
       style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}
     >
       <header className="shrink-0 px-3 py-3">
-        <div className="flex items-center gap-2">
-          <div
-            className="mono flex h-6 w-6 items-center justify-center rounded text-[11px] font-bold"
-            style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-alt))', color: '#04150e' }}
-            aria-hidden
-          >
-            C
-          </div>
-          <div className="min-w-0">
-            <h1 className="truncate text-[13px] font-semibold tracking-tight">Chomugiri</h1>
-            <p className="mono text-[9px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-faint)' }}>
-              autonomous workspace
-            </p>
-          </div>
-        </div>
+        <LogoWordmark size={18} />
       </header>
 
       <BridgeStatusCard onOpenSettings={onOpenSettings} />
