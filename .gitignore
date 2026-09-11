@@ -16,3 +16,8 @@ agent/.workspace/
 agent/.artifacts/
 dist/*.apk
 dist/*.aab
+android/app/src/main/assets/web/
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/

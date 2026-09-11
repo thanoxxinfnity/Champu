@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Chomugiri" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">#09090B</item>
+        <item name="android:statusBarColor">#09090B</item>
+        <item name="android:navigationBarColor">#09090B</item>
+        <item name="colorAccent">#10B981</item>
+    </style>
+</resources>
