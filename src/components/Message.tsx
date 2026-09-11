@@ -27,11 +27,18 @@ function ReasoningDrawer({ reasoning, streaming }: { reasoning: string; streamin
   const lines = reasoning.split('\n').filter(Boolean).length;
 
   return (
-    <div className="mb-2.5 overflow-hidden rounded-lg border" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
+    <div
+      className="mb-2.5 overflow-hidden rounded-xl border"
+      style={{
+        borderColor: streaming ? 'color-mix(in oklab, var(--accent-alt) 34%, var(--line))' : 'var(--line)',
+        background: 'var(--surface)',
+        transition: 'border-color var(--dur-base) var(--ease-out)',
+      }}
+    >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors"
+        className="press flex w-full items-center gap-2 px-3 py-2 text-left"
         style={{ color: 'var(--ink-dim)' }}
         aria-expanded={open}
       >
@@ -42,16 +49,26 @@ function ReasoningDrawer({ reasoning, streaming }: { reasoning: string; streamin
         >
           ▶
         </span>
-        <span className="mono text-[10.5px] uppercase tracking-[0.12em]">Reasoning</span>
+        <span
+          className={`mono text-[10.5px] uppercase tracking-[0.12em] ${streaming ? 'thinking-phrase' : ''}`}
+        >
+          Reasoning
+        </span>
         <span className="mono text-[10px]" style={{ color: 'var(--ink-faint)' }}>
           {streaming ? 'streaming…' : `${lines} line${lines === 1 ? '' : 's'}`}
         </span>
-        {streaming && <span className="thinking-dot ml-auto" aria-hidden />}
+        {streaming && (
+          <span className="ml-auto flex gap-1" aria-hidden>
+            <span className="thinking-dot" style={{ animationDelay: '0ms' }} />
+            <span className="thinking-dot" style={{ animationDelay: '160ms' }} />
+            <span className="thinking-dot" style={{ animationDelay: '320ms' }} />
+          </span>
+        )}
       </button>
 
       {open && (
         <div
-          className="mono max-h-72 overflow-y-auto whitespace-pre-wrap border-t px-3 py-2.5 text-[11.5px] leading-[1.62]"
+          className="enter-fade mono max-h-72 overflow-y-auto whitespace-pre-wrap border-t px-3 py-2.5 text-[11.5px] leading-[1.62]"
           style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
         >
           {reasoning}
@@ -67,7 +84,7 @@ function AttachmentChips({ attachments }: { attachments: NonNullable<ChatMessage
       {attachments.map((a) => (
         <span
           key={a.id}
-          className="mono flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10.5px]"
+          className="press mono flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10.5px]"
           style={{ borderColor: 'var(--line)', background: 'var(--surface)', color: 'var(--ink-dim)' }}
           title={`${a.kind} · ${a.bytes} bytes`}
         >
@@ -93,7 +110,7 @@ export function Message({ message }: { message: ChatMessageView }) {
   const isUser = message.role === 'user';
 
   return (
-    <article className="flex gap-3 px-4 py-3.5">
+    <article className="enter-rise flex gap-3 px-4 py-3.5">
       <Avatar role={message.role} lane={message.lane} />
 
       <div className="min-w-0 flex-1">
@@ -153,16 +170,15 @@ export function Message({ message }: { message: ChatMessageView }) {
         )}
 
         {message.streaming && !message.content && !message.reasoning && (
-          <div className="flex items-center gap-1.5 py-1">
-            <span className="thinking-dot" style={{ animationDelay: '0ms' }} aria-hidden />
-            <span className="thinking-dot" style={{ animationDelay: '180ms' }} aria-hidden />
-            <span className="thinking-dot" style={{ animationDelay: '360ms' }} aria-hidden />
+          <div className="flex flex-col gap-2 py-1" aria-hidden>
+            <span className="skeleton h-3 w-[72%]" />
+            <span className="skeleton h-3 w-[54%]" style={{ animationDelay: '140ms' }} />
           </div>
         )}
 
         {message.error && (
           <div
-            className="mt-2 rounded-lg border px-3 py-2 text-[12px] leading-5"
+            className="enter-pop mt-2 rounded-xl border px-3 py-2 text-[12px] leading-5"
             style={{
               borderColor: 'color-mix(in oklab, var(--color-rose) 40%, var(--line))',
               background: 'color-mix(in oklab, var(--color-rose) 8%, transparent)',

@@ -61,8 +61,14 @@ function SkillPalette({
 
   return (
     <div
-      className="absolute bottom-full left-0 right-0 mb-2 max-h-72 overflow-y-auto rounded-xl border shadow-2xl"
-      style={{ borderColor: 'var(--line-strong)', background: 'var(--panel)' }}
+      className="enter-pop absolute bottom-full left-0 right-0 mb-2 max-h-72 overflow-y-auto rounded-2xl border"
+      style={{
+        borderColor: 'var(--line-strong)',
+        background: 'color-mix(in oklab, var(--panel) 94%, transparent)',
+        backdropFilter: 'blur(14px) saturate(1.3)',
+        WebkitBackdropFilter: 'blur(14px) saturate(1.3)',
+        boxShadow: '0 24px 60px -24px rgba(0,0,0,0.85)',
+      }}
       role="listbox"
     >
       {matches.map(({ skill }, i) => (
@@ -73,8 +79,13 @@ function SkillPalette({
             e.preventDefault();
             onPick(skill);
           }}
-          className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors"
-          style={{ background: i === selected ? 'color-mix(in oklab, var(--accent) 10%, transparent)' : undefined }}
+          className="enter-fade flex w-full items-start gap-2.5 px-3 py-2.5 text-left"
+          style={{
+            background: i === selected ? 'color-mix(in oklab, var(--accent) 11%, transparent)' : undefined,
+            boxShadow: i === selected ? 'inset 2px 0 0 var(--accent)' : undefined,
+            animationDelay: `${Math.min(i, 8) * 24}ms`,
+            transition: 'background var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out)',
+          }}
           role="option"
           aria-selected={i === selected}
         >
@@ -159,7 +170,7 @@ function ModelSwitcher() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="mono flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] transition-colors"
+        className="press glow-accent mono flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px]"
         style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
         title={active ? `${active.vendor} · ${active.id}` : selection.model}
       >
@@ -181,8 +192,14 @@ function ModelSwitcher() {
 
       {open && (
         <div
-          className="absolute bottom-full right-0 mb-2 flex max-h-[420px] w-80 flex-col overflow-hidden rounded-xl border shadow-2xl"
-          style={{ borderColor: 'var(--line-strong)', background: 'var(--panel)' }}
+          className="enter-pop absolute bottom-full right-0 mb-2 flex max-h-[420px] w-80 flex-col overflow-hidden rounded-2xl border"
+          style={{
+            borderColor: 'var(--line-strong)',
+            background: 'color-mix(in oklab, var(--panel) 94%, transparent)',
+            backdropFilter: 'blur(14px) saturate(1.3)',
+            WebkitBackdropFilter: 'blur(14px) saturate(1.3)',
+            boxShadow: '0 24px 60px -24px rgba(0,0,0,0.85)',
+          }}
         >
           <div className="flex shrink-0 items-center gap-2 border-b px-2.5 py-2" style={{ borderColor: 'var(--line)' }}>
             <input
@@ -235,10 +252,12 @@ function ModelSwitcher() {
                         setSelection({ provider: model.provider, model: model.id });
                         setOpen(false);
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors disabled:cursor-not-allowed"
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left disabled:cursor-not-allowed"
                       style={{
                         background: isActive ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : undefined,
+                        boxShadow: isActive ? 'inset 2px 0 0 var(--accent)' : undefined,
                         opacity: unreachable ? 0.45 : 1,
+                        transition: 'background var(--dur-fast) var(--ease-out)',
                       }}
                       title={model.note}
                     >
@@ -441,10 +460,15 @@ export function CommandDock() {
         )}
 
         <div
-          className="rounded-2xl border shadow-xl transition-colors"
+          className="dock-focus rounded-2xl border"
           style={{
             borderColor: dragOver ? 'var(--accent)' : 'var(--line-strong)',
-            background: 'var(--panel)',
+            background: 'color-mix(in oklab, var(--panel) 92%, transparent)',
+            backdropFilter: 'blur(16px) saturate(1.4)',
+            WebkitBackdropFilter: 'blur(16px) saturate(1.4)',
+            boxShadow: dragOver
+              ? '0 0 0 4px color-mix(in oklab, var(--accent) 16%, transparent), 0 18px 44px -22px rgba(0,0,0,0.8)'
+              : '0 18px 44px -22px rgba(0,0,0,0.8)',
           }}
         >
           {attachments.length > 0 && (
@@ -452,7 +476,7 @@ export function CommandDock() {
               {attachments.map((a) => (
                 <span
                   key={a.id}
-                  className="mono flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10.5px]"
+                  className="enter-pop press mono flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10.5px]"
                   style={{ borderColor: 'var(--line)', background: 'var(--surface)', color: 'var(--ink-dim)' }}
                 >
                   {a.dataUrl ? (
@@ -518,7 +542,7 @@ export function CommandDock() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="mono flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] transition-colors"
+              className="press glow-accent mono flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[11px]"
               style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
               title="Attach images, code or documents"
             >
@@ -529,7 +553,7 @@ export function CommandDock() {
               <button
                 type="button"
                 onClick={() => setLaneOverride(effectiveLane === 'A' ? 'B' : 'A')}
-                className="mono rounded-lg border px-2 py-1.5 text-[10.5px] transition-colors"
+                className="press mono rounded-lg border px-2 py-1.5 text-[10.5px]"
                 style={{
                   borderColor: laneOverride ? 'var(--accent)' : 'var(--line)',
                   color: effectiveLane === 'B' ? 'var(--accent)' : 'var(--color-indigo)',
@@ -562,8 +586,12 @@ export function CommandDock() {
                 type="button"
                 onClick={() => void submit()}
                 disabled={thinking.active || (!value.trim() && !attachments.length)}
-                className="mono rounded-lg px-3.5 py-1.5 text-[11.5px] font-medium transition-opacity disabled:opacity-30"
-                style={{ background: 'var(--accent)', color: '#04150e' }}
+                className="press mono rounded-lg px-3.5 py-1.5 text-[11.5px] font-semibold disabled:opacity-30"
+                style={{
+                  background: 'linear-gradient(135deg, var(--accent), color-mix(in oklab, var(--accent) 62%, var(--accent-alt)))',
+                  color: '#04150e',
+                  boxShadow: '0 4px 16px -6px color-mix(in oklab, var(--accent) 70%, transparent)',
+                }}
               >
                 {thinking.active ? '…' : 'run'}
               </button>

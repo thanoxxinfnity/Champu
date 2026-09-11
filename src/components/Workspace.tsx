@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useWorkspace } from '@/lib/store';
 import { resumeParkedWork } from '@/lib/agent/runtime';
 import { Sidebar } from './Sidebar';
@@ -84,6 +84,11 @@ export function Workspace() {
   const modelWarnings = useWorkspace((s) => s.modelWarnings);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Below `lg` the split pane has nowhere to live, so plan/files/terminal move
+  // into a sheet that slides over the chat. Without this they are unreachable on
+  // a phone — which is where the Android build spends all of its time.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const tabRailRef = useRef<HTMLElement>(null);
   const [warningsDismissed, setWarningsDismissed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
@@ -140,6 +145,26 @@ export function Workspace() {
   // Fall back to a tab that exists for this suite.
   const effectiveTab = tabs.some((t) => t.id === rightPaneTab) ? rightPaneTab : tabs[0].id;
 
+  // Position the sliding underline from the active tab's real geometry —
+  // percentage guesses drift as soon as a badge changes a tab's width.
+  useLayoutEffect(() => {
+    const rail = tabRailRef.current;
+    if (!rail) return;
+    const active = rail.querySelector<HTMLElement>(`[data-tab="${effectiveTab}"]`);
+    if (!active) return;
+    rail.style.setProperty('--tab-x', `${active.offsetLeft}px`);
+    rail.style.setProperty('--tab-w', `${active.offsetWidth}px`);
+  }, [effectiveTab, tabs.length, files.size, plan?.tasks.length]);
+
+  const paneBody = (
+    <>
+      {effectiveTab === 'preview' && <SuiteTool />}
+      {effectiveTab === 'plan' && <TodoHud />}
+      {effectiveTab === 'files' && <FileManager />}
+      {effectiveTab === 'terminal' && <Terminal />}
+    </>
+  );
+
   return (
     <div className="flex h-dvh overflow-hidden" style={{ background: 'var(--bg)' }}>
       {sidebarOpen && (
@@ -156,7 +181,7 @@ export function Workspace() {
           <button
             type="button"
             onClick={toggleSidebar}
-            className="mono rounded px-1.5 py-1 text-[12px]"
+            className="press mono rounded-lg px-2 py-1 text-[12px]"
             style={{ color: 'var(--ink-faint)' }}
             aria-label="Toggle sidebar"
             title="⌘B"
@@ -173,7 +198,7 @@ export function Workspace() {
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}
-              className="mono rounded px-1.5 py-1 text-[12px]"
+              className="press mono rounded-lg px-2 py-1 text-[12px]"
               style={{ color: 'var(--ink-faint)' }}
               aria-label="Settings"
               title="⌘,"
@@ -215,22 +240,29 @@ export function Workspace() {
             }} className="min-h-0 flex-1 overflow-y-auto">
               {messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center p-8">
-                  <div className="max-w-md text-center">
-                    <div
-                      className="mono mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-xl text-[16px] font-bold"
-                      style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-alt))', color: '#04150e' }}
-                      aria-hidden
-                    >
-                      C
+                  <div className="enter-rise max-w-md text-center">
+                    <div className="thinking-shell mx-auto mb-5 block h-12 w-12">
+                      <span className="thinking-aurora" aria-hidden />
+                      <div
+                        className="mono flex h-12 w-12 items-center justify-center rounded-2xl text-[17px] font-bold"
+                        style={{
+                          background: 'linear-gradient(135deg, var(--accent), var(--accent-alt))',
+                          color: '#04150e',
+                          boxShadow: '0 10px 30px -12px color-mix(in oklab, var(--accent) 75%, transparent)',
+                        }}
+                        aria-hidden
+                      >
+                        C
+                      </div>
                     </div>
                     <h2 className="text-[17px] font-semibold tracking-tight">Chomugiri</h2>
-                    <p className="mt-1.5 text-[12.5px] leading-[1.6]" style={{ color: 'var(--ink-dim)' }}>
+                    <p className="mt-2 text-[12.5px] leading-[1.65]" style={{ color: 'var(--ink-dim)', textWrap: 'balance' }}>
                       Ask a technical question and it routes to <strong>Lane A</strong> — direct answers, no filler.
                       <br />
                       Describe something to build and it routes to <strong>Lane B</strong> — an atomic plan, generated
                       files, and real builds over the terminal bridge.
                     </p>
-                    <p className="mono mt-4 text-[10.5px] leading-[1.7]" style={{ color: 'var(--ink-faint)' }}>
+                    <p className="mono mt-5 text-[10.5px] leading-[1.9]" style={{ color: 'var(--ink-faint)', textWrap: 'balance' }}>
                       /make-apk · /build-mcpack · /build-mcp
                       <br />
                       /make-deck · /research · /audit-code · /deploy
@@ -242,12 +274,43 @@ export function Workspace() {
                   {messages.map((message) => (
                     <Message key={message.id} message={message} />
                   ))}
-                  <div className="px-4 pb-2">
+                  {/* Indented to the message text column so the pill reads as
+                      part of the assistant's turn, not a floating toast. */}
+                  <div className="pb-3 pl-[52px] pr-4">
                     <ThinkingBubble />
                   </div>
                 </>
               )}
             </div>
+
+            <nav className="flex shrink-0 gap-1.5 overflow-x-auto px-3 pb-1 pt-2 lg:hidden">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setRightPaneTab(tab.id);
+                    setSheetOpen(true);
+                  }}
+                  className="press mono flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10.5px]"
+                  style={{
+                    borderColor: 'var(--line)',
+                    background: 'color-mix(in oklab, var(--panel) 70%, transparent)',
+                    color: 'var(--ink-dim)',
+                  }}
+                >
+                  {tab.label}
+                  {tab.badge != null && tab.badge > 0 && (
+                    <span
+                      className="rounded-full px-1.5 py-px text-[9px] tabular-nums"
+                      style={{ background: 'color-mix(in oklab, var(--accent) 18%, transparent)', color: 'var(--accent)' }}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </nav>
 
             <CommandDock />
           </section>
@@ -257,23 +320,31 @@ export function Workspace() {
             className="hidden w-[46%] min-w-0 shrink-0 flex-col border-l lg:flex xl:w-[42%]"
             style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}
           >
-            <nav className="flex shrink-0 border-b" style={{ borderColor: 'var(--line)' }}>
+            <nav
+              ref={tabRailRef}
+              className="tab-rail flex shrink-0 border-b"
+              style={{ borderColor: 'var(--line)' }}
+            >
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
+                  data-tab={tab.id}
                   onClick={() => setRightPaneTab(tab.id)}
-                  className="mono flex items-center gap-1.5 px-3 py-2 text-[10.5px] transition-colors"
-                  style={{
-                    background: effectiveTab === tab.id ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : undefined,
-                    color: effectiveTab === tab.id ? 'var(--accent)' : 'var(--ink-dim)',
-                  }}
+                  className="press mono flex items-center gap-1.5 px-3.5 py-2.5 text-[10.5px]"
+                  style={{ color: effectiveTab === tab.id ? 'var(--accent)' : 'var(--ink-dim)' }}
                 >
                   {tab.label}
                   {tab.badge != null && tab.badge > 0 && (
                     <span
-                      className="rounded px-1 py-px text-[9px]"
-                      style={{ background: 'var(--surface)', color: 'var(--ink-faint)' }}
+                      className="rounded px-1 py-px text-[9px] tabular-nums"
+                      style={{
+                        background: effectiveTab === tab.id
+                          ? 'color-mix(in oklab, var(--accent) 18%, transparent)'
+                          : 'var(--surface)',
+                        color: effectiveTab === tab.id ? 'var(--accent)' : 'var(--ink-faint)',
+                        transition: 'background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out)',
+                      }}
                     >
                       {tab.badge}
                     </span>
@@ -282,15 +353,68 @@ export function Workspace() {
               ))}
             </nav>
 
-            <div className="min-h-0 flex-1">
-              {effectiveTab === 'preview' && <SuiteTool />}
-              {effectiveTab === 'plan' && <TodoHud />}
-              {effectiveTab === 'files' && <FileManager />}
-              {effectiveTab === 'terminal' && <Terminal />}
-            </div>
+            <div className="min-h-0 flex-1">{paneBody}</div>
           </section>
         </div>
       </main>
+
+      {sheetOpen && (
+        <div
+          className="enter-fade fixed inset-0 z-40 flex flex-col justify-end lg:hidden"
+          style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
+          onClick={() => setSheetOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${effectiveTab} pane`}
+        >
+          <div
+            className="flex h-[82dvh] flex-col overflow-hidden rounded-t-2xl border-t"
+            style={{
+              borderColor: 'var(--line-strong)',
+              background: 'var(--panel)',
+              animation: 'sheet-up 320ms var(--ease-out)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="relative flex shrink-0 items-center gap-2 border-b px-3 pb-2.5 pt-4"
+              style={{ borderColor: 'var(--line)' }}
+            >
+              <span
+                className="absolute left-1/2 top-1.5 h-1 w-10 -translate-x-1/2 rounded-full"
+                style={{ background: 'var(--line-strong)' }}
+                aria-hidden
+              />
+              <div className="flex gap-1">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setRightPaneTab(tab.id)}
+                    className="press mono rounded-lg px-2.5 py-1.5 text-[10.5px]"
+                    style={{
+                      background: effectiveTab === tab.id ? 'color-mix(in oklab, var(--accent) 13%, transparent)' : undefined,
+                      color: effectiveTab === tab.id ? 'var(--accent)' : 'var(--ink-dim)',
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSheetOpen(false)}
+                className="press mono ml-auto rounded-lg px-2 py-1 text-[12px]"
+                style={{ color: 'var(--ink-faint)' }}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="min-h-0 flex-1">{paneBody}</div>
+          </div>
+        </div>
+      )}
 
       <Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>

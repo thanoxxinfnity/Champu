@@ -31,14 +31,18 @@ function TaskRow({ task, index }: { task: Task; index: number }) {
 
   return (
     <li
-      className={`relative flex gap-3 rounded-lg border px-3 py-2.5 ${task.status === 'in_progress' ? 'task-running' : ''}`}
+      className={`enter-rise relative flex gap-3 rounded-xl border px-3 py-2.5 ${task.status === 'in_progress' ? 'task-running' : ''}`}
       style={{
+        animationDelay: `${Math.min(index, 8) * 45}ms`,
+        transition: 'border-color var(--dur-base) var(--ease-out), background var(--dur-base) var(--ease-out)',
         borderColor: task.status === 'in_progress' ? 'color-mix(in oklab, var(--accent) 40%, var(--line))' : 'var(--line)',
         background: task.status === 'in_progress' ? 'color-mix(in oklab, var(--accent) 5%, var(--panel))' : 'var(--panel)',
       }}
     >
       <span
-        className="mono mt-px shrink-0 text-[13px] leading-5"
+        className={`task-glyph mono mt-px shrink-0 text-[13px] leading-5 ${
+          task.status === 'in_progress' ? 'is-spinning' : task.status === 'completed' ? 'is-done' : ''
+        }`}
         style={{ color: style.color }}
         title={style.label}
         aria-label={style.label}
@@ -147,7 +151,7 @@ export function TodoHud({ compact = false }: { compact?: boolean }) {
 
         <div className="mt-2.5 h-1 overflow-hidden rounded-full" style={{ background: 'var(--surface)' }}>
           <div
-            className="h-full rounded-full transition-[width] duration-500 ease-out"
+            className="progress-bar h-full rounded-full"
             style={{
               width: `${progress.pct}%`,
               background:

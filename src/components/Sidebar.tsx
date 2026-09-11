@@ -214,9 +214,10 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
                   setExpanded(isExpanded ? null : suite.id);
                   setSuite(suite.id);
                 }}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors"
+                className="press flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left"
                 style={{
                   background: isActive ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : undefined,
+                  boxShadow: isActive ? 'inset 2px 0 0 var(--accent)' : undefined,
                   color: isActive ? 'var(--accent)' : 'var(--ink-dim)',
                 }}
                 title={suite.hint}
@@ -255,7 +256,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
                         <button
                           type="button"
                           onClick={() => void openSession(session)}
-                          className="min-w-0 flex-1 truncate rounded px-2 py-1 text-left text-[11px] transition-colors"
+                          className="press min-w-0 flex-1 truncate rounded px-2 py-1 text-left text-[11px]"
                           style={{
                             color: sessionId === session.id ? 'var(--accent)' : 'var(--ink-dim)',
                             background: sessionId === session.id ? 'color-mix(in oklab, var(--accent) 8%, transparent)' : undefined,
