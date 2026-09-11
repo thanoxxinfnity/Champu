@@ -85,6 +85,8 @@ export interface DeployResult {
   project: string;
   error?: string;
   at: number;
+  /** How many times this project has been shipped, first launch included. */
+  releases?: number;
 }
 
 export type ThemePref = 'system' | 'light' | 'dark';
@@ -418,7 +420,13 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     void setSetting('vercel', { token, teamId });
   },
   lastDeploy: null,
-  setLastDeploy: (result) => set({ lastDeploy: result }),
+  setLastDeploy: (result) => {
+    set({ lastDeploy: result });
+    // Persisted, so the app still knows which project it owns after a reload.
+    // Without this every visit looked like a first launch, and "update the site
+    // I already made" was impossible — it would have created a second project.
+    void setSetting('deploy', result);
+  },
 
   drafts: null,
   setDrafts: (drafts) => set({ drafts }),
@@ -464,6 +472,11 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     if (selection) set({ selection });
     if (bridgeConfig?.url) get().bridge.update(bridgeConfig);
     if (vercel?.token) set({ vercelToken: vercel.token, vercelTeamId: vercel.teamId ?? '' });
+
+    // Restore which site this workspace has already shipped, so the deploy
+    // control can offer to update it rather than launch a second one.
+    const priorDeploy = await getSetting<DeployResult | null>('deploy', null);
+    if (priorDeploy?.project) set({ lastDeploy: priorDeploy });
     set({ draftsEnabled: await getSetting<boolean>('draftsEnabled', false) });
 
     // The boot script already painted the stored theme; this re-syncs the store

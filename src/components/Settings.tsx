@@ -205,9 +205,24 @@ function EndpointsTab() {
   const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [headersText, setHeadersText] = useState('');
+  // Endpoints that do not publish /models are perfectly usable — you just have
+  // to say which model to call. Without this field they could not be used at all.
+  const [modelsText, setModelsText] = useState('');
   const [probing, setProbing] = useState(false);
   const [probe, setProbe] = useState<CapabilityProbe | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Editing a field invalidates whatever the last attempt said.
+   *
+   * Without this a validation error outlived the thing it was complaining
+   * about: fix the headers and the "must be a JSON object" message stayed on
+   * screen, pointing at a field that was now valid.
+   */
+  const edited = <T,>(set: (v: T) => void) => (v: T) => {
+    setError(null);
+    set(v);
+  };
 
   const reload = useCallback(async () => {
     if (!isBrowser()) return;
@@ -257,21 +272,65 @@ function EndpointsTab() {
     }
   };
 
+  /** Manually entered model ids, comma- or newline-separated. */
+  const manualModels = modelsText
+    .split(/[\n,]/)
+    .map((m) => m.trim())
+    .filter(Boolean);
+
   const save = async () => {
-    if (!probe?.ok || !isBrowser()) return;
-    const headers = parseHeaders() ?? {};
+    if (!isBrowser()) return;
+
+    const headers = parseHeaders();
+    if (headers === null) {
+      setError('Custom headers must be a JSON object, e.g. {"X-Org": "acme"}.');
+      return;
+    }
+
+    // A probe is evidence, not permission.
+    //
+    // Requiring `probe.ok` meant an endpoint that does not publish /models
+    // — which is most of them outside the big providers — could never be
+    // added at all, no matter how well it worked. The user knows their own
+    // server; the probe's job is to save them typing, not to veto them.
+    const url = (probe?.ok ? probe.baseUrl : baseUrl).trim().replace(/\/+$/, '');
+    let host: string;
+    try {
+      const parsed = new URL(url);
+      if (!/^https?:$/.test(parsed.protocol)) {
+        setError('The base URL must start with http:// or https://.');
+        return;
+      }
+      host = parsed.host;
+    } catch {
+      setError('That base URL is not a valid URL. Include the scheme and version path, e.g. https://api.example.com/v1');
+      return;
+    }
+
+    const probedModels = probe?.ok ? probe.models.map((m) => ({ id: m.id, label: m.label, capabilities: m.capabilities })) : [];
+    const typedModels = manualModels
+      .filter((id) => !probedModels.some((m) => m.id === id))
+      .map((id) => ({ id, label: id, capabilities: ['chat'] as EndpointRecord['models'][number]['capabilities'] }));
+    const models = [...probedModels, ...typedModels];
+
+    if (!models.length) {
+      setError('No models. Run "detect capabilities", or type at least one model id below — the endpoint cannot be called without one.');
+      return;
+    }
 
     const record: EndpointRecord = {
       id: uid('ep'),
-      label: label || new URL(probe.baseUrl).host,
-      baseUrl: probe.baseUrl,
+      label: label || host,
+      baseUrl: url,
       apiKey: apiKey || undefined,
       headers,
-      capabilities: probe.capabilities,
-      models: probe.models.map((m) => ({ id: m.id, label: m.label, capabilities: m.capabilities })),
-      routes: probe.routes,
+      capabilities: probe?.ok && probe.capabilities.length ? probe.capabilities : ['chat'],
+      models,
+      routes: probe?.ok ? probe.routes : ['/chat/completions'],
       lastProbedAt: Date.now(),
-      probeOk: 1,
+      // Recorded honestly: this endpoint was added on the user's word, not
+      // verified, so the list can say so rather than implying it was checked.
+      probeOk: probe?.ok ? 1 : 0,
       enabled: 1,
       createdAt: Date.now(),
     };
@@ -283,7 +342,9 @@ function EndpointsTab() {
     setBaseUrl('');
     setApiKey('');
     setHeadersText('');
+    setModelsText('');
     setProbe(null);
+    setError(null);
   };
 
   return (
@@ -294,24 +355,38 @@ function EndpointsTab() {
       </p>
 
       <Field label="Label">
-        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="My inference server" className={inputClass} style={inputStyle} />
+        <input value={label} onChange={(e) => edited(setLabel)(e.target.value)} placeholder="My inference server" className={inputClass} style={inputStyle} />
       </Field>
 
       <Field label="Base URL" hint="Include the version path, e.g. https://api.example.com/v1">
-        <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.example.com/v1" className={inputClass} style={inputStyle} spellCheck={false} />
+        <input value={baseUrl} onChange={(e) => edited(setBaseUrl)(e.target.value)} placeholder="https://api.example.com/v1" className={inputClass} style={inputStyle} spellCheck={false} />
       </Field>
 
       <Field label="API key" hint="Sent as `Authorization: Bearer …` unless a custom Authorization header is supplied below.">
-        <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} type="password" placeholder="sk-…" className={inputClass} style={inputStyle} spellCheck={false} />
+        <input value={apiKey} onChange={(e) => edited(setApiKey)(e.target.value)} type="password" placeholder="sk-…" className={inputClass} style={inputStyle} spellCheck={false} />
       </Field>
 
       <Field label="Custom headers" hint='JSON object. Example: {"X-Api-Version": "2024-10", "X-Org": "acme"}'>
         <textarea
           value={headersText}
-          onChange={(e) => setHeadersText(e.target.value)}
+          onChange={(e) => edited(setHeadersText)(e.target.value)}
           rows={2}
           placeholder="{}"
           className={`${inputClass} resize-y`}
+          style={inputStyle}
+          spellCheck={false}
+        />
+      </Field>
+
+      <Field
+        label="Model ids"
+        hint="Comma-separated. Only needed when the endpoint does not publish /models — detection fills this in when it can."
+      >
+        <input
+          value={modelsText}
+          onChange={(e) => edited(setModelsText)(e.target.value)}
+          placeholder="gpt-4o, gpt-4o-mini"
+          className={inputClass}
           style={inputStyle}
           spellCheck={false}
         />
@@ -330,18 +405,36 @@ function EndpointsTab() {
         <button
           type="button"
           onClick={() => void save()}
-          disabled={!probe?.ok}
-          className="mono flex-1 rounded-lg px-3 py-2 text-[11.5px] font-medium disabled:opacity-35"
-          style={{ background: 'var(--accent)', color: '#04150e' }}
+          disabled={!baseUrl.trim() || (!probe?.ok && !manualModels.length)}
+          className="press mono flex-1 rounded-lg px-3 py-2 text-[11.5px] font-semibold disabled:opacity-35"
+          style={{ background: 'var(--accent)', color: 'var(--panel)' }}
+          title={
+            !baseUrl.trim()
+              ? 'Enter a base URL first'
+              : !probe?.ok && !manualModels.length
+                ? 'Run detection, or type a model id — the endpoint cannot be called without one'
+                : 'Add this endpoint'
+          }
         >
           add endpoint
         </button>
       </div>
 
       {error && (
-        <p className="mono rounded-lg border px-2.5 py-2 text-[10.5px] leading-[1.5]" style={{ borderColor: 'color-mix(in oklab, var(--color-rose) 40%, var(--line))', color: 'var(--color-rose)' }}>
-          {error}
-        </p>
+        <div
+          className="rounded-lg border px-2.5 py-2"
+          style={{ borderColor: 'color-mix(in oklab, var(--color-danger) 40%, var(--line))' }}
+        >
+          <p className="mono text-[10.5px] leading-[1.5]" style={{ color: 'var(--color-danger)' }}>
+            {error}
+          </p>
+          {probe && !probe.ok && (
+            <p className="mt-1.5 text-[10.5px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
+              Plenty of endpoints do not publish a model list. Type the model id you want to call in the field above and
+              add it anyway — detection is a convenience, not a requirement.
+            </p>
+          )}
+        </div>
       )}
 
       {probe?.ok && (
@@ -371,9 +464,22 @@ function EndpointsTab() {
             {endpoints.map((ep) => (
               <div key={ep.id} className="flex items-center gap-2 rounded-lg border px-2.5 py-2" style={{ borderColor: 'var(--line)' }}>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[11.5px]">{ep.label}</p>
+                  <p className="flex items-center gap-1.5 truncate text-[11.5px]">
+                    {ep.label}
+                    {/* Added on the user's word rather than verified — worth
+                        saying, so a later failure is not a mystery. */}
+                    {!ep.probeOk && (
+                      <span
+                        className="mono shrink-0 rounded px-1 py-0.5 text-[9px]"
+                        style={{ background: 'color-mix(in oklab, var(--color-amber) 16%, transparent)', color: 'var(--color-amber)' }}
+                        title="Added without a successful capability probe"
+                      >
+                        unverified
+                      </span>
+                    )}
+                  </p>
                   <p className="mono truncate text-[9.5px]" style={{ color: 'var(--ink-faint)' }}>
-                    {ep.baseUrl} · {ep.capabilities.join(', ')}
+                    {ep.baseUrl} · {ep.models.length} model{ep.models.length === 1 ? '' : 's'} · {ep.capabilities.join(', ')}
                   </p>
                 </div>
                 <button
@@ -734,6 +840,18 @@ function GuardTab() {
 function KeysTab() {
   const loadModels = useWorkspace((s) => s.loadModels);
   const models = useWorkspace((s) => s.models);
+  // The Vercel token lives here too: every credential the app needs belongs in
+  // one place. Settings → Deployment still edits the same value.
+  const vercelToken = useWorkspace((s) => s.vercelToken);
+  const vercelTeamId = useWorkspace((s) => s.vercelTeamId);
+  const setVercelCredentials = useWorkspace((s) => s.setVercelCredentials);
+  const [vercel, setVercel] = useState('');
+  const [team, setTeam] = useState('');
+
+  useEffect(() => {
+    setVercel(vercelToken);
+    setTeam(vercelTeamId);
+  }, [vercelToken, vercelTeamId]);
 
   const [nim, setNim] = useState('');
   const [pollinations, setPollinations] = useState('');
@@ -769,6 +887,7 @@ function KeysTab() {
     setStatus({ kind: 'info', text: 'Saving, then checking the key against NVIDIA…' });
     try {
       await saveKeys({ nim, pollinations });
+      setVercelCredentials(vercel.trim(), team.trim());
       // The catalogue is the real test: it only returns NIM models if the key
       // was accepted, so a successful reload is proof rather than a guess.
       await loadModels(true);
@@ -788,15 +907,18 @@ function KeysTab() {
     } finally {
       setSaving(false);
     }
-  }, [nim, pollinations, loadModels]);
+  }, [nim, pollinations, vercel, team, loadModels, setVercelCredentials]);
 
   const clear = useCallback(async () => {
     setNim('');
     setPollinations('');
+    setVercel('');
+    setTeam('');
     await saveKeys({ nim: '', pollinations: '' });
+    setVercelCredentials('', '');
     await loadModels(true);
     setStatus({ kind: 'info', text: 'Keys cleared from this device.' });
-  }, [loadModels]);
+  }, [loadModels, setVercelCredentials]);
 
   const statusColor =
     status?.kind === 'ok' ? 'var(--color-success)' : status?.kind === 'error' ? 'var(--color-danger)' : 'var(--ink-dim)';
@@ -867,6 +989,39 @@ function KeysTab() {
           autoComplete="off"
           placeholder="leave empty to stay on the free tier"
           onChange={(e) => setPollinations(e.target.value)}
+        />
+      </Field>
+
+      <hr className="ink-rule" />
+
+      <Field
+        label="Vercel token"
+        hint="Only needed to launch or update a website. Create one at vercel.com/account/tokens. Stored on this device and sent only to Vercel, through this app's own server."
+      >
+        <input
+          className={inputClass}
+          style={inputStyle}
+          type={reveal ? 'text' : 'password'}
+          value={vercel}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder="leave empty if you are not deploying"
+          onChange={(e) => {
+            setVercel(e.target.value);
+            setStatus(null);
+          }}
+        />
+      </Field>
+
+      <Field label="Vercel team id (optional)" hint="Only for deploying into a team rather than your personal account.">
+        <input
+          className={inputClass}
+          style={inputStyle}
+          value={team}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder="team_..."
+          onChange={(e) => setTeam(e.target.value)}
         />
       </Field>
 

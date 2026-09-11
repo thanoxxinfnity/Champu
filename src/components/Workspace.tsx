@@ -249,7 +249,7 @@ export function Workspace() {
 
           <div className="ml-auto flex items-center gap-2">
             <ThemeToggle />
-            <DeployButton />
+            <DeployButton onOpenSettings={() => setSettingsOpen(true)} />
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}
