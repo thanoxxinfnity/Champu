@@ -259,3 +259,70 @@ object Pollinations {
         }
     }
 }
+
+/**
+ * Duck.ai — free models, reached the way DuckDuckGo intends.
+ *
+ * Mirrors the web build's src/lib/providers/duckai.ts, including the reason there
+ * is no chat call here: duck.ai answers HTTP 418 ERR_CHALLENGE to anything that
+ * is not a real browser session, and that check is an anti-abuse control. The
+ * WebView hands the prompt to duck.ai over the query-string hand-off DuckDuckGo
+ * publishes for it instead of forging that check.
+ */
+object DuckAi {
+    const val ORIGIN = "https://duck.ai"
+
+    private const val FREE_TIER =
+        "Free on duck.ai with no API key and no account. duck.ai serves it to a real browser only, " +
+            "so Chomugiri opens it there with your prompt instead of calling it behind your back."
+
+    /** id to label to vendor to note-prefix. Ids are the strings duck.ai puts on the wire. */
+    private val CATALOGUE = listOf(
+        Quad("gpt-5.6-luna", "GPT-5.6 Luna", "OpenAI · via Duck.ai", "Best for everyday use."),
+        Quad("gpt-5.4-mini", "GPT-5.4 mini", "OpenAI · via Duck.ai", "Solid, but hits limits sooner."),
+        Quad("claude-haiku-4-5", "Claude Haiku 4.5", "Anthropic · via Duck.ai", "Solid, but hits limits sooner."),
+        Quad("mistral-small-2603", "Mistral Small 4", "Mistral AI · via Duck.ai", ""),
+        Quad("tinfoil/gpt-oss-120b", "gpt-oss 120B", "OpenAI · via Duck.ai", "Open-weight, served in a Tinfoil enclave."),
+        Quad("tinfoil/gemma4-31b", "Gemma 4 31B", "Google · via Duck.ai", "Open-weight, served in a Tinfoil enclave."),
+    )
+
+    data class Quad(val id: String, val label: String, val vendor: String, val blurb: String)
+
+    private val REASONING = setOf("gpt-5.6-luna", "tinfoil/gpt-oss-120b")
+
+    fun listModels(): JSONArray {
+        val out = JSONArray()
+        CATALOGUE.forEach { m ->
+            val caps = mutableListOf("chat")
+            if (REASONING.contains(m.id)) caps.add("reasoning")
+            out.put(
+                JSONObject()
+                    .put("id", m.id)
+                    .put("provider", "duckai")
+                    .put("label", m.label)
+                    .put("vendor", m.vendor)
+                    .put("capabilities", JSONArray(caps))
+                    .put("emitsReasoning", caps.contains("reasoning"))
+                    .put("contextWindow", 16000)
+                    .put("origin", "browser-only")
+                    .put("handoffUrl", ORIGIN)
+                    .put("note", if (m.blurb.isEmpty()) FREE_TIER else m.blurb + " " + FREE_TIER)
+            )
+        }
+        return out
+    }
+
+    fun count(): Int = CATALOGUE.size
+
+    /**
+     * duck.ai's own router reads q, model, prompt and home off the query string.
+     * prompt=1 auto-sends; home=1 stops its short-prompt filter from dropping a
+     * one-word prompt.
+     */
+    fun handoffUrl(model: String, prompt: String): String {
+        val q = java.net.URLEncoder.encode(prompt.trim(), "UTF-8")
+        val base = "$ORIGIN/?q=$q&prompt=1&home=1"
+        if (model.isEmpty()) return base
+        return base + "&model=" + java.net.URLEncoder.encode(model, "UTF-8")
+    }
+}

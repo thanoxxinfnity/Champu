@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
           return Response.json(
             {
               error:
-                'NVIDIA_NIM_API_KEY is not set on the server. Add it to .env.local, or switch the active model to Pollinations (zero-key) or a custom endpoint.',
+                'NVIDIA_NIM_API_KEY is not set on the server. Add it to .env.local, or switch the active model to Pollinations (zero-key), a Duck.ai model (free, opens in the browser), or a custom endpoint.',
               code: 'nim_key_missing',
             },
             { status: 503 },
@@ -62,6 +62,21 @@ export async function POST(req: NextRequest) {
       case 'pollinations':
         config = pollinationsChatConfig();
         break;
+      case 'duckai':
+        // Deliberate, and not a gap to be plugged later. duck.ai gates its chat
+        // API behind an anti-abuse fingerprint check (HTTP 418 ERR_CHALLENGE for
+        // anything that is not a real browser session), and Chomugiri does not
+        // forge that. The client hands these prompts to duck.ai directly; if a
+        // request still arrives here, something bypassed that path.
+        return Response.json(
+          {
+            error:
+              'Duck.ai models are reached by hand-off, not by API — duck.ai only answers a real browser session. ' +
+              'Pick the model again from the dock to open it in duck.ai with your prompt, or choose a model Chomugiri can call directly.',
+            code: 'duckai_handoff_only',
+          },
+          { status: 501 },
+        );
       case 'custom': {
         if (!body.custom?.baseUrl) {
           return Response.json({ error: 'A custom provider request needs `custom.baseUrl`.' }, { status: 400 });

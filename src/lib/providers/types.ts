@@ -6,7 +6,7 @@
  * never has to branch on vendor.
  */
 
-export type ProviderId = 'nim' | 'pollinations' | 'custom';
+export type ProviderId = 'nim' | 'pollinations' | 'custom' | 'duckai';
 
 export type ModelCapability =
   | 'chat'
@@ -38,9 +38,13 @@ export interface ModelDescriptor {
    * `alias`        — a friendly name that resolves to `resolvesTo`.
    * `partner-only` — real, but not served by the configured base URL. Selectable
    *                  only once the user adds the partner endpoint themselves.
+   * `browser-only` — real and free, but the host only answers a real browser
+   *                  session, so it is reached by hand-off rather than by API.
    */
-  origin: 'catalogue' | 'static' | 'alias' | 'partner-only';
+  origin: 'catalogue' | 'static' | 'alias' | 'partner-only' | 'browser-only';
   resolvesTo?: string;
+  /** `browser-only` models: first-party URL that opens this model with the prompt. */
+  handoffUrl?: string;
   note?: string;
 }
 

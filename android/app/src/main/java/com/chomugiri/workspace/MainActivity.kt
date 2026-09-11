@@ -83,11 +83,44 @@ class MainActivity : AppCompatActivity() {
                 loadWithOverviewMode = true
                 setSupportZoom(false)
                 textZoom = 100
+                // The Duck.ai hand-off opens through window.open. A WebView drops
+                // that call silently unless multiple windows are supported, so the
+                // tab would never appear; onCreateWindow below routes it out to
+                // the system browser instead of opening a second WebView.
+                setSupportMultipleWindows(true)
+                javaScriptCanOpenWindowsAutomatically = true
             }
 
             CookieManager.getInstance().setAcceptCookie(true)
 
             webChromeClient = object : WebChromeClient() {
+                /**
+                 * window.open lands here. The target URL is not passed in, so the
+                 * documented route is a throwaway WebView whose only job is to
+                 * report the URL it was asked to load — which is then handed to
+                 * the system browser. Nothing is ever rendered in it.
+                 */
+                override fun onCreateWindow(
+                    view: WebView?,
+                    isDialog: Boolean,
+                    isUserGesture: Boolean,
+                    resultMsg: android.os.Message?,
+                ): Boolean {
+                    val host = view ?: return false
+                    val msg = resultMsg ?: return false
+                    val relay = WebView(host.context)
+                    relay.webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(v: WebView?, request: WebResourceRequest?): Boolean {
+                            request?.url?.let { startActivity(Intent(Intent.ACTION_VIEW, it)) }
+                            relay.destroy()
+                            return true
+                        }
+                    }
+                    (msg.obj as? WebView.WebViewTransport)?.webView = relay
+                    msg.sendToTarget()
+                    return true
+                }
+
                 override fun onConsoleMessage(message: ConsoleMessage): Boolean {
                     android.util.Log.d("ChomugiriWeb", "${message.messageLevel()} ${message.message()} @${message.lineNumber()}")
                     return true

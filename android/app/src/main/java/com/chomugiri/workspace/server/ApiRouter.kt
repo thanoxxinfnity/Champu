@@ -1,5 +1,6 @@
 package com.chomugiri.workspace.server
 
+import com.chomugiri.workspace.providers.DuckAi
 import com.chomugiri.workspace.providers.Nim
 import com.chomugiri.workspace.providers.Pollinations
 import com.chomugiri.workspace.providers.Upstream
@@ -62,7 +63,7 @@ class ApiRouter(private val secrets: SecretStore) {
 
         val liveIds = Nim.listModels(key)
         if (key.isEmpty()) {
-            warnings.put("No NVIDIA NIM key set — NIM models are hidden. Open Settings → API Keys. Pollinations needs no key and stays available.")
+            warnings.put("No NVIDIA NIM key set — NIM models are hidden. Open Settings → API Keys. Pollinations and the Duck.ai models need no key and stay available.")
         } else if (liveIds == null) {
             warnings.put("NVIDIA NIM catalogue unavailable — the key may be invalid or the device is offline.")
         }
@@ -130,9 +131,15 @@ class ApiRouter(private val secrets: SecretStore) {
             pollinationsCount++
         }
 
+        // Duck.ai is a fixed list, not a probe: its chat API refuses non-browser
+        // callers outright, so there is nothing to probe and nothing to configure.
+        val duck = DuckAi.listModels()
+        for (i in 0 until duck.length()) out.put(duck.getJSONObject(i))
+
         val providers = JSONObject()
             .put("nim", JSONObject().put("configured", key.isNotEmpty()).put("count", liveIds?.size ?: 0))
             .put("pollinations", JSONObject().put("configured", true).put("count", pollinationsCount))
+            .put("duckai", JSONObject().put("configured", true).put("count", DuckAi.count()))
 
         response.json(
             200,
@@ -174,6 +181,9 @@ class ApiRouter(private val secrets: SecretStore) {
                 ) to null
             }
         }
+        "duckai" -> null to
+            "Duck.ai models are reached by hand-off, not by API — duck.ai only answers a real browser session. " +
+            "Pick the model again to open it in duck.ai with your prompt, or choose a model Chomugiri can call directly."
         else -> null to "Unknown provider \"$provider\"."
     }
 

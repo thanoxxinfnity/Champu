@@ -227,7 +227,9 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       const current = get().selection;
       const stillValid = models.some((m) => m.provider === current.provider && m.id === current.model);
       if (!stillValid && models.length) {
-        const selectable = models.filter((m) => m.origin !== 'partner-only');
+        // A hand-off model cannot answer in the transcript, so it is never the
+        // automatic fallback — only ever an explicit choice.
+        const selectable = models.filter((m) => m.origin !== 'partner-only' && m.origin !== 'browser-only');
         const preferred =
           selectable.find((m) => m.id === DEFAULT_NIM_MODEL) ??
           selectable.find((m) => m.capabilities.includes('reasoning') && m.provider === 'nim') ??

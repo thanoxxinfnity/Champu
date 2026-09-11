@@ -1,3 +1,4 @@
+import { DUCKAI_MODELS } from './duckai';
 import type { ModelCapability, ModelDescriptor, ProviderId } from './types';
 
 /**
@@ -97,6 +98,7 @@ export const NIM_MODELS: ModelDescriptor[] = [
     contextWindow: 128_000,
     emitsReasoning: true,
     origin: 'static',
+    note: 'Verified live. The closest API-callable model at the 120B scale to duck.ai gpt-oss 120B.',
   },
   {
     id: 'nvidia/nemotron-3.5-lightning-30b-a3b',
@@ -207,6 +209,7 @@ export const NIM_MODELS: ModelDescriptor[] = [
     capabilities: REASON,
     emitsReasoning: true,
     origin: 'static',
+    note: 'Verified live. The API-callable stand-in for duck.ai gpt-oss 120B — same family, smaller.',
   },
   {
     id: 'google/gemma-4-31b-it',
@@ -215,6 +218,7 @@ export const NIM_MODELS: ModelDescriptor[] = [
     vendor: 'Google',
     capabilities: CHAT,
     origin: 'static',
+    note: 'Verified live: answers a completion on integrate.api.nvidia.com. The same weights duck.ai serves free as Gemma 4 31B, but callable from the API with a NIM key.',
   },
   {
     id: 'mistralai/mistral-large-2-instruct',
@@ -307,7 +311,7 @@ export const POLLINATIONS_MODELS: ModelDescriptor[] = [
 ];
 
 const BY_ID = new Map<string, ModelDescriptor>(
-  [...NIM_MODELS, ...POLLINATIONS_MODELS].map((m) => [`${m.provider}:${m.id}`, m]),
+  [...NIM_MODELS, ...POLLINATIONS_MODELS, ...DUCKAI_MODELS].map((m) => [`${m.provider}:${m.id}`, m]),
 );
 
 export function describeModel(provider: ProviderId, id: string): ModelDescriptor | undefined {
@@ -318,6 +322,17 @@ export function describeModel(provider: ProviderId, id: string): ModelDescriptor
 export function isPartnerOnly(provider: ProviderId, id: string): boolean {
   return describeModel(provider, id)?.origin === 'partner-only';
 }
+
+/**
+ * Models that only answer a real browser session, so the agent must hand the
+ * prompt off instead of calling them. See `duckai.ts` for how that was
+ * established against the live service.
+ */
+export function isBrowserOnly(provider: ProviderId, id: string): boolean {
+  return describeModel(provider, id)?.origin === 'browser-only';
+}
+
+export { DUCKAI_MODELS };
 
 /**
  * Resolve an alias to a concrete id, preferring the newest live build of the

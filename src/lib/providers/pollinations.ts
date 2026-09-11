@@ -51,7 +51,8 @@ export function describePollinationsError(
     return {
       message:
         'Pollinations refused the request with 402 — the keyless anonymous tier is out of quota or rate limiting this IP. ' +
-        'Wait a minute and retry, set POLLINATIONS_TOKEN in .env.local to raise the limit, or switch the model to NVIDIA NIM or a custom endpoint.' +
+        'Wait a minute and retry, set POLLINATIONS_TOKEN in .env.local to raise the limit, or switch the model ' +
+        'to a Duck.ai model (free, no key, opens in the browser), NVIDIA NIM, or a custom endpoint.' +
         (notice ? ` Upstream notice: ${notice.slice(0, 200)}` : ''),
       code: 'pollinations_quota',
       retryable: true,

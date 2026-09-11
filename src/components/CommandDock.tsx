@@ -330,9 +330,9 @@ function ModelSwitcher() {
               <p className="mono px-3 py-4 text-center text-[11px] leading-4" style={{ color: 'var(--ink-faint)' }}>
                 No models available.
                 <br />
-                Add NVIDIA_NIM_API_KEY, or use Pollinations —
+                Add NVIDIA_NIM_API_KEY, or use Pollinations
                 <br />
-                it needs no key.
+                or Duck.ai — neither needs a key.
               </p>
             )}
 
@@ -347,6 +347,9 @@ function ModelSwitcher() {
                 {list.map((model) => {
                   const isActive = model.provider === selection.provider && model.id === selection.model;
                   const unreachable = model.origin === 'partner-only';
+                  // Reachable, just not in-app: picking it hands the prompt to
+                  // duck.ai in a new tab. Selectable, and badged so that is no surprise.
+                  const handoff = model.origin === 'browser-only';
                   return (
                     <button
                       key={`${model.provider}:${model.id}`}
@@ -372,6 +375,15 @@ function ModelSwitcher() {
                         {model.label}
                       </span>
                       <span className="ml-auto flex shrink-0 gap-1">
+                        {handoff && (
+                          <span
+                            className="text-[9px]"
+                            style={{ color: 'var(--color-indigo)' }}
+                            title="Free on duck.ai — opens in a new tab with your prompt"
+                          >
+                            ↗
+                          </span>
+                        )}
                         {model.capabilities.includes('reasoning') && (
                           <span className="text-[9px]" style={{ color: 'var(--color-indigo)' }} title="reasoning">
                             ⚛

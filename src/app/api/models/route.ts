@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { DUCKAI_MODELS } from '@/lib/providers/duckai';
 import { hasNimKey, listModels as listNimModels } from '@/lib/providers/nim';
 import { listModels as listPollinationsModels } from '@/lib/providers/pollinations';
 import type { ModelDescriptor } from '@/lib/providers/types';
@@ -28,8 +29,13 @@ export async function GET(req: NextRequest) {
   if (pollinations.status === 'fulfilled') models.push(...pollinations.value);
   else warnings.push(`Pollinations catalogue unavailable: ${(pollinations.reason as Error)?.message ?? 'unknown error'}`);
 
+  // Duck.ai is a fixed list, not a probe: its catalogue lives in the site bundle,
+  // and its chat API refuses non-browser callers outright, so there is nothing to
+  // probe. These are always offered — they need no key and no account.
+  models.push(...DUCKAI_MODELS);
+
   if (!hasNimKey()) {
-    warnings.push('NVIDIA_NIM_API_KEY is not configured — NIM models are hidden. Pollinations needs no key and stays available.');
+    warnings.push('NVIDIA_NIM_API_KEY is not configured — NIM models are hidden. Pollinations and the Duck.ai models need no key and stay available.');
   }
 
   return Response.json(
@@ -39,6 +45,7 @@ export async function GET(req: NextRequest) {
       providers: {
         nim: { configured: hasNimKey(), count: models.filter((m) => m.provider === 'nim').length },
         pollinations: { configured: true, count: models.filter((m) => m.provider === 'pollinations').length },
+        duckai: { configured: true, count: models.filter((m) => m.provider === 'duckai').length },
       },
       refreshed: force,
       at: Date.now(),

@@ -7,7 +7,8 @@ import { extractArtifacts, filesOf, commandsOf, mergeFiles, type FileArtifact } 
 import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types';
 import type { CustomEndpointConfig } from '@/lib/providers/types';
 import { useWorkspace, type ChatAttachment, THINKING_PHRASES, LANE_B_PHRASES } from '@/lib/store';
-import { PLANNER_NIM_MODEL } from '@/lib/providers/registry';
+import { PLANNER_NIM_MODEL, describeModel, isBrowserOnly } from '@/lib/providers/registry';
+import { duckaiHandoffUrl } from '@/lib/providers/duckai';
 import { draftSystemSuffix, pickAngles } from './drafts';
 import { scanForSecrets, hasBlockingSecret } from '@/lib/security/secrets';
 import { appendMessage, createSession, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
@@ -499,6 +500,56 @@ export async function send(opts: SendOptions): Promise<void> {
       createdAt: Date.now(),
       error: 'secret_blocked',
     });
+    return;
+  }
+
+  // ── Browser-only models ───────────────────────────────────────────────────
+  // duck.ai serves these free, but only to a real browser session: its chat API
+  // answers HTTP 418 ERR_CHALLENGE to any other caller, and that check is an
+  // anti-abuse control, not an oversight. Rather than forging it, hand the prompt
+  // to duck.ai through the hand-off URL DuckDuckGo publishes for exactly this.
+  if (isBrowserOnly(selection.provider, selection.model)) {
+    const descriptor = describeModel(selection.provider, selection.model);
+    const url = duckaiHandoffUrl(selection.model, input);
+
+    let handoffSession = state.sessionId;
+    if (!handoffSession) {
+      const session = await createSession(suite, input.slice(0, 80) || 'Untitled run', {
+        provider: selection.provider,
+        model: selection.model,
+      });
+      handoffSession = session.id;
+      useWorkspace.getState().setSessionId(handoffSession);
+    }
+
+    const handoffUser = {
+      id: uid('msg'),
+      role: 'user' as const,
+      content: input,
+      createdAt: Date.now(),
+      attachments,
+    };
+    pushMessage(handoffUser);
+    void appendMessage({ ...handoffUser, sessionId: handoffSession, suite });
+
+    const label = descriptor?.label ?? selection.model;
+    const note = {
+      id: uid('msg'),
+      role: 'assistant' as const,
+      content:
+        `**${label}** runs on duck.ai, free and with no API key — but duck.ai only answers a real browser session, ` +
+        `so Chomugiri opens it there with your prompt already loaded instead of calling it behind your back.\n\n` +
+        `[Open this prompt in duck.ai ↗](${url})\n\n` +
+        `Want the answer to land back in this transcript instead? Pick a model Chomugiri can call directly — ` +
+        `NIM \`google/gemma-4-31b-it\` is the same Gemma 4 31B weights, and Pollinations needs no key at all.`,
+      createdAt: Date.now(),
+      model: selection.model,
+      provider: selection.provider,
+    };
+    pushMessage(note);
+    void appendMessage({ ...note, sessionId: handoffSession, suite });
+
+    if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener,noreferrer');
     return;
   }
 
