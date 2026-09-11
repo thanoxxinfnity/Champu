@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { withKeys } from '@/lib/keys';
 import { useWorkspace } from '@/lib/store';
 import { getResearchRun, listResearchRuns, saveResearchRun, uid } from '@/lib/db/history';
 import type { ResearchRunRecord } from '@/lib/db/schema';
@@ -70,11 +71,11 @@ export function Workdrive() {
     await refresh();
 
     try {
-      const res = await fetch('/api/research', {
+      const res = await fetch('/api/research', withKeys({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, maxSources: 7, maxChunks: 16 }),
-      });
+      }));
 
       const data = (await res.json()) as {
         context?: string;

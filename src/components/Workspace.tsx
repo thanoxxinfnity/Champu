@@ -80,6 +80,20 @@ export function Workspace() {
   const messages = useWorkspace((s) => s.messages);
   const sidebarOpen = useWorkspace((s) => s.sidebarOpen);
   const toggleSidebar = useWorkspace((s) => s.toggleSidebar);
+  // Separate from `sidebarOpen`: on a phone the navigation is an overlay that
+  // must start closed, while on a desktop it is a column that starts open.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // An overlay that covers the whole screen has to be dismissible by Escape as
+  // well as by tapping away, or a keyboard user is simply trapped in it.
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileNavOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [mobileNavOpen]);
   const rightPaneTab = useWorkspace((s) => s.rightPaneTab);
   const setRightPaneTab = useWorkspace((s) => s.setRightPaneTab);
   const hydrate = useWorkspace((s) => s.hydrate);
@@ -173,9 +187,40 @@ export function Workspace() {
 
   return (
     <div className="sketch-ui flex h-dvh overflow-hidden" style={{ background: 'var(--bg)' }}>
+      {/* Desktop: the sidebar is a real column in the layout. */}
       {sidebarOpen && (
         <div className="hidden md:block">
           <Sidebar onOpenSettings={() => setSettingsOpen(true)} />
+        </div>
+      )}
+
+      {/*
+        Phone: an overlay drawer.
+        The desktop column above is `hidden md:block`, so on a phone the
+        hamburger was toggling state that had nothing to render — the menu
+        simply never opened, and with it every suite, the history and Settings
+        were unreachable on the one build that ships as an app.
+      */}
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
+          <button
+            type="button"
+            className="absolute inset-0"
+            style={{ background: 'rgba(0,0,0,0.55)', animation: 'enter-fade var(--dur-fast) var(--ease-out)' }}
+            onClick={() => setMobileNavOpen(false)}
+            aria-label="Close menu"
+          />
+          <div
+            className="drawer-in absolute inset-y-0 left-0 flex w-[84%] max-w-[330px] flex-col overflow-hidden"
+            style={{ background: 'var(--panel)', borderRight: '1.5px solid var(--stroke)' }}
+          >
+            <Sidebar
+              onOpenSettings={() => {
+                setSettingsOpen(true);
+                setMobileNavOpen(false);
+              }}
+            />
+          </div>
         </div>
       )}
 
@@ -186,7 +231,10 @@ export function Workspace() {
         >
           <button
             type="button"
-            onClick={toggleSidebar}
+            onClick={() => {
+              toggleSidebar();
+              setMobileNavOpen((v) => !v);
+            }}
             className="press mono rounded-lg px-2 py-1 text-[12px]"
             style={{ color: 'var(--ink-faint)' }}
             aria-label="Toggle sidebar"
@@ -227,11 +275,27 @@ export function Workspace() {
                 </p>
               ))}
             </div>
+            {/*
+              A warning that names the fix but offers no way to reach it is just
+              a complaint. The missing-key case is the one that stops the app
+              working, so it gets a button straight to the field.
+            */}
+            {modelWarnings.some((w) => /API Keys|NVIDIA_NIM_API_KEY/i.test(w)) && (
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                className="press mono shrink-0 rounded-lg px-2 py-1 text-[10px] font-semibold"
+                style={{ background: 'var(--accent)', color: 'var(--panel)' }}
+              >
+                add key
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setWarningsDismissed(true)}
               className="mono shrink-0 text-[10px]"
               style={{ color: 'var(--color-amber)' }}
+              aria-label="Dismiss"
             >
               ✕
             </button>

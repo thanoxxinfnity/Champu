@@ -1,4 +1,3 @@
-import { DUCKAI_MODELS } from './duckai';
 import type { ModelCapability, ModelDescriptor, ProviderId } from './types';
 
 /**
@@ -34,16 +33,6 @@ export const NIM_MODELS: ModelDescriptor[] = [
     origin: 'static',
     note: '~2.8T hybrid KDA+MLA multimodal MoE. Long-horizon coding, agentic tool use, image understanding.',
   },
-  {
-    id: 'moonshotai/kimi-k2.6',
-    provider: 'nim',
-    label: 'Kimi K2.6',
-    vendor: 'Moonshot AI',
-    capabilities: REASON,
-    contextWindow: 256_000,
-    emitsReasoning: true,
-    origin: 'static',
-  },
 
   // ── DeepSeek ───────────────────────────────────────────────────────────────
   {
@@ -68,15 +57,6 @@ export const NIM_MODELS: ModelDescriptor[] = [
     origin: 'static',
     note: '284B MoE with 13B active — long context at flash latency.',
   },
-  {
-    id: 'deepseek-ai/deepseek-coder-6.7b-instruct',
-    provider: 'nim',
-    label: 'DeepSeek Coder 6.7B',
-    vendor: 'DeepSeek',
-    capabilities: CHAT,
-    contextWindow: 16_000,
-    origin: 'static',
-  },
 
   // ── NVIDIA Nemotron ────────────────────────────────────────────────────────
   {
@@ -98,7 +78,7 @@ export const NIM_MODELS: ModelDescriptor[] = [
     contextWindow: 128_000,
     emitsReasoning: true,
     origin: 'static',
-    note: 'Verified live. The closest API-callable model at the 120B scale to duck.ai gpt-oss 120B.',
+    note: 'Verified live: answers a completion on integrate.api.nvidia.com.',
   },
   {
     id: 'nvidia/nemotron-3.5-lightning-30b-a3b',
@@ -112,16 +92,6 @@ export const NIM_MODELS: ModelDescriptor[] = [
     note: 'Fastest 30B A3B MoE — the default for routing and planning.',
   },
   {
-    id: 'nvidia/nemotron-nano-3-30b-a3b',
-    provider: 'nim',
-    label: 'Nemotron Nano 3 30B',
-    vendor: 'NVIDIA',
-    capabilities: REASON,
-    contextWindow: 128_000,
-    emitsReasoning: true,
-    origin: 'static',
-  },
-  {
     id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
     provider: 'nim',
     label: 'Nemotron 3 Nano Omni 30B',
@@ -131,35 +101,6 @@ export const NIM_MODELS: ModelDescriptor[] = [
     emitsReasoning: true,
     origin: 'static',
     note: 'Omni-modal: images, video, speech and text.',
-  },
-  {
-    id: 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
-    provider: 'nim',
-    label: 'Llama Nemotron Ultra 253B',
-    vendor: 'NVIDIA',
-    capabilities: REASON,
-    contextWindow: 128_000,
-    emitsReasoning: true,
-    origin: 'static',
-  },
-  {
-    id: 'nvidia/llama-3.1-nemotron-70b-instruct',
-    provider: 'nim',
-    label: 'Llama Nemotron 70B Instruct',
-    vendor: 'NVIDIA',
-    capabilities: CHAT,
-    contextWindow: 128_000,
-    origin: 'static',
-  },
-  {
-    id: 'nvidia/cosmos-reason2-8b',
-    provider: 'nim',
-    label: 'Cosmos Reason 2 8B',
-    vendor: 'NVIDIA',
-    capabilities: ['chat', 'vision', 'reasoning'],
-    emitsReasoning: true,
-    origin: 'static',
-    note: 'Physical-world reasoning over video and images.',
   },
 
   // ── Meta ───────────────────────────────────────────────────────────────────
@@ -191,14 +132,6 @@ export const NIM_MODELS: ModelDescriptor[] = [
     contextWindow: 128_000,
     origin: 'static',
   },
-  {
-    id: 'meta/codellama-70b',
-    provider: 'nim',
-    label: 'CodeLlama 70B',
-    vendor: 'Meta',
-    capabilities: CHAT,
-    origin: 'static',
-  },
 
   // ── Others verified in the catalogue ──────────────────────────────────────
   {
@@ -209,7 +142,7 @@ export const NIM_MODELS: ModelDescriptor[] = [
     capabilities: REASON,
     emitsReasoning: true,
     origin: 'static',
-    note: 'Verified live. The API-callable stand-in for duck.ai gpt-oss 120B — same family, smaller.',
+    note: 'Verified live: answers a completion on integrate.api.nvidia.com.',
   },
   {
     id: 'google/gemma-4-31b-it',
@@ -218,24 +151,7 @@ export const NIM_MODELS: ModelDescriptor[] = [
     vendor: 'Google',
     capabilities: CHAT,
     origin: 'static',
-    note: 'Verified live: answers a completion on integrate.api.nvidia.com. The same weights duck.ai serves free as Gemma 4 31B, but callable from the API with a NIM key.',
-  },
-  {
-    id: 'mistralai/mistral-large-2-instruct',
-    provider: 'nim',
-    label: 'Mistral Large 2',
-    vendor: 'Mistral',
-    capabilities: CHAT,
-    contextWindow: 128_000,
-    origin: 'static',
-  },
-  {
-    id: 'mistralai/codestral-22b-instruct-v0.1',
-    provider: 'nim',
-    label: 'Codestral 22B',
-    vendor: 'Mistral',
-    capabilities: CHAT,
-    origin: 'static',
+    note: 'Verified live: answers a completion on integrate.api.nvidia.com.',
   },
 
   // ── Retrieval ─────────────────────────────────────────────────────────────
@@ -311,7 +227,7 @@ export const POLLINATIONS_MODELS: ModelDescriptor[] = [
 ];
 
 const BY_ID = new Map<string, ModelDescriptor>(
-  [...NIM_MODELS, ...POLLINATIONS_MODELS, ...DUCKAI_MODELS].map((m) => [`${m.provider}:${m.id}`, m]),
+  [...NIM_MODELS, ...POLLINATIONS_MODELS].map((m) => [`${m.provider}:${m.id}`, m]),
 );
 
 export function describeModel(provider: ProviderId, id: string): ModelDescriptor | undefined {
@@ -323,16 +239,6 @@ export function isPartnerOnly(provider: ProviderId, id: string): boolean {
   return describeModel(provider, id)?.origin === 'partner-only';
 }
 
-/**
- * Models that only answer a real browser session, so the agent must hand the
- * prompt off instead of calling them. See `duckai.ts` for how that was
- * established against the live service.
- */
-export function isBrowserOnly(provider: ProviderId, id: string): boolean {
-  return describeModel(provider, id)?.origin === 'browser-only';
-}
-
-export { DUCKAI_MODELS };
 
 /**
  * Resolve an alias to a concrete id, preferring the newest live build of the

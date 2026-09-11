@@ -274,22 +274,23 @@ function ModelSwitcher() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="press glow-accent mono flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px]"
+        className="press glow-accent mono flex min-w-0 max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px]"
         style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
         title={active ? `${active.vendor} · ${active.id}` : selection.model}
       >
         <span
-          className="h-1.5 w-1.5 rounded-full"
+          className="h-1.5 w-1.5 shrink-0 rounded-full"
           style={{ background: selection.provider === 'nim' ? 'var(--accent)' : selection.provider === 'pollinations' ? 'var(--color-amber)' : 'var(--color-indigo)' }}
           aria-hidden
         />
-        <span className="max-w-40 truncate">{active?.label ?? selection.model.split('/').pop()}</span>
+        {/* Tighter on a phone: 10rem of model name leaves no room for Run. */}
+        <span className="min-w-0 max-w-28 truncate sm:max-w-40">{active?.label ?? selection.model.split('/').pop()}</span>
         {active?.capabilities.includes('reasoning') && (
           <span style={{ color: 'var(--color-indigo)' }} title="Emits reasoning tokens">
             ⚛
           </span>
         )}
-        <span aria-hidden style={{ color: 'var(--ink-faint)' }}>
+        <span aria-hidden className="shrink-0" style={{ color: 'var(--ink-faint)' }}>
           ▾
         </span>
       </button>
@@ -330,9 +331,11 @@ function ModelSwitcher() {
               <p className="mono px-3 py-4 text-center text-[11px] leading-4" style={{ color: 'var(--ink-faint)' }}>
                 No models available.
                 <br />
-                Add NVIDIA_NIM_API_KEY, or use Pollinations
+Open Settings → API Keys to add
                 <br />
-                or Duck.ai — neither needs a key.
+                an NVIDIA key, or use Pollinations —
+                <br />
+                it needs no key.
               </p>
             )}
 
@@ -347,9 +350,6 @@ function ModelSwitcher() {
                 {list.map((model) => {
                   const isActive = model.provider === selection.provider && model.id === selection.model;
                   const unreachable = model.origin === 'partner-only';
-                  // Reachable, just not in-app: picking it hands the prompt to
-                  // duck.ai in a new tab. Selectable, and badged so that is no surprise.
-                  const handoff = model.origin === 'browser-only';
                   return (
                     <button
                       key={`${model.provider}:${model.id}`}
@@ -375,15 +375,6 @@ function ModelSwitcher() {
                         {model.label}
                       </span>
                       <span className="ml-auto flex shrink-0 gap-1">
-                        {handoff && (
-                          <span
-                            className="text-[9px]"
-                            style={{ color: 'var(--color-indigo)' }}
-                            title="Free on duck.ai — opens in a new tab with your prompt"
-                          >
-                            ↗
-                          </span>
-                        )}
                         {model.capabilities.includes('reasoning') && (
                           <span className="text-[9px]" style={{ color: 'var(--color-indigo)' }} title="reasoning">
                             ⚛
@@ -699,7 +690,13 @@ export function CommandDock() {
             aria-label="Prompt"
           />
 
-          <div className="flex items-center gap-2 px-2.5 pb-2.5">
+          {/*
+            flex-wrap, not nowrap: at phone width ＋, Lane, drafts, the model
+            chip and Run do not fit on one line, and without wrapping the row
+            simply overflowed — the model name ran underneath Run, which made
+            Run unreadable and easy to miss.
+          */}
+          <div className="flex flex-wrap items-center gap-2 px-2.5 pb-2.5">
             <input
               ref={fileInputRef}
               type="file"
@@ -770,17 +767,19 @@ export function CommandDock() {
               </span>
             )}
 
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex min-w-0 items-center gap-2">
               <ModelSwitcher />
 
               <button
                 type="button"
                 onClick={() => void submit()}
                 disabled={thinking.active || blocked || (!value.trim() && !attachments.length)}
-                className="press mono rounded-lg px-3.5 py-1.5 text-[11.5px] font-semibold disabled:opacity-30"
+                className="press mono shrink-0 rounded-lg px-3.5 py-1.5 text-[11.5px] font-semibold disabled:opacity-30"
                 style={{
                   background: 'linear-gradient(135deg, var(--accent), color-mix(in oklab, var(--accent) 62%, var(--accent-alt)))',
-                  color: '#04150e',
+                  // Was a hardcoded near-black green left over from the old
+                  // palette; on orange it read as mud.
+                  color: 'var(--panel)',
                   boxShadow: '0 4px 16px -6px color-mix(in oklab, var(--accent) 70%, transparent)',
                 }}
               >
@@ -794,7 +793,7 @@ export function CommandDock() {
           {blocked
             ? 'blocked — remove or vault the credential above'
             : classification && !showPalette
-              ? `routed to Lane ${classification.lane} — ${classification.reason}`
+              ? `Lane ${classification.lane} · ${classification.reason}`
               : 'Chomugiri · talk less, work more'}
         </p>
       </div>

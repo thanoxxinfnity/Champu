@@ -91,13 +91,13 @@ export function classifyLocal(input: string, opts: { hasAttachments?: boolean } 
 
   if (hasVerb && hasNoun) {
     score += 3;
-    reasons.push('build verb + artifact noun');
+    reasons.push('you asked for something to be built');
   } else if (hasVerb) {
     score += 1.5;
-    reasons.push('build verb');
+    reasons.push('phrased as an instruction');
   } else if (hasNoun) {
     score += 0.5;
-    reasons.push('artifact noun');
+    reasons.push('mentions something buildable');
   }
 
   if (INQUIRY_MARKERS.test(text)) {
@@ -106,11 +106,11 @@ export function classifyLocal(input: string, opts: { hasAttachments?: boolean } 
   }
   if (EXPLAIN_MARKERS.test(text)) {
     score -= 2;
-    reasons.push('explanation request');
+    reasons.push('asks for an explanation');
   }
   if (text.endsWith('?') && !hasVerb) {
     score -= 1.5;
-    reasons.push('interrogative');
+    reasons.push('ends in a question mark');
   }
   if (opts.hasAttachments) {
     score += 1;
@@ -119,22 +119,31 @@ export function classifyLocal(input: string, opts: { hasAttachments?: boolean } 
   // Multi-clause imperatives ("do X, then Y and Z") are almost always work orders.
   if (/\b(then|after that|and then|uske baad|phir)\b/i.test(text) && hasVerb) {
     score += 1;
-    reasons.push('sequenced imperative');
+    reasons.push('lists steps to carry out');
   }
+  // A pasted error or stack trace is someone asking for it to be fixed, even
+  // when the message around it is only a few words.
+  if (/\b(error|exception|traceback|stack ?trace|failed|cannot find|undefined is not|NullPointer|SyntaxError)\b/i.test(text)) {
+    score += 1;
+    reasons.push('contains an error to fix');
+  }
+
   // Long prompts with requirement lists are specs, not questions.
   if (text.length > 400 && /(\n\s*[-*\d]|\brequirements?\b|\bmust\b|\bshould\b)/i.test(text)) {
     score += 1.5;
-    reasons.push('specification-shaped');
+    reasons.push('reads like a spec');
   }
 
   const lane: Lane = score >= 2 ? 'B' : 'A';
   const margin = Math.abs(score - 2);
   const confidence = Math.min(0.98, 0.5 + margin / 5);
 
+  const because = reasons.length ? reasons.join(', ') : 'nothing here asks for a build';
   return {
     lane,
     confidence,
-    reason: reasons.length ? reasons.join(', ') : 'no strong execution signal',
+    // Leads with the action so the line answers "what is it about to do?".
+    reason: lane === 'B' ? `building it — ${because}` : `answering directly — ${because}`,
     suite,
     needsModel: margin < 0.75,
   };

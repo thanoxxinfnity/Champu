@@ -9,6 +9,7 @@ import { AntiLoopGuard, type Fingerprint } from '@/lib/agent/fingerprint';
 import type { EndpointRecord, SuiteId } from '@/lib/db/schema';
 import type { FileArtifact } from '@/lib/agent/artifacts';
 import { getSetting, setSetting } from '@/lib/db/history';
+import { keyHeaders, loadKeys } from '@/lib/keys';
 
 /**
  * Workspace state.
@@ -247,7 +248,12 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   loadModels: async (force = false) => {
     set({ modelsLoading: true });
     try {
-      const res = await fetch(`/api/models${force ? '?refresh=1' : ''}`, { cache: force ? 'no-store' : 'default' });
+      const res = await fetch(`/api/models${force ? '?refresh=1' : ''}`, {
+        // Without the user's key the catalogue comes back with no NIM models at
+        // all, so this has to carry it like every other provider call.
+        headers: keyHeaders(),
+        cache: force ? 'no-store' : 'default',
+      });
       if (!res.ok) throw new Error(`models endpoint returned ${res.status}`);
 
       const data = (await res.json()) as { models: ModelDescriptor[]; warnings: string[] };
@@ -260,9 +266,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       const current = get().selection;
       const stillValid = models.some((m) => m.provider === current.provider && m.id === current.model);
       if (!stillValid && models.length) {
-        // A hand-off model cannot answer in the transcript, so it is never the
-        // automatic fallback — only ever an explicit choice.
-        const selectable = models.filter((m) => m.origin !== 'partner-only' && m.origin !== 'browser-only');
+        const selectable = models.filter((m) => m.origin !== 'partner-only');
         const preferred =
           selectable.find((m) => m.id === DEFAULT_NIM_MODEL) ??
           selectable.find((m) => m.capabilities.includes('reasoning') && m.provider === 'nim') ??
@@ -448,6 +452,9 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
 
   hydrate: async () => {
+    // Before anything else: the catalogue load below needs the key in hand.
+    await loadKeys();
+
     const [selection, bridgeConfig, vercel] = await Promise.all([
       getSetting<ModelSelection | null>('selection', null),
       getSetting<{ url: string; token: string; via?: 'direct' | 'proxy' } | null>('bridge', null),

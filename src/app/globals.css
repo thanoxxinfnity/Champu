@@ -1033,3 +1033,13 @@ select {
 .sketch-ui .no-ink.border-b {
   border-bottom-color: var(--line);
 }
+
+/* The phone navigation drawer slides in from the edge it is anchored to. */
+.drawer-in {
+  animation: drawer-in var(--dur-base) var(--ease-out);
+}
+
+@keyframes drawer-in {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}

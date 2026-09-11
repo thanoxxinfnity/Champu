@@ -83,10 +83,10 @@ class MainActivity : AppCompatActivity() {
                 loadWithOverviewMode = true
                 setSupportZoom(false)
                 textZoom = 100
-                // The Duck.ai hand-off opens through window.open. A WebView drops
-                // that call silently unless multiple windows are supported, so the
-                // tab would never appear; onCreateWindow below routes it out to
-                // the system browser instead of opening a second WebView.
+                // A WebView drops window.open silently unless multiple windows
+                // are supported, so any link the app opens would simply never
+                // appear; onCreateWindow below routes it out to the system
+                // browser instead of opening a second WebView.
                 setSupportMultipleWindows(true)
                 javaScriptCanOpenWindowsAutomatically = true
             }

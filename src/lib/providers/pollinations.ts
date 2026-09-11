@@ -1,4 +1,5 @@
 import type { UpstreamConfig } from './openai-compat';
+import { requestKey } from './request-keys';
 import { POLLINATIONS_MODELS } from './registry';
 import { ProviderError, type ModelDescriptor } from './types';
 
@@ -17,7 +18,10 @@ const REFERRER = process.env.POLLINATIONS_REFERRER ?? 'chomugiri';
 
 function headers(): Record<string, string> {
   const h: Record<string, string> = { Referer: REFERRER };
-  const token = process.env.POLLINATIONS_TOKEN?.trim();
+  // A token is optional here — the anonymous tier works without one. If the user
+  // saved one in Settings it raises their rate limit; otherwise the server's own
+  // is used, and failing that the request simply goes out anonymous.
+  const token = requestKey('pollinations') ?? process.env.POLLINATIONS_TOKEN?.trim();
   if (token) h.Authorization = `Bearer ${token}`;
   return h;
 }
@@ -52,7 +56,7 @@ export function describePollinationsError(
       message:
         'Pollinations refused the request with 402 — the keyless anonymous tier is out of quota or rate limiting this IP. ' +
         'Wait a minute and retry, set POLLINATIONS_TOKEN in .env.local to raise the limit, or switch the model ' +
-        'to a Duck.ai model (free, no key, opens in the browser), NVIDIA NIM, or a custom endpoint.' +
+        'to NVIDIA NIM or a custom endpoint.' +
         (notice ? ` Upstream notice: ${notice.slice(0, 200)}` : ''),
       code: 'pollinations_quota',
       retryable: true,

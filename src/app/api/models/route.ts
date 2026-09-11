@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { DUCKAI_MODELS } from '@/lib/providers/duckai';
+import { keysFromRequest, withRequestKeys } from '@/lib/providers/request-keys';
 import { hasNimKey, listModels as listNimModels } from '@/lib/providers/nim';
 import { listModels as listPollinationsModels } from '@/lib/providers/pollinations';
 import type { ModelDescriptor } from '@/lib/providers/types';
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
  * Providers are probed in parallel and a failure in one never blanks the others —
  * a down Pollinations endpoint must not remove NIM from the model switcher.
  */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   const force = req.nextUrl.searchParams.get('refresh') === '1';
 
   const [nim, pollinations] = await Promise.allSettled([
@@ -29,13 +29,8 @@ export async function GET(req: NextRequest) {
   if (pollinations.status === 'fulfilled') models.push(...pollinations.value);
   else warnings.push(`Pollinations catalogue unavailable: ${(pollinations.reason as Error)?.message ?? 'unknown error'}`);
 
-  // Duck.ai is a fixed list, not a probe: its catalogue lives in the site bundle,
-  // and its chat API refuses non-browser callers outright, so there is nothing to
-  // probe. These are always offered — they need no key and no account.
-  models.push(...DUCKAI_MODELS);
-
   if (!hasNimKey()) {
-    warnings.push('NVIDIA_NIM_API_KEY is not configured — NIM models are hidden. Pollinations and the Duck.ai models need no key and stay available.');
+    warnings.push('No NVIDIA NIM key yet — NIM models are hidden. Open Settings → API Keys to add one. Pollinations needs no key and stays available.');
   }
 
   return Response.json(
@@ -45,11 +40,19 @@ export async function GET(req: NextRequest) {
       providers: {
         nim: { configured: hasNimKey(), count: models.filter((m) => m.provider === 'nim').length },
         pollinations: { configured: true, count: models.filter((m) => m.provider === 'pollinations').length },
-        duckai: { configured: true, count: models.filter((m) => m.provider === 'duckai').length },
       },
       refreshed: force,
       at: Date.now(),
     },
     { headers: { 'Cache-Control': force ? 'no-store' : 'public, max-age=60, stale-while-revalidate=600' } },
   );
+}
+
+/**
+ * Credentials the user saved in the app travel on the request, so the web build
+ * works without anyone editing .env.local. The server's own environment is still
+ * the fallback, so a self-hosted instance is unaffected.
+ */
+export async function GET(req: NextRequest) {
+  return withRequestKeys(keysFromRequest(req), () => handleGET(req));
 }

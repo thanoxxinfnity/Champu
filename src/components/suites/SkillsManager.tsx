@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { withKeys } from '@/lib/keys';
 import { db, isBrowser, type SkillRecord } from '@/lib/db/schema';
 import { BUILTIN_SKILLS, parseGeneratedSkill, toRecord } from '@/lib/skills/registry';
 import { useWorkspace } from '@/lib/store';
@@ -51,7 +52,7 @@ export function SkillsManager() {
     try {
       const template = BUILTIN_SKILLS.find((s) => s.command === 'skill')!.template.replace('{{input}}', brief);
 
-      const res = await fetch('/api/chat', {
+      const res = await fetch('/api/chat', withKeys({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -65,7 +66,7 @@ export function SkillsManager() {
             { role: 'user', content: template },
           ],
         }),
-      });
+      }));
 
       const data = (await res.json()) as { content?: string; error?: string };
       if (!res.ok || !data.content) {

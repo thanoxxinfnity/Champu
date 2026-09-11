@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { keysFromRequest, withRequestKeys } from '@/lib/providers/request-keys';
 import { activeEmbedModel, embed, rerank, rerankAvailable, hasNimKey } from '@/lib/providers/nim';
 import { describeAttempts, search, type SearchHit } from '@/lib/search';
 
@@ -145,7 +146,7 @@ function lexicalScore(query: string, passage: string): number {
   return score / (terms.length || 1);
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   let body: ResearchRequest;
   try {
     body = (await req.json()) as ResearchRequest;
@@ -278,4 +279,13 @@ export async function POST(req: NextRequest) {
     }),
     stats: { pagesFetched: pages.length, passages: passages.length, selected: ranked.length },
   });
+}
+
+/**
+ * Credentials the user saved in the app travel on the request, so the web build
+ * works without anyone editing .env.local. The server's own environment is still
+ * the fallback, so a self-hosted instance is unaffected.
+ */
+export async function POST(req: NextRequest) {
+  return withRequestKeys(keysFromRequest(req), () => handlePOST(req));
 }

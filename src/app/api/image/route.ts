@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { keysFromRequest, withRequestKeys } from '@/lib/providers/request-keys';
 import { generateImage as nimImage, hasNimKey } from '@/lib/providers/nim';
 import { generateImage as pollinationsImage } from '@/lib/providers/pollinations';
 import { customHeaders, assertSafeEndpoint } from '@/lib/providers/custom';
@@ -63,7 +64,7 @@ async function customImage(cfg: CustomEndpointConfig, req: ImageRequest): Promis
  * Requests run in parallel for `count > 1`; a partial failure returns the images
  * that did succeed alongside the errors rather than discarding the whole batch.
  */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   let body: ImageRequest;
   try {
     body = (await req.json()) as ImageRequest;
@@ -130,4 +131,13 @@ export async function POST(req: NextRequest) {
   }
 
   return Response.json({ images, errors, provider, prompt });
+}
+
+/**
+ * Credentials the user saved in the app travel on the request, so the web build
+ * works without anyone editing .env.local. The server's own environment is still
+ * the fallback, so a self-hosted instance is unaffected.
+ */
+export async function POST(req: NextRequest) {
+  return withRequestKeys(keysFromRequest(req), () => handlePOST(req));
 }

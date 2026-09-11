@@ -1,14 +1,15 @@
 'use client';
 
 import { classifyLocal, type Classification } from './router';
+import { withKeys } from '@/lib/keys';
 import { buildSystemPrompt } from './system-prompt';
 import { heuristicPlan, parsePlan, PLANNER_PROMPT, planProgress, parkBridgeTasks, requiresBridge, type Plan } from './planner';
 import { extractArtifacts, filesOf, commandsOf, mergeFiles, type FileArtifact } from './artifacts';
+import { describeFileWork, renderWorkLog } from './worklog';
 import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types';
 import type { CustomEndpointConfig } from '@/lib/providers/types';
 import { useWorkspace, type ChatAttachment, THINKING_PHRASES, LANE_B_PHRASES } from '@/lib/store';
-import { PLANNER_NIM_MODEL, describeModel, isBrowserOnly } from '@/lib/providers/registry';
-import { duckaiHandoffUrl } from '@/lib/providers/duckai';
+import { PLANNER_NIM_MODEL } from '@/lib/providers/registry';
 import { draftSystemSuffix, pickAngles } from './drafts';
 import { scanForSecrets, hasBlockingSecret } from '@/lib/security/secrets';
 import { appendMessage, createSession, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
@@ -61,12 +62,12 @@ async function streamCompletion(
 
   let res: Response;
   try {
-    res = await fetch('/api/chat', {
+    res = await fetch('/api/chat', withKeys({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...body, stream: true }),
       signal,
-    });
+    }));
   } catch (err) {
     const message = (err as Error).name === 'AbortError' ? 'Run cancelled.' : `Gateway unreachable: ${(err as Error).message}`;
     callbacks.onError?.(message);
@@ -155,12 +156,12 @@ async function complete(
   body: { provider: ProviderId; model: string; messages: ChatMessage[]; json?: boolean; custom?: CustomEndpointConfig; maxTokens?: number },
   signal?: AbortSignal,
 ): Promise<string> {
-  const res = await fetch('/api/chat', {
+  const res = await fetch('/api/chat', withKeys({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...body, stream: false }),
     signal,
-  });
+  }));
   if (!res.ok) {
     const payload = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(payload.error ?? `Gateway returned ${res.status}`);
@@ -503,56 +504,6 @@ export async function send(opts: SendOptions): Promise<void> {
     return;
   }
 
-  // ── Browser-only models ───────────────────────────────────────────────────
-  // duck.ai serves these free, but only to a real browser session: its chat API
-  // answers HTTP 418 ERR_CHALLENGE to any other caller, and that check is an
-  // anti-abuse control, not an oversight. Rather than forging it, hand the prompt
-  // to duck.ai through the hand-off URL DuckDuckGo publishes for exactly this.
-  if (isBrowserOnly(selection.provider, selection.model)) {
-    const descriptor = describeModel(selection.provider, selection.model);
-    const url = duckaiHandoffUrl(selection.model, input);
-
-    let handoffSession = state.sessionId;
-    if (!handoffSession) {
-      const session = await createSession(suite, input.slice(0, 80) || 'Untitled run', {
-        provider: selection.provider,
-        model: selection.model,
-      });
-      handoffSession = session.id;
-      useWorkspace.getState().setSessionId(handoffSession);
-    }
-
-    const handoffUser = {
-      id: uid('msg'),
-      role: 'user' as const,
-      content: input,
-      createdAt: Date.now(),
-      attachments,
-    };
-    pushMessage(handoffUser);
-    void appendMessage({ ...handoffUser, sessionId: handoffSession, suite });
-
-    const label = descriptor?.label ?? selection.model;
-    const note = {
-      id: uid('msg'),
-      role: 'assistant' as const,
-      content:
-        `**${label}** runs on duck.ai, free and with no API key — but duck.ai only answers a real browser session, ` +
-        `so Chomugiri opens it there with your prompt already loaded instead of calling it behind your back.\n\n` +
-        `[Open this prompt in duck.ai ↗](${url})\n\n` +
-        `Want the answer to land back in this transcript instead? Pick a model Chomugiri can call directly — ` +
-        `NIM \`google/gemma-4-31b-it\` is the same Gemma 4 31B weights, and Pollinations needs no key at all.`,
-      createdAt: Date.now(),
-      model: selection.model,
-      provider: selection.provider,
-    };
-    pushMessage(note);
-    void appendMessage({ ...note, sessionId: handoffSession, suite });
-
-    if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener,noreferrer');
-    return;
-  }
-
   // Session bootstrap.
   let sessionId = state.sessionId;
   if (!sessionId) {
@@ -745,6 +696,9 @@ export async function send(opts: SendOptions): Promise<void> {
     const artifacts = extractArtifacts(result.content);
     const files = filesOf(artifacts);
 
+    // Snapshot before writing, so "created" and "updated" mean what they say.
+    const filesBefore = new Map(useWorkspace.getState().files);
+
     for (const file of files) {
       upsertFile(file);
       void upsertArtifact({
@@ -758,6 +712,27 @@ export async function send(opts: SendOptions): Promise<void> {
     }
 
     if (files.length) setRightPaneTab('files');
+
+    // ── Report the work ─────────────────────────────────────────────────────
+    // Files landing silently in a panel leaves the obvious question unanswered:
+    // what is in them, and which one holds the thing that was asked for. This
+    // says so per file, from the file's own contents.
+    if (files.length) {
+      const summary = renderWorkLog(
+        describeFileWork(files, filesBefore),
+        commandsOf(artifacts).filter((c) => c.complete && c.command),
+      );
+      if (summary) {
+        const note = {
+          id: uid('msg'),
+          role: 'system' as const,
+          content: summary,
+          createdAt: Date.now(),
+        };
+        pushMessage(note);
+        void appendMessage({ ...note, sessionId, suite });
+      }
+    }
 
     // ── Execute terminal steps ──────────────────────────────────────────────
     if (lane === 'B') {

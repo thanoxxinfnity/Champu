@@ -8,8 +8,9 @@ import type { CapabilityProbe } from '@/lib/providers/custom';
 import type { VaultRecord } from '@/lib/db/schema';
 import { isClientExposed, maskSecret, toEnvExample, toEnvFile, validateSecretName } from '@/lib/security/secrets';
 import { downloadText } from '@/lib/zip';
+import { getKeys, isShellHosted, loadKeys, maskKey, saveKeys, validateNimKey } from '@/lib/keys';
 
-type Tab = 'bridge' | 'secrets' | 'endpoints' | 'deploy' | 'guard';
+type Tab = 'keys' | 'bridge' | 'secrets' | 'endpoints' | 'deploy' | 'guard';
 
 function Field({
   label,
@@ -717,7 +718,202 @@ function GuardTab() {
   );
 }
 
+
+/**
+ * Where the NVIDIA key goes.
+ *
+ * This tab is the fix for the app's worst first-run failure: NIM models are the
+ * default, NIM needs a key, and the only place to put one used to be a .env.local
+ * file on the server — so a fresh install looked simply broken, with no route
+ * from the symptom to the cause.
+ *
+ * In the APK the native shell owns the key and this posts to it; in a browser it
+ * is stored with the rest of the workspace and sent with each request. The tab
+ * does not need to care which, beyond telling the user where their key ended up.
+ */
+function KeysTab() {
+  const loadModels = useWorkspace((s) => s.loadModels);
+  const models = useWorkspace((s) => s.models);
+
+  const [nim, setNim] = useState('');
+  const [pollinations, setPollinations] = useState('');
+  const [reveal, setReveal] = useState(false);
+  const [shell, setShell] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const [keys, hosted] = await Promise.all([loadKeys(), isShellHosted()]);
+      if (!alive) return;
+      setShell(hosted);
+      setNim(keys.nim);
+      setPollinations(keys.pollinations);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const nimCount = models.filter((m) => m.provider === 'nim').length;
+
+  const save = useCallback(async () => {
+    const problem = validateNimKey(nim);
+    if (problem) {
+      setStatus({ kind: 'error', text: problem });
+      return;
+    }
+
+    setSaving(true);
+    setStatus({ kind: 'info', text: 'Saving, then checking the key against NVIDIA…' });
+    try {
+      await saveKeys({ nim, pollinations });
+      // The catalogue is the real test: it only returns NIM models if the key
+      // was accepted, so a successful reload is proof rather than a guess.
+      await loadModels(true);
+      const live = useWorkspace.getState().models.filter((m) => m.provider === 'nim').length;
+      if (!nim.trim()) {
+        setStatus({ kind: 'info', text: 'Key cleared. Pollinations still works without one.' });
+      } else if (live > 0) {
+        setStatus({ kind: 'ok', text: `Key accepted — ${live} NVIDIA models are available.` });
+      } else {
+        setStatus({
+          kind: 'error',
+          text: 'Saved, but NVIDIA returned no models. The key may be wrong or expired — regenerate it at build.nvidia.com.',
+        });
+      }
+    } catch (err) {
+      setStatus({ kind: 'error', text: (err as Error).message });
+    } finally {
+      setSaving(false);
+    }
+  }, [nim, pollinations, loadModels]);
+
+  const clear = useCallback(async () => {
+    setNim('');
+    setPollinations('');
+    await saveKeys({ nim: '', pollinations: '' });
+    await loadModels(true);
+    setStatus({ kind: 'info', text: 'Keys cleared from this device.' });
+  }, [loadModels]);
+
+  const statusColor =
+    status?.kind === 'ok' ? 'var(--color-success)' : status?.kind === 'error' ? 'var(--color-danger)' : 'var(--ink-dim)';
+
+  return (
+    <div className="space-y-4">
+      <p className="text-[11.5px] leading-[1.55]" style={{ color: 'var(--ink-dim)' }}>
+        Chomugiri needs an NVIDIA NIM key to run its main models. It is free — sign in at{' '}
+        <a href="https://build.nvidia.com" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
+          build.nvidia.com
+        </a>
+        , open any model, and copy the key from the API tab.
+      </p>
+
+      <Field
+        label="NVIDIA NIM API key"
+        hint={
+          shell
+            ? 'Stored by the app itself, not in the page. It never leaves your device except to NVIDIA.'
+            : 'Stored on this device and sent only to Chomugiri’s own server, which forwards it to NVIDIA. Nothing is written to a file.'
+        }
+      >
+        <div className="flex gap-1.5">
+          <input
+            className={inputClass}
+            style={inputStyle}
+            type={reveal ? 'text' : 'password'}
+            value={nim}
+            spellCheck={false}
+            autoComplete="off"
+            placeholder="nvapi-..."
+            onChange={(e) => {
+              setNim(e.target.value);
+              setStatus(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void save();
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => setReveal((v) => !v)}
+            className="press mono shrink-0 rounded-lg border px-2.5 text-[10.5px]"
+            style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
+            aria-label={reveal ? 'Hide key' : 'Show key'}
+          >
+            {reveal ? 'hide' : 'show'}
+          </button>
+        </div>
+      </Field>
+
+      {!reveal && nim && (
+        <p className="mono text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>
+          saved as {maskKey(nim)}
+        </p>
+      )}
+
+      <Field
+        label="Pollinations token (optional)"
+        hint="Pollinations works with no token at all. Adding one only raises your rate limit."
+      >
+        <input
+          className={inputClass}
+          style={inputStyle}
+          type={reveal ? 'text' : 'password'}
+          value={pollinations}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder="leave empty to stay on the free tier"
+          onChange={(e) => setPollinations(e.target.value)}
+        />
+      </Field>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={saving}
+          className="press mono rounded-lg px-3.5 py-1.5 text-[11.5px] font-semibold disabled:opacity-40"
+          style={{ background: 'var(--accent)', color: 'var(--panel)' }}
+        >
+          {saving ? 'checking…' : 'save & test'}
+        </button>
+        <button
+          type="button"
+          onClick={() => void clear()}
+          className="press mono rounded-lg border px-2.5 py-1.5 text-[10.5px]"
+          style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
+        >
+          clear
+        </button>
+        <span className="mono text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>
+          {nimCount > 0 ? `${nimCount} NVIDIA models loaded` : 'no NVIDIA models loaded'}
+        </span>
+      </div>
+
+      {status && (
+        <p className="text-[11px] leading-[1.5]" style={{ color: statusColor }}>
+          {status.text}
+        </p>
+      )}
+
+      <div className="rounded-lg border p-3" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
+        <p className="mono text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-faint)' }}>
+          no key handy?
+        </p>
+        <p className="mt-1.5 text-[11px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
+Chomugiri still works — Pollinations needs no key at all. Pick it from the model menu in the command
+          dock. NVIDIA is only needed for the larger models and for image generation.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 const TABS: Array<{ id: Tab; label: string }> = [
+  { id: 'keys', label: 'API Keys' },
   { id: 'bridge', label: 'Terminal Bridge' },
   { id: 'secrets', label: 'Secrets' },
   { id: 'endpoints', label: 'Custom Endpoints' },
@@ -726,7 +922,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
 ];
 
 export function Settings({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>('bridge');
+  const [tab, setTab] = useState<Tab>('keys');
 
   useEffect(() => {
     if (!open) return;
@@ -778,6 +974,7 @@ export function Settings({ open, onClose }: { open: boolean; onClose: () => void
         </nav>
 
         <div className="flex-1 overflow-y-auto p-4">
+          {tab === 'keys' && <KeysTab />}
           {tab === 'bridge' && <BridgeTab />}
           {tab === 'secrets' && <SecretsTab />}
           {tab === 'endpoints' && <EndpointsTab />}

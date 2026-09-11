@@ -1,4 +1,6 @@
 import { inferCapabilities, labelFor, NIM_MODELS, resolveModelId, vendorFor } from './registry';
+import { keyFingerprint, requestKey } from './request-keys';
+import { isUnserved, isUnservedError, NON_CHAT, rememberUnserved } from './unserved';
 import type { UpstreamConfig } from './openai-compat';
 import { completeChat } from './openai-compat';
 import { ProviderError, type ChatRequest, type ModelDescriptor } from './types';
@@ -16,11 +18,16 @@ export const NIM_BASE = process.env.NVIDIA_NIM_BASE_URL?.replace(/\/+$/, '') ?? 
 export const NIM_GENAI_BASE = process.env.NVIDIA_NIM_GENAI_BASE_URL?.replace(/\/+$/, '') ?? 'https://ai.api.nvidia.com/v1/genai';
 export const NIM_RETRIEVAL_BASE = process.env.NVIDIA_NIM_RETRIEVAL_BASE_URL?.replace(/\/+$/, '') ?? 'https://integrate.api.nvidia.com/v1';
 
+/**
+ * The key for the current request: what the user saved in the app, falling back
+ * to the server's own environment.
+ */
 export function nimKey(): string {
-  const key = process.env.NVIDIA_NIM_API_KEY?.trim();
+  const key = requestKey('nim') ?? process.env.NVIDIA_NIM_API_KEY?.trim();
   if (!key) {
     throw new ProviderError(
-      'NVIDIA_NIM_API_KEY is not configured. Add it to .env.local (get one free at build.nvidia.com), or switch the active model to Pollinations, which needs no key.',
+      'No NVIDIA NIM key yet. Open Settings → API Keys and paste one (free at build.nvidia.com), ' +
+        'or switch the active model to Pollinations, which needs no key.',
       { status: 503, code: 'nim_key_missing' },
     );
   }
@@ -28,7 +35,12 @@ export function nimKey(): string {
 }
 
 export function hasNimKey(): boolean {
-  return Boolean(process.env.NVIDIA_NIM_API_KEY?.trim());
+  return Boolean(requestKey('nim') ?? process.env.NVIDIA_NIM_API_KEY?.trim());
+}
+
+/** Identifies whose key a cached result belongs to. Never the key itself. */
+function keyTag(): string {
+  return keyFingerprint(requestKey('nim') ?? process.env.NVIDIA_NIM_API_KEY?.trim());
 }
 
 function authHeaders(): Record<string, string> {
@@ -61,9 +73,15 @@ export function describeNimError(
         retryable: false,
       };
     case 404:
+      // NVIDIA lists models the account has no entitlement to, so this is
+      // usually "you cannot call this one", not "this id does not exist".
+      // Saying so, and naming one that does work, is the difference between a
+      // dead end and one wasted click.
       return {
-        message: `NVIDIA NIM has no model at that id (404). Model ids rotate — hit refresh in the model switcher to re-probe the live catalogue. ${detail}`.trim(),
-        code: 'nim_model_not_found',
+        message:
+          `This model is listed by NVIDIA but not available on your key (404). ` +
+          `It has been removed from the switcher — pick another; Kimi K3, Nemotron 3 Super 120B and GPT-OSS 20B are known to work. ${detail}`.trim(),
+        code: 'nim_model_unserved',
         retryable: false,
       };
     case 410:
@@ -91,13 +109,20 @@ export function describeNimError(
   }
 }
 
-export function nimChatConfig(): UpstreamConfig {
+export function nimChatConfig(modelId?: string): UpstreamConfig {
   return {
     url: `${NIM_BASE}/chat/completions`,
     headers: authHeaders(),
     supportsStreaming: true,
     timeoutMs: 300_000,
-    describeError: describeNimError,
+    describeError: (status, body) => {
+      // Learn from the refusal: the bundled list of unserved ids is a floor,
+      // and entitlements differ per account. Remembering it here means the id
+      // disappears from the switcher on the next catalogue read instead of
+      // failing a second time.
+      if (modelId && isUnservedError(status, body)) rememberUnserved(modelId);
+      return describeNimError(status, body);
+    },
     shapeBody: (body) => {
       // NIM streams token usage only when explicitly asked.
       if (body.stream) body.stream_options = { include_usage: true };
@@ -107,11 +132,14 @@ export function nimChatConfig(): UpstreamConfig {
 }
 
 /** Live catalogue probe. Cached briefly — the list is large and rarely changes. */
-let catalogueCache: { at: number; ids: string[] } | null = null;
+let catalogueCache: { at: number; ids: string[]; tag: string } | null = null;
 const CATALOGUE_TTL_MS = 10 * 60_000;
 
 export async function listCatalogueIds(force = false): Promise<string[]> {
-  if (!force && catalogueCache && Date.now() - catalogueCache.at < CATALOGUE_TTL_MS) {
+  const tag = keyTag();
+  // Tagged by key: two different keys can see two different catalogues, and a
+  // process-wide cache must never hand one user's to the other.
+  if (!force && catalogueCache && catalogueCache.tag === tag && Date.now() - catalogueCache.at < CATALOGUE_TTL_MS) {
     return catalogueCache.ids;
   }
   if (!hasNimKey()) return [];
@@ -121,13 +149,19 @@ export async function listCatalogueIds(force = false): Promise<string[]> {
       headers: authHeaders(),
       signal: AbortSignal.timeout(20_000),
     });
-    if (!res.ok) return catalogueCache?.ids ?? [];
+    if (!res.ok) return catalogueCache?.tag === tag ? catalogueCache.ids : [];
     const json = (await res.json()) as { data?: Array<{ id?: string }> };
-    const ids = (json.data ?? []).map((m) => m.id).filter((id): id is string => Boolean(id));
-    catalogueCache = { at: Date.now(), ids };
+    const ids = (json.data ?? [])
+      .map((m) => m.id)
+      .filter((id): id is string => Boolean(id))
+      // The catalogue lists NIMs this account cannot call and models that are
+      // not chat models at all. Offering either is what made the switcher a
+      // minefield, so neither reaches the UI. See unserved.ts.
+      .filter((id) => !isUnserved(id) && !NON_CHAT.test(id));
+    catalogueCache = { at: Date.now(), ids, tag };
     return ids;
   } catch {
-    return catalogueCache?.ids ?? [];
+    return catalogueCache?.tag === tag ? catalogueCache.ids : [];
   }
 }
 

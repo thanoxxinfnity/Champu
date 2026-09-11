@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { withKeys } from '@/lib/keys';
 import { useWorkspace } from '@/lib/store';
 import { listAssets, saveAsset, deleteAsset } from '@/lib/db/history';
 import type { AssetRecord } from '@/lib/db/schema';
@@ -57,7 +58,7 @@ export function ImageSuite() {
     const endpoint = imageEndpoints.find((e) => e.id === endpointId) ?? imageEndpoints[0];
 
     try {
-      const res = await fetch('/api/image', {
+      const res = await fetch('/api/image', withKeys({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -73,7 +74,7 @@ export function ImageSuite() {
               ? { baseUrl: endpoint.baseUrl, apiKey: endpoint.apiKey, headers: endpoint.headers }
               : undefined,
         }),
-      });
+      }));
 
       const data = (await res.json()) as {
         images?: Array<{ dataUrl: string; model: string; seed: number }>;

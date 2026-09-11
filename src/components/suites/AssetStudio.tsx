@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { withKeys } from '@/lib/keys';
 import { useWorkspace } from '@/lib/store';
 import {
   KEY_MAGENTA,
@@ -111,7 +112,7 @@ export function AssetStudio() {
     try {
       // The key colour is written into the prompt, so the cut is exact rather
       // than a guess at where the subject ends.
-      const res = await fetch('/api/image', {
+      const res = await fetch('/api/image', withKeys({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -122,7 +123,7 @@ export function AssetStudio() {
           height: 1024,
           count: 1,
         }),
-      });
+      }));
       const data = (await res.json()) as { images?: Array<{ dataUrl: string }>; error?: string };
       if (!res.ok || !data.images?.length) {
         setError(data.error ?? 'Generation failed.');
