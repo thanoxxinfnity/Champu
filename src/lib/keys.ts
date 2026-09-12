@@ -57,13 +57,45 @@ export async function saveKeys(next: Partial<ApiKeys>): Promise<ApiKeys> {
 
   if (await isShellHosted()) {
     // The shell is the system of record; keeping a second copy in IndexedDB
-    // would leave a stale key behind after the user clears it natively.
-    await postToShell(cache.nim);
+    // would leave a stale key behind after the user clears it natively — and
+    // IndexedDB is exactly the storage that did not survive a restart.
+    await postToShell({ nimKey: cache.nim, pollinationsToken: cache.pollinations });
     return cache;
   }
 
   await setSetting('apiKeys', cache);
   return cache;
+}
+
+/**
+ * Deployment credentials, kept wherever the platform can actually hold them.
+ *
+ * In the APK this is the native secret store; in a browser it is IndexedDB.
+ * Split from `saveKeys` because the Vercel token is read back by the page (the
+ * deploy call is made from here) while the model keys never are.
+ */
+export async function saveVercel(token: string, teamId: string): Promise<void> {
+  if (await isShellHosted()) {
+    await postToShell({ vercelToken: token.trim(), vercelTeamId: teamId.trim() });
+    return;
+  }
+  await setSetting('vercel', { token: token.trim(), teamId: teamId.trim() });
+}
+
+export async function loadVercel(): Promise<{ token: string; teamId: string }> {
+  if (await isShellHosted()) {
+    try {
+      const res = await fetch('/api/shell/keys', { signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        const json = (await res.json()) as { vercelToken?: string; vercelTeamId?: string };
+        return { token: json.vercelToken ?? '', teamId: json.vercelTeamId ?? '' };
+      }
+    } catch {
+      // Fall through to the browser copy.
+    }
+  }
+  const stored = await getSetting<{ token: string; teamId: string } | null>('vercel', null);
+  return { token: stored?.token ?? '', teamId: stored?.teamId ?? '' };
 }
 
 /**
@@ -118,13 +150,14 @@ export async function nimConfigured(): Promise<boolean> {
   return Boolean(cache.nim);
 }
 
-async function postToShell(nim: string): Promise<void> {
+/** Only the fields passed are written, so a partial save clears nothing else. */
+async function postToShell(fields: Record<string, string>): Promise<void> {
   const res = await fetch('/api/shell/keys', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nimKey: nim }),
+    body: JSON.stringify(fields),
   });
-  if (!res.ok) throw new Error(`The app shell refused the key (${res.status}).`);
+  if (!res.ok) throw new Error(`The app shell refused the credentials (${res.status}).`);
 }
 
 /**

@@ -209,9 +209,14 @@ object Pollinations {
         }
     }
 
-    fun chatConfig() = Upstream.Config(
+    /**
+     * A token is optional — the anonymous tier works without one. When the user
+     * has saved one it only raises their rate limit.
+     */
+    fun chatConfig(token: String = "") = Upstream.Config(
         url = "$TEXT_BASE/openai",
-        headers = mapOf("Referer" to REFERRER),
+        headers = if (token.isBlank()) mapOf("Referer" to REFERRER)
+        else mapOf("Referer" to REFERRER, "Authorization" to "Bearer $token"),
         describeError = ::describeError,
         // The free tier rejects stream_options; keep the payload minimal.
         shapeBody = { body -> body.put("referrer", REFERRER); body.remove("stream_options") },

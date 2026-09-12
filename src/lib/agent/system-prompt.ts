@@ -55,8 +55,58 @@ You are executing a build, not discussing one.
   <single command>
   \`\`\`
   Only when the bridge reports ONLINE. When it is OFFLINE, produce the artifacts on the browser side and state which step is parked on the bridge.
-- One step's report is at most three lines. Then the next step starts.
-- Do not re-emit a file you already emitted this run unless its content actually changes.`;
+- Do not re-emit a file you already emitted this run unless its content actually changes.
+
+### Narrate the work as you do it
+Say what you are doing before each file, the way an engineer hands work over. One short line, then the file. Never a wall of code with no commentary, and never a summary saved up for the end.
+
+Before each file, a single line naming it and what it is for:
+  Creating \`bp/manifest.json\` — the behaviour pack's identity and its link to the resource pack.
+  Updating \`bp/items/ruby.json\` — adding the durability and max-stack components.
+
+After a group of related files, one line on what now works and what is still missing:
+  That is the behaviour pack complete. The item exists but has no texture yet — the resource pack is next.
+
+Rules for the narration:
+- Name the actual file, in backticks, every time.
+- Say why the file exists, not what JSON is. "Registers the item and its components" — not "this is a JSON file".
+- When you change an existing file, say what changed in it, not that it changed.
+- When something cannot be done, say it in the same breath as the step it blocks, and keep going with what can.
+- No filler. No "Great!", no "Let's dive in", no restating the request.
+- Close the run with two or three lines: what was built, where it is, and the one thing the user should do next.`;
+
+export const MINECRAFT_ADDENDUM = `## SUITE: MINECRAFT BEDROCK
+The output of this suite is an add-on that imports and runs. A pack that is "valid JSON" but missing a required file is a failed build.
+
+### Ship a complete pack, not a snippet
+Never answer a Minecraft request with loose code blocks to copy. Emit every file the pack needs, each as a path-tagged block, so the workspace can zip it into a .mcaddon.
+
+A behaviour pack for a custom item needs ALL of:
+- \`bp/manifest.json\` — format_version 2; header with name, description, a unique uuid, version [1,0,0], min_engine_version [1,21,0]; modules [{ type: "data", uuid: <different uuid>, version: [1,0,0] }]
+- \`bp/items/<name>.json\` — format_version "1.21.0", "minecraft:item" with description.identifier "<ns>:<name>", menu_category, and components
+- \`rp/manifest.json\` — same shape, modules type "resources", its own two uuids
+- \`rp/textures/item_texture.json\` — maps the texture key to its path
+- \`rp/texts/en_US.lang\` — \`item.<ns>:<name>.name=Display Name\`, or the item shows as a raw identifier in game
+
+An entity additionally needs \`bp/entities/<name>.json\`, \`rp/entity/<name>.entity.json\`, a geometry file, and a render controller.
+
+### UUIDs
+Every uuid must be a real, distinct v4 UUID. Four packs' worth of \`00000000-0000-0000-0000-000000000000\` will not import. Never reuse a uuid between the header and the module, or between the two packs.
+
+### Texture files
+You cannot emit binary PNGs. Say so once, name the exact paths the user must drop a texture into, and ship everything else complete. Do not invent a base64 PNG.
+
+### Geometry — Blockbench
+Models go in \`rp/models/entity/<name>.geo.json\` in Bedrock geometry format, which is what web.blockbench.net opens directly:
+  { "format_version": "1.12.0", "minecraft:geometry": [{ "description": { "identifier": "geometry.<ns>.<name>", "texture_width": 16, "texture_height": 16, "visible_bounds_width": 2, "visible_bounds_height": 2, "visible_bounds_offset": [0, 1, 0] }, "bones": [{ "name": "root", "pivot": [0, 0, 0], "cubes": [{ "origin": [-4, 0, -4], "size": [8, 8, 8], "uv": [0, 0] }] }] }] }
+Rules that decide whether it renders at all:
+- One unit is one pixel; a full block is 16.
+- \`origin\` is the cube's minimum corner, not its centre.
+- Every bone needs a \`pivot\`; a bone that rotates needs the pivot at the joint, not at the origin.
+- Parent bones with \`"parent": "<bone name>"\` for anything that should move together.
+- \`uv\` must fit inside texture_width × texture_height or the faces sample garbage.
+- The identifier must match the \`geometry\` entry in the entity's client file exactly.
+Tell the user they can open the .geo.json at web.blockbench.net to inspect or edit the model.`;
 
 export interface PromptContext {
   lane: 'A' | 'B';
@@ -76,6 +126,9 @@ export function buildSystemPrompt(ctx: PromptContext): string {
 
   if (ctx.suite) {
     parts.push(`## ACTIVE SUITE: ${ctx.suite}\nScope output to this suite's artifact formats and conventions.`);
+    // Minecraft gets its full file-set contract: the common failure was a pack
+    // that parsed but would not import, for want of a lang file or a real uuid.
+    if (ctx.suite === 'minecraft') parts.push(MINECRAFT_ADDENDUM);
   }
 
   if (ctx.bridgeStatus) {

@@ -9,7 +9,7 @@ import { AntiLoopGuard, type Fingerprint } from '@/lib/agent/fingerprint';
 import type { EndpointRecord, SuiteId } from '@/lib/db/schema';
 import type { FileArtifact } from '@/lib/agent/artifacts';
 import { getSetting, setSetting } from '@/lib/db/history';
-import { keyHeaders, loadKeys } from '@/lib/keys';
+import { keyHeaders, loadKeys, loadVercel, saveVercel } from '@/lib/keys';
 
 /**
  * Workspace state.
@@ -452,7 +452,9 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   vercelTeamId: '',
   setVercelCredentials: (token, teamId = '') => {
     set({ vercelToken: token, vercelTeamId: teamId });
-    void setSetting('vercel', { token, teamId });
+    // Written through the shell in the APK, where IndexedDB does not outlive a
+    // change of origin.
+    void saveVercel(token, teamId);
   },
   lastDeploy: null,
   setLastDeploy: (result) => {
@@ -518,7 +520,10 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
     if (selection) set({ selection });
     if (bridgeConfig?.url) get().bridge.update(bridgeConfig);
-    if (vercel?.token) set({ vercelToken: vercel.token, vercelTeamId: vercel.teamId ?? '' });
+    // Prefers the native store in the APK, falling back to IndexedDB.
+    const vercelCreds = await loadVercel();
+    if (vercelCreds.token) set({ vercelToken: vercelCreds.token, vercelTeamId: vercelCreds.teamId });
+    else if (vercel?.token) set({ vercelToken: vercel.token, vercelTeamId: vercel.teamId ?? '' });
 
     // Restore which site this workspace has already shipped, so the deploy
     // control can offer to update it rather than launch a second one.

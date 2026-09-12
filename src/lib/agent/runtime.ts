@@ -8,7 +8,7 @@ import { extractArtifacts, filesOf, commandsOf, mergeFiles, type FileArtifact } 
 import { describeFileWork, renderWorkLog } from './worklog';
 import { noticeTopic, shouldNotify } from './notify';
 import { advancePlan, NO_EVIDENCE, settleRemaining, type RunEvidence } from './progress';
-import { buildPackExport, describeExport, detectPacks } from '@/lib/suites/minecraft/pack';
+import { buildPackExport, describeExport, detectPacks, validatePacks } from '@/lib/suites/minecraft/pack';
 import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types';
 import type { CustomEndpointConfig } from '@/lib/providers/types';
 import { useWorkspace, type ChatAttachment, THINKING_PHRASES, LANE_B_PHRASES } from '@/lib/store';
@@ -736,15 +736,39 @@ export async function send(opts: SendOptions): Promise<void> {
       const exported = buildPackExport(packs, input.slice(0, 48) || 'chomugiri-addon');
       if (exported) {
         evidence.artifactProduced = true;
+
+        // Checked before it is handed over: a pack can be valid JSON and still
+        // fail at the import screen, and that failure happens on the user's
+        // device long after the run that caused it.
+        const problems = validatePacks(packs);
+        const blockers = problems.filter((p) => p.severity === 'blocker');
+        const warnings = problems.filter((p) => p.severity === 'warning');
+
+        const header = blockers.length
+          ? `**This add-on will not import yet.** ${describeExport(exported)}`
+          : `**Your add-on is ready.** ${describeExport(exported)}`;
+
+        const body = [
+          header,
+          '',
+          ...(blockers.length
+            ? ['Fix these first:', '', ...blockers.map((p) => `- ${p.message}`), '']
+            : [
+                exported.packs > 1
+                  ? 'Open it on a device with Minecraft installed and both packs import together.'
+                  : 'Open it on a device with Minecraft installed to import it.',
+                '',
+              ]),
+          ...(warnings.length ? ['Worth knowing:', '', ...warnings.map((p) => `- ${p.message}`)] : []),
+        ].join('\n');
+
         const offer = {
           id: uid('msg'),
           role: 'system' as const,
-          content:
-            `**Your add-on is ready.** ${describeExport(exported)}\n\n` +
-            (exported.packs > 1
-              ? 'Open it on a device with Minecraft installed and both packs import together.'
-              : 'Open it on a device with Minecraft installed to import it.'),
+          content: body,
           createdAt: Date.now(),
+          // Offered even when it has blockers: the user may want to inspect or
+          // repair it by hand rather than be told no.
           offer: { kind: 'minecraft-pack' as const, filename: exported.filename, label: describeExport(exported) },
         };
         pushMessage(offer);

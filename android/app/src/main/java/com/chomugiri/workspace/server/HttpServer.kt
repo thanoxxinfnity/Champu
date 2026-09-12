@@ -45,12 +45,57 @@ class HttpServer(
     var port: Int = 0
         private set
 
+    /**
+     * Binds the same port across launches.
+     *
+     * This is not a preference — it is the difference between the app keeping
+     * the user's data and losing it. The workspace is served from
+     * http://127.0.0.1:<port>, and every browser storage API is scoped to the
+     * origin, which *includes the port*. Binding port 0 handed us a different
+     * port on every launch, so every launch was a different origin with its own
+     * empty IndexedDB and localStorage: custom endpoints, saved tokens, chat
+     * history and even the chosen theme were all silently gone the moment the
+     * app was killed. Nothing was deleting them; they were simply being written
+     * somewhere the next launch never looked.
+     *
+     * So: reuse the port that worked last time, and only move if something else
+     * has taken it. The candidates are a fixed private-range block rather than
+     * the ephemeral range, precisely because the OS does not hand those out at
+     * random to other processes.
+     */
+    private fun bindStablePort(): ServerSocket {
+        val loopback = InetAddress.getByName("127.0.0.1")
+        val saved = router.servedPort
+
+        val candidates = buildList {
+            if (saved in 1024..65535) add(saved)
+            // A deterministic block, so a fresh install lands somewhere stable.
+            for (offset in 0 until 24) add(BASE_PORT + offset)
+        }
+
+        for (candidate in candidates) {
+            try {
+                val bound = ServerSocket(candidate, 16, loopback)
+                if (candidate != saved) router.servedPort = candidate
+                return bound
+            } catch (_: IOException) {
+                // Taken by something else; try the next.
+            }
+        }
+
+        // Every candidate is occupied. Fall back to an OS-assigned port so the
+        // app still runs — this launch will not see the previous launch's data,
+        // which is worth saying plainly rather than failing silently.
+        log("all stable ports are in use; falling back to an ephemeral port and this session will start with empty local storage", null)
+        val fallback = ServerSocket(0, 16, loopback)
+        router.servedPort = fallback.localPort
+        return fallback
+    }
+
     fun start(): Int {
         if (running.get()) return port
 
-        // Port 0 lets the OS pick a free one; a fixed port collides with whatever
-        // else the user happens to be running.
-        val server = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
+        val server = bindStablePort()
         socket = server
         port = server.localPort
         running.set(true)
@@ -276,6 +321,13 @@ class HttpServer(
 
     companion object {
         const val TAG = "ChomugiriHttp"
+
+        /**
+         * Start of the block the server prefers. Inside IANA's dynamic range but
+         * well away from the ephemeral ports Android hands out, so a collision is
+         * unlikely and a rebind after one is rare.
+         */
+        const val BASE_PORT = 47_615
 
         fun statusText(code: Int): String = when (code) {
             200 -> "OK"; 204 -> "No Content"; 400 -> "Bad Request"; 403 -> "Forbidden"

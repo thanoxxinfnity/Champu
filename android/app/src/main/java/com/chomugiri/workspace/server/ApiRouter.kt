@@ -21,6 +21,33 @@ class ApiRouter(private val secrets: SecretStore) {
         get() = secrets.get("nim_key")
         set(value) { secrets.put("nim_key", value) }
 
+    /**
+     * Credentials that used to live only in the WebView's IndexedDB, which does
+     * not survive a change of origin. Kept natively alongside the NIM key so no
+     * credential depends on browser storage outliving the app.
+     */
+    var pollinationsToken: String
+        get() = secrets.get("pollinations_token")
+        set(value) { secrets.put("pollinations_token", value) }
+
+    var vercelToken: String
+        get() = secrets.get("vercel_token")
+        set(value) { secrets.put("vercel_token", value) }
+
+    var vercelTeamId: String
+        get() = secrets.get("vercel_team_id")
+        set(value) { secrets.put("vercel_team_id", value) }
+
+    /**
+     * The port the workspace was last served on.
+     *
+     * Stored because browser storage is scoped to the origin, and the origin
+     * includes the port — reusing it is what lets local data survive a restart.
+     */
+    var servedPort: Int
+        get() = secrets.get("served_port").toIntOrNull() ?: 0
+        set(value) { secrets.put("served_port", value.toString()) }
+
     fun handle(request: ApiRequest, response: ResponseWriter) {
         try {
             when (request.path) {
@@ -46,12 +73,31 @@ class ApiRouter(private val secrets: SecretStore) {
     private fun shellKeys(request: ApiRequest, response: ResponseWriter) {
         if (request.method == "POST") {
             val body = JSONObject(request.bodyText)
+            // Only fields that were sent are touched, so a partial save never
+            // silently clears a credential the caller did not mention.
             if (body.has("nimKey")) nimKey = body.optString("nimKey")
-            response.json(200, JSONObject().put("ok", true).put("nimConfigured", nimKey.isNotEmpty()).toString())
+            if (body.has("pollinationsToken")) pollinationsToken = body.optString("pollinationsToken")
+            if (body.has("vercelToken")) vercelToken = body.optString("vercelToken")
+            if (body.has("vercelTeamId")) vercelTeamId = body.optString("vercelTeamId")
+            response.json(200, state().put("ok", true).toString())
         } else {
-            response.json(200, JSONObject().put("nimConfigured", nimKey.isNotEmpty()).toString())
+            response.json(200, state().toString())
         }
     }
+
+    /**
+     * What the shell holds.
+     *
+     * The NIM and Pollinations values are reported as booleans only — the web
+     * layer never needs to read a key back, and handing it to the page would put
+     * a credential somewhere it does not have to be. Vercel is returned because
+     * deployment runs through the page's own fetch and genuinely needs it.
+     */
+    private fun state(): JSONObject = JSONObject()
+        .put("nimConfigured", nimKey.isNotEmpty())
+        .put("pollinationsConfigured", pollinationsToken.isNotEmpty())
+        .put("vercelToken", vercelToken)
+        .put("vercelTeamId", vercelTeamId)
 
     // ── /api/models ─────────────────────────────────────────────────────────
 
@@ -152,7 +198,7 @@ class ApiRouter(private val secrets: SecretStore) {
             if (nimKey.isEmpty()) null to "No NVIDIA NIM key configured. Open Settings → API Keys, or switch the model to Pollinations (zero-key)."
             else Nim.chatConfig(nimKey) to null
         }
-        "pollinations" -> Pollinations.chatConfig() to null
+        "pollinations" -> Pollinations.chatConfig(pollinationsToken) to null
         "custom" -> {
             val custom = body.optJSONObject("custom")
             val base = custom?.optString("baseUrl").orEmpty().trimEnd('/')
