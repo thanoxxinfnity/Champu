@@ -1,5 +1,8 @@
 'use client';
 
+import { useWorkspace } from '@/lib/store';
+import { downloadZip } from '@/lib/zip';
+import { buildPackExport, detectPacks } from '@/lib/suites/minecraft/pack';
 import { useMemo, useState } from 'react';
 import { renderMarkdown } from './markdown';
 import type { ChatMessageView } from '@/lib/store';
@@ -176,6 +179,8 @@ export function Message({ message }: { message: ChatMessageView }) {
           </div>
         )}
 
+        {message.offer ? <OfferDownload offer={message.offer} /> : null}
+
         {message.error && (
           <div
             className="enter-pop mt-2 rounded-xl border px-3 py-2 text-[12px] leading-5"
@@ -192,5 +197,55 @@ export function Message({ message }: { message: ChatMessageView }) {
         )}
       </div>
     </article>
+  );
+}
+
+/**
+ * A file the run produced, handed over as a real download.
+ *
+ * The archive is built at the moment it is clicked, from the workspace's
+ * current files, rather than being stored in the message — otherwise every
+ * saved conversation would carry a second copy of every artifact, and a later
+ * edit to a file would leave the download stale.
+ */
+function OfferDownload({ offer }: { offer: NonNullable<ChatMessageView['offer']> }) {
+  const files = useWorkspace((s) => s.files);
+  const [error, setError] = useState<string | null>(null);
+
+  const take = () => {
+    const packs = detectPacks([...files.values()]);
+    const built = buildPackExport(packs, offer.filename.replace(/\.(mcpack|mcaddon)$/i, ''));
+    if (!built) {
+      // The files that produced this offer are no longer in the workspace.
+      setError('Those pack files are no longer open — re-run the build to get the add-on again.');
+      return;
+    }
+    setError(null);
+    downloadZip(built.entries, built.filename, 'application/octet-stream');
+  };
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={take}
+        className="press mono inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[11.5px] font-semibold"
+        style={{
+          borderColor: 'color-mix(in oklab, var(--accent) 45%, var(--line))',
+          background: 'color-mix(in oklab, var(--accent) 10%, transparent)',
+          color: 'var(--accent)',
+        }}
+      >
+        ↓ {offer.filename}
+      </button>
+      <p className="mono mt-1 text-[10px]" style={{ color: 'var(--ink-faint)' }}>
+        {offer.label}
+      </p>
+      {error && (
+        <p className="mt-1 text-[10.5px]" style={{ color: 'var(--color-danger)' }}>
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

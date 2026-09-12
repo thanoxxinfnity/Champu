@@ -44,6 +44,12 @@ export interface ChatMessageView {
   attachments?: ChatAttachment[];
   usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
   durationMs?: number;
+  /**
+   * A file the run produced that the user can take away, built on demand from
+   * the current workspace files rather than stored in the message — history
+   * should not carry a second copy of every artifact.
+   */
+  offer?: { kind: 'minecraft-pack'; filename: string; label: string };
 }
 
 export interface TerminalLine {
@@ -88,6 +94,29 @@ export interface DeployResult {
   /** How many times this project has been shipped, first launch included. */
   releases?: number;
 }
+
+/**
+ * A finished background run, announced briefly and then gone.
+ *
+ * Deliberately not a chat message and never written to history: the user asked
+ * for a notice, not a permanent entry, and a transcript that accumulates "this
+ * finished" rows is worse than one that does not. It lives in memory, expires
+ * on its own, and carries just enough — the topic and the session — to get the
+ * user back to the work with one action.
+ */
+export interface RunNotice {
+  id: string;
+  sessionId: string;
+  suite: SuiteId;
+  /** What the run was about, taken from the prompt that started it. */
+  topic: string;
+  status: 'done' | 'failed';
+  detail?: string;
+  at: number;
+}
+
+/** How long a notice stays on screen before removing itself. */
+export const NOTICE_TTL_MS = 15_000;
 
 export type ThemePref = 'system' | 'light' | 'dark';
 
@@ -197,6 +226,12 @@ interface WorkspaceState {
   setVercelCredentials: (token: string, teamId?: string) => void;
   lastDeploy: DeployResult | null;
   setLastDeploy: (result: DeployResult | null) => void;
+
+  // ── Run notices ───────────────────────────────────────────────────────────
+  notices: RunNotice[];
+  pushNotice: (notice: Omit<RunNotice, 'id' | 'at'>) => void;
+  dismissNotice: (id: string) => void;
+  clearNotices: () => void;
 
   // ── Drafts ────────────────────────────────────────────────────────────────
   drafts: Draft[] | null;
@@ -427,6 +462,18 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     // I already made" was impossible — it would have created a second project.
     void setSetting('deploy', result);
   },
+
+  notices: [],
+  pushNotice: (notice) => {
+    const id = `notice_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    // Capped, so a long unattended session cannot stack notices off-screen.
+    set((s) => ({ notices: [...s.notices, { ...notice, id, at: Date.now() }].slice(-4) }));
+    if (typeof window !== 'undefined') {
+      window.setTimeout(() => get().dismissNotice(id), NOTICE_TTL_MS);
+    }
+  },
+  dismissNotice: (id) => set((s) => ({ notices: s.notices.filter((n) => n.id !== id) })),
+  clearNotices: () => set({ notices: [] }),
 
   drafts: null,
   setDrafts: (drafts) => set({ drafts }),

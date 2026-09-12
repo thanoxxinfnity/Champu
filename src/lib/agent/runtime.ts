@@ -6,6 +6,9 @@ import { buildSystemPrompt } from './system-prompt';
 import { heuristicPlan, parsePlan, PLANNER_PROMPT, planProgress, parkBridgeTasks, requiresBridge, type Plan } from './planner';
 import { extractArtifacts, filesOf, commandsOf, mergeFiles, type FileArtifact } from './artifacts';
 import { describeFileWork, renderWorkLog } from './worklog';
+import { noticeTopic, shouldNotify } from './notify';
+import { advancePlan, NO_EVIDENCE, settleRemaining, type RunEvidence } from './progress';
+import { buildPackExport, describeExport, detectPacks } from '@/lib/suites/minecraft/pack';
 import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types';
 import type { CustomEndpointConfig } from '@/lib/providers/types';
 import { useWorkspace, type ChatAttachment, THINKING_PHRASES, LANE_B_PHRASES } from '@/lib/store';
@@ -713,6 +716,42 @@ export async function send(opts: SendOptions): Promise<void> {
 
     if (files.length) setRightPaneTab('files');
 
+    // Everything the plan's progress is derived from. Gathered here rather
+    // than asked of the model: a checklist should tick on what happened.
+    const evidence: RunEvidence = {
+      ...NO_EVIDENCE,
+      answerChars: result.content.length,
+      filesWritten: files.length,
+      failed: Boolean(result.error),
+    };
+
+    // ── Minecraft: hand over something installable ──────────────────────────
+    //
+    // A Bedrock add-on is a ZIP of JSON with no build step, so it never needed
+    // the terminal bridge — which was the only packaging path the runtime had.
+    // The result was a correct pack that stopped at "here are some files",
+    // which from the user's side is simply "it did not build my mod".
+    if (files.length) {
+      const packs = detectPacks(files);
+      const exported = buildPackExport(packs, input.slice(0, 48) || 'chomugiri-addon');
+      if (exported) {
+        evidence.artifactProduced = true;
+        const offer = {
+          id: uid('msg'),
+          role: 'system' as const,
+          content:
+            `**Your add-on is ready.** ${describeExport(exported)}\n\n` +
+            (exported.packs > 1
+              ? 'Open it on a device with Minecraft installed and both packs import together.'
+              : 'Open it on a device with Minecraft installed to import it.'),
+          createdAt: Date.now(),
+          offer: { kind: 'minecraft-pack' as const, filename: exported.filename, label: describeExport(exported) },
+        };
+        pushMessage(offer);
+        void appendMessage({ ...offer, sessionId, suite });
+      }
+    }
+
     // ── Report the work ─────────────────────────────────────────────────────
     // Files landing silently in a panel leaves the obvious question unanswered:
     // what is in them, and which one holds the thing that was asked for. This
@@ -768,6 +807,12 @@ export async function send(opts: SendOptions): Promise<void> {
             suite,
             signal: controller.signal,
           });
+          // A command parked because the bridge is offline did not run, so it
+          // is neither a success nor a failure to report.
+          if (outcome.skipped !== 'offline') {
+            evidence.commandsRun += 1;
+            if (!outcome.ok) evidence.commandsFailed += 1;
+          }
           // A ban or a hard failure stops the sequence; continuing would run
           // dependent commands against a broken state.
           if (!outcome.ok && outcome.skipped !== 'offline') break;
@@ -778,6 +823,7 @@ export async function send(opts: SendOptions): Promise<void> {
         try {
           const collected = await useWorkspace.getState().bridge.collect(['.apk', '.aab', '.zip', '.mcpack', '.mcaddon']);
           if (collected.count) {
+            evidence.artifactProduced = true;
             const bridgeClient = useWorkspace.getState().bridge;
             const lines = collected.collected.map(
               (a) => `- [\`${a.name}\`](${bridgeClient.artifactUrl(a.name)}) — ${(a.bytes / 1024 / 1024).toFixed(1)} MB`,
@@ -832,6 +878,17 @@ export async function send(opts: SendOptions): Promise<void> {
       }
     }
 
+    // ── Settle the checklist ────────────────────────────────────────────────
+    //
+    // Nothing used to complete a task, so the HUD read "0/7 complete" through a
+    // run that had done all seven things. Steps tick on the evidence above;
+    // whatever is left had no evidence and is marked skipped rather than being
+    // claimed.
+    const finalPlan = useWorkspace.getState().plan;
+    if (finalPlan) {
+      setPlan(settleRemaining(advancePlan(finalPlan, evidence), evidence));
+    }
+
     void touchSession(sessionId, {
       title: input.slice(0, 80) || 'Untitled run',
       model: selection.model,
@@ -841,6 +898,32 @@ export async function send(opts: SendOptions): Promise<void> {
   } finally {
     stopPhrases();
     setAbortController(null);
+
+    // ── Tell the user it finished, if they are not watching ─────────────────
+    //
+    // A long build is something you start and then go and do something else.
+    // Announcing it only in the transcript means the one case that needs an
+    // announcement — nobody is looking at the transcript — is the one case it
+    // does not cover. So: a notice when the tab is hidden or the user has moved
+    // to another session, and silence when they are already watching it happen.
+    const after = useWorkspace.getState();
+    const announce = shouldNotify({
+      currentSessionId: after.sessionId,
+      runSessionId: sessionId,
+      hidden: typeof document !== 'undefined' && document.hidden,
+      aborted: controller.signal.aborted,
+    });
+
+    if (announce) {
+      const finished = after.messages.find((m) => m.id === assistantId);
+      after.pushNotice({
+        sessionId,
+        suite,
+        topic: noticeTopic(input),
+        status: finished?.error ? 'failed' : 'done',
+        detail: finished?.error ? noticeTopic(finished.error) : undefined,
+      });
+    }
   }
 }
 

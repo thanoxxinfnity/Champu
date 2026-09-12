@@ -16,6 +16,7 @@ import { DraftPicker } from './DraftPicker';
 import { AssetStudio } from './suites/AssetStudio';
 import { LogoMark, LogoWordmark } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
+import { RunNotices } from './RunNotices';
 import { BedrockBuilder } from './suites/BedrockBuilder';
 import { BlockbenchStudio } from './suites/Blockbench';
 import { AndroidStudio } from './suites/AndroidStudio';
@@ -477,6 +478,8 @@ export function Workspace() {
           </div>
         </div>
       )}
+
+      <RunNotices />
 
       <Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>

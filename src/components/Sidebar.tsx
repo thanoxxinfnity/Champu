@@ -1,5 +1,6 @@
 'use client';
 
+import { openSession } from '@/lib/session/open';
 import { useCallback, useEffect, useState } from 'react';
 import { useWorkspace } from '@/lib/store';
 import { deleteSession, exportSuite, listMessages, listSessions, searchSessions, storageEstimate } from '@/lib/db/history';
@@ -126,32 +127,6 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
   useEffect(() => {
     void storageEstimate().then(setStorage);
   }, [sessions.length]);
-
-  const openSession = async (session: SessionRecord) => {
-    setSuite(session.suite);
-    setSessionId(session.id);
-    clearMessages();
-    setPlan(null);
-    setFiles(new Map());
-
-    const messages = await listMessages(session.id);
-    for (const m of messages) {
-      if (m.role === 'tool') continue;
-      pushMessage({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        reasoning: m.reasoning,
-        lane: m.lane,
-        model: m.model,
-        provider: m.provider as never,
-        createdAt: m.createdAt,
-        attachments: m.attachments?.map((a, i) => ({ id: `${m.id}_${i}`, ...a })),
-        usage: m.usage,
-        durationMs: m.durationMs,
-      });
-    }
-  };
 
   const newSession = (suite: SuiteId) => {
     setSuite(suite);
