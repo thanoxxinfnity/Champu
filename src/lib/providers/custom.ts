@@ -1,4 +1,4 @@
-import { modelIdsFrom, modelListCandidates } from './model-list';
+import { chatBaseCandidates, modelIdsFrom, modelListCandidates, normalizeBase } from './model-list';
 import type { UpstreamConfig } from './openai-compat';
 import { inferCapabilities, labelFor, vendorFor } from './registry';
 import { ProviderError, type CustomEndpointConfig, type ModelCapability, type ModelDescriptor } from './types';
@@ -122,7 +122,10 @@ export async function probeEndpoint(cfg: CustomEndpointConfig): Promise<Capabili
   const started = Date.now();
   let base: string;
   try {
-    base = assertSafeEndpoint(cfg.baseUrl).toString().replace(/\/+$/, '');
+    // A pasted endpoint is not a base. People copy the URL from the docs —
+    // ".../v1/models" or ".../v1/chat/completions" — and taking it literally
+    // makes the probe ask for "/v1/models/models", then blames the endpoint.
+    base = assertSafeEndpoint(normalizeBase(cfg.baseUrl)).toString().replace(/\/+$/, '');
   } catch (err) {
     return {
       ok: false,
@@ -139,6 +142,21 @@ export async function probeEndpoint(cfg: CustomEndpointConfig): Promise<Capabili
   const capabilities = new Set<ModelCapability>();
   const routes: string[] = [];
   let models: ModelDescriptor[] = [];
+
+  // Which base can actually be talked to.
+  //
+  // The model list and the chat route need not share a prefix — kie.ai serves
+  // chat at /v1/chat/completions and lists models at /api/v1/models — so a base
+  // derived from one is wrong for the other. Picking the wrong one leaves an
+  // endpoint that probes perfectly and then cannot answer a single message,
+  // which is the worst of both.
+  const chatBase = await findChatBase(base, headers);
+  if (chatBase && chatBase !== base) {
+    base = chatBase;
+    routes.push(`chat at ${new URL(chatBase).pathname || '/'}`);
+  } else if (chatBase) {
+    routes.push('/chat/completions');
+  }
 
   // 1. The model list.
   //
@@ -240,3 +258,39 @@ export async function probeEndpoint(cfg: CustomEndpointConfig): Promise<Capabili
 }
 
 
+
+
+/**
+ * The base whose `/chat/completions` exists.
+ *
+ * Existence is inferred from the refusal: a 404 or 501 means the route is not
+ * there, and anything else — including a 400 about the model, or a 401 about
+ * the key — means it is. That is deliberately generous, because the point is to
+ * find the route, not to make a successful completion at probe time.
+ */
+async function findChatBase(base: string, headers: Record<string, string>): Promise<string | null> {
+  for (const candidate of chatBaseCandidates(base)) {
+    try {
+      const res = await fetch(`${candidate}/chat/completions`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: '__chomugiri_probe__', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 }),
+        signal: AbortSignal.timeout(12_000),
+      });
+
+      if (res.status === 404 || res.status === 501) continue;
+
+      // Some gateways answer 200 with the error in the body; a "no route"
+      // message there means the same as a 404.
+      if (res.ok) {
+        const body = await res.clone().text().catch(() => '');
+        if (/not supported|no route|not found/i.test(body) && /"code"\s*:\s*(404|501)/.test(body)) continue;
+      }
+
+      return candidate;
+    } catch {
+      // Unreachable; try the next.
+    }
+  }
+  return null;
+}

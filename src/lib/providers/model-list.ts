@@ -83,3 +83,48 @@ export function modelIdsFrom(json: unknown): string[] {
 
   return [];
 }
+
+/**
+ * Cleans up a base URL that is nearly right.
+ *
+ * People paste the URL they found in the docs, which is usually an endpoint
+ * rather than a base — `.../v1/models` or `.../v1/chat/completions`. Treating
+ * that literally makes the probe ask for `/v1/models/models`, which of course
+ * answers nothing, and the error blames the endpoint for the paste.
+ */
+export function normalizeBase(input: string): string {
+  let base = input.trim().replace(/\/+$/, '');
+  // Longest first, so /chat/completions is not left as a stray /chat.
+  for (const suffix of ['/chat/completions', '/completions', '/models', '/chat']) {
+    if (base.toLowerCase().endsWith(suffix)) {
+      base = base.slice(0, -suffix.length);
+      break;
+    }
+  }
+  return base.replace(/\/+$/, '');
+}
+
+/**
+ * Bases whose `/chat/completions` might answer.
+ *
+ * The model list and the chat route do not have to share a prefix. kie.ai
+ * serves chat at /v1/chat/completions and lists models at /api/v1/models, so a
+ * base derived from one is wrong for the other — and picking the wrong one
+ * leaves an endpoint that probes perfectly and then cannot be talked to.
+ */
+export function chatBaseCandidates(base: string): string[] {
+  const trimmed = normalizeBase(base);
+  const out = [trimmed];
+
+  try {
+    const parsed = new URL(trimmed);
+    const path = parsed.pathname.replace(/\/+$/, '');
+    if (path.startsWith('/api')) out.push(`${parsed.origin}${path.slice(4)}` || parsed.origin);
+    else out.push(`${parsed.origin}/api${path}`);
+  } catch {
+    // Not a URL; the caller reports that separately.
+  }
+
+  const seen = new Set<string>();
+  return out.filter((c) => c && !seen.has(c) && (seen.add(c), true));
+}

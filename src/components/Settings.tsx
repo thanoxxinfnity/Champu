@@ -9,6 +9,7 @@ import type { VaultRecord } from '@/lib/db/schema';
 import { isClientExposed, maskSecret, toEnvExample, toEnvFile, validateSecretName } from '@/lib/security/secrets';
 import { downloadText } from '@/lib/zip';
 import { isShellHosted, loadKeys, maskKey, nimConfigured, saveKeys, validateNimKey } from '@/lib/keys';
+import { normalizeBase } from '@/lib/providers/model-list';
 
 type Tab = 'guide' | 'keys' | 'bridge' | 'secrets' | 'endpoints' | 'deploy' | 'guard';
 
@@ -293,7 +294,10 @@ function EndpointsTab() {
     // — which is most of them outside the big providers — could never be
     // added at all, no matter how well it worked. The user knows their own
     // server; the probe's job is to save them typing, not to veto them.
-    const url = (probe?.ok ? probe.baseUrl : baseUrl).trim().replace(/\/+$/, '');
+    // The probe reports the base it could actually talk to, which may differ
+    // from what was typed; without a probe, at least strip a pasted endpoint
+    // suffix so "/v1/models" does not get stored as the base.
+    const url = probe?.ok ? probe.baseUrl : normalizeBase(baseUrl);
     let host: string;
     try {
       const parsed = new URL(url);
@@ -452,6 +456,11 @@ function EndpointsTab() {
           <p className="mono mt-1.5 text-[10px]" style={{ color: 'var(--ink-faint)' }}>
             {probe.models.length} model{probe.models.length === 1 ? '' : 's'} · routes {probe.routes.join(', ')}
           </p>
+          {normalizeBase(baseUrl) !== probe.baseUrl && (
+            <p className="mono mt-1 text-[10px]" style={{ color: 'var(--color-amber)' }}>
+              using {probe.baseUrl} — that is where this endpoint answers chat
+            </p>
+          )}
         </div>
       )}
 

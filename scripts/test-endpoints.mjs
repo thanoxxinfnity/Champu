@@ -65,3 +65,46 @@ test('a base that will not parse still yields the one obvious candidate', () => 
   const urls = modelListCandidates('not a url').map((c) => c.url);
   assert.deepEqual(urls, ['not a url/models']);
 });
+
+// ── Pasted URLs ─────────────────────────────────────────────────────────────
+
+import { chatBaseCandidates, normalizeBase } from '../src/lib/providers/model-list.ts';
+
+test('a pasted endpoint URL is treated as a base, not appended to', () => {
+  // This exact paste produced "answered nothing" — the probe asked for
+  // /api/v1/models/models.
+  assert.equal(normalizeBase('https://api.kie.ai/api/v1/models'), 'https://api.kie.ai/api/v1');
+  assert.equal(normalizeBase('https://api.example.com/v1/chat/completions'), 'https://api.example.com/v1');
+  assert.equal(normalizeBase('https://api.example.com/v1/completions'), 'https://api.example.com/v1');
+});
+
+test('a base that is already a base is left alone', () => {
+  assert.equal(normalizeBase('https://api.kie.ai/v1'), 'https://api.kie.ai/v1');
+  assert.equal(normalizeBase('https://api.kie.ai/v1/'), 'https://api.kie.ai/v1');
+});
+
+test('/chat/completions is stripped whole, not down to a stray /chat', () => {
+  assert.equal(normalizeBase('https://x.com/v1/chat/completions'), 'https://x.com/v1');
+});
+
+test('a model id containing "models" in the host is not mangled', () => {
+  assert.equal(normalizeBase('https://models.example.com/v1'), 'https://models.example.com/v1');
+});
+
+test('both prefixes are offered, because chat and models can live apart', () => {
+  // kie.ai: chat at /v1, models at /api/v1.
+  assert.deepEqual(chatBaseCandidates('https://api.kie.ai/api/v1/models'), [
+    'https://api.kie.ai/api/v1',
+    'https://api.kie.ai/v1',
+  ]);
+  assert.deepEqual(chatBaseCandidates('https://api.kie.ai/v1'), [
+    'https://api.kie.ai/v1',
+    'https://api.kie.ai/api/v1',
+  ]);
+});
+
+test('candidates are unique and the typed one is tried first', () => {
+  const c = chatBaseCandidates('https://api.example.com/v1');
+  assert.equal(c[0], 'https://api.example.com/v1');
+  assert.equal(new Set(c).size, c.length);
+});
