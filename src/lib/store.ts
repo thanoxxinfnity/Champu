@@ -11,7 +11,6 @@ import type { FileArtifact } from '@/lib/agent/artifacts';
 import { getSetting, setSetting } from '@/lib/db/history';
 import { keyHeaders, loadKeys, loadVercel, saveVercel } from '@/lib/keys';
 import { endpointModels } from '@/lib/providers/endpoint-models';
-import { DEFAULT_PUTER_MODEL, PUTER_MODELS } from '@/lib/providers/puter-models';
 
 /**
  * Workspace state.
@@ -171,11 +170,6 @@ interface WorkspaceState {
   loadModels: (force?: boolean) => Promise<void>;
   setSelection: (selection: ModelSelection) => void;
 
-  // ── Puter (keyless) ───────────────────────────────────────────────────────
-  /** When on, Puter's models join the switcher — no API key, user-pays. */
-  puterEnabled: boolean;
-  setPuterEnabled: (enabled: boolean) => Promise<void>;
-
   // ── Custom endpoints ──────────────────────────────────────────────────────
   endpoints: EndpointRecord[];
   setEndpoints: (endpoints: EndpointRecord[]) => void;
@@ -308,13 +302,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
       // The catalogue is server-side and knows nothing about custom endpoints,
       // which live on the device — so they are added back on every reload.
-      const withCustom = [
-        ...models,
-        // Puter's catalogue is client-side by nature: the SDK runs in this page,
-        // so the server has nothing to report about it.
-        ...(get().puterEnabled ? PUTER_MODELS : []),
-        ...endpointModels(get().endpoints),
-      ];
+      const withCustom = [...models, ...endpointModels(get().endpoints)];
       set({ models: withCustom, modelWarnings: data.warnings ?? [] });
 
       // If the persisted selection no longer exists, fall back to something real
@@ -323,16 +311,12 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       const stillValid = withCustom.some((m) => m.provider === current.provider && m.id === current.model);
       if (!stillValid && withCustom.length) {
         const selectable = withCustom.filter((m) => m.origin !== 'partner-only');
-        // Without a key there are no NIM models at all, and falling through to
-        // "the first thing in the list" left a fresh install pointed at
-        // something that could not answer. Puter needs nothing, so it is the
-        // sensible default exactly when NVIDIA is absent.
+        // Without a key there are no NIM models at all, so a NIM-first fallback
+        // would leave a fresh install pointed at something that cannot answer.
         const hasNim = selectable.some((m) => m.provider === 'nim');
         const preferred =
           (hasNim ? selectable.find((m) => m.id === DEFAULT_NIM_MODEL) : undefined) ??
           (hasNim ? selectable.find((m) => m.capabilities.includes('reasoning') && m.provider === 'nim') : undefined) ??
-          selectable.find((m) => m.provider === 'puter' && m.id === DEFAULT_PUTER_MODEL) ??
-          selectable.find((m) => m.provider === 'puter') ??
           selectable.find((m) => m.capabilities.includes('chat')) ??
           selectable[0];
         if (!preferred) return;
@@ -349,15 +333,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   setSelection: (selection) => {
     set({ selection });
     void setSetting('selection', selection);
-  },
-
-  // On by default: a fresh install with no key should still be able to hold a
-  // conversation, and Puter is the only provider here that needs nothing at all.
-  puterEnabled: true,
-  setPuterEnabled: async (enabled) => {
-    set({ puterEnabled: enabled });
-    await setSetting('puterEnabled', enabled);
-    await get().loadModels();
   },
 
   endpoints: [],
@@ -578,7 +553,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const priorDeploy = await getSetting<DeployResult | null>('deploy', null);
     if (priorDeploy?.project) set({ lastDeploy: priorDeploy });
     set({ draftsEnabled: await getSetting<boolean>('draftsEnabled', false) });
-    set({ puterEnabled: await getSetting<boolean>('puterEnabled', true) });
     set({ imageModel: await getSetting<string>('imageModel', 'nim:black-forest-labs/flux.1-dev') });
 
     // The boot script already painted the stored theme; this re-syncs the store

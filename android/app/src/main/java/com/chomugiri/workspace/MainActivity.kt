@@ -114,23 +114,13 @@ class MainActivity : AppCompatActivity() {
             }
 
             CookieManager.getInstance().setAcceptCookie(true)
-            // Puter's SDK and its sign-in window are a different origin from the
-            // loopback page that hosts them; without this their session cookie
-            // is dropped and the user is signed out on every call.
-            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 
             webChromeClient = object : WebChromeClient() {
                 /**
-                 * window.open lands here, and the target URL is not passed in —
-                 * the documented route is a second WebView that reports the URL
-                 * it was asked to load.
-                 *
-                 * Where it goes depends on what it is. An ordinary link belongs
-                 * in the system browser. A sign-in window does not: Puter's
-                 * keyless provider signs the user in through a popup that talks
-                 * back to its opener with postMessage, and a popup handed to
-                 * Chrome has no opener to talk to — so sign-in could never
-                 * finish inside the app. Those stay in-process, in a dialog.
+                 * window.open lands here. The target URL is not passed in, so the
+                 * documented route is a throwaway WebView whose only job is to
+                 * report the URL it was asked to load — which is then handed to
+                 * the system browser. Nothing is ever rendered in it.
                  */
                 override fun onCreateWindow(
                     view: WebView?,
@@ -140,36 +130,15 @@ class MainActivity : AppCompatActivity() {
                 ): Boolean {
                     val host = view ?: return false
                     val msg = resultMsg ?: return false
-
-                    @SuppressLint("SetJavaScriptEnabled")
-                    val popup = WebView(host.context).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.databaseEnabled = true
-                        settings.setSupportMultipleWindows(true)
-                        settings.javaScriptCanOpenWindowsAutomatically = true
-                    }
-                    CookieManager.getInstance().setAcceptThirdPartyCookies(popup, true)
-
-                    var routed = false
-                    popup.webViewClient = object : WebViewClient() {
-                        override fun onPageStarted(v: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                            if (routed) return
-                            routed = true
-                            val uri = runCatching { Uri.parse(url) }.getOrNull()
-                            if (isSignInHost(uri?.host)) showPopupWindow(popup)
-                            else {
-                                uri?.let { startActivity(Intent(Intent.ACTION_VIEW, it)) }
-                                closePopupWindow()
-                            }
+                    val relay = WebView(host.context)
+                    relay.webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(v: WebView?, request: WebResourceRequest?): Boolean {
+                            request?.url?.let { startActivity(Intent(Intent.ACTION_VIEW, it)) }
+                            relay.destroy()
+                            return true
                         }
                     }
-                    popup.webChromeClient = object : WebChromeClient() {
-                        // The sign-in page closes itself when it is done.
-                        override fun onCloseWindow(window: WebView?) = closePopupWindow()
-                    }
-
-                    (msg.obj as? WebView.WebViewTransport)?.webView = popup
+                    (msg.obj as? WebView.WebViewTransport)?.webView = relay
                     msg.sendToTarget()
                     return true
                 }
@@ -223,10 +192,7 @@ class MainActivity : AppCompatActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                // A sign-in window is the thing on screen; back closes that first.
-                if (popupWindow != null) closePopupWindow()
-                else if (webView.canGoBack()) webView.goBack()
-                else finish()
+                if (webView.canGoBack()) webView.goBack() else finish()
             }
         })
 
@@ -245,47 +211,6 @@ class MainActivity : AppCompatActivity() {
         if (router.nimKey.isEmpty()) {
             webView.postDelayed({ promptForKey(firstRun = true) }, 1200)
         }
-    }
-
-    // ── In-app sign-in window ───────────────────────────────────────────────
-
-    private var popupWindow: AlertDialog? = null
-    private var popupView: WebView? = null
-
-    /**
-     * Hosts whose popup has to stay inside the app.
-     *
-     * A sign-in popup reports its result to the window that opened it. Handing
-     * it to the system browser breaks that link, and the sign-in can never
-     * complete — which is the difference between Puter working in the APK and
-     * not working at all.
-     */
-    private fun isSignInHost(host: String?): Boolean {
-        val h = host?.lowercase() ?: return false
-        return h == "puter.com" || h.endsWith(".puter.com")
-    }
-
-    private fun showPopupWindow(popup: WebView) {
-        closePopupWindow()
-        popupView = popup
-        popupWindow = AlertDialog.Builder(this)
-            .setView(popup)
-            .setOnDismissListener { destroyPopupView() }
-            .create()
-            .also { it.show() }
-    }
-
-    private fun closePopupWindow() {
-        val dialog = popupWindow
-        popupWindow = null
-        if (dialog != null) dialog.dismiss() else destroyPopupView()
-    }
-
-    private fun destroyPopupView() {
-        val popup = popupView ?: return
-        popupView = null
-        (popup.parent as? ViewGroup)?.removeView(popup)
-        popup.destroy()
     }
 
     /**

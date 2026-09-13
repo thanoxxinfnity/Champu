@@ -1,14 +1,12 @@
 /**
  * Chomugiri — provider contracts.
  *
- * Every model source (NVIDIA NIM, Pollinations, Puter, a user's own
- * OpenAI-compatible endpoint) is normalised onto the same request/response shape
- * so the agent core never has to branch on vendor. Puter is the one exception to
- * the *transport*: its SDK runs in the page, because that is what lets it work
- * with no key at all.
+ * Every model source (NVIDIA NIM, Pollinations, a user's own OpenAI-compatible
+ * endpoint) is normalised onto the same request/response shape so the agent core
+ * never has to branch on vendor.
  */
 
-export type ProviderId = 'nim' | 'pollinations' | 'custom' | 'puter';
+export type ProviderId = 'nim' | 'pollinations' | 'custom';
 
 export type ModelCapability =
   | 'chat'

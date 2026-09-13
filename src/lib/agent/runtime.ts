@@ -17,8 +17,6 @@ import type { CustomEndpointConfig } from '@/lib/providers/types';
 import { useWorkspace, type ChatAttachment, THINKING_PHRASES, LANE_B_PHRASES } from '@/lib/store';
 import { PLANNER_NIM_MODEL } from '@/lib/providers/registry';
 import { endpointConfigFor } from '@/lib/providers/endpoint-models';
-import { streamPuter } from '@/lib/providers/puter';
-import { PUTER_PLANNER_MODEL } from '@/lib/providers/puter-models';
 import { draftSystemSuffix, pickAngles } from './drafts';
 import { scanForSecrets, hasBlockingSecret } from '@/lib/security/secrets';
 import { appendMessage, createSession, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
@@ -68,18 +66,6 @@ async function streamCompletion(
   let reasoning = '';
   let usage: (StreamFrame & { type: 'usage' }) | undefined;
   let error: string | undefined;
-
-  // Puter is the one provider that is not proxied: its SDK runs in this page and
-  // bills the signed-in user's own account, which is what makes it keyless.
-  // Sending it through /api/chat would mean holding a Puter token server-side —
-  // the very thing it exists to avoid.
-  if (body.provider === 'puter') {
-    const result = await streamPuter(body.messages, body.model, callbacks, signal, {
-      temperature: body.temperature,
-      maxTokens: body.maxTokens,
-    });
-    return { content: result.content, reasoning: result.reasoning, error: result.error };
-  }
 
   let res: Response;
   try {
@@ -177,12 +163,6 @@ async function complete(
   body: { provider: ProviderId; model: string; messages: ChatMessage[]; json?: boolean; custom?: CustomEndpointConfig; maxTokens?: number },
   signal?: AbortSignal,
 ): Promise<string> {
-  if (body.provider === 'puter') {
-    const { content, error } = await streamPuter(body.messages, body.model, {}, signal);
-    if (error) throw new Error(error);
-    return content;
-  }
-
   const res = await fetch('/api/chat', withKeys({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -386,13 +366,8 @@ async function buildPlan(
 ): Promise<Plan> {
   // Decomposition is a cheap structured task. Spending a 2.8T flagship's latency
   // on it before the real work even starts is waste, so NIM runs plan through the
-  // fast Nemotron and Puter through a flash model; the rest keep the selection.
-  const plannerModel =
-    selection.provider === 'nim'
-      ? PLANNER_NIM_MODEL
-      : selection.provider === 'puter'
-        ? PUTER_PLANNER_MODEL
-        : selection.model;
+  // fast Nemotron; other providers keep the selected model.
+  const plannerModel = selection.provider === 'nim' ? PLANNER_NIM_MODEL : selection.model;
 
   try {
     const raw = await complete(

@@ -1,8 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { puterSignIn, puterSignOut, puterStatus, puterUsage } from '@/lib/providers/puter';
-import { summarizeUsage } from '@/lib/providers/puter-models';
 import { useWorkspace } from '@/lib/store';
 import { db, isBrowser, type EndpointRecord } from '@/lib/db/schema';
 import { uid } from '@/lib/db/history';
@@ -848,133 +846,6 @@ function GuardTab() {
  * is stored with the rest of the workspace and sent with each request. The tab
  * does not need to care which, beyond telling the user where their key ended up.
  */
-/**
- * Puter — the keyless option.
- *
- * Every other provider here wants a credential. Puter does not: its SDK runs in
- * this page and bills the user's own Puter account, so the only thing Chomugiri
- * needs is for them to be signed in. That makes it the honest first answer to
- * "I have no API key", which is why it sits above the key fields rather than
- * below them.
- */
-function PuterCard() {
-  const enabled = useWorkspace((s) => s.puterEnabled);
-  const setEnabled = useWorkspace((s) => s.setPuterEnabled);
-  const models = useWorkspace((s) => s.models);
-
-  const [state, setState] = useState<{ checking: boolean; signedIn: boolean; user?: string; error?: string }>({
-    checking: false,
-    signedIn: false,
-  });
-
-  const [usage, setUsage] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    setState((s) => ({ ...s, checking: true }));
-    const status = await puterStatus();
-    setState({ checking: false, signedIn: status.signedIn, user: status.user, error: status.error });
-    // "No API key" is not "no limit". The account's own allowance is shown as
-    // Puter reports it, rather than described.
-    setUsage(status.signedIn ? summarizeUsage(await puterUsage()) : null);
-  }, []);
-
-  useEffect(() => {
-    if (enabled) void refresh();
-  }, [enabled, refresh]);
-
-  const signIn = useCallback(async () => {
-    setState((s) => ({ ...s, checking: true, error: undefined }));
-    const result = await puterSignIn();
-    setState({ checking: false, signedIn: result.signedIn, user: result.user, error: result.error });
-  }, []);
-
-  const count = models.filter((m) => m.provider === 'puter').length;
-
-  return (
-    <div className="sketch-b space-y-3 p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[12px] font-semibold" style={{ color: 'var(--ink)' }}>
-            Puter — no API key at all
-          </p>
-          <p className="mt-0.5 text-[11px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
-            Chat models that need no key from you: Claude Fable 5.1, GPT-6 Astra, GPT-5.6 Sol and Gemini 3.1 Pro.
-            Usage is billed to your own free Puter account, never to a key stored here — so it is free, but not
-            unlimited: every account gets a monthly allowance that resets each month, and a free account can run
-            3 AI requests at once. Text chat only, and it needs an internet connection.
-          </p>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={enabled}
-          onClick={() => void setEnabled(!enabled)}
-          className="press shrink-0 rounded-full border px-2.5 py-1 text-[10.5px] mono"
-          style={{
-            borderColor: enabled ? 'var(--accent)' : 'var(--line)',
-            color: enabled ? 'var(--accent)' : 'var(--ink-dim)',
-            background: enabled ? 'color-mix(in oklab, var(--accent) 14%, transparent)' : 'transparent',
-          }}
-        >
-          {enabled ? 'on' : 'off'}
-        </button>
-      </div>
-
-      {enabled && (
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void (state.signedIn ? refresh() : signIn())}
-              disabled={state.checking}
-              className="press rounded-lg border px-3 py-1.5 text-[11px]"
-              style={{
-              borderColor: 'var(--accent)',
-              color: 'var(--accent)',
-              background: 'color-mix(in oklab, var(--accent) 12%, transparent)',
-            }}
-            >
-              {state.checking ? 'checking…' : state.signedIn ? 'recheck' : 'Sign in to Puter'}
-            </button>
-            {state.signedIn && (
-              <button
-                type="button"
-                onClick={() => void puterSignOut().then(refresh)}
-                className="press rounded-lg border px-3 py-1.5 text-[11px]"
-                style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
-              >
-                sign out
-              </button>
-            )}
-          </div>
-
-          <p className="mono text-[10.5px]" style={{ color: state.error ? 'var(--color-danger)' : 'var(--ink-faint)' }}>
-            {/*
-              While the SDK is still being fetched nothing is known yet, and
-              saying "not signed in" there is a guess that reads as a fact — on a
-              slow or blocked connection it was the only thing shown, for as long
-              as the request hung.
-            */}
-            {state.checking
-              ? 'reaching js.puter.com…'
-              : state.error
-                ? state.error
-                : state.signedIn
-                  ? `✔ signed in${state.user ? ` as ${state.user}` : ''} — ${count} Puter models in the switcher`
-                    : 'not signed in — Puter still answers at its lower anonymous tier; signing in raises the limits'}
-          </p>
-
-          {usage && (
-            <p className="mono text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>
-              {usage}
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function KeysTab() {
   const loadModels = useWorkspace((s) => s.loadModels);
   const models = useWorkspace((s) => s.models);
@@ -1077,16 +948,12 @@ function KeysTab() {
 
   return (
     <div className="space-y-4">
-      <PuterCard />
-
-      <hr className="ink-rule" />
-
       <p className="text-[11.5px] leading-[1.55]" style={{ color: 'var(--ink-dim)' }}>
-        NVIDIA NIM powers the build lane — the terminal, deployment and the Minecraft suite. It is free — sign in at{' '}
+        Chomugiri needs an NVIDIA NIM key to run its main models. It is free — sign in at{' '}
         <a href="https://build.nvidia.com" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
           build.nvidia.com
         </a>
-        , open any model, and copy the key from the API tab. For plain chat you can skip this entirely and use Puter above.
+        , open any model, and copy the key from the API tab. Pollinations answers with no key at all, and is smaller.
       </p>
 
       <Field
@@ -1249,20 +1116,12 @@ function GuideTab() {
 
   const nimCount = models.filter((m) => m.provider === 'nim').length;
 
-  const puterCount = models.filter((m) => m.provider === 'puter').length;
-
   const steps = [
-    {
-      done: puterCount > 0,
-      title: 'Chat with no key at all',
-      body: 'Already on. Claude Fable 5.1, GPT-6 Astra, GPT-5.6 Sol and Gemini 3.1 Pro are in the model switcher with no key from you — Puter answers even before you sign in, and signing in raises the limits. Free, but not unlimited: it draws on your own Puter account’s monthly allowance, which resets each month. Text chat only.',
-      state: puterCount > 0 ? `${puterCount} Puter models in the switcher` : 'off — turn it on if you have no API key',
-    },
     {
       done: nimCount > 0,
       title: 'Add a model key',
       body: 'API Keys → NVIDIA NIM. Free at build.nvidia.com. It powers the build lane — terminal steps, deployment and the Minecraft suite. Pollinations also answers with no key, and is smaller.',
-      state: nimCount > 0 ? `${nimCount} NVIDIA models ready` : 'not set — Pollinations and Puter still work',
+      state: nimCount > 0 ? `${nimCount} NVIDIA models ready` : 'not set — Pollinations still works',
     },
     {
       done: endpoints.length > 0,
