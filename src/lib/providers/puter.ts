@@ -6,6 +6,7 @@ import {
   puterChunkText,
   puterErrorText,
   puterMessages,
+  puterNeedsSignIn,
 } from './puter-models';
 import type { ChatMessage } from './types';
 
@@ -32,6 +33,7 @@ interface PuterSdk {
     signIn: () => Promise<unknown>;
     signOut: () => void;
     getUser: () => Promise<{ username?: string; email?: string }>;
+    getMonthlyUsage?: () => Promise<unknown>;
   };
 }
 
@@ -123,6 +125,24 @@ export async function puterSignIn(): Promise<{ signedIn: boolean; user?: string;
   }
 }
 
+/**
+ * The account's own monthly allowance, as Puter reports it.
+ *
+ * Worth showing rather than describing: "no API key" is not the same as "no
+ * limit", and a number the user can see beats a promise they have to take on
+ * trust. Returns null when Puter does not report one for this account.
+ */
+export async function puterUsage(): Promise<Record<string, unknown> | null> {
+  try {
+    const puter = await loadPuter();
+    if (!puter.auth.isSignedIn()) return null;
+    const usage = await puter.auth.getMonthlyUsage?.();
+    return usage && typeof usage === 'object' ? (usage as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function puterSignOut(): Promise<void> {
   const puter = await loadPuter().catch(() => null);
   puter?.auth.signOut();
@@ -162,30 +182,39 @@ export async function streamPuter(
     return fail((err as Error).message);
   }
 
-  // Not signed in: ask, rather than refusing. The SDK opens its own window, and
-  // a first run should not dead-end on a setting the user has never heard of.
-  // When that window cannot open — a popup blocker, a WebView without
-  // multi-window — the message names the one place that always works.
-  if (!puter.auth.isSignedIn()) {
-    try {
-      await puter.auth.signIn();
-    } catch (err) {
-      return fail(
-        `Puter could not sign you in (${puterErrorText(err)}). Open Settings → API Keys → Puter and press Sign in — it is free, and it only has to be done once.`,
-      );
-    }
-    if (!puter.auth.isSignedIn()) {
-      return fail('Puter sign-in was closed before it finished. Open Settings → API Keys → Puter to try again.');
-    }
-  }
-
-  try {
-    const response = await puter.ai.chat(puterMessages(messages), {
+  const ask = () =>
+    puter.ai.chat(puterMessages(messages), {
       model,
       stream: true,
       ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
       ...(options.maxTokens !== undefined ? { max_tokens: options.maxTokens } : {}),
     });
+
+  try {
+    // Ask first, sign in only if asked to.
+    //
+    // Puter serves accounts that have never signed in, at a lower tier, so the
+    // keyless promise holds from the very first message. Putting a login window
+    // in front of every run would break that — and would also be wrong for the
+    // failure that actually happens most, which is an allowance running out.
+    let response: Awaited<ReturnType<typeof ask>>;
+    try {
+      response = await ask();
+    } catch (err) {
+      if (!puterNeedsSignIn(err) || puter.auth.isSignedIn()) return fail(puterErrorText(err));
+
+      try {
+        await puter.auth.signIn();
+      } catch (signInError) {
+        return fail(
+          `Puter asked you to sign in and the window could not open (${puterErrorText(signInError)}). Open Settings → API Keys → Puter and press Sign in — it is free, and it only has to be done once.`,
+        );
+      }
+      if (!puter.auth.isSignedIn()) {
+        return fail('Puter sign-in was closed before it finished. Open Settings → API Keys → Puter to try again.');
+      }
+      response = await ask();
+    }
 
     if (!response || typeof response !== 'object' || !(Symbol.asyncIterator in response)) {
       // Puter answered without streaming; read it as one chunk.

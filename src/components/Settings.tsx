@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { puterSignIn, puterSignOut, puterStatus } from '@/lib/providers/puter';
+import { puterSignIn, puterSignOut, puterStatus, puterUsage } from '@/lib/providers/puter';
+import { summarizeUsage } from '@/lib/providers/puter-models';
 import { useWorkspace } from '@/lib/store';
 import { db, isBrowser, type EndpointRecord } from '@/lib/db/schema';
 import { uid } from '@/lib/db/history';
@@ -866,10 +867,15 @@ function PuterCard() {
     signedIn: false,
   });
 
+  const [usage, setUsage] = useState<string | null>(null);
+
   const refresh = useCallback(async () => {
     setState((s) => ({ ...s, checking: true }));
     const status = await puterStatus();
     setState({ checking: false, signedIn: status.signedIn, user: status.user, error: status.error });
+    // "No API key" is not "no limit". The account's own allowance is shown as
+    // Puter reports it, rather than described.
+    setUsage(status.signedIn ? summarizeUsage(await puterUsage()) : null);
   }, []);
 
   useEffect(() => {
@@ -893,8 +899,9 @@ function PuterCard() {
           </p>
           <p className="mt-0.5 text-[11px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
             Chat models that need no key from you: Claude Fable 5.1, GPT-6 Astra, GPT-5.6 Sol and Gemini 3.1 Pro.
-            Sign in to Puter once and the usage is billed to your own free Puter account, never to a key stored here.
-            Text chat only — it needs an internet connection, and it does not do images, deployment or the terminal.
+            Usage is billed to your own free Puter account, never to a key stored here — so it is free, but not
+            unlimited: every account gets a monthly allowance that resets each month, and a free account can run
+            3 AI requests at once. Text chat only, and it needs an internet connection.
           </p>
         </div>
         <button
@@ -954,8 +961,14 @@ function PuterCard() {
                 ? state.error
                 : state.signedIn
                   ? `✔ signed in${state.user ? ` as ${state.user}` : ''} — ${count} Puter models in the switcher`
-                  : 'not signed in yet — the models are listed, but a run will ask you to sign in first'}
+                    : 'not signed in — Puter still answers at its lower anonymous tier; signing in raises the limits'}
           </p>
+
+          {usage && (
+            <p className="mono text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>
+              {usage}
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -1242,7 +1255,7 @@ function GuideTab() {
     {
       done: puterCount > 0,
       title: 'Chat with no key at all',
-      body: 'API Keys → Puter. Turn it on, sign in to Puter once, and Claude Fable 5.1, GPT-6 Astra, GPT-5.6 Sol and Gemini 3.1 Pro appear in the model switcher. Usage is billed to your own free Puter account, so nothing is stored here. Text chat only, and it needs an internet connection.',
+      body: 'Already on. Claude Fable 5.1, GPT-6 Astra, GPT-5.6 Sol and Gemini 3.1 Pro are in the model switcher with no key from you — Puter answers even before you sign in, and signing in raises the limits. Free, but not unlimited: it draws on your own Puter account’s monthly allowance, which resets each month. Text chat only.',
       state: puterCount > 0 ? `${puterCount} Puter models in the switcher` : 'off — turn it on if you have no API key',
     },
     {

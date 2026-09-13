@@ -109,6 +109,15 @@ export const PUTER_MODELS: ModelDescriptor[] = [
   },
 ];
 
+/**
+ * What a keyless install starts on.
+ *
+ * Fast and cheap against the account's allowance, which matters when it is the
+ * default: a flagship as the opening model spends someone's monthly credit on
+ * "hi".
+ */
+export const DEFAULT_PUTER_MODEL = 'gemini-3.8-flash';
+
 /** The model used for Puter's own internal steps (planning, classification). */
 export const PUTER_PLANNER_MODEL = 'gemini-3.8-flash';
 
@@ -178,25 +187,54 @@ export function puterChunkError(part: unknown): string | null {
   return 'The Puter stream failed without saying why.';
 }
 
-/** A thrown Puter failure, in words a user can act on. */
-export function puterErrorText(err: unknown): string {
-  if (!err) return 'Puter failed without an error.';
-  if (typeof err === 'string') return err;
+/** The code and message out of whatever shape Puter threw. */
+function failureParts(err: unknown): { code: string; message: string } {
+  if (typeof err === 'string') return { code: '', message: err };
+  if (!err || typeof err !== 'object') return { code: '', message: 'Puter failed without an error.' };
 
   const shape = err as {
     message?: string;
-    error?: { message?: string; code?: string; delegate?: string } | string;
+    status?: number;
+    error?: { message?: string; code?: string } | string;
     code?: string;
   };
 
   const inner = typeof shape.error === 'string' ? shape.error : shape.error?.message;
-  const code = (typeof shape.error === 'object' ? shape.error?.code : undefined) ?? shape.code;
-  const message = inner ?? shape.message ?? 'Puter failed without an error.';
+  const code = ((typeof shape.error === 'object' ? shape.error?.code : undefined) ?? shape.code ?? '').toString();
+  const status = shape.status ? String(shape.status) : '';
 
-  if (code === 'insufficient_funds' || /insufficient|quota|credit/i.test(message)) {
-    return `${message} — this is your Puter account's own allowance, not Chomugiri's. Top it up at puter.com, or switch to Pollinations, which is free without an account.`;
+  return { code: code || status, message: inner ?? shape.message ?? 'Puter failed without an error.' };
+}
+
+/**
+ * Whether signing in would fix this.
+ *
+ * Puter serves calls from accounts that have never signed in, at a lower tier —
+ * so a run should try first and only ask for a sign-in when the answer was
+ * actually "who are you". Treating every failure as an auth problem would put a
+ * login window in front of a user whose allowance simply ran out.
+ */
+export function puterNeedsSignIn(err: unknown): boolean {
+  const { code, message } = failureParts(err);
+  if (/insufficient_funds|too_many_requests|rate/i.test(code)) return false;
+  return /auth|unauthorized|forbidden|401|403|token|permission|sign ?in/i.test(`${code} ${message}`);
+}
+
+/** A thrown Puter failure, in words a user can act on. */
+export function puterErrorText(err: unknown): string {
+  if (!err) return 'Puter failed without an error.';
+  const { code, message } = failureParts(err);
+
+  if (code === 'insufficient_funds' || /insufficient|out of credit|quota/i.test(message)) {
+    return `${message} — that is your own Puter account's monthly allowance, not a limit Chomugiri sets. It resets each month; you can top it up at puter.com, or switch to Pollinations or an NVIDIA key, which do not touch it.`;
   }
-  if (/not authenticated|sign ?in|unauthorized|401/i.test(message)) {
+  if (code === 'too_many_requests' || code === '429' || /rate ?limit|too many requests/i.test(message)) {
+    return 'Puter is rate-limiting this account — a free account gets 3 AI requests running at once, and 30 in any 10 seconds. Wait a moment and send it again.';
+  }
+  if (code === 'subscription_required') {
+    return 'That Puter route needs a paid Puter plan. The same models are reachable on the free tier through the normal chat call, which is what this app uses — so if you are seeing this, report it.';
+  }
+  if (puterNeedsSignIn(err)) {
     return 'Puter needs you signed in before it will answer. Open Settings → API Keys → Puter and press Sign in.';
   }
   return message;
@@ -223,4 +261,36 @@ export function puterMessages(messages: ChatMessage[]): Array<{ role: string; co
       .join('');
     return { role: message.role, content: text };
   });
+}
+
+/**
+ * The monthly allowance, in one line.
+ *
+ * Puter's usage payload is not a documented shape, so this reads the fields it
+ * plausibly carries and says nothing when it recognises none — a wrong number
+ * about someone's balance is worse than no number.
+ */
+export function summarizeUsage(usage: unknown): string | null {
+  if (!usage || typeof usage !== 'object') return null;
+  const u = usage as Record<string, unknown>;
+
+  const num = (...keys: string[]): number | null => {
+    for (const key of keys) {
+      const value = u[key];
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+    }
+    return null;
+  };
+
+  const used = num('used', 'usage', 'spent', 'consumed', 'amount_used');
+  const limit = num('limit', 'allowance', 'total', 'quota', 'monthly_limit', 'max');
+  const left = num('remaining', 'left', 'balance', 'available');
+
+  if (used !== null && limit !== null && limit > 0) {
+    const pct = Math.min(100, Math.round((used / limit) * 100));
+    return `${pct}% of this month's Puter allowance used`;
+  }
+  if (left !== null) return `${left} left in this month's Puter allowance`;
+  if (used !== null) return `${used} used from this month's Puter allowance`;
+  return null;
 }
