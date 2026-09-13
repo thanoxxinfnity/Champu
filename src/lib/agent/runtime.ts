@@ -13,6 +13,7 @@ import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types
 import type { CustomEndpointConfig } from '@/lib/providers/types';
 import { useWorkspace, type ChatAttachment, THINKING_PHRASES, LANE_B_PHRASES } from '@/lib/store';
 import { PLANNER_NIM_MODEL } from '@/lib/providers/registry';
+import { endpointConfigFor } from '@/lib/providers/endpoint-models';
 import { draftSystemSuffix, pickAngles } from './drafts';
 import { scanForSecrets, hasBlockingSecret } from '@/lib/security/secrets';
 import { appendMessage, createSession, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
@@ -484,6 +485,11 @@ export async function send(opts: SendOptions): Promise<void> {
 
   const suite = opts.suite ?? activeSuite;
   const attachments = opts.attachments ?? [];
+
+  // Resolved here rather than at every call site: nothing that calls send()
+  // knew to look up the endpoint, so a selected custom model went out with no
+  // base URL at all and the request could only fail.
+  const custom = opts.custom ?? endpointConfigFor(state.endpoints, selection);
   const input = opts.input.trim();
   if (!input && !attachments.length) return;
 
@@ -521,6 +527,24 @@ export async function send(opts: SendOptions): Promise<void> {
   const controller = new AbortController();
   setAbortController(controller);
 
+  /**
+   * Writes that belong to *this* run's session.
+   *
+   * The live transcript is a single list with no session of its own, so a run
+   * that finished while the user was reading another conversation wrote its
+   * messages into whatever was on screen — one session's answer appearing
+   * inside another. Persistence was always correct; only the view bled. These
+   * guards drop the live write when the user has moved on, and the message is
+   * still saved to the session it belongs to, so switching back shows it.
+   */
+  const isCurrent = () => useWorkspace.getState().sessionId === sessionId;
+  const emit = (message: Parameters<typeof pushMessage>[0]) => {
+    if (isCurrent()) pushMessage(message);
+  };
+  const patch = (id: string, patchValue: Parameters<typeof patchMessage>[1]) => {
+    if (isCurrent()) patchMessage(id, patchValue);
+  };
+
   // ── Classify ──────────────────────────────────────────────────────────────
   const classification: Classification = opts.forceLane
     ? { lane: opts.forceLane, confidence: 1, reason: 'explicit override', suite }
@@ -536,11 +560,11 @@ export async function send(opts: SendOptions): Promise<void> {
     attachments,
     lane,
   };
-  pushMessage(userMessage);
+  emit(userMessage);
   void appendMessage({ ...userMessage, sessionId, suite });
 
   const assistantId = uid('msg');
-  pushMessage({
+  emit({
     id: assistantId,
     role: 'assistant',
     content: '',
@@ -560,7 +584,7 @@ export async function send(opts: SendOptions): Promise<void> {
     let plan: Plan | null = null;
     if (lane === 'B') {
       useWorkspace.getState().setThinking(true, 'Decomposing into atomic steps...');
-      plan = await buildPlan(input, selection, suite, opts.custom, controller.signal);
+      plan = await buildPlan(input, selection, suite, custom, controller.signal);
 
       // Park terminal steps immediately if the tunnel is already down, rather
       // than letting them fail one at a time later.
@@ -600,7 +624,7 @@ export async function send(opts: SendOptions): Promise<void> {
     // Drafts replace the single answer entirely; the chosen one is committed
     // into the transcript when the user picks it.
     if (useWorkspace.getState().draftsEnabled && !opts.forceLane) {
-      patchMessage(assistantId, { streaming: false, content: '' });
+      patch(assistantId, { streaming: false, content: '' });
       useWorkspace.getState().setThinking(true, 'Drafting two approaches...');
 
       await runDrafts({
@@ -611,12 +635,12 @@ export async function send(opts: SendOptions): Promise<void> {
         lane,
         suite,
         selection,
-        custom: opts.custom,
+        custom,
         signal: controller.signal,
       });
 
       // The placeholder turn is a slot the chosen draft fills in.
-      patchMessage(assistantId, { content: '', streaming: false });
+      patch(assistantId, { content: '', streaming: false });
       return;
     }
 
@@ -635,11 +659,11 @@ export async function send(opts: SendOptions): Promise<void> {
         messages,
         temperature: lane === 'B' ? 0.25 : 0.5,
         maxTokens: 8192,
-        custom: opts.custom,
+        custom,
       },
       {
         onDelta: (_delta, full) => {
-          patchMessage(assistantId, { content: full });
+          patch(assistantId, { content: full });
 
           // Extract artifacts live so the file manager fills in mid-stream.
           if (lane === 'B' && full.includes('```')) {
@@ -654,13 +678,13 @@ export async function send(opts: SendOptions): Promise<void> {
             }
           }
         },
-        onReasoning: (_delta, full) => patchMessage(assistantId, { reasoning: full }),
-        onError: (message) => patchMessage(assistantId, { error: message }),
+        onReasoning: (_delta, full) => patch(assistantId, { reasoning: full }),
+        onError: (message) => patch(assistantId, { error: message }),
       },
       controller.signal,
     );
 
-    patchMessage(assistantId, {
+    patch(assistantId, {
       content: result.content,
       reasoning: result.reasoning,
       streaming: false,
@@ -771,7 +795,7 @@ export async function send(opts: SendOptions): Promise<void> {
           // repair it by hand rather than be told no.
           offer: { kind: 'minecraft-pack' as const, filename: exported.filename, label: describeExport(exported) },
         };
-        pushMessage(offer);
+        emit(offer);
         void appendMessage({ ...offer, sessionId, suite });
       }
     }
@@ -792,7 +816,7 @@ export async function send(opts: SendOptions): Promise<void> {
           content: summary,
           createdAt: Date.now(),
         };
-        pushMessage(note);
+        emit(note);
         void appendMessage({ ...note, sessionId, suite });
       }
     }
@@ -861,7 +885,7 @@ export async function send(opts: SendOptions): Promise<void> {
             ].join('\n');
 
             const artifactId = uid('msg');
-            pushMessage({
+            emit({
               id: artifactId,
               role: 'assistant',
               content: body,

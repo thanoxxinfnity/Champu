@@ -41,6 +41,8 @@ export interface ModelDescriptor {
    */
   origin: 'catalogue' | 'static' | 'alias' | 'partner-only';
   resolvesTo?: string;
+  /** For a custom-endpoint model: which configured endpoint serves it. */
+  endpointId?: string;
   note?: string;
 }
 

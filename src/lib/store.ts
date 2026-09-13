@@ -10,6 +10,7 @@ import type { EndpointRecord, SuiteId } from '@/lib/db/schema';
 import type { FileArtifact } from '@/lib/agent/artifacts';
 import { getSetting, setSetting } from '@/lib/db/history';
 import { keyHeaders, loadKeys, loadVercel, saveVercel } from '@/lib/keys';
+import { endpointModels } from '@/lib/providers/endpoint-models';
 
 /**
  * Workspace state.
@@ -296,14 +297,17 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       const data = (await res.json()) as { models: ModelDescriptor[]; warnings: string[] };
       const models = data.models ?? [];
 
-      set({ models, modelWarnings: data.warnings ?? [] });
+      // The catalogue is server-side and knows nothing about custom endpoints,
+      // which live on the device — so they are added back on every reload.
+      const withCustom = [...models, ...endpointModels(get().endpoints)];
+      set({ models: withCustom, modelWarnings: data.warnings ?? [] });
 
       // If the persisted selection no longer exists, fall back to something real
       // rather than letting every request 404.
       const current = get().selection;
-      const stillValid = models.some((m) => m.provider === current.provider && m.id === current.model);
-      if (!stillValid && models.length) {
-        const selectable = models.filter((m) => m.origin !== 'partner-only');
+      const stillValid = withCustom.some((m) => m.provider === current.provider && m.id === current.model);
+      if (!stillValid && withCustom.length) {
+        const selectable = withCustom.filter((m) => m.origin !== 'partner-only');
         const preferred =
           selectable.find((m) => m.id === DEFAULT_NIM_MODEL) ??
           selectable.find((m) => m.capabilities.includes('reasoning') && m.provider === 'nim') ??
@@ -336,7 +340,13 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         if (suite) tabs.add(suite);
       }
     }
-    set({ endpoints, capabilityTabs: [...tabs] });
+    set((prev) => ({
+      endpoints,
+      capabilityTabs: [...tabs],
+      // Merged in here as well as in loadModels, so adding an endpoint puts its
+      // models in the switcher immediately rather than after the next refresh.
+      models: [...prev.models.filter((m) => m.provider !== 'custom'), ...endpointModels(endpoints)],
+    }));
   },
 
   messages: [],

@@ -49,23 +49,40 @@ export function RunNotices() {
       {notices.map((notice) => {
         const failed = notice.status === 'failed';
         return (
-          <button
+          <div
             key={notice.id}
-            type="button"
-            // Double-click is the quick jump; a single click only dismisses, so
-            // brushing past a notice never yanks the user out of what they are
-            // reading.
+            // Double-click opens the run. Dismiss is its own button rather than
+            // a single click on the card: the first click of a double-click was
+            // unmounting the notice, so the double-click handler never fired
+            // and the jump silently did nothing.
             onDoubleClick={() => void jump(notice)}
-            onClick={() => dismissNotice(notice.id)}
-            className={`notice-pop pointer-events-auto w-full rounded-xl border p-2.5 text-left ${failed ? '' : 'notice-glow'}`}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void jump(notice);
+              if (e.key === 'Escape') dismissNotice(notice.id);
+            }}
+            className={`notice-pop pointer-events-auto relative w-full cursor-pointer rounded-xl border p-2.5 pr-7 text-left ${failed ? '' : 'notice-glow'}`}
             style={{
               borderColor: failed
                 ? 'color-mix(in oklab, var(--color-danger) 50%, var(--line))'
                 : 'color-mix(in oklab, var(--accent) 55%, var(--line))',
               background: 'var(--panel)',
             }}
-            title="Double-click to open this run · click to dismiss"
+            title="Double-click to open this run"
           >
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                dismissNotice(notice.id);
+              }}
+              className="press mono absolute right-1.5 top-1.5 px-1 text-[10px]"
+              style={{ color: 'var(--ink-faint)' }}
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
             <span
               className="mono flex items-center gap-1.5 text-[9.5px] uppercase tracking-[0.12em]"
               style={{ color: failed ? 'var(--color-danger)' : 'var(--accent)' }}
@@ -82,7 +99,7 @@ export function RunNotices() {
             <span className="mono mt-0.5 block truncate text-[10px]" style={{ color: 'var(--ink-faint)' }}>
               {notice.detail ?? 'double-click to open'}
             </span>
-          </button>
+          </div>
         );
       })}
     </div>

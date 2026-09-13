@@ -1,3 +1,4 @@
+import { modelIdsFrom, modelListCandidates } from './model-list';
 import type { UpstreamConfig } from './openai-compat';
 import { inferCapabilities, labelFor, vendorFor } from './registry';
 import { ProviderError, type CustomEndpointConfig, type ModelCapability, type ModelDescriptor } from './types';
@@ -139,15 +140,48 @@ export async function probeEndpoint(cfg: CustomEndpointConfig): Promise<Capabili
   const routes: string[] = [];
   let models: ModelDescriptor[] = [];
 
-  // 1. /models — the only route most OpenAI-compatible servers guarantee.
+  // 1. The model list.
+  //
+  // "<base>/models with an OpenAI envelope" is the common case, not the only
+  // one, and assuming it was the reason perfectly working endpoints came back
+  // as "answered nothing". kie.ai, for one, serves chat at /v1/chat/completions
+  // but lists its models at /api/v1/models — a different prefix entirely — and
+  // wraps them as { data: { models: [{ model }] } }. So several plausible paths
+  // are tried, and several envelopes are accepted.
   try {
-    const res = await fetch(`${base}/models`, { headers, signal: AbortSignal.timeout(15_000) });
-    if (res.ok) {
-      routes.push('/models');
-      const json = (await res.json()) as { data?: Array<{ id?: string }>; models?: Array<{ id?: string; name?: string }> };
-      const ids = (json.data ?? json.models ?? [])
-        .map((m) => m.id ?? ('name' in m ? m.name : undefined))
-        .filter((id): id is string => Boolean(id));
+    let res: Response | null = null;
+    let usedPath = '';
+
+    for (const path of modelListCandidates(base)) {
+      try {
+        const attempt = await fetch(path.url, { headers, signal: AbortSignal.timeout(12_000) });
+        // Auth failures are conclusive — stop and report rather than trying
+        // every other path and blaming the route.
+        if (attempt.status === 401 || attempt.status === 403) {
+          return {
+            ok: false,
+            baseUrl: base,
+            capabilities: [],
+            models: [],
+            routes: [],
+            latencyMs: Date.now() - started,
+            error: `Endpoint rejected the credentials (${attempt.status}). Check the API key or custom auth header.`,
+          };
+        }
+        if (!attempt.ok) continue;
+        const ids = modelIdsFrom(await attempt.clone().json().catch(() => null));
+        if (!ids.length) continue;
+        res = attempt;
+        usedPath = path.label;
+        break;
+      } catch {
+        // Unreachable path; try the next.
+      }
+    }
+
+    if (res) {
+      routes.push(usedPath);
+      const ids = modelIdsFrom(await res.json().catch(() => null));
 
       models = ids.map((id) => {
         const caps = capabilitiesFromId(id);
@@ -162,16 +196,6 @@ export async function probeEndpoint(cfg: CustomEndpointConfig): Promise<Capabili
         };
       });
       for (const m of models) for (const c of m.capabilities) capabilities.add(c);
-    } else if (res.status === 401 || res.status === 403) {
-      return {
-        ok: false,
-        baseUrl: base,
-        capabilities: [],
-        models: [],
-        routes: [],
-        latencyMs: Date.now() - started,
-        error: `Endpoint rejected the credentials (${res.status}). Check the API key or custom auth header.`,
-      };
     }
   } catch (err) {
     return {
@@ -214,3 +238,5 @@ export async function probeEndpoint(cfg: CustomEndpointConfig): Promise<Capabili
     error: routes.length ? undefined : 'Endpoint answered nothing on /models or any known generation route.',
   };
 }
+
+

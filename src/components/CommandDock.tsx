@@ -356,7 +356,10 @@ Open Settings → API Keys to add
                       type="button"
                       disabled={unreachable}
                       onClick={() => {
-                        setSelection({ provider: model.provider, model: model.id });
+                        // endpointId is what lets the request find the right
+                        // base URL and key; without it a custom model is
+                        // selected but unaddressable.
+                        setSelection({ provider: model.provider, model: model.id, endpointId: model.endpointId });
                         setOpen(false);
                       }}
                       className="flex w-full items-center gap-2 px-3 py-1.5 text-left disabled:cursor-not-allowed"

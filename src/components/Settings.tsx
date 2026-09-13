@@ -8,7 +8,7 @@ import type { CapabilityProbe } from '@/lib/providers/custom';
 import type { VaultRecord } from '@/lib/db/schema';
 import { isClientExposed, maskSecret, toEnvExample, toEnvFile, validateSecretName } from '@/lib/security/secrets';
 import { downloadText } from '@/lib/zip';
-import { getKeys, isShellHosted, loadKeys, maskKey, saveKeys, validateNimKey } from '@/lib/keys';
+import { isShellHosted, loadKeys, maskKey, nimConfigured, saveKeys, validateNimKey } from '@/lib/keys';
 
 type Tab = 'keys' | 'bridge' | 'secrets' | 'endpoints' | 'deploy' | 'guard';
 
@@ -857,17 +857,27 @@ function KeysTab() {
   const [pollinations, setPollinations] = useState('');
   const [reveal, setReveal] = useState(false);
   const [shell, setShell] = useState(false);
+  /**
+   * Whether a key is already stored where this page cannot read it.
+   *
+   * In the APK the key lives in the native store by design, so the field
+   * renders empty — which looked exactly like the key had been deleted. Worse,
+   * saving again would have posted that empty field and actually deleted it.
+   */
+  const [nimSaved, setNimSaved] = useState(false);
+  const [nimTouched, setNimTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ kind: 'ok' | 'error' | 'info'; text: string } | null>(null);
 
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [keys, hosted] = await Promise.all([loadKeys(), isShellHosted()]);
+      const [keys, hosted, configured] = await Promise.all([loadKeys(), isShellHosted(), nimConfigured()]);
       if (!alive) return;
       setShell(hosted);
       setNim(keys.nim);
       setPollinations(keys.pollinations);
+      setNimSaved(configured);
     })();
     return () => {
       alive = false;
@@ -877,7 +887,9 @@ function KeysTab() {
   const nimCount = models.filter((m) => m.provider === 'nim').length;
 
   const save = useCallback(async () => {
-    const problem = validateNimKey(nim);
+    // An untouched field means "leave it as it is", not "clear it".
+    const sendNim = nimTouched || !nimSaved;
+    const problem = sendNim ? validateNimKey(nim) : null;
     if (problem) {
       setStatus({ kind: 'error', text: problem });
       return;
@@ -886,13 +898,13 @@ function KeysTab() {
     setSaving(true);
     setStatus({ kind: 'info', text: 'Saving, then checking the key against NVIDIA…' });
     try {
-      await saveKeys({ nim, pollinations });
+      await saveKeys(sendNim ? { nim, pollinations } : { pollinations });
       setVercelCredentials(vercel.trim(), team.trim());
       // The catalogue is the real test: it only returns NIM models if the key
       // was accepted, so a successful reload is proof rather than a guess.
       await loadModels(true);
       const live = useWorkspace.getState().models.filter((m) => m.provider === 'nim').length;
-      if (!nim.trim()) {
+      if (sendNim && !nim.trim()) {
         setStatus({ kind: 'info', text: 'Key cleared. Pollinations still works without one.' });
       } else if (live > 0) {
         setStatus({ kind: 'ok', text: `Key accepted — ${live} NVIDIA models are available.` });
@@ -907,9 +919,11 @@ function KeysTab() {
     } finally {
       setSaving(false);
     }
-  }, [nim, pollinations, vercel, team, loadModels, setVercelCredentials]);
+  }, [nim, pollinations, vercel, team, nimTouched, nimSaved, loadModels, setVercelCredentials]);
 
   const clear = useCallback(async () => {
+    setNimTouched(false);
+    setNimSaved(false);
     setNim('');
     setPollinations('');
     setVercel('');
@@ -973,6 +987,12 @@ function KeysTab() {
       {!reveal && nim && (
         <p className="mono text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>
           saved as {maskKey(nim)}
+        </p>
+      )}
+
+      {nimSaved && !nim && (
+        <p className="mono text-[10.5px]" style={{ color: 'var(--color-success)' }}>
+          ✔ a key is saved on this device — leave the field empty to keep it
         </p>
       )}
 
