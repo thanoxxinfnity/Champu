@@ -108,3 +108,47 @@ test('candidates are unique and the typed one is tried first', () => {
   assert.equal(c[0], 'https://api.example.com/v1');
   assert.equal(new Set(c).size, c.length);
 });
+
+// ── Chat models only ────────────────────────────────────────────────────────
+
+import { chatModelsOnly } from '../src/lib/providers/model-list.ts';
+
+test('video, image and audio models are kept out of the chat switcher', () => {
+  const kie = [
+    'gpt-5-2',
+    'gemini-3-pro',
+    'kling/v2-1-master-text-to-video',
+    'google/imagen4-ultra',
+    'elevenlabs/text-to-speech-turbo-2-5',
+    'recraft/crisp-upscale',
+    'bytedance/seedream-v4-text-to-image',
+    'veo-3-1',
+    'nano-banana-pro',
+  ];
+  assert.deepEqual(chatModelsOnly(kie), ['gpt-5-2', 'gemini-3-pro']);
+});
+
+test('ordinary chat ids all survive', () => {
+  const ids = ['gpt-4o', 'claude-sonnet-4-6', 'llama-3.3-70b-instruct', 'deepseek-chat', 'mistral-small'];
+  assert.deepEqual(chatModelsOnly(ids), ids);
+});
+
+test('a list of only media models is shown rather than emptied', () => {
+  // The heuristic is wrong for that endpoint; showing nothing is worse.
+  const media = ['veo-3-1', 'kling/v2-1-pro'];
+  assert.deepEqual(chatModelsOnly(media), media);
+});
+
+test('music, audio and animation jobs are filtered out too', () => {
+  const kie = [
+    'gpt-5-2',
+    'gemini-2.5-pro',
+    'infinitalk/from-audio',
+    'wan/2-2-animate-replace',
+    'ai-music-api/generate',
+    '4o-image-api',
+    'elevenlabs/text-to-dialogue-v3',
+    'recraft/crisp-upscale',
+  ];
+  assert.deepEqual(chatModelsOnly(kie), ['gpt-5-2', 'gemini-2.5-pro']);
+});

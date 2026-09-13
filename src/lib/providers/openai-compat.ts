@@ -1,3 +1,4 @@
+import { envelopeError, type ErrorInfo } from './envelope-error';
 import { ProviderError, type ChatRequest, type StreamFrame } from './types';
 
 /**
@@ -20,7 +21,7 @@ export interface UpstreamConfig {
    * inside an HTTP 500 body — and the default "500 …" text tells the user
    * nothing they can act on.
    */
-  describeError?: (status: number, body: string) => { message: string; code?: string; retryable?: boolean } | null;
+  describeError?: (status: number, body: string) => ErrorInfo | null;
 }
 
 export function buildBody(req: ChatRequest, modelId: string, stream: boolean): Record<string, unknown> {
@@ -178,7 +179,7 @@ export async function* streamChat(
     const text = await res.text();
 
     // Some upstreams answer 200 with an error envelope in the body.
-    const masked = cfg.describeError?.(res.status, text);
+    const masked = cfg.describeError?.(res.status, text) ?? envelopeError(text);
     if (masked) {
       yield { type: 'error', message: masked.message, code: masked.code ?? 'upstream_error', retryable: masked.retryable ?? false };
       yield { type: 'done', finishReason: 'error' };
@@ -284,3 +285,4 @@ export async function completeChat(
   }
   return { content, reasoning };
 }
+

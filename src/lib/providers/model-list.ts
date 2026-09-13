@@ -128,3 +128,38 @@ export function chatBaseCandidates(base: string): string[] {
   const seen = new Set<string>();
   return out.filter((c) => c && !seen.has(c) && (seen.add(c), true));
 }
+
+
+/**
+ * Ids that are plainly not chat models.
+ *
+ * A gateway's model list is everything it can do, not everything it can chat
+ * with: kie.ai lists 206 entries of which most are video, image, audio or
+ * upscaling. Offering all of them in a chat switcher is how a user ends up
+ * picking something that cannot answer — and the failure reads as "the app is
+ * broken" rather than "that is a video model".
+ *
+ * Matched on the id, which in practice carries the modality.
+ */
+export const NOT_CHAT = new RegExp(
+  [
+    // Modality stated in the id: "text-to-video", "image-to-image".
+    '(text|image|img|audio|speech)[-_]?to[-_]?(video|image|speech|audio|music|3d|model|dialogue)',
+    // Media verbs and jobs.
+    '\\b(tts|stt|whisper|lipsync|upscale|upscaler|inpaint|outpaint|animate|extend|remix|relight|restyle|denoise|embed|embedding|rerank|moderation)\\b',
+    'remove[-_]?bg|background[-_]?removal|from[-_]?audio|crisp[-_]?upscale',
+    // Media families, allowing a version suffix — "imagen4" is still Imagen.
+    '\\b(video|music|audio|veo|kling|sora|runway|seedance|pika|luma|hailuo|dall[-_]?e|midjourney|imagen|flux|seedream|recraft|ideogram|infinitalk|elevenlabs)\\d*(?:[-_/][\\w.-]*)?\\b',
+    // Named products that do not follow either pattern.
+    '\\bnano[-_]?banana\\b|\\bqwen[-_/]image\\b|\\bgrok[-_]imagine\\b|\\b4o[-_]image\\b|\\bwan/\\S+',
+  ].join('|'),
+  'i',
+);
+
+/** Keeps the entries that could plausibly hold a conversation. */
+export function chatModelsOnly(ids: string[]): string[] {
+  const chat = ids.filter((id) => !NOT_CHAT.test(id));
+  // If the filter would empty the list, the heuristic is wrong for this
+  // endpoint and showing everything beats showing nothing.
+  return chat.length ? chat : ids;
+}

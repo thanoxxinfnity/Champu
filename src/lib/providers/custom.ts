@@ -1,4 +1,4 @@
-import { chatBaseCandidates, modelIdsFrom, modelListCandidates, normalizeBase } from './model-list';
+import { chatBaseCandidates, chatModelsOnly, modelIdsFrom, modelListCandidates, normalizeBase } from './model-list';
 import type { UpstreamConfig } from './openai-compat';
 import { inferCapabilities, labelFor, vendorFor } from './registry';
 import { ProviderError, type CustomEndpointConfig, type ModelCapability, type ModelDescriptor } from './types';
@@ -199,7 +199,10 @@ export async function probeEndpoint(cfg: CustomEndpointConfig): Promise<Capabili
 
     if (res) {
       routes.push(usedPath);
-      const ids = modelIdsFrom(await res.json().catch(() => null));
+      // A gateway's list is everything it can do, not everything it can chat
+      // with. Offering its video and image models in a chat switcher is how a
+      // user picks one that cannot answer.
+      const ids = chatModelsOnly(modelIdsFrom(await res.json().catch(() => null)));
 
       models = ids.map((id) => {
         const caps = capabilitiesFromId(id);
