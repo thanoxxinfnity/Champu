@@ -57,7 +57,10 @@ export function customHeaders(cfg: CustomEndpointConfig): Record<string, string>
 }
 
 export function customChatConfig(cfg: CustomEndpointConfig): UpstreamConfig {
-  const base = assertSafeEndpoint(cfg.baseUrl).toString().replace(/\/+$/, '');
+  // The stored base can still be a pasted endpoint (added by hand, without a
+  // probe), and appending /chat/completions to /v1/chat/completions asks for a
+  // route that does not exist.
+  const base = assertSafeEndpoint(normalizeBase(cfg.baseUrl)).toString().replace(/\/+$/, '');
   const path = (cfg.chatPath ?? '/chat/completions').replace(/^\/?/, '/');
   return {
     url: `${base}${path}`,
@@ -256,7 +259,10 @@ export async function probeEndpoint(cfg: CustomEndpointConfig): Promise<Capabili
     models,
     routes,
     latencyMs: Date.now() - started,
-    error: routes.length ? undefined : 'Endpoint answered nothing on /models or any known generation route.',
+    error: routes.length
+      ? undefined
+      : `Nothing answered at ${base} — no model list on /models or /api/v1/models, and no chat route. ` +
+        'Check the base URL and the key; you can still add the endpoint and type the model id by hand.',
   };
 }
 

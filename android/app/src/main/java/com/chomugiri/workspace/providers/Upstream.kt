@@ -134,7 +134,10 @@ object Upstream {
             // Some upstreams ignore `stream` and answer with a whole JSON object.
             if (conn.contentType?.contains("event-stream") != true) {
                 val text = conn.inputStream.bufferedReader().use(BufferedReader::readText)
-                cfg.describeError?.invoke(status, text)?.let {
+                // Not every gateway uses HTTP status codes; some answer 200 with
+                // the failure in the body, which otherwise reaches the user as
+                // raw JSON in place of the assistant's reply.
+                (cfg.describeError?.invoke(status, text) ?: EndpointProbe.envelopeError(text))?.let {
                     emit(Frame.Err(it)); emit(Frame.Done("error")); return
                 }
                 runCatching { framesFromChunk(JSONObject(text), emit) }
@@ -194,7 +197,8 @@ object Upstream {
             if (status !in 200..299) return Completion("", "", failure(cfg, status, conn.errorBody()))
 
             val text = conn.inputStream.bufferedReader().use(BufferedReader::readText)
-            cfg.describeError?.invoke(status, text)?.let { return Completion("", "", it) }
+            (cfg.describeError?.invoke(status, text) ?: EndpointProbe.envelopeError(text))
+                ?.let { return Completion("", "", it) }
 
             runCatching {
                 framesFromChunk(JSONObject(text)) { frame ->
@@ -216,6 +220,27 @@ object Upstream {
     }
 
     /** Plain GET returning the body, or null on any failure. */
+    /** A GET plus the status, so an auth failure can be told from a missing route. */
+    data class Fetched(val status: Int, val body: String?)
+
+    fun getWithStatus(url: String, headers: Map<String, String>, timeoutMs: Int = 25_000): Fetched = runCatching {
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 15_000
+            readTimeout = timeoutMs
+            headers.forEach { (k, v) -> setRequestProperty(k, v) }
+        }
+        try {
+            val status = conn.responseCode
+            val body = if (status in 200..299)
+                conn.inputStream.bufferedReader().use(BufferedReader::readText)
+            else null
+            Fetched(status, body)
+        } finally {
+            conn.disconnect()
+        }
+    }.getOrElse { Fetched(0, null) }
+
     fun get(url: String, headers: Map<String, String>, timeoutMs: Int = 25_000): String? = runCatching {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"

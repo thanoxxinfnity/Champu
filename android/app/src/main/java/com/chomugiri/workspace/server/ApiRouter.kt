@@ -1,5 +1,6 @@
 package com.chomugiri.workspace.server
 
+import com.chomugiri.workspace.providers.EndpointProbe
 import com.chomugiri.workspace.providers.Nim
 import com.chomugiri.workspace.providers.Pollinations
 import com.chomugiri.workspace.providers.Upstream
@@ -201,7 +202,10 @@ class ApiRouter(private val secrets: SecretStore) {
         "pollinations" -> Pollinations.chatConfig(pollinationsToken) to null
         "custom" -> {
             val custom = body.optJSONObject("custom")
-            val base = custom?.optString("baseUrl").orEmpty().trimEnd('/')
+            // The stored base can still be a pasted endpoint (added by hand,
+            // without a probe); appending /chat/completions to a base that
+            // already ends in it asks for a route that does not exist.
+            val base = EndpointProbe.normalizeBase(custom?.optString("baseUrl").orEmpty())
             if (base.isEmpty()) null to "A custom provider request needs `custom.baseUrl`."
             else {
                 val headers = mutableMapOf<String, String>()
@@ -362,7 +366,10 @@ class ApiRouter(private val secrets: SecretStore) {
             response.json(400, err("Request body is not valid JSON.", "bad_json")); return
         }
 
-        val base = body.optString("baseUrl").trim().trimEnd('/')
+        // A pasted endpoint is not a base. People copy the URL out of the docs —
+        // ".../v1/models", ".../v1/chat/completions" — and taking it literally
+        // makes the probe ask for "/v1/models/models", then blames the endpoint.
+        val base = EndpointProbe.normalizeBase(body.optString("baseUrl"))
         if (base.isEmpty()) { response.json(400, err("`baseUrl` is required.", "missing_base_url")); return }
 
         val host = runCatching { URL(base).host }.getOrNull()
@@ -385,29 +392,60 @@ class ApiRouter(private val secrets: SecretStore) {
         val routes = JSONArray()
         val models = JSONArray()
 
-        Upstream.get("$base/models", headers, 15_000)?.let { text ->
-            routes.put("/models")
-            runCatching {
-                val json = JSONObject(text)
-                val data = json.optJSONArray("data") ?: json.optJSONArray("models") ?: JSONArray()
-                for (i in 0 until data.length()) {
-                    val id = data.optJSONObject(i)?.let { it.optString("id").ifEmpty { it.optString("name") } } ?: continue
-                    if (id.isEmpty()) continue
-                    val caps = ModelMeta.capabilities(id)
-                    capabilities.addAll(caps)
-                    models.put(
-                        JSONObject().put("id", id).put("provider", "custom")
-                            .put("label", ModelMeta.label(id)).put("vendor", ModelMeta.vendor(id))
-                            .put("capabilities", JSONArray(caps))
-                            .put("origin", "catalogue")
-                    )
-                }
-            }
+        // 1. Which base can actually be talked to.
+        //
+        // The model list and the chat route need not share a prefix — kie.ai
+        // serves chat at /v1/chat/completions and lists models at
+        // /api/v1/models — so a base derived from one is wrong for the other.
+        var chatBase = base
+        findChatBase(base, headers)?.let { found ->
+            chatBase = found
+            val path = runCatching { URL(found).path }.getOrNull().orEmpty()
+            routes.put(if (found == base) "/chat/completions" else "chat at ${path.ifEmpty { "/" }}")
         }
 
+        // 2. The model list. "<base>/models with an OpenAI envelope" is the
+        // common case, not the only one, so several paths and several envelopes
+        // are accepted.
+        var authFailure: Int? = null
+        for (candidate in EndpointProbe.modelListCandidates(base)) {
+            val result = Upstream.getWithStatus(candidate.url, headers, 15_000)
+            // Auth failures are conclusive — stop and report rather than trying
+            // every other path and blaming the route.
+            if (result.status == 401 || result.status == 403) { authFailure = result.status; break }
+            if (result.body == null) continue
+
+            val ids = EndpointProbe.chatModelsOnly(EndpointProbe.modelIdsFrom(result.body))
+            if (ids.isEmpty()) continue
+
+            routes.put(candidate.label)
+            for (id in ids) {
+                val caps = ModelMeta.capabilities(id)
+                capabilities.addAll(caps)
+                models.put(
+                    JSONObject().put("id", id).put("provider", "custom")
+                        .put("label", ModelMeta.label(id)).put("vendor", ModelMeta.vendor(id))
+                        .put("capabilities", JSONArray(caps))
+                        .put("origin", "catalogue")
+                )
+            }
+            break
+        }
+
+        if (authFailure != null) {
+            response.json(422, JSONObject()
+                .put("ok", false).put("baseUrl", base)
+                .put("capabilities", JSONArray()).put("models", JSONArray()).put("routes", JSONArray())
+                .put("latencyMs", System.currentTimeMillis() - started)
+                .put("error", "Endpoint rejected the credentials ($authFailure). Check the API key or custom auth header.")
+                .toString())
+            return
+        }
+
+        // 3. Route sniffing for modalities /models does not always advertise.
         routeCapabilities.forEach { (path, capability) ->
             val status = runCatching {
-                val conn = (URL("$base$path").openConnection() as HttpURLConnection).apply {
+                val conn = (URL("$chatBase$path").openConnection() as HttpURLConnection).apply {
                     requestMethod = "OPTIONS"; connectTimeout = 8_000; readTimeout = 8_000
                     headers.forEach { (k, v) -> setRequestProperty(k, v) }
                 }
@@ -428,14 +466,70 @@ class ApiRouter(private val secrets: SecretStore) {
         response.json(
             if (ok) 200 else 422,
             JSONObject()
-                .put("ok", ok).put("baseUrl", base)
+                .put("ok", ok).put("baseUrl", chatBase)
                 .put("capabilities", JSONArray(capabilities.toList()))
                 .put("models", models).put("routes", routes)
                 .put("latencyMs", System.currentTimeMillis() - started)
-                .apply { if (!ok) put("error", "Endpoint answered nothing on /models or any known generation route.") }
+                .apply {
+                    if (!ok) put(
+                        "error",
+                        "Nothing answered at $base — no model list on /models or /api/v1/models, and no chat route. " +
+                            "Check the base URL and the key; you can still add the endpoint and type the model id by hand."
+                    )
+                }
                 .toString()
         )
     }
+
+    /**
+     * The base whose `/chat/completions` exists.
+     *
+     * Existence is inferred from the refusal: 404 or 501 means the route is not
+     * there, and anything else — a 400 about the model, a 422 about the id —
+     * means it is. Deliberately generous: the point is to find the route, not to
+     * make a successful completion at probe time.
+     */
+    private fun findChatBase(base: String, headers: Map<String, String>): String? {
+        for (candidate in EndpointProbe.chatBaseCandidates(base)) {
+            val payload = JSONObject()
+                .put("model", "__chomugiri_probe__")
+                .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", "hi")))
+                .put("max_tokens", 1)
+                .toString()
+
+            val result = runCatching {
+                val conn = (URL("$candidate/chat/completions").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"; doOutput = true
+                    connectTimeout = 10_000; readTimeout = 12_000
+                    setRequestProperty("Content-Type", "application/json")
+                    headers.forEach { (k, v) -> setRequestProperty(k, v) }
+                }
+                try {
+                    conn.outputStream.use { it.write(payload.toByteArray()) }
+                    val status = conn.responseCode
+                    val text = runCatching {
+                        (if (status in 200..299) conn.inputStream else conn.errorStream)
+                            ?.bufferedReader()?.use { r -> r.readText() }
+                    }.getOrNull().orEmpty()
+                    status to text
+                } finally { conn.disconnect() }
+            }.getOrNull() ?: continue
+
+            val (status, text) = result
+            if (status == 404 || status == 501) continue
+
+            // Some gateways answer 200 with the error in the body; a "no route"
+            // message there means the same as a 404.
+            if (status in 200..299 &&
+                Regex("not supported|no route|not found", RegexOption.IGNORE_CASE).containsMatchIn(text) &&
+                Regex("\"code\"\\s*:\\s*(404|501)").containsMatchIn(text)
+            ) continue
+
+            return candidate
+        }
+        return null
+    }
+
 
     // ── /api/bridge/proxy ───────────────────────────────────────────────────
 

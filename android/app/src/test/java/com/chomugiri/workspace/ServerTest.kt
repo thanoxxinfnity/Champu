@@ -181,6 +181,36 @@ class ServerTest {
         } finally { server.stop() }
     }
 
+    /**
+     * The native probe against a real gateway.
+     *
+     * kie.ai is the endpoint that exposed the bug: it 404s /v1/models and lists
+     * its catalogue at /api/v1/models, so a probe that only appends /models to
+     * the base reports a perfectly working endpoint as answering nothing.
+     *
+     * Skipped, not failed, without a key — the suite has to stay useful on a
+     * machine with no credentials, and the key never belongs in the repo.
+     */
+    @Test fun probeFindsModelsOnASiblingApiPath() {
+        val key = System.getenv("CHOMUGIRI_PROBE_KEY").orEmpty()
+        val base = System.getenv("CHOMUGIRI_PROBE_URL").orEmpty()
+        if (key.isEmpty() || base.isEmpty()) return
+
+        val (server, port) = boot()
+        try {
+            val (code, body, _) = request(
+                port, "/api/endpoints/probe", "POST",
+                JSONObject().put("baseUrl", base).put("apiKey", key).toString(),
+                server.sessionToken,
+            )
+            assertEquals(200, code)
+            val json = JSONObject(body)
+            assertTrue("probe succeeded: $body", json.getBoolean("ok"))
+            assertTrue("models discovered: $body", json.getJSONArray("models").length() > 0)
+            assertTrue("chat route found: $body", json.getJSONArray("routes").toString().contains("chat"))
+        } finally { server.stop() }
+    }
+
     @Test fun deployPrechecksBeforeUploading() {
         val (server, port) = boot()
         try {
