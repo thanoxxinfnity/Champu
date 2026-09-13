@@ -155,7 +155,7 @@ interface WorkspaceState {
   activeSuite: SuiteId;
   sessionId: string | null;
   sidebarOpen: boolean;
-  rightPaneTab: 'preview' | 'files' | 'terminal' | 'plan';
+  rightPaneTab: 'preview' | 'site' | 'files' | 'terminal' | 'plan';
 
   setSuite: (suite: SuiteId) => void;
   setSessionId: (id: string | null) => void;

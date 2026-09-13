@@ -56,6 +56,28 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         router = ApiRouter(PrefsSecretStore(this))
+
+        // A run is driven entirely from the WebView, so only the page knows one
+        // is in flight. While it is, the shell holds the process open with a
+        // foreground service — Android freezes a backgrounded app otherwise, and
+        // that is what used to kill a build the moment the screen went off. The
+        // notification lives exactly as long as the run.
+        router.onRunState = { state ->
+            runOnUiThread {
+                if (state.active) {
+                    RunService.start(this, state.topic)
+                } else {
+                    RunService.stop(this)
+                    if (state.notify) {
+                        RunService.notifyFinished(
+                            this,
+                            if (state.ok) "Run finished" else "Run failed",
+                            state.summary.ifEmpty { state.topic },
+                        )
+                    }
+                }
+            }
+        }
         server = HttpServer(
             AndroidAssetSource(assets),
             router,
@@ -208,6 +230,16 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        RunService.ensureChannels(this)
+        // Without this the "your run finished" notice is silently dropped on
+        // Android 13+, which reads as the feature not working at all.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 91)
+        }
+
         webView.loadUrl("http://127.0.0.1:$port/")
 
         if (router.nimKey.isEmpty()) {
@@ -347,6 +379,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // A run cannot outlive the page that drives it, so neither should the
+        // notification saying one is going.
+        RunService.stop(this)
         server.stop()
         webView.destroy()
         super.onDestroy()

@@ -1,12 +1,13 @@
 'use client';
 
-import { classifyLocal, type Classification } from './router';
+import { classifyLocal, wantsSite, type Classification } from './router';
 import { withKeys } from '@/lib/keys';
 import { buildSystemPrompt } from './system-prompt';
 import { heuristicPlan, parsePlan, PLANNER_PROMPT, planProgress, parkBridgeTasks, requiresBridge, type Plan } from './planner';
 import { extractArtifacts, filesOf, commandsOf, mergeFiles, type FileArtifact } from './artifacts';
 import { describeFileWork, renderWorkLog } from './worklog';
 import { noticeTopic, shouldNotify } from './notify';
+import { runFinished, runStarted } from '@/lib/shell/run-state';
 import { advancePlan, NO_EVIDENCE, settleRemaining, type RunEvidence } from './progress';
 import { buildPackExport, describeExport, detectPacks, missingGeometries, validatePacks } from '@/lib/suites/minecraft/pack';
 import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geometry';
@@ -603,6 +604,11 @@ export async function send(opts: SendOptions): Promise<void> {
     streaming: true,
   });
 
+  // Android freezes a backgrounded process unless something says work is
+  // happening. Saying it here, rather than at the transport, means the whole
+  // run is covered — planning, streaming, terminal steps and all.
+  void runStarted(noticeTopic(input));
+
   const stopPhrases = startPhraseCycle(lane);
   const startedAt = Date.now();
 
@@ -643,6 +649,7 @@ export async function send(opts: SendOptions): Promise<void> {
       failedApproaches: guard.bannedApproaches(),
       attachments: attachments.map((a) => ({ name: a.name, kind: a.kind, bytes: a.bytes })),
       workspaceFiles: [...useWorkspace.getState().files.keys()],
+      buildingSite: wantsSite(input),
     });
 
     const history = historyFor(10);
@@ -1108,8 +1115,9 @@ export async function send(opts: SendOptions): Promise<void> {
       aborted: controller.signal.aborted,
     });
 
+    const finished = after.messages.find((m) => m.id === assistantId);
+
     if (announce) {
-      const finished = after.messages.find((m) => m.id === assistantId);
       after.pushNotice({
         sessionId,
         suite,
@@ -1118,6 +1126,16 @@ export async function send(opts: SendOptions): Promise<void> {
         detail: finished?.error ? noticeTopic(finished.error) : undefined,
       });
     }
+
+    // Let the shell go. The in-app notice above is only seen by someone looking
+    // at the app; when the run was left to finish in the background, the shell
+    // posts the one dismissible notification that says so.
+    void runFinished({
+      topic: noticeTopic(input),
+      ok: !finished?.error,
+      summary: finished?.error ? noticeTopic(finished.error, 120) : noticeTopic(input, 120),
+      notify: announce,
+    });
   }
 }
 

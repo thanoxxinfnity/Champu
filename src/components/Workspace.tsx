@@ -7,6 +7,7 @@ import { Sidebar } from './Sidebar';
 import { Message } from './Message';
 import { ThinkingBubble } from './ThinkingBubble';
 import { TodoHud } from './TodoHud';
+import { SitePreview } from './SitePreview';
 import { Terminal } from './Terminal';
 import { FileManager } from './FileManager';
 import { CommandDock } from './CommandDock';
@@ -156,8 +157,12 @@ export function Workspace() {
   }, [toggleSidebar]);
 
   const suiteHasTool = HAS_TOOL.has(activeSuite);
+  // A website is worth watching run, so the tab appears the moment one exists —
+  // in any suite, since "build me a landing page" is not a suite of its own.
+  const hasSite = Array.from(files.keys()).some((path) => /\.html?$/i.test(path));
   const tabs: Array<{ id: typeof rightPaneTab; label: string; badge?: number }> = [
     ...(suiteHasTool ? [{ id: 'preview' as const, label: 'tool' }] : []),
+    ...(hasSite ? [{ id: 'site' as const, label: 'site' }] : []),
     { id: 'plan', label: 'plan', badge: plan?.tasks.length },
     { id: 'files', label: 'files', badge: files.size || undefined },
     { id: 'terminal', label: 'terminal' },
@@ -180,6 +185,7 @@ export function Workspace() {
   const paneBody = (
     <>
       {effectiveTab === 'preview' && <SuiteTool />}
+      {effectiveTab === 'site' && <SitePreview />}
       {effectiveTab === 'plan' && <TodoHud />}
       {effectiveTab === 'files' && <FileManager />}
       {effectiveTab === 'terminal' && <Terminal />}

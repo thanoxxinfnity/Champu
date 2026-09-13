@@ -60,6 +60,7 @@ class ApiRouter(private val secrets: SecretStore) {
                 "/api/vercel/deploy" -> vercelDeploy(request, response)
                 "/api/research" -> research(request, response)
                 "/api/shell/keys" -> shellKeys(request, response)
+                "/api/shell/run" -> shellRun(request, response)
                 else -> response.json(404, err("No route for ${request.path}", "no_route"))
             }
         } catch (e: Exception) {
@@ -69,6 +70,48 @@ class ApiRouter(private val secrets: SecretStore) {
 
     private fun err(message: String, code: String, retryable: Boolean = false) =
         JSONObject().put("error", message).put("code", code).put("retryable", retryable).toString()
+
+    /**
+     * What the shell should do about a run starting or finishing.
+     *
+     * Set by MainActivity; absent in the JVM tests, where the route still has to
+     * answer rather than blow up.
+     */
+    var onRunState: ((RunState) -> Unit)? = null
+
+    data class RunState(
+        val active: Boolean,
+        val topic: String,
+        /** Only meaningful when `active` is false. */
+        val ok: Boolean = true,
+        val summary: String = "",
+        /** Whether the user has moved away and should be told it finished. */
+        val notify: Boolean = false,
+    )
+
+    // ── /api/shell/run — Android-only, keeps a backgrounded run alive ────────
+    //
+    // The page cannot keep itself running when Android freezes the process, and
+    // the shell cannot know a run is in flight: the work is driven entirely from
+    // the WebView. So the page says so, and the shell holds the process open for
+    // exactly that long.
+    private fun shellRun(request: ApiRequest, response: ResponseWriter) {
+        if (request.method != "POST") { response.json(405, err("POST only.", "bad_method")); return }
+
+        val body = runCatching { JSONObject(request.bodyText) }.getOrElse {
+            response.json(400, err("Request body is not valid JSON.", "bad_json")); return
+        }
+
+        val state = RunState(
+            active = body.optBoolean("active"),
+            topic = body.optString("topic").ifEmpty { "a run" },
+            ok = if (body.has("ok")) body.optBoolean("ok") else true,
+            summary = body.optString("summary"),
+            notify = body.optBoolean("notify"),
+        )
+        onRunState?.invoke(state)
+        response.json(200, JSONObject().put("ok", true).put("active", state.active).toString())
+    }
 
     // ── /api/shell/keys — Android-only, lets the web Settings pane store the key
     private fun shellKeys(request: ApiRequest, response: ResponseWriter) {

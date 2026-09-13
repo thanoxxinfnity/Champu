@@ -211,6 +211,52 @@ class ServerTest {
         } finally { server.stop() }
     }
 
+    /**
+     * The page is the only thing that knows a run is happening, so this route is
+     * the whole mechanism that keeps a backgrounded run alive. If it stops
+     * reporting, Android freezes the process and the build dies silently.
+     */
+    @Test fun runStateReachesTheShell() {
+        val seen = mutableListOf<ApiRouter.RunState>()
+        val secrets = MemorySecrets()
+        val router = ApiRouter(secrets).apply { onRunState = { seen += it } }
+        val server = HttpServer(MemoryAssets(mapOf("web/index.html" to "<html></html>")), router)
+        val port = server.start()
+
+        try {
+            val (startCode, _, _) = request(
+                port, "/api/shell/run", "POST",
+                """{"active":true,"topic":"a minecraft pack"}""",
+                server.sessionToken,
+            )
+            assertEquals(200, startCode)
+
+            val (endCode, _, _) = request(
+                port, "/api/shell/run", "POST",
+                """{"active":false,"topic":"a minecraft pack","ok":true,"summary":"7 files","notify":true}""",
+                server.sessionToken,
+            )
+            assertEquals(200, endCode)
+
+            assertEquals(2, seen.size)
+            assertTrue("run reported as started", seen[0].active)
+            assertEquals("a minecraft pack", seen[0].topic)
+            assertTrue("run reported as finished", !seen[1].active)
+            assertTrue("finish is notified when the user moved away", seen[1].notify)
+            assertEquals("7 files", seen[1].summary)
+        } finally { server.stop() }
+    }
+
+    @Test fun runStateSurvivesAShellThatIsNotListening() {
+        // The JVM suite has no Activity behind the router; the route still has to
+        // answer rather than 500, or a run would fail on its own bookkeeping.
+        val (server, port) = boot()
+        try {
+            val (code, _, _) = request(port, "/api/shell/run", "POST", """{"active":true}""", server.sessionToken)
+            assertEquals(200, code)
+        } finally { server.stop() }
+    }
+
     @Test fun deployPrechecksBeforeUploading() {
         val (server, port) = boot()
         try {

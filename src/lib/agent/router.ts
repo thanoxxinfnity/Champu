@@ -62,6 +62,24 @@ const SUITE_HINTS: Array<[RegExp, string]> = [
   [/\b(skill|slash command|custom command|palette)\b/i, 'skills'],
 ];
 
+/**
+ * Whether the thing being asked for is a website.
+ *
+ * Websites arrive in ordinary chat — "make me a 3D landing page" — rather than
+ * through a suite, so the web contract has to be attached by what is being
+ * built. Deliberately requires an actual build verb near a web noun: a question
+ * *about* CSS is not a request for a site, and answering it with a full page is
+ * as wrong as the reverse.
+ */
+const SITE_NOUN = /\b(website|web ?site|web ?page|webpage|landing ?page|portfolio|homepage|one[- ]?pager|web ?app|site)\b/i;
+const SITE_VERB = /\b(build|make|create|generate|design|code|write|bana|banao|chahiye|redesign|rebuild|clone)\b/i;
+const SITE_TECH = /\b(three\.?js|webgl|3d (site|website|page|scene|landing)|parallax|scroll[- ]animation|glsl|shader)\b/i;
+
+export function wantsSite(text: string): boolean {
+  if (SITE_TECH.test(text) && SITE_NOUN.test(text)) return true;
+  return SITE_NOUN.test(text) && SITE_VERB.test(text);
+}
+
 export function detectSuite(text: string): string | undefined {
   for (const [re, suite] of SUITE_HINTS) if (re.test(text)) return suite;
   return undefined;

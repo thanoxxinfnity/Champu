@@ -108,6 +108,50 @@ Rules that decide whether it renders at all:
 - The identifier must match the \`geometry\` entry in the entity's client file exactly.
 Tell the user they can open the .geo.json at web.blockbench.net to inspect or edit the model.`;
 
+export const WEB_ADDENDUM = `## BUILDING A WEBSITE
+The output is a site that runs, not a description of one. It is previewed by
+assembling the generated files into a single document and running it in a
+sandboxed iframe with no server and no build step, so write for that.
+
+### The shape that works
+- \`index.html\` is the entry. Local \`<link rel="stylesheet" href="styles.css">\` and
+  \`<script type="module" src="app.js">\` are inlined automatically, so keep to one
+  stylesheet and one module. Do NOT split the JS across several local modules
+  that import each other — only the file named in the HTML is inlined, and the
+  rest will 404 in the preview.
+- No bundler, no npm, no framework CLI. Plain HTML, CSS and ES modules.
+- Libraries come from a CDN with a pinned version, via an import map:
+  \`<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"}}</script>\`
+  Never \`import ... from 'three'\` without that map — the browser cannot resolve a
+  bare specifier on its own.
+
+### 3D that actually renders
+When the request is for a 3D or animated site, build it with three.js and get
+these right, because each one is the difference between a scene and a black box:
+- Size the renderer from the canvas's own client box, not \`window.innerWidth\`,
+  and clamp the pixel ratio: \`renderer.setPixelRatio(Math.min(devicePixelRatio, 2))\`.
+  An unclamped ratio melts a phone.
+- Handle resize: update \`camera.aspect\`, call \`camera.updateProjectionMatrix()\`,
+  and \`renderer.setSize()\`. A scene that only fits at load is a bug.
+- Light it. A \`MeshStandardMaterial\` with no light in the scene renders pure
+  black, which reads as "the 3D is broken".
+- Drive the loop with \`renderer.setAnimationLoop\`, and stop it when the document
+  is hidden, or a background tab keeps a phone's GPU busy for nothing.
+- Respect \`prefers-reduced-motion\`: render one static frame instead of animating.
+- Fall back honestly: if WebGL is unavailable, show the content styled in 2D
+  rather than an empty canvas.
+- Never ship a placeholder \`.glb\` URL or a texture path that does not exist.
+  Build geometry in code — that is what renders with nothing to download.
+
+### The rest of the page
+- Real copy, not lorem ipsum. If the user gave a subject, write about it.
+- Responsive down to 360px: one column, no horizontal scroll, tap targets ≥ 40px.
+- Motion through CSS where CSS can do it (scroll-driven animation, transitions),
+  and keep it under \`@media (prefers-reduced-motion: reduce)\`.
+- Semantic landmarks, alt text, and visible focus styles. A pretty page nobody
+  can tab through is unfinished.
+- Say plainly which parts are placeholders and what the user should replace.`;
+
 export interface PromptContext {
   lane: 'A' | 'B';
   suite?: string;
@@ -119,6 +163,8 @@ export interface PromptContext {
   capabilities?: string[];
   attachments?: Array<{ name: string; kind: string; bytes: number }>;
   workspaceFiles?: string[];
+  /** The request is for a website, so the web contract applies. */
+  buildingSite?: boolean;
 }
 
 export function buildSystemPrompt(ctx: PromptContext): string {
@@ -130,6 +176,10 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     // that parsed but would not import, for want of a lang file or a real uuid.
     if (ctx.suite === 'minecraft') parts.push(MINECRAFT_ADDENDUM);
   }
+
+  // A website is not a suite of its own — "build me a landing page" arrives in
+  // chat — so the contract is attached by what is being built, not by where.
+  if (ctx.buildingSite) parts.push(WEB_ADDENDUM);
 
   if (ctx.bridgeStatus) {
     const line =
