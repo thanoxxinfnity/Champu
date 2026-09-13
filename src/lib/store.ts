@@ -239,6 +239,9 @@ interface WorkspaceState {
   setDrafts: (drafts: Draft[] | null) => void;
   patchDraft: (id: string, patch: Partial<Draft>) => void;
   draftsEnabled: boolean;
+  /** Which image model paints generated textures and assets. */
+  imageModel: string;
+  setImageModel: (model: string) => void;
   /** 'system' follows the OS; the other two are an explicit override. */
   theme: ThemePref;
   setTheme: (theme: ThemePref) => void;
@@ -493,6 +496,13 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     set((s) => ({ drafts: s.drafts?.map((d) => (d.id === id ? { ...d, ...patch } : d)) ?? null })),
   draftsEnabled: false,
 
+  imageModel: 'nim:black-forest-labs/flux.1-dev',
+  setImageModel: (model) => {
+    set({ imageModel: model });
+    void setSetting('imageModel', model);
+  },
+
+
   theme: 'system',
   setTheme: (theme) => {
     applyTheme(theme);
@@ -540,6 +550,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const priorDeploy = await getSetting<DeployResult | null>('deploy', null);
     if (priorDeploy?.project) set({ lastDeploy: priorDeploy });
     set({ draftsEnabled: await getSetting<boolean>('draftsEnabled', false) });
+    set({ imageModel: await getSetting<string>('imageModel', 'nim:black-forest-labs/flux.1-dev') });
 
     // The boot script already painted the stored theme; this re-syncs the store
     // with it and covers the case where the localStorage mirror was cleared.

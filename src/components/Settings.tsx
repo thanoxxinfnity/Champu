@@ -10,7 +10,7 @@ import { isClientExposed, maskSecret, toEnvExample, toEnvFile, validateSecretNam
 import { downloadText } from '@/lib/zip';
 import { isShellHosted, loadKeys, maskKey, nimConfigured, saveKeys, validateNimKey } from '@/lib/keys';
 
-type Tab = 'keys' | 'bridge' | 'secrets' | 'endpoints' | 'deploy' | 'guard';
+type Tab = 'guide' | 'keys' | 'bridge' | 'secrets' | 'endpoints' | 'deploy' | 'guard';
 
 function Field({
   label,
@@ -1014,6 +1014,10 @@ function KeysTab() {
 
       <hr className="ink-rule" />
 
+      <ImageModelField />
+
+      <hr className="ink-rule" />
+
       <Field
         label="Vercel token"
         hint="Only needed to launch or update a website. Create one at vercel.com/account/tokens. Stored on this device and sent only to Vercel, through this app's own server."
@@ -1087,7 +1091,192 @@ Chomugiri still works — Pollinations needs no key at all. Pick it from the mod
   );
 }
 
+
+/**
+ * What the app is and how to switch it on.
+ *
+ * Written because most of what Chomugiri does was only discoverable by already
+ * knowing it was there — the terminal bridge, the suites, the slash commands,
+ * the asset studio. A feature nobody finds is a feature that does not exist.
+ */
+function GuideTab() {
+  const models = useWorkspace((s) => s.models);
+  const heartbeat = useWorkspace((s) => s.heartbeat);
+  const endpoints = useWorkspace((s) => s.endpoints);
+  const vercelToken = useWorkspace((s) => s.vercelToken);
+
+  const nimCount = models.filter((m) => m.provider === 'nim').length;
+
+  const steps = [
+    {
+      done: nimCount > 0,
+      title: 'Add a model key',
+      body: 'API Keys → NVIDIA NIM. Free at build.nvidia.com. Without it only Pollinations answers, which needs no key but is smaller.',
+      state: nimCount > 0 ? `${nimCount} NVIDIA models ready` : 'not set — Pollinations still works',
+    },
+    {
+      done: endpoints.length > 0,
+      title: 'Add your own endpoint (optional)',
+      body: 'Custom Endpoints takes any OpenAI-compatible server. Detection fills in the model list; if the server does not publish one, type the model id yourself and add it anyway.',
+      state: endpoints.length ? `${endpoints.length} configured` : 'none — optional',
+    },
+    {
+      done: heartbeat.status === 'online',
+      title: 'Connect a terminal (optional)',
+      body: 'Terminal Bridge runs real shell commands on your own machine over ngrok or Cloudflare. Needed only for native compilation — APKs, toolchains, test runs. Everything else is built in the browser.',
+      state: heartbeat.status === 'online' ? 'online' : 'offline — browser-side builds still work',
+    },
+    {
+      done: Boolean(vercelToken),
+      title: 'Add a Vercel token (optional)',
+      body: 'API Keys → Vercel token. Only needed to put a generated site on the internet.',
+      state: vercelToken ? 'ready to launch' : 'not set — only needed for deployment',
+    },
+  ];
+
+  const suites = [
+    ['Chat', 'Ask anything. Questions get answered directly; describe something to build and it switches to building it.'],
+    ['Android', 'Generates a full Android project and compiles an APK when the terminal bridge is connected.'],
+    ['Minecraft', 'Bedrock add-ons end to end — manifests, items, entities, a 3D model for anything that needs one, and painted textures. Exports an installable .mcaddon.'],
+    ['Studio', 'Slide decks, documents and a visual canvas from a prompt.'],
+    ['MCP Builder', 'Scaffolds Model Context Protocol servers for Claude Code, Cursor and others.'],
+    ['Workdrive', 'Research mode: searches, reads and writes up what it found.'],
+    ['Asset Studio', 'Generate an image, cut its background out, and export icon sets for Android or the web.'],
+    ['Skills', 'Your own slash commands, saved and reusable.'],
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <p className="hand text-[24px] leading-none">Getting set up</p>
+        <p className="mt-1.5 text-[11.5px] leading-[1.55]" style={{ color: 'var(--ink-dim)' }}>
+          Only the first step is required, and even that has a free fallback. Everything below it is optional and the app
+          says so when something it needs is missing.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        {steps.map((step, i) => (
+          <div
+            key={step.title}
+            className="rounded-lg border p-2.5"
+            style={{
+              borderColor: step.done ? 'color-mix(in oklab, var(--color-success) 45%, var(--line))' : 'var(--line)',
+              background: 'var(--surface)',
+            }}
+          >
+            <p className="flex items-center gap-2 text-[12px]" style={{ color: 'var(--ink)' }}>
+              <span className="mono text-[10px]" style={{ color: step.done ? 'var(--color-success)' : 'var(--ink-faint)' }}>
+                {step.done ? '✔' : String(i + 1).padStart(2, '0')}
+              </span>
+              {step.title}
+            </p>
+            <p className="mt-1 text-[11px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
+              {step.body}
+            </p>
+            <p className="mono mt-1 text-[10px]" style={{ color: step.done ? 'var(--color-success)' : 'var(--ink-faint)' }}>
+              {step.state}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <hr className="ink-rule" />
+
+      <div>
+        <p className="hand text-[20px] leading-none">What each suite does</p>
+        <div className="mt-2 space-y-1.5">
+          {suites.map(([name, what]) => (
+            <div key={name} className="text-[11px] leading-[1.5]">
+              <span className="mono" style={{ color: 'var(--accent)' }}>
+                {name}
+              </span>
+              <span style={{ color: 'var(--ink-dim)' }}> — {what}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <hr className="ink-rule" />
+
+      <div>
+        <p className="hand text-[20px] leading-none">Worth knowing</p>
+        <ul className="mt-2 space-y-1.5 text-[11px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
+          <li>
+            <span className="mono" style={{ color: 'var(--ink)' }}>Slash commands</span> — type <span className="mono">/</span>{' '}
+            in the box: /make-apk, /build-mcpack, /deploy, /research, /audit-code, /make-deck.
+          </li>
+          <li>
+            <span className="mono" style={{ color: 'var(--ink)' }}>Drafts</span> — the ⑂ button answers twice and lets you
+            pick. Costs two completions; on NVIDIA&apos;s free tier they run one after the other.
+          </li>
+          <li>
+            <span className="mono" style={{ color: 'var(--ink)' }}>Background runs</span> — start something and leave. When
+            it finishes you get a notice naming the topic; double-click it to jump back to that conversation.
+          </li>
+          <li>
+            <span className="mono" style={{ color: 'var(--ink)' }}>Secrets</span> — the vault holds environment variables
+            for deployment. Paste a key into the chat box and sending is blocked until it is removed.
+          </li>
+          <li>
+            <span className="mono" style={{ color: 'var(--ink)' }}>Theme</span> — the ☀ / ◐ / ☾ control in the header.
+            ◐ follows your phone.
+          </li>
+          <li>
+            <span className="mono" style={{ color: 'var(--ink)' }}>History</span> — every suite keeps its own, searchable
+            from the sidebar, stored on this device only.
+          </li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * Which model paints generated art.
+ *
+ * Worth exposing because the answer differs by what the user has: FLUX gives
+ * the best textures but needs an NVIDIA key, and Pollinations needs none at
+ * all. Picking silently would mean quality quietly depending on a setting the
+ * user cannot see.
+ */
+function ImageModelField() {
+  const imageModel = useWorkspace((s) => s.imageModel);
+  const setImageModel = useWorkspace((s) => s.setImageModel);
+  const models = useWorkspace((s) => s.models);
+  const nimReady = models.some((m) => m.provider === 'nim');
+
+  const options = [
+    { value: 'nim:black-forest-labs/flux.1-dev', label: 'FLUX.1 dev (NVIDIA) — best quality', needsKey: true },
+    { value: 'pollinations:flux', label: 'FLUX (Pollinations) — no key needed', needsKey: false },
+    { value: 'pollinations:turbo', label: 'Turbo (Pollinations) — fastest', needsKey: false },
+  ];
+
+  return (
+    <Field
+      label="Image model"
+      hint="Paints Minecraft textures and Asset Studio images. Generated large and reduced afterwards, so detail matters more than output size."
+    >
+      <select
+        className={inputClass}
+        style={inputStyle}
+        value={imageModel}
+        onChange={(e) => setImageModel(e.target.value)}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+            {o.needsKey && !nimReady ? ' — needs an NVIDIA key' : ''}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+}
+
 const TABS: Array<{ id: Tab; label: string }> = [
+  { id: 'guide', label: 'Setup Guide' },
   { id: 'keys', label: 'API Keys' },
   { id: 'bridge', label: 'Terminal Bridge' },
   { id: 'secrets', label: 'Secrets' },
@@ -1097,7 +1286,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
 ];
 
 export function Settings({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>('keys');
+  const [tab, setTab] = useState<Tab>('guide');
 
   useEffect(() => {
     if (!open) return;
@@ -1149,6 +1338,7 @@ export function Settings({ open, onClose }: { open: boolean; onClose: () => void
         </nav>
 
         <div className="flex-1 overflow-y-auto p-4">
+          {tab === 'guide' && <GuideTab />}
           {tab === 'keys' && <KeysTab />}
           {tab === 'bridge' && <BridgeTab />}
           {tab === 'secrets' && <SecretsTab />}

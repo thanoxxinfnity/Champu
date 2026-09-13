@@ -345,6 +345,45 @@ interface ClientEntity {
  * between a one-line fix and an afternoon of wondering why the mob is
  * invisible.
  */
+/**
+ * Geometry identifiers an entity asks for that nothing in the pack defines.
+ *
+ * Exported so the runtime can *build* the missing models rather than only
+ * report them: an entity with no geometry is invisible in game, and that is
+ * fixable without asking the user to write geometry by hand.
+ */
+export function missingGeometries(packs: DetectedPack[]): Array<{ file: string; identifier: string }> {
+  const all = packs.flatMap((p) => p.files);
+
+  const defined = new Set<string>();
+  for (const file of all) {
+    if (!/\.geo\.json$/.test(file.path)) continue;
+    try {
+      const parsed = JSON.parse(file.content) as { 'minecraft:geometry'?: Array<{ description?: { identifier?: string } }> };
+      for (const geo of parsed['minecraft:geometry'] ?? []) {
+        if (geo?.description?.identifier) defined.add(geo.description.identifier);
+      }
+    } catch {
+      /* reported by the validator */
+    }
+  }
+
+  const missing: Array<{ file: string; identifier: string }> = [];
+  for (const file of all) {
+    if (!/\.entity\.json$/.test(file.path)) continue;
+    try {
+      const desc = (JSON.parse(file.content) as ClientEntity)['minecraft:client_entity']?.description;
+      for (const id of Object.values(desc?.geometry ?? {})) {
+        if (!defined.has(id)) missing.push({ file: file.path, identifier: id });
+      }
+    } catch {
+      /* likewise */
+    }
+  }
+
+  return missing;
+}
+
 function validateEntityReferences(packs: DetectedPack[]): PackProblem[] {
   const problems: PackProblem[] = [];
   const all = packs.flatMap((p) => p.files);

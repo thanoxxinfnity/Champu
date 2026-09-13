@@ -8,7 +8,8 @@ import { extractArtifacts, filesOf, commandsOf, mergeFiles, type FileArtifact } 
 import { describeFileWork, renderWorkLog } from './worklog';
 import { noticeTopic, shouldNotify } from './notify';
 import { advancePlan, NO_EVIDENCE, settleRemaining, type RunEvidence } from './progress';
-import { buildPackExport, describeExport, detectPacks, validatePacks } from '@/lib/suites/minecraft/pack';
+import { buildPackExport, describeExport, detectPacks, missingGeometries, validatePacks } from '@/lib/suites/minecraft/pack';
+import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geometry';
 import { plannedTextures, texturePrompt, textureArtifact, toPixelArt } from '@/lib/suites/minecraft/texture';
 import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types';
 import type { CustomEndpointConfig } from '@/lib/providers/types';
@@ -750,6 +751,55 @@ export async function send(opts: SendOptions): Promise<void> {
       failed: Boolean(result.error),
     };
 
+    // ── Minecraft: build the models the entity asks for ────────────────────
+    //
+    // An entity naming a geometry nothing defines imports cleanly and then
+    // draws nothing — Bedrock reports no error, so it only shows up on the
+    // user's device. The format has several ways to be silently wrong, so the
+    // model is compiled from a body plan here rather than written by hand.
+    if (files.length) {
+      const missing = missingGeometries(detectPacks(files));
+
+      for (const gap of missing) {
+        try {
+          const plan = inferPlan(`${input} ${gap.identifier}`);
+          const geo = buildGeometry({ identifier: gap.identifier, parts: bodyPlan(plan) });
+
+          // Alongside the entity that asked for it, where Minecraft looks.
+          const dir = gap.file.replace(/\/entity\/[^/]+$/, '');
+          const name = gap.identifier.split('.').pop() ?? 'model';
+          const artifact = {
+            kind: 'file' as const,
+            path: `${dir}/models/entity/${name}.geo.json`,
+            language: 'json',
+            content: JSON.stringify(geo, null, 2),
+            complete: true,
+            bytes: 0,
+          };
+          artifact.bytes = artifact.content.length;
+
+          files.push(artifact);
+          upsertFile(artifact);
+
+          emit({
+            id: uid('msg'),
+            role: 'system',
+            content:
+              `Built the missing model — \`${artifact.path}\` (${plan} rig, ${geo['minecraft:geometry'][0].bones.length} bones). ` +
+              `Without it the entity would import and then be invisible. Open it at web.blockbench.net to reshape it.`,
+            createdAt: Date.now(),
+          });
+        } catch (err) {
+          emit({
+            id: uid('msg'),
+            role: 'system',
+            content: `Could not build a model for \`${gap.identifier}\` — ${(err as Error).message}`,
+            createdAt: Date.now(),
+          });
+        }
+      }
+    }
+
     // ── Minecraft: paint the textures the model could not ──────────────────
     //
     // A language model cannot emit a PNG, so every pack arrived with its art
@@ -776,10 +826,18 @@ export async function send(opts: SendOptions): Promise<void> {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                // NIM's FLUX is much better at this; Pollinations needs no key
-                // and is the fallback when NIM is not configured.
-                provider: useWorkspace.getState().models.some((m) => m.provider === 'nim') ? 'nim' : 'pollinations',
+                // The user's chosen image model, falling back to whatever is
+                // actually configured — NIM needs a key, Pollinations does not.
+                ...(() => {
+                  const [chosenProvider, ...rest] = (useWorkspace.getState().imageModel || 'nim:').split(':');
+                  const chosenModel = rest.join(':');
+                  const nimReady = useWorkspace.getState().models.some((m) => m.provider === 'nim');
+                  const provider = chosenProvider === 'nim' && !nimReady ? 'pollinations' : chosenProvider;
+                  return { provider, ...(chosenModel ? { model: chosenModel } : {}) };
+                })(),
                 prompt: texturePrompt(texture),
+                // Generated large and reduced afterwards: the detail that
+                // survives the downscale is what makes a 16px icon readable.
                 width: 1024,
                 height: 1024,
               }),
