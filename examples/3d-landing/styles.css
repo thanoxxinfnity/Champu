@@ -1,0 +1,197 @@
+:root {
+  --paper: #fdf6ec;
+  --ink: #2b1d12;
+  --ink-dim: #6b5342;
+  --ink-faint: #9b846e;
+  --orange: #e8722a;
+  --orange-deep: #c25314;
+  --line: #e3d2bd;
+  --panel: #fffaf3;
+  --radius: 14px 22px 16px 20px / 20px 14px 22px 16px;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* The canvas is scenery: fixed behind everything, never in the way of a tap. */
+#scene {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 0;
+  pointer-events: none;
+  /*
+   * Scenery must never win against the copy. The canvas is faded out across the
+   * column the text occupies, so a cube drifting past a paragraph dissolves
+   * instead of sitting on the words. On a phone the text owns the top, so the
+   * fade runs the other way.
+   */
+  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.35) 46%, #000 78%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.35) 46%, #000 78%);
+  opacity: 0.9;
+}
+
+@media (min-width: 760px) {
+  #scene {
+    mask-image: linear-gradient(to right, transparent 30%, rgba(0, 0, 0, 0.5) 48%, #000 64%);
+    -webkit-mask-image: linear-gradient(to right, transparent 30%, rgba(0, 0, 0, 0.5) 48%, #000 64%);
+  }
+}
+
+header, main, footer { position: relative; z-index: 1; }
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  border-bottom: 1.5px solid var(--line);
+  background: color-mix(in oklab, var(--paper) 82%, transparent);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+}
+.mark { color: var(--orange); font-size: 18px; }
+.wordmark { font-weight: 800; letter-spacing: 0.16em; font-size: 12.5px; }
+.ghost {
+  margin-left: auto;
+  color: var(--ink-dim);
+  text-decoration: none;
+  font-size: 12.5px;
+  border-bottom: 1.5px dashed var(--line);
+  padding-bottom: 2px;
+}
+.ghost:hover, .ghost:focus-visible { color: var(--orange-deep); border-color: var(--orange); }
+
+main { max-width: 940px; margin: 0 auto; padding: 0 20px; }
+
+.hero { padding: clamp(56px, 12vw, 130px) 0 clamp(48px, 9vw, 96px); }
+
+.kicker {
+  margin: 0 0 14px;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+h1 {
+  margin: 0 0 20px;
+  font-size: clamp(40px, 9vw, 78px);
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+}
+h1 em {
+  font-style: normal;
+  color: var(--orange-deep);
+  background-image: linear-gradient(100deg, transparent 1%, #ffd9b8 2%, #ffd9b8 96%, transparent 98%);
+  background-repeat: no-repeat;
+  background-size: 100% 46%;
+  background-position: 0 72%;
+}
+
+.lede {
+  margin: 0 0 30px;
+  max-width: 52ch;
+  font-size: clamp(15.5px, 2.2vw, 18.5px);
+  color: var(--ink-dim);
+}
+
+.actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.actions a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1.5px solid var(--orange);
+  transition: transform 140ms ease, background 140ms ease;
+}
+.solid { background: var(--orange); color: #fff; }
+.quiet { background: transparent; color: var(--orange-deep); border-style: dashed; }
+.actions a:hover { transform: translateY(-2px); }
+.actions a:focus-visible { outline: 2px solid var(--orange-deep); outline-offset: 3px; }
+
+.hint { margin: 34px 0 0; font-size: 12px; color: var(--ink-faint); }
+
+.strip { padding: clamp(40px, 8vw, 80px) 0; border-top: 1.5px solid var(--line); }
+.strip h2, .close h2 {
+  margin: 0 0 26px;
+  font-size: clamp(23px, 4.4vw, 33px);
+  letter-spacing: -0.02em;
+}
+
+.cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); }
+.cards article {
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 20px;
+}
+.cards h3 { margin: 0 0 8px; font-size: 16px; color: var(--orange-deep); }
+.cards p { margin: 0; font-size: 14px; color: var(--ink-dim); }
+
+.steps { margin: 0; padding-left: 22px; display: grid; gap: 14px; }
+.steps li { font-size: 15px; color: var(--ink-dim); max-width: 62ch; }
+.steps b { color: var(--ink); }
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: #f5e7d6;
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+
+.close { padding: clamp(48px, 9vw, 96px) 0; border-top: 1.5px solid var(--line); }
+.close p { margin: 0; max-width: 54ch; color: var(--ink-dim); }
+
+footer {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  padding: 26px 20px 42px;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  border-top: 1.5px solid var(--line);
+}
+.dot { opacity: 0.5; }
+
+.fallback { max-width: 940px; margin: 0 auto; padding: 0 20px 30px; color: var(--ink-faint); font-size: 13px; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .actions a:hover { transform: none; }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #17120d;
+    --ink: #f6e8d8;
+    --ink-dim: #c3ab93;
+    --ink-faint: #93795f;
+    --orange: #ff8b3d;
+    --orange-deep: #ffa763;
+    --line: #362a1f;
+    --panel: #1f1811;
+  }
+  h1 em { background-image: linear-gradient(100deg, transparent 1%, #4a2c14 2%, #4a2c14 96%, transparent 98%); }
+  code { background: #2a2017; }
+  .solid { color: #1a1209; }
+}

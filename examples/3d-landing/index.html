@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chomugiri — the workspace that builds</title>
+<meta name="description" content="An autonomous developer workspace that ships Minecraft add-ons, Android APKs and websites from a single prompt.">
+<link rel="stylesheet" href="styles.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+</head>
+<body>
+<canvas id="scene" aria-hidden="true"></canvas>
+
+<header class="bar">
+  <span class="mark">◈</span>
+  <span class="wordmark">CHOMUGIRI</span>
+  <a class="ghost" href="#build">what it builds</a>
+</header>
+
+<main>
+  <section class="hero">
+    <p class="kicker">autonomous developer workspace</p>
+    <h1>You describe it.<br><em>It ships.</em></h1>
+    <p class="lede">
+      One prompt goes in. A real artifact comes out — a Bedrock add-on that imports,
+      an APK that installs, a website that runs. Not a snippet to copy. The finished thing.
+    </p>
+    <div class="actions">
+      <a class="solid" href="#build">See what it makes</a>
+      <a class="quiet" href="#how">How it works</a>
+    </div>
+    <p class="hint">↓ scroll — the shape follows you</p>
+  </section>
+
+  <section id="build" class="strip">
+    <h2>Four things it finishes</h2>
+    <div class="cards">
+      <article><h3>Minecraft add-ons</h3><p>Manifests, real v4 UUIDs, a lang file, painted 16×16 textures and Blockbench geometry — zipped into a <code>.mcaddon</code> that actually imports.</p></article>
+      <article><h3>Android apps</h3><p>A full Gradle project, compiled to an APK when your terminal bridge is connected. Offline, it writes every source file and tells you which step is parked.</p></article>
+      <article><h3>Websites</h3><p>This page is the proof. One module, no bundler, three.js pinned — previewed inside the app at phone, tablet and full width before it ever ships.</p></article>
+      <article><h3>MCP servers</h3><p>Model Context Protocol scaffolds for Claude Code and Cursor: tools, resources and schemas that pass validation on the first run.</p></article>
+    </div>
+  </section>
+
+  <section id="how" class="strip alt">
+    <h2>How a run goes</h2>
+    <ol class="steps">
+      <li><b>It reads the intent.</b> A question gets answered. A build gets built. It does not confuse the two.</li>
+      <li><b>It plans out loud.</b> Atomic steps land in a live checklist you can watch tick over.</li>
+      <li><b>It narrates each file.</b> “Creating <code>bp/manifest.json</code> — the pack's identity.” Never a wall of code with no commentary.</li>
+      <li><b>It keeps going when you leave.</b> A backgrounded run holds the process open and tells you when it is done.</li>
+    </ol>
+  </section>
+
+  <section class="close">
+    <h2>Built on a phone, for a phone.</h2>
+    <p>Chomugiri ships as an Android APK with its own embedded server — your keys never leave the device.</p>
+  </section>
+</main>
+
+<footer><span>Chomugiri</span><span class="dot">·</span><span>rendered live with three.js r185</span></footer>
+
+<noscript><p class="fallback">This page paints its background in WebGL. The content above reads fine without it.</p></noscript>
+<script type="module" src="app.js"></script>
+</body>
+</html>
