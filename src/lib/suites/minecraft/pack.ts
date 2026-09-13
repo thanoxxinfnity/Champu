@@ -110,10 +110,31 @@ export function slugify(name: string, fallback = 'chomugiri-addon'): string {
 
 export interface PackExport {
   filename: string;
-  /** Paths inside the archive, already rebased for Minecraft. */
-  entries: Array<{ path: string; content: string }>;
+  /**
+   * Paths inside the archive, already rebased for Minecraft.
+   *
+   * Content is bytes for anything binary — generated textures arrive as data
+   * URLs and are decoded here, because a PNG written into a ZIP as text is a
+   * corrupt PNG.
+   */
+  entries: Array<{ path: string; content: string | Uint8Array }>;
   packs: number;
   kinds: PackKind[];
+}
+
+/** Decodes a data URL to bytes; anything else passes through as text. */
+function payload(content: string): string | Uint8Array {
+  if (!content.startsWith('data:')) return content;
+
+  const comma = content.indexOf(',');
+  const meta = content.slice(0, comma);
+  const body = content.slice(comma + 1);
+  if (!meta.includes('base64')) return decodeURIComponent(body);
+
+  const binary = atob(body);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
 const SUFFIX: Record<PackKind, string> = { behavior: '_BP', resource: '_RP', unknown: '' };
@@ -155,20 +176,20 @@ export function buildPackExport(packs: DetectedPack[], projectName: string): Pac
       filename: `${base}.mcpack`,
       entries: pack.files.map((f) => ({
         path: prefix && f.path.startsWith(prefix) ? f.path.slice(prefix.length) : f.path,
-        content: f.content,
+        content: payload(f.content),
       })),
       packs: 1,
       kinds: [pack.kind],
     };
   }
 
-  const entries: Array<{ path: string; content: string }> = [];
+  const entries: Array<{ path: string; content: string | Uint8Array }> = [];
   for (const pack of packs) {
     const folder = `${slugify(pack.name ?? base, base)}${SUFFIX[pack.kind]}`;
     const prefix = pack.root ? `${pack.root}/` : '';
     for (const f of pack.files) {
       const rel = prefix && f.path.startsWith(prefix) ? f.path.slice(prefix.length) : f.path;
-      entries.push({ path: `${folder}/${rel}`, content: f.content });
+      entries.push({ path: `${folder}/${rel}`, content: payload(f.content) });
     }
   }
 

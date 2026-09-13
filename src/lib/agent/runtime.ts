@@ -9,6 +9,7 @@ import { describeFileWork, renderWorkLog } from './worklog';
 import { noticeTopic, shouldNotify } from './notify';
 import { advancePlan, NO_EVIDENCE, settleRemaining, type RunEvidence } from './progress';
 import { buildPackExport, describeExport, detectPacks, validatePacks } from '@/lib/suites/minecraft/pack';
+import { plannedTextures, texturePrompt, textureArtifact, toPixelArt } from '@/lib/suites/minecraft/texture';
 import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types';
 import type { CustomEndpointConfig } from '@/lib/providers/types';
 import { useWorkspace, type ChatAttachment, THINKING_PHRASES, LANE_B_PHRASES } from '@/lib/store';
@@ -748,6 +749,68 @@ export async function send(opts: SendOptions): Promise<void> {
       filesWritten: files.length,
       failed: Boolean(result.error),
     };
+
+    // ── Minecraft: paint the textures the model could not ──────────────────
+    //
+    // A language model cannot emit a PNG, so every pack arrived with its art
+    // missing and Minecraft rendered it magenta-and-black. Chomugiri already
+    // generates images; this fills exactly the holes the pack declares.
+    if (files.length) {
+      const detected = detectPacks(files);
+      const wanted = plannedTextures(detected);
+
+      if (wanted.length) {
+        emit({
+          id: uid('msg'),
+          role: 'system',
+          content: `Painting ${wanted.length} texture${wanted.length === 1 ? '' : 's'} the pack asks for — ${wanted
+            .map((t) => `\`${t.path.split('/').pop()}\``)
+            .join(', ')}.`,
+          createdAt: Date.now(),
+        });
+
+        for (const texture of wanted) {
+          if (controller.signal.aborted) break;
+          try {
+            const res = await fetch('/api/image', withKeys({
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                // NIM's FLUX is much better at this; Pollinations needs no key
+                // and is the fallback when NIM is not configured.
+                provider: useWorkspace.getState().models.some((m) => m.provider === 'nim') ? 'nim' : 'pollinations',
+                prompt: texturePrompt(texture),
+                width: 1024,
+                height: 1024,
+              }),
+            }));
+            if (!res.ok) throw new Error(`image provider returned ${res.status}`);
+
+            // The route answers { images: [{ dataUrl }] }; a single-image
+            // shape is accepted too so a change there cannot silently break
+            // texture generation again.
+            const body = (await res.json()) as { images?: Array<{ dataUrl?: string }>; dataUrl?: string };
+            const dataUrl = body.images?.[0]?.dataUrl ?? body.dataUrl;
+            if (!dataUrl) throw new Error('the image provider returned no image');
+
+            // The downscale is the part that makes it a Minecraft texture
+            // rather than a small painting.
+            const pixels = await toPixelArt(dataUrl, texture.size);
+            const artifact = textureArtifact(texture.path, pixels);
+            files.push(artifact);
+            upsertFile(artifact);
+          } catch (err) {
+            // One texture failing must not cost the user the whole add-on.
+            emit({
+              id: uid('msg'),
+              role: 'system',
+              content: `Could not paint \`${texture.path}\` — ${(err as Error).message}. The pack is still built; drop a PNG in at that path yourself.`,
+              createdAt: Date.now(),
+            });
+          }
+        }
+      }
+    }
 
     // ── Minecraft: hand over something installable ──────────────────────────
     //

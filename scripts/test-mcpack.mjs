@@ -215,3 +215,36 @@ test('a broken .geo.json is reported rather than ignored', () => {
   const out = blockers(detectPacks([f('rp/manifest.json', good({ modules: [{ type: 'resources', uuid: 'cccccccc-1111-4222-8333-444444444444' }] })), f('rp/models/entity/mob.geo.json', '{ broken')]));
   assert.ok(out.some((m) => /model will not load/i.test(m)), out.join(' | '));
 });
+
+// ── Binary textures ─────────────────────────────────────────────────────────
+
+test('a data-URL texture is decoded to bytes, not written as text', () => {
+  // "PNG" as base64 — a PNG written into a ZIP as text is a corrupt PNG.
+  const png = 'data:image/png;base64,UE5H';
+  const exp = buildPackExport(
+    detectPacks([f('rp/manifest.json', good({ modules: [{ type: 'resources', uuid: 'dddddddd-1111-4222-8333-444444444444' }] })), f('rp/textures/items/ruby.png', png)]),
+    'Ruby',
+  );
+  const entry = exp.entries.find((e) => e.path.endsWith('ruby.png'));
+  assert.ok(entry.content instanceof Uint8Array, 'texture must be bytes');
+  assert.deepEqual([...entry.content], [0x50, 0x4e, 0x47]);
+});
+
+test('ordinary JSON files stay as text alongside the binary ones', () => {
+  const png = 'data:image/png;base64,UE5H';
+  const exp = buildPackExport(
+    detectPacks([f('rp/manifest.json', good({ modules: [{ type: 'resources', uuid: 'dddddddd-1111-4222-8333-444444444444' }] })), f('rp/textures/items/ruby.png', png)]),
+    'Ruby',
+  );
+  const manifest = exp.entries.find((e) => e.path.endsWith('manifest.json'));
+  assert.equal(typeof manifest.content, 'string');
+});
+
+test('a shipped texture clears the missing-texture warning', () => {
+  const png = 'data:image/png;base64,UE5H';
+  const rp = good({ modules: [{ type: 'resources', uuid: 'dddddddd-1111-4222-8333-444444444444' }] });
+  const withTexture = validatePacks(
+    detectPacks([f('rp/manifest.json', rp), f('rp/textures/item_texture.json', '{}'), f('rp/textures/items/ruby.png', png)]),
+  );
+  assert.ok(!withTexture.some((p) => /none are included/i.test(p.message)), JSON.stringify(withTexture));
+});
