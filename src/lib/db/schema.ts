@@ -137,6 +137,12 @@ export interface EndpointRecord {
   apiKey?: string;
   headers?: Record<string, string>;
   chatPath?: string;
+  /**
+   * The wire protocol this endpoint speaks — 'openai' (the default and, for a
+   * long time, the only one supported), 'anthropic' (/v1/messages, x-api-key)
+   * or 'gemini' (:generateContent, x-goog-api-key).
+   */
+  dialect?: 'openai' | 'anthropic' | 'gemini';
   capabilities: string[];
   models: Array<{ id: string; label: string; capabilities: string[] }>;
   routes: string[];

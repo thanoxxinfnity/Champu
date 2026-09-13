@@ -16,6 +16,18 @@ object Upstream {
     data class Config(
         val url: String,
         val headers: Map<String, String>,
+        /**
+         * Which wire protocol this upstream speaks. Defaults to OpenAI's — what
+         * NIM, Pollinations and most gateways use; Anthropic and Gemini need
+         * their own request shape, headers and reader.
+         */
+        val dialect: String = Dialects.OPENAI,
+        /**
+         * The URL when the route depends on streaming. Gemini has two separate
+         * endpoints, so one fixed URL sends a non-streaming request to an SSE
+         * route and gets back something the JSON reader cannot parse.
+         */
+        val urlFor: ((Boolean) -> String)? = null,
         val describeError: ((Int, String) -> ErrorInfo?)? = null,
         val shapeBody: ((JSONObject) -> Unit)? = null,
         val timeoutMs: Int = 300_000,
@@ -32,8 +44,8 @@ object Upstream {
         data class Err(val info: ErrorInfo) : Frame
     }
 
-    private fun open(cfg: Config, accept: String): HttpURLConnection =
-        (URL(cfg.url).openConnection() as HttpURLConnection).apply {
+    private fun open(cfg: Config, accept: String, stream: Boolean = false): HttpURLConnection =
+        (URL(cfg.urlFor?.invoke(stream) ?: cfg.url).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
             connectTimeout = 20_000
@@ -50,6 +62,7 @@ object Upstream {
 
     private fun failure(cfg: Config, status: Int, body: String): ErrorInfo {
         cfg.describeError?.invoke(status, body)?.let { return it }
+        Dialects.errorFromBody(cfg.dialect, status, body)?.let { return it }
 
         val message = runCatching {
             val json = JSONObject(body)
@@ -75,8 +88,8 @@ object Upstream {
             }
         }
 
-    /** Pull the two delta shapes every vendor uses out of one chunk. */
-    private fun framesFromChunk(payload: JSONObject, emit: (Frame) -> Unit) {
+    /** Pull the two delta shapes every OpenAI-compatible vendor uses out of a chunk. */
+    fun framesFromPayload(payload: JSONObject, emit: (Frame) -> Unit) {
         payload.optJSONObject("error")?.let {
             emit(Frame.Err(ErrorInfo(it.optString("message", "upstream error"), "upstream_stream_error", false)))
             return
@@ -115,9 +128,9 @@ object Upstream {
      * frame so the UI degrades instead of unmounting mid-render.
      */
     fun stream(cfg: Config, request: JSONObject, model: String, emit: (Frame) -> Unit) {
-        val body = buildBody(request, model, true).also { cfg.shapeBody?.invoke(it) }
+        val body = Dialects.requestBody(cfg.dialect, request, model, true).also { cfg.shapeBody?.invoke(it) }
 
-        val conn = runCatching { open(cfg, "text/event-stream") }.getOrElse {
+        val conn = runCatching { open(cfg, "text/event-stream", stream = true) }.getOrElse {
             emit(Frame.Err(ErrorInfo("Cannot reach ${cfg.url}: ${it.message}", "network_error", true)))
             emit(Frame.Done(null)); return
         }
@@ -140,7 +153,7 @@ object Upstream {
                 (cfg.describeError?.invoke(status, text) ?: EndpointProbe.envelopeError(text))?.let {
                     emit(Frame.Err(it)); emit(Frame.Done("error")); return
                 }
-                runCatching { framesFromChunk(JSONObject(text), emit) }
+                runCatching { Dialects.framesFromResponse(cfg.dialect, JSONObject(text), emit) }
                     .onFailure { emit(Frame.Delta(text)) }
                 emit(Frame.Done("stop")); return
             }
@@ -156,11 +169,11 @@ object Upstream {
                         return@forEachLine
                     }
                     runCatching {
-                        framesFromChunk(JSONObject(data)) { frame ->
+                        Dialects.framesFromStreamChunk(cfg.dialect, JSONObject(data)) { frame ->
                             // A finish_reason chunk and a trailing [DONE] both mean
                             // finished; emitting twice closes the run twice downstream.
                             if (frame is Frame.Done) {
-                                if (emittedDone) return@framesFromChunk
+                                if (emittedDone) return@framesFromStreamChunk
                                 emittedDone = true
                             }
                             emit(frame)
@@ -185,9 +198,9 @@ object Upstream {
         val reasoning = StringBuilder()
         var error: ErrorInfo? = null
 
-        val body = buildBody(request, model, false).also { cfg.shapeBody?.invoke(it) }
+        val body = Dialects.requestBody(cfg.dialect, request, model, false).also { cfg.shapeBody?.invoke(it) }
 
-        val conn = runCatching { open(cfg, "application/json") }.getOrElse {
+        val conn = runCatching { open(cfg, "application/json", stream = false) }.getOrElse {
             return Completion("", "", ErrorInfo("Cannot reach ${cfg.url}: ${it.message}", "network_error", true))
         }
 
@@ -201,7 +214,7 @@ object Upstream {
                 ?.let { return Completion("", "", it) }
 
             runCatching {
-                framesFromChunk(JSONObject(text)) { frame ->
+                Dialects.framesFromResponse(cfg.dialect, JSONObject(text)) { frame ->
                     when (frame) {
                         is Frame.Delta -> content.append(frame.text)
                         is Frame.Reasoning -> reasoning.append(frame.text)

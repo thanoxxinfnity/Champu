@@ -1,7 +1,7 @@
-import type { UpstreamConfig } from './openai-compat';
-import { requestKey } from './request-keys';
-import { POLLINATIONS_MODELS } from './registry';
-import { ProviderError, type ModelDescriptor } from './types';
+import type { UpstreamConfig } from './openai-compat.ts';
+import { requestKey } from './request-keys.ts';
+import { POLLINATIONS_MODELS } from './registry.ts';
+import { ProviderError, type ModelDescriptor } from './types.ts';
 
 /**
  * Pollinations.ai adapter — zero-key generation hub.

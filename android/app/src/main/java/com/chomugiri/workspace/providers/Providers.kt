@@ -38,8 +38,13 @@ object Nim {
                 "nim_unauthorized", false,
             )
             404 -> Upstream.ErrorInfo(
-                "NVIDIA NIM has no model at that id (404). Model ids rotate — refresh the model switcher. $detail".trim(),
-                "nim_model_not_found", false,
+                // Usually "your key has no entitlement to this one", not "this
+                // id does not exist" — so name a model that does work rather
+                // than leaving the user to guess.
+                ("This model is listed by NVIDIA but not available on your key (404). It has been removed " +
+                    "from the switcher — pick another; Kimi K3, Nemotron 3 Super 120B and GPT-OSS 20B are " +
+                    "known to work. $detail").trim(),
+                "nim_model_unserved", false,
             )
             410 -> Upstream.ErrorInfo(
                 "This NIM has been retired by NVIDIA and no longer serves requests. $detail Pick another model.".trim(),
@@ -54,10 +59,16 @@ object Nim {
         }
     }
 
-    fun chatConfig(key: String) = Upstream.Config(
+    fun chatConfig(key: String, modelId: String = "") = Upstream.Config(
         url = "$BASE/chat/completions",
         headers = headers(key),
-        describeError = ::describeError,
+        describeError = { status, body ->
+            // Learn from the refusal. The bundled list is a floor — entitlements
+            // differ per account — so remembering it here drops the id from the
+            // switcher on the next catalogue read instead of failing twice.
+            if (modelId.isNotEmpty() && Unserved.isUnservedError(status, body)) Unserved.remember(modelId)
+            describeError(status, body)
+        },
         shapeBody = { body -> if (body.optBoolean("stream")) body.put("stream_options", JSONObject().put("include_usage", true)) },
     )
 
@@ -67,7 +78,12 @@ object Nim {
         val body = Upstream.get("$BASE/models", headers(key)) ?: return null
         return runCatching {
             val data = JSONObject(body).optJSONArray("data") ?: JSONArray()
-            (0 until data.length()).mapNotNull { data.optJSONObject(it)?.optString("id")?.takeIf(String::isNotEmpty) }
+            val ids = (0 until data.length())
+                .mapNotNull { data.optJSONObject(it)?.optString("id")?.takeIf(String::isNotEmpty) }
+            // The catalogue is not a list of models this key can call: over half
+            // of it 404s on the first token, and embedding and safety NIMs are
+            // not chat models at all. Both were reaching the switcher.
+            Unserved.keepChatModels(ids)
         }.getOrNull()
     }
 

@@ -66,7 +66,7 @@ export const UNSERVED_IDS: ReadonlySet<string> = new Set([
  * classification, OCR, translation, reward scoring. Listing them in a chat
  * switcher is its own kind of broken: they answer, then fail strangely.
  */
-export const NON_CHAT = /embed|rerank|nemoguard|content-safety|safety-guard|topic-control|nemotron-parse|nvclip|deplot|kosmos|video-detector|riva-translate|340b-reward|arctic-embed|nemoretriever|ising-calibration/i;
+export const NON_CHAT = /embed|rerank|nemoguard|llama-guard|content-safety|safety-guard|topic-control|nemotron-parse|nvclip|deplot|kosmos|video-detector|riva-translate|340b-reward|arctic-embed|nemoretriever|ising-calibration/i;
 
 /** Learned during this process from a live 404, on top of the list above. */
 const learned = new Set<string>();

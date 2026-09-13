@@ -66,6 +66,12 @@ export interface CustomEndpointConfig {
   headers?: Record<string, string>;
   /** Path appended to baseUrl; defaults to `/chat/completions`. */
   chatPath?: string;
+  /**
+   * Which wire protocol the endpoint speaks. Detected by the probe and stored
+   * with the endpoint; absent means OpenAI-compatible, which is the default and
+   * the only one that used to be supported.
+   */
+  dialect?: 'openai' | 'anthropic' | 'gemini';
 }
 
 export interface ChatRequest {

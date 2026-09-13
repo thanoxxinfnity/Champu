@@ -67,7 +67,9 @@ async function handlePOST(req: NextRequest) {
         if (!body.custom?.baseUrl) {
           return Response.json({ error: 'A custom provider request needs `custom.baseUrl`.' }, { status: 400 });
         }
-        config = customChatConfig(body.custom);
+        // The model id is part of the route for Gemini-dialect endpoints, so
+        // the config cannot be built without it.
+        config = customChatConfig(body.custom, modelId);
         break;
       }
       default:

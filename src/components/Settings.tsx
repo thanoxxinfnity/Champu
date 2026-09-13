@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { DIALECT_LABELS, dialectFromUrl, type Dialect } from '@/lib/providers/dialects';
 import { useWorkspace } from '@/lib/store';
 import { db, isBrowser, type EndpointRecord } from '@/lib/db/schema';
 import { uid } from '@/lib/db/history';
@@ -206,6 +207,9 @@ function EndpointsTab() {
   const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [headersText, setHeadersText] = useState('');
+  // '' means "work it out from the URL and the probe", which is right almost
+  // always — but a gateway on an unusual path needs a way to be told.
+  const [dialect, setDialect] = useState<'' | Dialect>('');
   // Endpoints that do not publish /models are perfectly usable — you just have
   // to say which model to call. Without this field they could not be used at all.
   const [modelsText, setModelsText] = useState('');
@@ -261,7 +265,7 @@ function EndpointsTab() {
       const res = await fetch('/api/endpoints/probe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ baseUrl, apiKey: apiKey || undefined, headers }),
+        body: JSON.stringify({ baseUrl, apiKey: apiKey || undefined, headers, dialect: dialect || undefined }),
       });
       const data = (await res.json()) as CapabilityProbe;
       setProbe(data);
@@ -328,6 +332,11 @@ function EndpointsTab() {
       baseUrl: url,
       apiKey: apiKey || undefined,
       headers,
+      // Which protocol answered. Without it a stored Anthropic or Gemini
+      // endpoint would be called in OpenAI's dialect and fail every time.
+      // A protocol chosen by hand wins over detection; otherwise what the probe
+      // actually spoke, falling back to what the URL announces.
+      dialect: dialect || probe?.dialect || dialectFromUrl(url) || undefined,
       capabilities: probe?.ok && probe.capabilities.length ? probe.capabilities : ['chat'],
       models,
       routes: probe?.ok ? probe.routes : ['/chat/completions'],
@@ -366,8 +375,42 @@ function EndpointsTab() {
         <input value={baseUrl} onChange={(e) => edited(setBaseUrl)(e.target.value)} placeholder="https://api.example.com/v1" className={inputClass} style={inputStyle} spellCheck={false} />
       </Field>
 
-      <Field label="API key" hint="Sent as `Authorization: Bearer …` unless a custom Authorization header is supplied below.">
+      <Field
+        label="API key"
+        hint={
+          dialect === 'anthropic'
+            ? 'Sent as `x-api-key`, with `anthropic-version`, which is what an Anthropic endpoint reads.'
+            : dialect === 'gemini'
+              ? 'Sent as `x-goog-api-key`, which is what Gemini reads.'
+              : 'Sent as `Authorization: Bearer …` unless a custom header below supplies one. Anthropic and Gemini endpoints get their own header instead.'
+        }
+      >
         <input value={apiKey} onChange={(e) => edited(setApiKey)(e.target.value)} type="password" placeholder="sk-…" className={inputClass} style={inputStyle} spellCheck={false} />
+      </Field>
+
+      <Field
+        label="Protocol"
+        hint="Detected from the URL and confirmed by the probe. Set it by hand only if detection gets it wrong."
+      >
+        <div className="flex flex-wrap gap-1.5">
+          {([['', 'auto'], ['openai', 'OpenAI'], ['anthropic', 'Anthropic'], ['gemini', 'Gemini']] as const).map(
+            ([value, name]) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => edited(setDialect)(value as '' | Dialect)}
+                className="press mono rounded-lg border px-2.5 py-1.5 text-[10.5px]"
+                style={{
+                  borderColor: dialect === value ? 'var(--accent)' : 'var(--line)',
+                  color: dialect === value ? 'var(--accent)' : 'var(--ink-dim)',
+                  background: dialect === value ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'transparent',
+                }}
+              >
+                {name}
+              </button>
+            ),
+          )}
+        </div>
       </Field>
 
       <Field label="Custom headers" hint='JSON object. Example: {"X-Api-Version": "2024-10", "X-Org": "acme"}'>
@@ -446,6 +489,11 @@ function EndpointsTab() {
           <p className="mono text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--accent)' }}>
             detected · {probe.latencyMs}ms
           </p>
+          {probe.dialect && (
+            <p className="mono mt-1 text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+              speaks {DIALECT_LABELS[probe.dialect]}
+            </p>
+          )}
           <div className="mt-1.5 flex flex-wrap gap-1">
             {probe.capabilities.map((c) => (
               <span key={c} className="mono rounded px-1.5 py-0.5 text-[9.5px]" style={{ background: 'var(--surface)', color: 'var(--ink-dim)' }}>

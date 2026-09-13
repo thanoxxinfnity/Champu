@@ -1,5 +1,5 @@
 import type { EndpointRecord } from '@/lib/db/schema';
-import type { CustomEndpointConfig, ModelCapability, ModelDescriptor } from './types';
+import type { CustomEndpointConfig, ModelCapability, ModelDescriptor } from './types.ts';
 
 /**
  * Custom endpoints, as entries in the model switcher.
@@ -59,5 +59,8 @@ export function endpointConfigFor(
     apiKey: endpoint.apiKey,
     headers: endpoint.headers,
     chatPath: endpoint.chatPath,
+    // Without this an Anthropic or Gemini endpoint is called in OpenAI's
+    // dialect — wrong route, wrong auth header, wrong body.
+    dialect: endpoint.dialect,
   };
 }

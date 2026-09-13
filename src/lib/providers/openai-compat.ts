@@ -1,5 +1,6 @@
-import { envelopeError, type ErrorInfo } from './envelope-error';
-import { ProviderError, type ChatRequest, type StreamFrame } from './types';
+import { errorFromBody, framesFromResponse, framesFromStreamChunk, requestBody, type Dialect } from './dialects.ts';
+import { envelopeError, type ErrorInfo } from './envelope-error.ts';
+import { ProviderError, type ChatRequest, type StreamFrame } from './types.ts';
 
 /**
  * One OpenAI-compatible transport shared by NIM, Pollinations and any custom
@@ -9,7 +10,20 @@ import { ProviderError, type ChatRequest, type StreamFrame } from './types';
 
 export interface UpstreamConfig {
   url: string;
+  /**
+   * The URL when the route itself depends on streaming. Gemini has two separate
+   * endpoints — `:generateContent` and `:streamGenerateContent?alt=sse` — so a
+   * single fixed URL would send a non-streaming request to an SSE route and get
+   * back something the JSON reader cannot parse.
+   */
+  urlFor?: (stream: boolean) => string;
   headers: Record<string, string>;
+  /**
+   * Which wire protocol this upstream speaks. Defaults to OpenAI's, which is
+   * what NIM, Pollinations and most gateways use; an Anthropic or Gemini
+   * endpoint needs its own request shape, headers and response reader.
+   */
+  dialect?: Dialect;
   /** Body transform applied after the standard OpenAI payload is assembled. */
   shapeBody?: (body: Record<string, unknown>, req: ChatRequest) => Record<string, unknown>;
   /** Upstreams that reject `stream: true` fall back to a single-shot request. */
@@ -24,18 +38,13 @@ export interface UpstreamConfig {
   describeError?: (status: number, body: string) => ErrorInfo | null;
 }
 
-export function buildBody(req: ChatRequest, modelId: string, stream: boolean): Record<string, unknown> {
-  const body: Record<string, unknown> = {
-    model: modelId,
-    messages: req.messages,
-    stream,
-  };
-  if (req.temperature !== undefined) body.temperature = req.temperature;
-  if (req.topP !== undefined) body.top_p = req.topP;
-  if (req.maxTokens !== undefined) body.max_tokens = req.maxTokens;
-  if (req.stop?.length) body.stop = req.stop;
-  if (req.json) body.response_format = { type: 'json_object' };
-  return body;
+export function buildBody(
+  req: ChatRequest,
+  modelId: string,
+  stream: boolean,
+  dialect: Dialect = 'openai',
+): Record<string, unknown> {
+  return requestBody(dialect, req, modelId, stream);
 }
 
 interface DescribedError {
@@ -47,7 +56,8 @@ interface DescribedError {
 async function readError(res: Response, cfg: UpstreamConfig): Promise<DescribedError> {
   const text = await res.text().catch(() => '');
 
-  const described = cfg.describeError?.(res.status, text);
+  const dialectError = errorFromBody(cfg.dialect ?? 'openai', res.status, text);
+  const described = cfg.describeError?.(res.status, text) ?? (dialectError ? { ...dialectError, retryable: isRetryable(res.status) } : null);
   if (described) {
     return {
       message: described.message,
@@ -98,7 +108,9 @@ interface ChunkPayload {
   error?: { message?: string } | string;
 }
 
-function framesFromChunk(payload: ChunkPayload): StreamFrame[] {
+function framesFromChunk(payload: ChunkPayload, dialect: Dialect = 'openai'): StreamFrame[] {
+  if (dialect !== 'openai') return framesFromStreamChunk(dialect, payload);
+
   const out: StreamFrame[] = [];
 
   if (payload.error) {
@@ -140,8 +152,9 @@ export async function* streamChat(
   modelId: string,
   signal?: AbortSignal,
 ): AsyncGenerator<StreamFrame> {
+  const dialect = cfg.dialect ?? 'openai';
   const wantStream = req.stream !== false && cfg.supportsStreaming !== false;
-  let body = buildBody(req, modelId, wantStream);
+  let body = buildBody(req, modelId, wantStream, dialect);
   if (cfg.shapeBody) body = cfg.shapeBody(body, req);
 
   const timeout = AbortSignal.timeout(cfg.timeoutMs ?? 300_000);
@@ -149,7 +162,7 @@ export async function* streamChat(
 
   let res: Response;
   try {
-    res = await fetch(cfg.url, {
+    res = await fetch(cfg.urlFor?.(wantStream) ?? cfg.url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: wantStream ? 'text/event-stream' : 'application/json', ...cfg.headers },
       body: JSON.stringify(body),
@@ -188,7 +201,7 @@ export async function* streamChat(
 
     try {
       const payload = JSON.parse(text) as ChunkPayload;
-      const frames = framesFromChunk(payload);
+      const frames = dialect === 'openai' ? framesFromChunk(payload) : framesFromResponse(dialect, payload);
       if (!frames.some((f) => f.type === 'delta' || f.type === 'reasoning')) {
         // Some zero-key endpoints answer with a bare string body.
         yield { type: 'delta', delta: text };
@@ -239,7 +252,7 @@ export async function* streamChat(
             continue;
           }
           try {
-            for (const f of framesFromChunk(JSON.parse(data) as ChunkPayload)) {
+            for (const f of framesFromChunk(JSON.parse(data) as ChunkPayload, dialect)) {
               if (f.type === 'done') {
                 if (emittedDone) continue;
                 emittedDone = true;

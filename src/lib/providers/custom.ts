@@ -1,7 +1,19 @@
-import { chatBaseCandidates, chatModelsOnly, modelIdsFrom, modelListCandidates, normalizeBase } from './model-list';
-import type { UpstreamConfig } from './openai-compat';
-import { inferCapabilities, labelFor, vendorFor } from './registry';
-import { ProviderError, type CustomEndpointConfig, type ModelCapability, type ModelDescriptor } from './types';
+import {
+  authHeaders,
+  chatUrl,
+  dialectFromUrl,
+  DIALECT_LABELS,
+  DIALECTS,
+  hasAuthHeader,
+  modelIdsFromList,
+  modelListUrl,
+  normalizeBase as normalizeForDialect,
+  type Dialect,
+} from './dialects.ts';
+import { chatBaseCandidates, chatModelsOnly, modelIdsFrom, modelListCandidates, normalizeBase } from './model-list.ts';
+import type { UpstreamConfig } from './openai-compat.ts';
+import { inferCapabilities, labelFor, vendorFor } from './registry.ts';
+import { ProviderError, type CustomEndpointConfig, type ModelCapability, type ModelDescriptor } from './types.ts';
 
 /**
  * Universal custom model gateway.
@@ -44,27 +56,46 @@ export function assertSafeEndpoint(baseUrl: string): URL {
 /** Header names the gateway controls itself; a user header must not clobber them. */
 const RESERVED = new Set(['host', 'content-length', 'connection', 'transfer-encoding']);
 
-export function customHeaders(cfg: CustomEndpointConfig): Record<string, string> {
+export function customHeaders(cfg: CustomEndpointConfig, dialect?: Dialect): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(cfg.headers ?? {})) {
     if (!k || RESERVED.has(k.toLowerCase())) continue;
     out[k] = v;
   }
-  if (cfg.apiKey && !Object.keys(out).some((k) => k.toLowerCase() === 'authorization')) {
-    out.Authorization = `Bearer ${cfg.apiKey}`;
+
+  // Each dialect authenticates with its own header: Anthropic reads x-api-key
+  // and requires anthropic-version, Gemini reads x-goog-api-key. Sending a
+  // Bearer token to either is a 401 every time — which is half of why a working
+  // key looked like a broken endpoint.
+  const spoken = dialect ?? cfg.dialect ?? 'openai';
+  if (!hasAuthHeader(spoken, out)) Object.assign(out, authHeaders(spoken, cfg.apiKey));
+  else if (spoken === 'anthropic' && !Object.keys(out).some((k) => k.toLowerCase() === 'anthropic-version')) {
+    Object.assign(out, { 'anthropic-version': authHeaders('anthropic')['anthropic-version'] });
   }
   return out;
 }
 
-export function customChatConfig(cfg: CustomEndpointConfig): UpstreamConfig {
+export function customChatConfig(cfg: CustomEndpointConfig, modelId = ''): UpstreamConfig {
   // The stored base can still be a pasted endpoint (added by hand, without a
   // probe), and appending /chat/completions to /v1/chat/completions asks for a
   // route that does not exist.
-  const base = assertSafeEndpoint(normalizeBase(cfg.baseUrl)).toString().replace(/\/+$/, '');
-  const path = (cfg.chatPath ?? '/chat/completions').replace(/^\/?/, '/');
+  const dialect: Dialect = cfg.dialect ?? dialectFromUrl(cfg.baseUrl) ?? 'openai';
+  const base = assertSafeEndpoint(normalizeForDialect(cfg.baseUrl, dialect)).toString().replace(/\/+$/, '');
+
+  // An explicit chatPath is the user overriding detection, and only makes sense
+  // for the OpenAI shape — the other two put the model in the path themselves.
+  const url =
+    cfg.chatPath && dialect === 'openai'
+      ? `${base}${cfg.chatPath.replace(/^\/?/, '/')}`
+      : chatUrl(dialect, base, modelId, true);
+
   return {
-    url: `${base}${path}`,
-    headers: customHeaders(cfg),
+    url,
+    // Gemini routes streaming and non-streaming to different paths, so the URL
+    // cannot be decided until the request is made.
+    urlFor: cfg.chatPath && dialect === 'openai' ? undefined : (stream) => chatUrl(dialect, base, modelId, stream),
+    headers: customHeaders(cfg, dialect),
+    dialect,
     supportsStreaming: true,
     timeoutMs: 300_000,
     shapeBody: (body) => {
@@ -79,6 +110,8 @@ export function customChatConfig(cfg: CustomEndpointConfig): UpstreamConfig {
 export interface CapabilityProbe {
   ok: boolean;
   baseUrl: string;
+  /** Which wire protocol answered. Stored with the endpoint and used for chat. */
+  dialect?: Dialect;
   /** Union of capabilities across all discovered models. */
   capabilities: ModelCapability[];
   models: ModelDescriptor[];
@@ -141,10 +174,49 @@ export async function probeEndpoint(cfg: CustomEndpointConfig): Promise<Capabili
     };
   }
 
-  const headers = customHeaders(cfg);
   const capabilities = new Set<ModelCapability>();
   const routes: string[] = [];
   let models: ModelDescriptor[] = [];
+
+  // Which protocol this endpoint actually speaks.
+  //
+  // Only one of three is OpenAI's. An Anthropic gateway serves /v1/messages and
+  // reads x-api-key; Gemini puts the model in the path and reads x-goog-api-key.
+  // Asking either in OpenAI's dialect 404s the route or 401s the key, and the
+  // endpoint gets blamed for a protocol mismatch. The URL usually announces
+  // which it is; when it does not, each is tried in turn.
+  const hinted = cfg.dialect ?? dialectFromUrl(cfg.baseUrl);
+  const order: Dialect[] = hinted ? [hinted, ...DIALECTS.filter((d) => d !== hinted)] : DIALECTS;
+
+  let dialect: Dialect = hinted ?? 'openai';
+  let spoken = false;
+
+  for (const candidate of order) {
+    const candidateBase = normalizeForDialect(cfg.baseUrl, candidate);
+    const answer = await speaks(candidate, candidateBase, customHeaders(cfg, candidate));
+    if (!answer.ok) {
+      if (answer.auth) {
+        return {
+          ok: false,
+          baseUrl: candidateBase,
+          dialect: candidate,
+          capabilities: [],
+          models: [],
+          routes: [],
+          latencyMs: Date.now() - started,
+          error: `Endpoint rejected the credentials (${answer.status}). Check the API key, or the custom auth header if the endpoint wants its own.`,
+        };
+      }
+      continue;
+    }
+    dialect = candidate;
+    base = candidateBase;
+    spoken = true;
+    routes.push(answer.route);
+    break;
+  }
+
+  const headers = customHeaders(cfg, dialect);
 
   // Which base can actually be talked to.
   //
@@ -153,12 +225,38 @@ export async function probeEndpoint(cfg: CustomEndpointConfig): Promise<Capabili
   // derived from one is wrong for the other. Picking the wrong one leaves an
   // endpoint that probes perfectly and then cannot answer a single message,
   // which is the worst of both.
-  const chatBase = await findChatBase(base, headers);
-  if (chatBase && chatBase !== base) {
-    base = chatBase;
-    routes.push(`chat at ${new URL(chatBase).pathname || '/'}`);
-  } else if (chatBase) {
-    routes.push('/chat/completions');
+  if (dialect === 'openai' && !spoken) {
+    const chatBase = await findChatBase(base, headers);
+    if (chatBase && chatBase !== base) {
+      base = chatBase;
+      routes.push(`chat at ${new URL(chatBase).pathname || '/'}`);
+    } else if (chatBase) {
+      routes.push('/chat/completions');
+    }
+  }
+
+  // A non-OpenAI endpoint publishes its models at its own path, in its own
+  // shape, and none of the OpenAI-shaped fallbacks apply.
+  if (dialect !== 'openai') {
+    const ids = await listModelsFor(dialect, base, headers);
+    if (ids.length) {
+      routes.push('/models');
+      models = ids.map((id) => describeModel(id));
+      for (const m of models) for (const c of m.capabilities) capabilities.add(c);
+    }
+    capabilities.add('chat');
+    return {
+      ok: routes.length > 0,
+      baseUrl: base,
+      dialect,
+      capabilities: Array.from(capabilities),
+      models,
+      routes,
+      latencyMs: Date.now() - started,
+      error: routes.length
+        ? undefined
+        : `Nothing answered at ${base} in the ${dialect} dialect. Check the base URL and the key; you can still add the endpoint and type the model id by hand.`,
+    };
   }
 
   // 1. The model list.
@@ -207,18 +305,7 @@ export async function probeEndpoint(cfg: CustomEndpointConfig): Promise<Capabili
       // user picks one that cannot answer.
       const ids = chatModelsOnly(modelIdsFrom(await res.json().catch(() => null)));
 
-      models = ids.map((id) => {
-        const caps = capabilitiesFromId(id);
-        return {
-          id,
-          provider: 'custom' as const,
-          label: labelFor(id),
-          vendor: vendorFor(id),
-          capabilities: caps,
-          emitsReasoning: caps.includes('reasoning'),
-          origin: 'catalogue' as const,
-        };
-      });
+      models = ids.map((id) => describeModel(id));
       for (const m of models) for (const c of m.capabilities) capabilities.add(c);
     }
   } catch (err) {
@@ -255,6 +342,7 @@ export async function probeEndpoint(cfg: CustomEndpointConfig): Promise<Capabili
   return {
     ok: routes.length > 0,
     baseUrl: base,
+    dialect,
     capabilities: Array.from(capabilities),
     models,
     routes,
@@ -302,4 +390,89 @@ async function findChatBase(base: string, headers: Record<string, string>): Prom
     }
   }
   return null;
+}
+
+
+/** One model descriptor, however the id was discovered. */
+function describeModel(id: string): ModelDescriptor {
+  const caps = capabilitiesFromId(id);
+  return {
+    id,
+    provider: 'custom',
+    label: labelFor(id),
+    vendor: vendorFor(id),
+    capabilities: caps,
+    emitsReasoning: caps.includes('reasoning'),
+    origin: 'catalogue',
+  };
+}
+
+/**
+ * Whether an endpoint answers in a given dialect.
+ *
+ * Existence is inferred from the refusal, not from a successful completion: a
+ * 404 or 501 means the route is not there, and anything else — a 400 about the
+ * model, a 422 about the id — means it is. A 401 or 403 is conclusive in the
+ * other direction: the route exists and the credentials were refused, which is
+ * worth reporting rather than trying two more protocols and blaming the URL.
+ */
+async function speaks(
+  dialect: Dialect,
+  base: string,
+  headers: Record<string, string>,
+): Promise<{ ok: boolean; route: string; status?: number; auth?: boolean }> {
+  const probeModel = dialect === 'gemini' ? 'gemini-3-flash' : '__chomugiri_probe__';
+  const url = chatUrl(dialect, base, probeModel, false);
+
+  const body =
+    dialect === 'anthropic'
+      ? { model: probeModel, max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] }
+      : dialect === 'gemini'
+        ? { contents: [{ role: 'user', parts: [{ text: 'hi' }] }] }
+        : { model: probeModel, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 };
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(12_000),
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, route: '', status: res.status, auth: true };
+    }
+    if (res.status === 404 || res.status === 501 || res.status === 405) return { ok: false, route: '' };
+
+    // Some gateways answer 200 with the error in the body; a "no route" message
+    // there means the same as a 404.
+    if (res.ok) {
+      const text = await res.clone().text().catch(() => '');
+      if (/not supported|no route|not found/i.test(text) && /"code"\s*:\s*(404|501)/.test(text)) {
+        return { ok: false, route: '' };
+      }
+    }
+
+    const path = (() => {
+      try {
+        return new URL(url).pathname;
+      } catch {
+        return url;
+      }
+    })();
+    return { ok: true, route: dialect === 'openai' ? '/chat/completions' : `${DIALECT_LABELS[dialect]} at ${path}` };
+  } catch {
+    return { ok: false, route: '' };
+  }
+}
+
+/** The model list, read in the dialect's own shape. */
+async function listModelsFor(dialect: Dialect, base: string, headers: Record<string, string>): Promise<string[]> {
+  try {
+    const res = await fetch(modelListUrl(dialect, base), { headers, signal: AbortSignal.timeout(12_000) });
+    if (!res.ok) return [];
+    return modelIdsFromList(dialect, await res.json().catch(() => null));
+  } catch {
+    return [];
+  }
 }

@@ -1,4 +1,4 @@
-import type { ModelCapability, ModelDescriptor, ProviderId } from './types';
+import type { ModelCapability, ModelDescriptor, ProviderId } from './types.ts';
 
 /**
  * Bundled model registry.

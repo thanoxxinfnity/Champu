@@ -1,5 +1,6 @@
 package com.chomugiri.workspace.server
 
+import com.chomugiri.workspace.providers.Dialects
 import com.chomugiri.workspace.providers.EndpointProbe
 import com.chomugiri.workspace.providers.Nim
 import com.chomugiri.workspace.providers.Pollinations
@@ -240,15 +241,22 @@ class ApiRouter(private val secrets: SecretStore) {
     private fun configFor(provider: String, body: JSONObject): Pair<Upstream.Config?, String?> = when (provider) {
         "nim" -> {
             if (nimKey.isEmpty()) null to "No NVIDIA NIM key configured. Open Settings → API Keys, or switch the model to Pollinations (zero-key)."
-            else Nim.chatConfig(nimKey) to null
+            else Nim.chatConfig(nimKey, body.optString("model")) to null
         }
         "pollinations" -> Pollinations.chatConfig(pollinationsToken) to null
         "custom" -> {
             val custom = body.optJSONObject("custom")
+            val raw = custom?.optString("baseUrl").orEmpty()
+
+            // Which protocol the endpoint speaks decides the route, the auth
+            // header and the body shape. Stored with the endpoint by the probe;
+            // inferred from the URL for one added by hand.
+            val dialect = custom?.optString("dialect").orEmpty().ifEmpty { Dialects.fromUrl(raw) ?: Dialects.OPENAI }
+
             // The stored base can still be a pasted endpoint (added by hand,
             // without a probe); appending /chat/completions to a base that
             // already ends in it asks for a route that does not exist.
-            val base = EndpointProbe.normalizeBase(custom?.optString("baseUrl").orEmpty())
+            val base = Dialects.normalizeBase(raw, dialect)
             if (base.isEmpty()) null to "A custom provider request needs `custom.baseUrl`."
             else {
                 val headers = mutableMapOf<String, String>()
@@ -256,13 +264,23 @@ class ApiRouter(private val secrets: SecretStore) {
                     h.keys().forEach { k -> headers[k] = h.optString(k) }
                 }
                 val apiKey = custom?.optString("apiKey").orEmpty()
-                if (apiKey.isNotEmpty() && headers.keys.none { it.equals("authorization", true) }) {
-                    headers["Authorization"] = "Bearer $apiKey"
+                if (!Dialects.hasAuthHeader(dialect, headers)) {
+                    headers.putAll(Dialects.authHeaders(dialect, apiKey))
                 }
-                val path = custom?.optString("chatPath").orEmpty().ifEmpty { "/chat/completions" }
+
+                val model = body.optString("model")
+                val chatPath = custom?.optString("chatPath").orEmpty()
+                // An explicit path is the user overriding detection, and only
+                // makes sense for the OpenAI shape — the others put the model in
+                // the path themselves.
+                val override = chatPath.isNotEmpty() && dialect == Dialects.OPENAI
+
                 Upstream.Config(
-                    url = base + if (path.startsWith("/")) path else "/$path",
+                    url = if (override) base + if (chatPath.startsWith("/")) chatPath else "/$chatPath"
+                    else Dialects.chatUrl(dialect, base, model, true),
                     headers = headers,
+                    dialect = dialect,
+                    urlFor = if (override) null else ({ stream -> Dialects.chatUrl(dialect, base, model, stream) }),
                     shapeBody = { it.remove("stream_options") },
                 ) to null
             }
@@ -412,7 +430,8 @@ class ApiRouter(private val secrets: SecretStore) {
         // A pasted endpoint is not a base. People copy the URL out of the docs —
         // ".../v1/models", ".../v1/chat/completions" — and taking it literally
         // makes the probe ask for "/v1/models/models", then blames the endpoint.
-        val base = EndpointProbe.normalizeBase(body.optString("baseUrl"))
+        val raw = body.optString("baseUrl")
+        var base = EndpointProbe.normalizeBase(raw)
         if (base.isEmpty()) { response.json(400, err("`baseUrl` is required.", "missing_base_url")); return }
 
         val host = runCatching { URL(base).host }.getOrNull()
@@ -423,17 +442,99 @@ class ApiRouter(private val secrets: SecretStore) {
             response.json(403, JSONObject().put("ok", false).put("baseUrl", base).put("error", "That host is blocked (cloud metadata endpoint).").toString()); return
         }
 
+        // Only the user's own headers here. Which auth header the key belongs in
+        // depends on the dialect, and putting a Bearer token on an Anthropic or
+        // Gemini request is a 401 — the auth header is added once the protocol
+        // is known, below.
         val headers = mutableMapOf<String, String>()
         body.optJSONObject("headers")?.let { h -> h.keys().forEach { k -> headers[k] = h.optString(k) } }
         val apiKey = body.optString("apiKey")
-        if (apiKey.isNotEmpty() && headers.keys.none { it.equals("authorization", true) }) {
-            headers["Authorization"] = "Bearer $apiKey"
-        }
 
         val started = System.currentTimeMillis()
         val capabilities = linkedSetOf<String>()
         val routes = JSONArray()
         val models = JSONArray()
+
+        // 0. Which protocol this endpoint actually speaks.
+        //
+        // Only one of three is OpenAI's. An Anthropic gateway serves
+        // /v1/messages and reads x-api-key; Gemini puts the model in the path
+        // and reads x-goog-api-key. Asking either in OpenAI's dialect 404s the
+        // route or 401s the key, and the endpoint gets blamed for a protocol
+        // mismatch.
+        // An explicit choice from Settings wins over detection.
+        val hinted = body.optString("dialect").takeIf { it.isNotEmpty() && Dialects.ALL.contains(it) }
+            ?: Dialects.fromUrl(raw)
+        val order = if (hinted != null) listOf(hinted) + Dialects.ALL.filter { it != hinted } else Dialects.ALL
+
+        var dialect = hinted ?: Dialects.OPENAI
+        var spoken = false
+
+        for (candidate in order) {
+            val candidateBase = Dialects.normalizeBase(raw, candidate)
+            val candidateHeaders = headers.toMutableMap().apply {
+                if (!Dialects.hasAuthHeader(candidate, this)) putAll(Dialects.authHeaders(candidate, apiKey))
+            }
+            val answer = speaksDialect(candidate, candidateBase, candidateHeaders)
+            if (answer.auth) {
+                response.json(422, JSONObject()
+                    .put("ok", false).put("baseUrl", candidateBase).put("dialect", candidate)
+                    .put("capabilities", JSONArray()).put("models", JSONArray()).put("routes", JSONArray())
+                    .put("latencyMs", System.currentTimeMillis() - started)
+                    .put("error", "Endpoint rejected the credentials (${answer.status}). Check the API key, or the custom auth header if the endpoint wants its own.")
+                    .toString())
+                return
+            }
+            if (!answer.ok) continue
+            dialect = candidate
+            base = candidateBase
+            spoken = true
+            routes.put(answer.route)
+            break
+        }
+
+        if (!Dialects.hasAuthHeader(dialect, headers)) headers.putAll(Dialects.authHeaders(dialect, apiKey))
+
+        // A non-OpenAI endpoint publishes its models at its own path, in its own
+        // shape, and none of the OpenAI-shaped fallbacks apply.
+        if (dialect != Dialects.OPENAI) {
+            val ids = Dialects.modelIdsFromList(
+                dialect,
+                Upstream.getWithStatus(Dialects.modelListUrl(dialect, base), headers, 15_000).body,
+            )
+            if (ids.isNotEmpty()) {
+                routes.put("/models")
+                ids.forEach { id ->
+                    val caps = ModelMeta.capabilities(id)
+                    capabilities.addAll(caps)
+                    models.put(
+                        JSONObject().put("id", id).put("provider", "custom")
+                            .put("label", ModelMeta.label(id)).put("vendor", ModelMeta.vendor(id))
+                            .put("capabilities", JSONArray(caps)).put("origin", "catalogue")
+                    )
+                }
+            }
+            capabilities.add("chat")
+
+            val answered = routes.length() > 0
+            response.json(
+                if (answered) 200 else 422,
+                JSONObject()
+                    .put("ok", answered).put("baseUrl", base).put("dialect", dialect)
+                    .put("capabilities", JSONArray(capabilities.toList()))
+                    .put("models", models).put("routes", routes)
+                    .put("latencyMs", System.currentTimeMillis() - started)
+                    .apply {
+                        if (!answered) put(
+                            "error",
+                            "Nothing answered at $base in the $dialect dialect. Check the base URL and the key; " +
+                                "you can still add the endpoint and type the model id by hand."
+                        )
+                    }
+                    .toString()
+            )
+            return
+        }
 
         // 1. Which base can actually be talked to.
         //
@@ -441,10 +542,12 @@ class ApiRouter(private val secrets: SecretStore) {
         // serves chat at /v1/chat/completions and lists models at
         // /api/v1/models — so a base derived from one is wrong for the other.
         var chatBase = base
-        findChatBase(base, headers)?.let { found ->
-            chatBase = found
-            val path = runCatching { URL(found).path }.getOrNull().orEmpty()
-            routes.put(if (found == base) "/chat/completions" else "chat at ${path.ifEmpty { "/" }}")
+        if (!spoken) {
+            findChatBase(base, headers)?.let { found ->
+                chatBase = found
+                val path = runCatching { URL(found).path }.getOrNull().orEmpty()
+                routes.put(if (found == base) "/chat/completions" else "chat at ${path.ifEmpty { "/" }}")
+            }
         }
 
         // 2. The model list. "<base>/models with an OpenAI envelope" is the
@@ -509,7 +612,7 @@ class ApiRouter(private val secrets: SecretStore) {
         response.json(
             if (ok) 200 else 422,
             JSONObject()
-                .put("ok", ok).put("baseUrl", chatBase)
+                .put("ok", ok).put("baseUrl", chatBase).put("dialect", dialect)
                 .put("capabilities", JSONArray(capabilities.toList()))
                 .put("models", models).put("routes", routes)
                 .put("latencyMs", System.currentTimeMillis() - started)
@@ -522,6 +625,69 @@ class ApiRouter(private val secrets: SecretStore) {
                 }
                 .toString()
         )
+    }
+
+    private data class Spoken(val ok: Boolean, val route: String, val status: Int = 0, val auth: Boolean = false)
+
+    /**
+     * Whether an endpoint answers in a given dialect.
+     *
+     * Existence is inferred from the refusal, not from a successful completion:
+     * 404/405/501 means the route is not there, and anything else — a 400 about
+     * the model, a 422 about the id — means it is. 401/403 is conclusive the
+     * other way: the route exists and the credentials were refused, which is
+     * worth saying rather than trying two more protocols and blaming the URL.
+     */
+    private fun speaksDialect(dialect: String, base: String, headers: Map<String, String>): Spoken {
+        val probeModel = if (dialect == Dialects.GEMINI) "gemini-3-flash" else "__chomugiri_probe__"
+        val url = Dialects.chatUrl(dialect, base, probeModel, false)
+
+        val payload = when (dialect) {
+            Dialects.ANTHROPIC -> JSONObject()
+                .put("model", probeModel).put("max_tokens", 1)
+                .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", "hi")))
+            Dialects.GEMINI -> JSONObject().put(
+                "contents",
+                JSONArray().put(
+                    JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", "hi")))
+                )
+            )
+            else -> JSONObject()
+                .put("model", probeModel).put("max_tokens", 1)
+                .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", "hi")))
+        }.toString()
+
+        val result = runCatching {
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"; doOutput = true
+                connectTimeout = 10_000; readTimeout = 12_000
+                setRequestProperty("Content-Type", "application/json")
+                headers.forEach { (k, v) -> setRequestProperty(k, v) }
+            }
+            try {
+                conn.outputStream.use { it.write(payload.toByteArray()) }
+                val status = conn.responseCode
+                val text = runCatching {
+                    (if (status in 200..299) conn.inputStream else conn.errorStream)
+                        ?.bufferedReader()?.use { r -> r.readText() }
+                }.getOrNull().orEmpty()
+                status to text
+            } finally { conn.disconnect() }
+        }.getOrNull() ?: return Spoken(false, "")
+
+        val (status, text) = result
+        if (status == 401 || status == 403) return Spoken(false, "", status, auth = true)
+        if (status == 404 || status == 405 || status == 501) return Spoken(false, "")
+
+        // Some gateways answer 200 with the error in the body; a "no route"
+        // message there means the same as a 404.
+        if (status in 200..299 &&
+            Regex("not supported|no route|not found", RegexOption.IGNORE_CASE).containsMatchIn(text) &&
+            Regex("\"code\"\\s*:\\s*(404|501)").containsMatchIn(text)
+        ) return Spoken(false, "")
+
+        val path = runCatching { URL(url).path }.getOrNull().orEmpty()
+        return Spoken(true, if (dialect == Dialects.OPENAI) "/chat/completions" else "$dialect at $path")
     }
 
     /**

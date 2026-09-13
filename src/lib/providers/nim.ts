@@ -1,9 +1,9 @@
-import { inferCapabilities, labelFor, NIM_MODELS, resolveModelId, vendorFor } from './registry';
-import { keyFingerprint, requestKey } from './request-keys';
-import { isUnserved, isUnservedError, NON_CHAT, rememberUnserved } from './unserved';
-import type { UpstreamConfig } from './openai-compat';
-import { completeChat } from './openai-compat';
-import { ProviderError, type ChatRequest, type ModelDescriptor } from './types';
+import { inferCapabilities, labelFor, NIM_MODELS, resolveModelId, vendorFor } from './registry.ts';
+import { keyFingerprint, requestKey } from './request-keys.ts';
+import { isUnserved, isUnservedError, NON_CHAT, rememberUnserved } from './unserved.ts';
+import type { UpstreamConfig } from './openai-compat.ts';
+import { completeChat } from './openai-compat.ts';
+import { ProviderError, type ChatRequest, type ModelDescriptor } from './types.ts';
 
 /**
  * NVIDIA NIM adapter.
