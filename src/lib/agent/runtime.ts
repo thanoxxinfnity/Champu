@@ -11,6 +11,7 @@ import { runFinished, runStarted } from '@/lib/shell/run-state';
 import { advancePlan, NO_EVIDENCE, settleRemaining, type RunEvidence } from './progress';
 import { buildPackExport, describeExport, detectPacks, missingGeometries, validatePacks } from '@/lib/suites/minecraft/pack';
 import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geometry';
+import { planBrief, planGame, planSummary } from '@/lib/suites/godot/plan';
 import { plannedTextures, texturePrompt, textureArtifact, toPixelArt } from '@/lib/suites/minecraft/texture';
 import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types';
 import type { CustomEndpointConfig } from '@/lib/providers/types';
@@ -611,6 +612,24 @@ export async function send(opts: SendOptions): Promise<void> {
       if (first) setTaskStatus(first.id, 'in_progress');
     }
 
+    // A game is designed before it is written. Read deterministically from the
+    // prompt so the same request plans the same game every time — and so the
+    // user can correct it in one sentence instead of after a whole build.
+    const design = suite === 'godot' ? planGame(input) : null;
+    if (design) {
+      useWorkspace.getState().setThinking(true, `Planning ${design.name}…`);
+      // Shown before the build, not after it. A misread prompt costs one
+      // sentence to correct here and a whole regenerated project later.
+      const note = {
+        id: uid('msg'),
+        role: 'system' as const,
+        content: `**Here is the game I am about to build.** Say so if any of it is wrong.\n\n${planSummary(design)}`,
+        createdAt: Date.now(),
+      };
+      emit(note);
+      void appendMessage({ ...note, sessionId, suite });
+    }
+
     // ── Stream the answer ───────────────────────────────────────────────────
     const systemPrompt = buildSystemPrompt({
       lane,
@@ -628,6 +647,7 @@ export async function send(opts: SendOptions): Promise<void> {
       attachments: attachments.map((a) => ({ name: a.name, kind: a.kind, bytes: a.bytes })),
       workspaceFiles: [...useWorkspace.getState().files.keys()],
       buildingSite: wantsSite(input),
+      ...(design ? { gamePlan: planBrief(design) } : {}),
     });
 
     const history = historyFor(10);

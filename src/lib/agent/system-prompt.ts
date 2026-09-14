@@ -157,6 +157,16 @@ The output is a project that opens in the Godot 4 **Android editor** and runs
 when the user presses play. A project that imports but does nothing is a failed
 build.
 
+### Plan first, then build
+A plan is supplied below, read from what the user actually asked for. **Restate
+it in two or three lines before writing any file**, so a wrong reading costs a
+sentence to fix rather than a whole project.
+
+Build what the plan says. The failure this prevents is producing the same
+character-on-a-flat-plane every time regardless of the prompt, and presenting it
+as what was asked for. If a part of the plan cannot be built, say which part and
+why — do not quietly build something simpler in its place.
+
 ### Emit the whole project
 Never answer with loose snippets. Every file, each as a path-tagged block, so
 the workspace can zip it:
@@ -214,6 +224,13 @@ export interface PromptContext {
   workspaceFiles?: string[];
   /** The request is for a website, so the web contract applies. */
   buildingSite?: boolean;
+  /**
+   * The design plan read from the user's prompt, from `suites/godot/plan.ts`.
+   *
+   * Passed in rather than left to the model to invent, so the same prompt plans
+   * the same game every time and the user can correct it in one sentence.
+   */
+  gamePlan?: string;
 }
 
 export function buildSystemPrompt(ctx: PromptContext): string {
@@ -224,7 +241,12 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     // Minecraft gets its full file-set contract: the common failure was a pack
     // that parsed but would not import, for want of a lang file or a real uuid.
     if (ctx.suite === 'minecraft') parts.push(MINECRAFT_ADDENDUM);
-    if (ctx.suite === 'godot') parts.push(GODOT_ADDENDUM);
+    if (ctx.suite === 'godot') {
+      parts.push(GODOT_ADDENDUM);
+      // After the contract, so the plan is the last word on *what* to build
+      // while the addendum still governs *how* to write it.
+      if (ctx.gamePlan) parts.push(ctx.gamePlan);
+    }
   }
 
   // A website is not a suite of its own — "build me a landing page" arrives in

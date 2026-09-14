@@ -56,7 +56,14 @@ const EXECUTION_SLASH = new Set([
 const SUITE_HINTS: Array<[RegExp, string]> = [
   [/\b(apk|aab|android|gradle|jetpack ?compose|exe|\.exe|desktop app|electron|winforms|wpf|tkinter|pyqt)\b/i, 'android'],
   [/\b(minecraft|bedrock|mcpack|mcaddon|blockbench|behaviou?r ?pack|resource ?pack|\.jar mod|forge|fabric|voxel)\b/i, 'minecraft'],
-  [/\b(godot|gdscript|\.tscn|game ?engine|platformer|(3d|2d) ?game|game ?jam|player ?controller)\b/i, 'godot'],
+  // Genres as well as tooling: "an endless runner" and "a first person shooter"
+  // are game requests and were falling through to plain chat, which meant the
+  // suite — and the design plan — never applied to the prompts that needed them
+  // most. Minecraft is matched above, so voxel terms still go there.
+  [
+    /\b(godot|gdscript|\.tscn|game ?engine|game ?jam|player ?controller|platformer|(3d|2d) ?game|endless ?runner|first[- ]person ?shooter|fps ?game|twin[- ]stick|roguelike|rogue[- ]?lite|tower ?defen[cs]e|racing ?game|kart ?racer|survival ?game|top[- ]?down ?game|(make|build|create) (me )?an? [\w\s-]{0,24}game)\b/i,
+    'godot',
+  ],
   [/\b(deck|slide|presentation|pitch|pdf|spreadsheet|landing ?page|canvas|mockup|poster|figma)\b/i, 'studio'],
   [/\b(mcp|model context protocol|tool schema|resource definition|stdio server)\b/i, 'mcp'],
   [/\b(research|investigate|find out|sources|cite|literature|competitor|market|deadline|milestone|schedule)\b/i, 'workdrive'],
