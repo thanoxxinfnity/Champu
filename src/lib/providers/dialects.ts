@@ -380,3 +380,49 @@ export function errorFromBody(dialect: Dialect, status: number, text: string): {
   }
   return null;
 }
+
+/**
+ * Per-endpoint limits, applied to a body that is already in the right dialect.
+ *
+ * A gateway is not obliged to accept the caller's idea of a sensible ceiling:
+ * plenty of smaller models 400 on `max_tokens: 8192` because their own cap is
+ * 2048 or 4096, and the run dies on a number the user never chose. An endpoint
+ * can now carry its own cap and default temperature, and the request is clamped
+ * to them rather than rejected by them.
+ *
+ * Clamps, never raises — a caller asking for less than the endpoint's ceiling
+ * meant it.
+ */
+export function applyEndpointLimits(
+  body: Record<string, unknown>,
+  dialect: Dialect,
+  limits: { maxTokens?: number; temperature?: number },
+): Record<string, unknown> {
+  const { maxTokens, temperature } = limits;
+
+  if (maxTokens !== undefined && maxTokens > 0) {
+    if (dialect === 'gemini') {
+      const config = (body.generationConfig ?? {}) as Record<string, unknown>;
+      const asked = typeof config.maxOutputTokens === 'number' ? config.maxOutputTokens : undefined;
+      config.maxOutputTokens = asked === undefined ? maxTokens : Math.min(asked, maxTokens);
+      body.generationConfig = config;
+    } else {
+      const asked = typeof body.max_tokens === 'number' ? body.max_tokens : undefined;
+      body.max_tokens = asked === undefined ? maxTokens : Math.min(asked, maxTokens);
+    }
+  }
+
+  // Temperature is a default, not a clamp: the run asks for 0.25 on a build and
+  // 0.5 on a chat, and overriding that would break the lanes.
+  if (temperature !== undefined) {
+    if (dialect === 'gemini') {
+      const config = (body.generationConfig ?? {}) as Record<string, unknown>;
+      if (config.temperature === undefined) config.temperature = temperature;
+      body.generationConfig = config;
+    } else if (body.temperature === undefined) {
+      body.temperature = temperature;
+    }
+  }
+
+  return body;
+}

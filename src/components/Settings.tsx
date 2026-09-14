@@ -210,6 +210,10 @@ function EndpointsTab() {
   // '' means "work it out from the URL and the probe", which is right almost
   // always — but a gateway on an unusual path needs a way to be told.
   const [dialect, setDialect] = useState<'' | Dialect>('');
+  // Some gateways 400 on a max_tokens their model cannot serve. An endpoint
+  // that says its own ceiling gets requests clamped to it instead.
+  const [maxTokens, setMaxTokens] = useState('');
+  const [temperature, setTemperature] = useState('');
   // Endpoints that do not publish /models are perfectly usable — you just have
   // to say which model to call. Without this field they could not be used at all.
   const [modelsText, setModelsText] = useState('');
@@ -337,6 +341,8 @@ function EndpointsTab() {
       // A protocol chosen by hand wins over detection; otherwise what the probe
       // actually spoke, falling back to what the URL announces.
       dialect: dialect || probe?.dialect || dialectFromUrl(url) || undefined,
+      maxTokens: Number(maxTokens) > 0 ? Number(maxTokens) : undefined,
+      temperature: temperature.trim() === '' ? undefined : Number(temperature),
       capabilities: probe?.ok && probe.capabilities.length ? probe.capabilities : ['chat'],
       models,
       routes: probe?.ok ? probe.routes : ['/chat/completions'],
@@ -412,6 +418,29 @@ function EndpointsTab() {
           )}
         </div>
       </Field>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Max output tokens" hint="Optional. Requests are clamped to this — useful when a gateway rejects a larger ceiling.">
+          <input
+            value={maxTokens}
+            onChange={(e) => edited(setMaxTokens)(e.target.value.replace(/[^0-9]/g, ''))}
+            inputMode="numeric"
+            placeholder="e.g. 4096"
+            className={inputClass}
+            style={inputStyle}
+          />
+        </Field>
+        <Field label="Temperature" hint="Optional default, used only when the run does not set one.">
+          <input
+            value={temperature}
+            onChange={(e) => edited(setTemperature)(e.target.value.replace(/[^0-9.]/g, ''))}
+            inputMode="decimal"
+            placeholder="e.g. 0.7"
+            className={inputClass}
+            style={inputStyle}
+          />
+        </Field>
+      </div>
 
       <Field label="Custom headers" hint='JSON object. Example: {"X-Api-Version": "2024-10", "X-Org": "acme"}'>
         <textarea

@@ -297,3 +297,41 @@ test('a refused key is reported as a refused key, not as a missing route', async
     server.close();
   }
 });
+
+// ── Per-endpoint limits ─────────────────────────────────────────────────────
+
+const { applyEndpointLimits } = await import('../src/lib/providers/dialects.ts');
+
+test('an endpoint ceiling clamps the request instead of being rejected by it', () => {
+  // The failure this prevents: a run asks for 8192, the gateway's model caps at
+  // 2048, and the whole run dies on a 400 about a number the user never chose.
+  assert.equal(applyEndpointLimits({ max_tokens: 8192 }, 'openai', { maxTokens: 2048 }).max_tokens, 2048);
+  assert.equal(applyEndpointLimits({ max_tokens: 8192 }, 'anthropic', { maxTokens: 2048 }).max_tokens, 2048);
+  assert.equal(
+    applyEndpointLimits({ generationConfig: { maxOutputTokens: 8192 } }, 'gemini', { maxTokens: 2048 }).generationConfig.maxOutputTokens,
+    2048,
+  );
+});
+
+test('it clamps, never raises — a smaller ask meant it', () => {
+  assert.equal(applyEndpointLimits({ max_tokens: 512 }, 'openai', { maxTokens: 4096 }).max_tokens, 512);
+});
+
+test('a ceiling fills in when the caller named none', () => {
+  assert.equal(applyEndpointLimits({}, 'openai', { maxTokens: 4096 }).max_tokens, 4096);
+  assert.equal(applyEndpointLimits({}, 'gemini', { maxTokens: 4096 }).generationConfig.maxOutputTokens, 4096);
+});
+
+test('temperature is a default, not a clamp — the lanes set their own', () => {
+  // Lane B runs at 0.25 deliberately; an endpoint default must not override it.
+  assert.equal(applyEndpointLimits({ temperature: 0.25 }, 'openai', { temperature: 0.9 }).temperature, 0.25);
+  assert.equal(applyEndpointLimits({}, 'openai', { temperature: 0.9 }).temperature, 0.9);
+  assert.equal(applyEndpointLimits({}, 'gemini', { temperature: 0.9 }).generationConfig.temperature, 0.9);
+});
+
+test('no limits configured changes nothing', () => {
+  assert.deepEqual(applyEndpointLimits({ max_tokens: 8192, temperature: 0.3 }, 'openai', {}), {
+    max_tokens: 8192,
+    temperature: 0.3,
+  });
+});

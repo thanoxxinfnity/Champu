@@ -143,6 +143,10 @@ export interface EndpointRecord {
    * or 'gemini' (:generateContent, x-goog-api-key).
    */
   dialect?: 'openai' | 'anthropic' | 'gemini';
+  /** Output ceiling this endpoint accepts; requests are clamped to it. */
+  maxTokens?: number;
+  /** Default temperature, used when the run does not ask for one. */
+  temperature?: number;
   capabilities: string[];
   models: Array<{ id: string; label: string; capabilities: string[] }>;
   routes: string[];

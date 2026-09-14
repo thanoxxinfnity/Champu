@@ -282,7 +282,15 @@ class ApiRouter(private val secrets: SecretStore) {
                     headers = headers,
                     dialect = dialect,
                     urlFor = if (override) null else ({ stream -> Dialects.chatUrl(dialect, base, model, stream) }),
-                    shapeBody = { it.remove("stream_options") },
+                    shapeBody = { body ->
+                        body.remove("stream_options")
+                        Dialects.applyEndpointLimits(
+                            body,
+                            dialect,
+                            custom?.optInt("maxTokens", 0) ?: 0,
+                            custom?.optDouble("temperature", -1.0) ?: -1.0,
+                        )
+                    },
                 ) to null
             }
         }

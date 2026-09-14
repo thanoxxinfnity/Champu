@@ -102,6 +102,42 @@ class DialectsTest {
         assertEquals(listOf("gemini-3-pro"), Dialects.modelIdsFromList(Dialects.GEMINI, """{"models":[{"name":"models/gemini-3-pro"}]}"""))
     }
 
+    @Test fun `an endpoint ceiling clamps the request instead of being rejected by it`() {
+        // The failure this prevents: a run asks for 8192, the gateway's model
+        // caps at 2048, and the run dies on a 400 about a number the user never
+        // chose.
+        assertEquals(
+            2048,
+            Dialects.applyEndpointLimits(JSONObject().put("max_tokens", 8192), Dialects.OPENAI, 2048, -1.0).optInt("max_tokens"),
+        )
+        // Clamps, never raises.
+        assertEquals(
+            512,
+            Dialects.applyEndpointLimits(JSONObject().put("max_tokens", 512), Dialects.OPENAI, 4096, -1.0).optInt("max_tokens"),
+        )
+        assertEquals(
+            2048,
+            Dialects.applyEndpointLimits(
+                JSONObject().put("generationConfig", JSONObject().put("maxOutputTokens", 8192)),
+                Dialects.GEMINI, 2048, -1.0,
+            ).optJSONObject("generationConfig")!!.optInt("maxOutputTokens"),
+        )
+    }
+
+    @Test fun `temperature is a default, not a clamp`() {
+        // Lane B runs at 0.25 deliberately; an endpoint default must not win.
+        assertEquals(
+            0.25,
+            Dialects.applyEndpointLimits(JSONObject().put("temperature", 0.25), Dialects.OPENAI, 0, 0.9).optDouble("temperature"),
+            0.0001,
+        )
+        assertEquals(
+            0.9,
+            Dialects.applyEndpointLimits(JSONObject(), Dialects.OPENAI, 0, 0.9).optDouble("temperature"),
+            0.0001,
+        )
+    }
+
     // ── End to end, against servers that speak the real protocols ───────────
 
     /** What one request looked like, and what the stub should answer with. */

@@ -185,6 +185,42 @@ object Dialects {
         return Upstream.buildBody(request, model, stream)
     }
 
+    /**
+     * Per-endpoint limits, applied to a body already in the right dialect.
+     *
+     * A gateway is not obliged to accept the caller's idea of a sensible
+     * ceiling: plenty of smaller models 400 on `max_tokens: 8192` because their
+     * own cap is 2048, and the run dies on a number the user never chose.
+     *
+     * Clamps, never raises — a caller asking for less meant it. Temperature is
+     * a default rather than a clamp, because the lanes set their own.
+     */
+    fun applyEndpointLimits(body: JSONObject, dialect: String, maxTokens: Int, temperature: Double): JSONObject {
+        if (maxTokens > 0) {
+            if (dialect == GEMINI) {
+                val config = body.optJSONObject("generationConfig") ?: JSONObject()
+                val asked = if (config.has("maxOutputTokens")) config.optInt("maxOutputTokens") else null
+                config.put("maxOutputTokens", if (asked == null) maxTokens else minOf(asked, maxTokens))
+                body.put("generationConfig", config)
+            } else {
+                val asked = if (body.has("max_tokens")) body.optInt("max_tokens") else null
+                body.put("max_tokens", if (asked == null) maxTokens else minOf(asked, maxTokens))
+            }
+        }
+
+        if (temperature >= 0) {
+            if (dialect == GEMINI) {
+                val config = body.optJSONObject("generationConfig") ?: JSONObject()
+                if (!config.has("temperature")) config.put("temperature", temperature)
+                body.put("generationConfig", config)
+            } else if (!body.has("temperature")) {
+                body.put("temperature", temperature)
+            }
+        }
+
+        return body
+    }
+
     /** Frames from one non-streaming response body. */
     fun framesFromResponse(dialect: String, payload: JSONObject, emit: (Upstream.Frame) -> Unit) {
         if (dialect == ANTHROPIC) {

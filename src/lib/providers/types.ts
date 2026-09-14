@@ -72,6 +72,14 @@ export interface CustomEndpointConfig {
    * the only one that used to be supported.
    */
   dialect?: 'openai' | 'anthropic' | 'gemini';
+  /**
+   * The endpoint's own output ceiling. Requests are clamped to it — plenty of
+   * gateways 400 on a `max_tokens` their model cannot serve, and the run then
+   * dies on a number the user never chose.
+   */
+  maxTokens?: number;
+  /** Used when the caller did not ask for a specific temperature. */
+  temperature?: number;
 }
 
 export interface ChatRequest {

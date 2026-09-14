@@ -62,5 +62,7 @@ export function endpointConfigFor(
     // Without this an Anthropic or Gemini endpoint is called in OpenAI's
     // dialect — wrong route, wrong auth header, wrong body.
     dialect: endpoint.dialect,
+    maxTokens: endpoint.maxTokens,
+    temperature: endpoint.temperature,
   };
 }

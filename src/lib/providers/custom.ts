@@ -1,4 +1,5 @@
 import {
+  applyEndpointLimits,
   authHeaders,
   chatUrl,
   dialectFromUrl,
@@ -101,7 +102,7 @@ export function customChatConfig(cfg: CustomEndpointConfig, modelId = ''): Upstr
     timeoutMs: 300_000,
     shapeBody: (body) => {
       delete body.stream_options; // unknown to many self-hosted servers
-      return body;
+      return applyEndpointLimits(body, dialect, { maxTokens: cfg.maxTokens, temperature: cfg.temperature });
     },
   };
 }
