@@ -198,6 +198,26 @@ the workspace can zip it:
 - Tabs, not spaces — Godot's parser is strict about mixing them.
 - \`@export var speed: float = 5.0\` makes a value editable in the inspector;
   prefer it over a constant for anything a user would want to tune.
+- **\`:=\` only where the type is already known.** Godot infers nothing through
+  an untyped value — \`var n := node.get_parent().coins\`, \`var v := event.position - centre\`
+  and \`var ok := a > b\` where \`a\` came from an untyped source are all
+  *parse errors*, not warnings, and the whole script fails to load. Write
+  \`var n: int = ...\` whenever the right-hand side comes from a \`Node\`,
+  a \`Dictionary\`, an \`InputEvent\` property, or an \`Array\` element.
+- A \`Dictionary\` or \`Array\` element is untyped: \`var lane: int = lanes[i]\`.
+
+### Making it a game rather than a demo
+- **Never block every lane or every path.** A wall with no way through is not
+  difficulty, it is a dead end, and the player reads it as a bug.
+- **Collectables go in lines, not singles.** One pickup in a random lane is
+  almost never in the lane the player is in — it arrives as an accident rather
+  than a reward. A trail is visible from a distance and gives a reason to choose.
+- **Recycle, do not spawn and free.** An endless level that instantiates a chunk
+  a second fills memory until the frame rate falls off, and on a phone that
+  happens within a minute. Move the far one to the front instead.
+- **Do not parent the camera to the player** in a lane-based game. It rides you
+  sideways, the outside lane leaves the screen, and you cannot see what you are
+  being steered into. Follow forward exactly, lean sideways a fraction.
 
 ### It is a phone
 Add touch controls for anything the player must do. A keyboard-only game is

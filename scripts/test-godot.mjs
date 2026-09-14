@@ -9,6 +9,7 @@ import {
   sceneUid,
   validateProject,
 } from '../src/lib/suites/godot/project.ts';
+import { GODOT_ADDENDUM } from '../src/lib/agent/system-prompt.ts';
 
 const SPEC = { name: 'Space Runner', dimension: '3d' };
 
@@ -203,4 +204,26 @@ test('the character script is indented with tabs like the rest', () => {
   const indented = body.split('\n').filter((l) => /^\s+\S/.test(l));
   assert.ok(indented.length > 0);
   assert.ok(indented.every((l) => l.startsWith('\t')));
+});
+
+test('the suite warns about the GDScript inference rule that breaks whole scripts', () => {
+  // Hit three separate times while building a real game: `:=` through an
+  // untyped value is a parse error, not a warning, and the script does not
+  // load at all. The model writes GDScript, so it needs the rule.
+  assert.match(GODOT_ADDENDUM, /:=` only where the type is already known/);
+  assert.match(GODOT_ADDENDUM, /parse errors\*, not warnings/);
+});
+
+test('the suite carries the lessons that separate a game from a demo', () => {
+  // Each of these was a real defect found by playing the generated game, not a
+  // style preference: an unwinnable wall, coins nobody ever collects, a level
+  // that leaks memory, and a camera that hides the obstacle ahead of you.
+  for (const rule of [
+    /Never block every lane/,
+    /Collectables go in lines/,
+    /Recycle, do not spawn and free/,
+    /Do not parent the camera to the player/,
+  ]) {
+    assert.match(GODOT_ADDENDUM, rule);
+  }
 });
