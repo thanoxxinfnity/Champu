@@ -1,7 +1,7 @@
 'use client';
 
 import { classifyLocal, wantsSite, type Classification } from './router';
-import { withKeys } from '@/lib/keys';
+import { getKeys, withKeys } from '@/lib/keys';
 import { buildSystemPrompt } from './system-prompt';
 import { heuristicPlan, parsePlan, PLANNER_PROMPT, planProgress, parkBridgeTasks, requiresBridge, type Plan } from './planner';
 import { extractArtifacts, filesOf, commandsOf, mergeFiles, type FileArtifact } from './artifacts';
@@ -11,7 +11,10 @@ import { runFinished, runStarted } from '@/lib/shell/run-state';
 import { advancePlan, NO_EVIDENCE, settleRemaining, type RunEvidence } from './progress';
 import { buildPackExport, describeExport, detectPacks, missingGeometries, validatePacks } from '@/lib/suites/minecraft/pack';
 import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geometry';
-import { planBrief, planGame, planSummary } from '@/lib/suites/godot/plan';
+import { planBrief, planGame, planSummary, playerParts } from '@/lib/suites/godot/plan';
+import { buildGodotExport, describeExport as describeGodotExport, detectGodotProject, referencedResources } from '@/lib/suites/godot/export';
+import { generateModel, sourceChain } from '@/lib/suites/godot/model-source';
+import { glbArtifact } from '@/lib/suites/godot/artifact';
 import { plannedTextures, texturePrompt, textureArtifact, toPixelArt } from '@/lib/suites/minecraft/texture';
 import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types';
 import type { CustomEndpointConfig } from '@/lib/providers/types';
@@ -897,6 +900,105 @@ export async function send(opts: SendOptions): Promise<void> {
             });
           }
         }
+      }
+    }
+
+    // ── Godot: build the model, complete the project, hand over a zip ───────
+    //
+    // The suite used to stop at "here are some files": a project.godot and a
+    // .tscn in the file panel, which on a phone means creating the folder and
+    // saving each one by hand. And nothing ever generated the .glb the scene
+    // referenced, so the character the plan described was never actually built.
+    if (suite === 'godot' && files.length && detectGodotProject(files)) {
+      const keys = getKeys();
+      const chain = sourceChain({ meshy: keys.meshy, tripo: keys.tripo, nim: keys.nim, trellisUrl: keys.trellisUrl });
+
+      // The scene names the model it wants; only build one if it asked.
+      const wantsModel = referencedResources(files, detectGodotProject(files)?.root ?? '').some((r) => r.endsWith('.glb'));
+
+      if (wantsModel && design) {
+        useWorkspace.getState().setThinking(true, `Building the ${design.player.description} model…`);
+        try {
+          const outcome = await generateModel(
+            {
+              prompt: `${design.player.description}, ${design.genre} game character`,
+              plan: design.player.body,
+              parts: playerParts(design),
+            },
+            { meshy: keys.meshy, tripo: keys.tripo, nim: keys.nim, trellisUrl: keys.trellisUrl },
+            { onStage: (_source, message) => useWorkspace.getState().setThinking(true, message) },
+          );
+
+          if (outcome.bytes) {
+            const target = referencedResources(files, detectGodotProject(files)?.root ?? '').find((r) => r.endsWith('.glb'));
+            const artifact = glbArtifact(target ?? 'hero.glb', outcome.bytes);
+            files.push(artifact);
+            upsertFile(artifact);
+            evidence.artifactProduced = true;
+          }
+
+          // Said plainly rather than swallowed: a user who pasted a Meshy key
+          // and silently got a box model would think the key was ignored.
+          const notes = [...outcome.notes];
+          if (outcome.url) {
+            notes.push(`${outcome.source} generated the model at ${outcome.url} — download it and save it into the project folder.`);
+          }
+          if (!outcome.rigged && outcome.source !== 'built') {
+            notes.push('That model has no skeleton, so it will not animate until it is rigged.');
+          }
+          if (notes.length) {
+            emit({
+              id: uid('msg'),
+              role: 'system',
+              content: [`**Model built with ${outcome.source}.**`, '', ...notes.map((n) => `- ${n}`)].join('\n'),
+              createdAt: Date.now(),
+            });
+          }
+        } catch (err) {
+          // Losing the model must not cost the user the project.
+          emit({
+            id: uid('msg'),
+            role: 'system',
+            content: `Could not build the 3D model — ${(err as Error).message}. The project is still here; it will open without it.`,
+            createdAt: Date.now(),
+          });
+        }
+      }
+
+      const exported = buildGodotExport(files, design);
+      if (exported) {
+        evidence.artifactProduced = true;
+
+        const header = exported.problems.length
+          ? `**This project will not open cleanly yet.** ${describeGodotExport(exported)}`
+          : `**Your game is ready.** ${describeGodotExport(exported)}`;
+
+        const body = [
+          header,
+          '',
+          ...(exported.problems.length
+            ? ['Fix these first:', '', ...exported.problems.map((p) => `- ${p}`), '']
+            : ['Extract it, open Godot 4 on your phone, press Import and pick the `project.godot` inside.', '']),
+          ...(exported.filledIn.length
+            ? ['Filled in because the project referenced them and they were not written:', '',
+               ...exported.filledIn.map((f) => `- \`${f}\``), '']
+            : []),
+          chain[0] === 'built'
+            ? '_Models are being built in code. Add a Meshy or Tripo key in Settings → API Keys for generated ones._'
+            : `_Model source: ${chain[0]}._`,
+        ].join('\n');
+
+        const offer = {
+          id: uid('msg'),
+          role: 'system' as const,
+          content: body,
+          // Offered even with problems: the user may want to repair it by hand
+          // rather than be told no.
+          offer: { kind: 'godot-project' as const, filename: exported.filename, label: describeGodotExport(exported) },
+          createdAt: Date.now(),
+        };
+        emit(offer);
+        void appendMessage({ ...offer, sessionId, suite });
       }
     }
 

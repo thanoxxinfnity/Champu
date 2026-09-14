@@ -44,6 +44,28 @@ class ApiRouter(private val secrets: SecretStore) {
         set(value) { secrets.put("vercel_team_id", value) }
 
     /**
+     * 3D model generators, stored for the same reason as the rest.
+     *
+     * These were kept only in the web layer's in-memory cache once the shell
+     * was hosting, because saveKeys returned as soon as it had posted the NIM
+     * and Pollinations keys. That left them working until the app was closed
+     * and then silently gone — the Settings field read empty and the Godot
+     * suite quietly fell back to code-built geometry.
+     */
+    var tripoKey: String
+        get() = secrets.get("tripo_key")
+        set(value) { secrets.put("tripo_key", value) }
+
+    var meshyKey: String
+        get() = secrets.get("meshy_key")
+        set(value) { secrets.put("meshy_key", value) }
+
+    /** A self-hosted TRELLIS NIM container. A URL, not a secret, but it belongs with them. */
+    var trellisUrl: String
+        get() = secrets.get("trellis_url")
+        set(value) { secrets.put("trellis_url", value) }
+
+    /**
      * The port the workspace was last served on.
      *
      * Stored because browser storage is scoped to the origin, and the origin
@@ -127,6 +149,9 @@ class ApiRouter(private val secrets: SecretStore) {
             if (body.has("pollinationsToken")) pollinationsToken = body.optString("pollinationsToken")
             if (body.has("vercelToken")) vercelToken = body.optString("vercelToken")
             if (body.has("vercelTeamId")) vercelTeamId = body.optString("vercelTeamId")
+            if (body.has("tripoKey")) tripoKey = body.optString("tripoKey")
+            if (body.has("meshyKey")) meshyKey = body.optString("meshyKey")
+            if (body.has("trellisUrl")) trellisUrl = body.optString("trellisUrl")
             response.json(200, state().put("ok", true).toString())
         } else {
             response.json(200, state().toString())
@@ -139,13 +164,17 @@ class ApiRouter(private val secrets: SecretStore) {
      * The NIM and Pollinations values are reported as booleans only — the web
      * layer never needs to read a key back, and handing it to the page would put
      * a credential somewhere it does not have to be. Vercel is returned because
-     * deployment runs through the page's own fetch and genuinely needs it.
+     * deployment runs through the page's own fetch and genuinely needs it, and
+     * the 3D keys for the same reason: Tripo and Meshy are called from the page.
      */
     private fun state(): JSONObject = JSONObject()
         .put("nimConfigured", nimKey.isNotEmpty())
         .put("pollinationsConfigured", pollinationsToken.isNotEmpty())
         .put("vercelToken", vercelToken)
         .put("vercelTeamId", vercelTeamId)
+        .put("tripoKey", tripoKey)
+        .put("meshyKey", meshyKey)
+        .put("trellisUrl", trellisUrl)
 
     // ── /api/models ─────────────────────────────────────────────────────────
 

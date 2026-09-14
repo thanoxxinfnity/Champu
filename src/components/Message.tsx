@@ -3,6 +3,7 @@
 import { useWorkspace } from '@/lib/store';
 import { downloadZip } from '@/lib/zip';
 import { buildPackExport, detectPacks } from '@/lib/suites/minecraft/pack';
+import { buildGodotExport } from '@/lib/suites/godot/export';
 import { useMemo, useState } from 'react';
 import { renderMarkdown } from './markdown';
 import type { ChatMessageView } from '@/lib/store';
@@ -213,6 +214,19 @@ function OfferDownload({ offer }: { offer: NonNullable<ChatMessageView['offer']>
   const [error, setError] = useState<string | null>(null);
 
   const take = () => {
+    if (offer.kind === 'godot-project') {
+      // Rebuilt from the workspace at click time, like the pack below, so an
+      // edit made after the build is in the archive rather than being lost.
+      const built = buildGodotExport([...files.values()], null, offer.filename.replace(/\.zip$/i, ''));
+      if (!built) {
+        setError('That project is no longer open — re-run the build to get the game again.');
+        return;
+      }
+      setError(null);
+      downloadZip(built.entries, built.filename, 'application/zip');
+      return;
+    }
+
     const packs = detectPacks([...files.values()]);
     const built = buildPackExport(packs, offer.filename.replace(/\.(mcpack|mcaddon)$/i, ''));
     if (!built) {

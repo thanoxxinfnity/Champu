@@ -62,6 +62,32 @@ export function getKeys(): ApiKeys {
 }
 
 export async function loadKeys(): Promise<ApiKeys> {
+  if (await isShellHosted()) {
+    // The shell holds these, so read them back from it rather than from
+    // IndexedDB — which in the APK is empty, and was why a Tripo key saved in
+    // one session came back blank in the next.
+    //
+    // The NIM and Pollinations keys are deliberately not returned by the shell:
+    // the page never needs to read a credential it only ever posts. The UI
+    // shows those as "already configured" from `nimConfigured` instead.
+    try {
+      const res = await fetch('/api/shell/keys', { signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        const json = (await res.json()) as { tripoKey?: string; meshyKey?: string; trellisUrl?: string };
+        cache = {
+          ...EMPTY,
+          tripo: json.tripoKey ?? '',
+          meshy: json.meshyKey ?? '',
+          trellisUrl: json.trellisUrl ?? '',
+        };
+        return cache;
+      }
+    } catch {
+      // The shell not answering is not a reason to lose the in-memory copy.
+      return cache;
+    }
+  }
+
   const stored = await getSetting<ApiKeys | null>('apiKeys', null);
   cache = { ...EMPTY, ...(stored ?? {}) };
   return cache;
@@ -82,7 +108,18 @@ export async function saveKeys(next: Partial<ApiKeys>): Promise<ApiKeys> {
     // The shell is the system of record; keeping a second copy in IndexedDB
     // would leave a stale key behind after the user clears it natively — and
     // IndexedDB is exactly the storage that did not survive a restart.
-    await postToShell({ nimKey: cache.nim, pollinationsToken: cache.pollinations });
+    //
+    // Every credential goes, not just the two the shell originally knew about.
+    // Sending a subset is what left the Tripo key alive in memory and gone
+    // after a restart: it worked all session, then the field read empty and the
+    // Godot suite quietly dropped back to code-built geometry.
+    await postToShell({
+      nimKey: cache.nim,
+      pollinationsToken: cache.pollinations,
+      tripoKey: cache.tripo,
+      meshyKey: cache.meshy,
+      trellisUrl: cache.trellisUrl,
+    });
     return cache;
   }
 

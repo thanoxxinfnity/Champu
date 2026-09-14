@@ -50,7 +50,7 @@ export interface ChatMessageView {
    * the current workspace files rather than stored in the message — history
    * should not carry a second copy of every artifact.
    */
-  offer?: { kind: 'minecraft-pack'; filename: string; label: string };
+  offer?: { kind: 'minecraft-pack' | 'godot-project'; filename: string; label: string };
 }
 
 export interface TerminalLine {
