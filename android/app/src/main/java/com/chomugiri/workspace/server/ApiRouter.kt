@@ -1,7 +1,9 @@
 package com.chomugiri.workspace.server
 
 import com.chomugiri.workspace.providers.Blocked
+import com.chomugiri.workspace.providers.CustomEndpoint
 import com.chomugiri.workspace.providers.Dialects
+import com.chomugiri.workspace.providers.ModelCatalog
 import com.chomugiri.workspace.providers.EndpointProbe
 import com.chomugiri.workspace.providers.Nim
 import com.chomugiri.workspace.providers.Pollinations
@@ -246,52 +248,16 @@ class ApiRouter(private val secrets: SecretStore) {
         }
         "pollinations" -> Pollinations.chatConfig(pollinationsToken) to null
         "custom" -> {
+            // Parsed into a type rather than read field by field. The loose
+            // version is how a protocol flag, a token ceiling and a model name
+            // each went missing in a different place.
             val custom = body.optJSONObject("custom")
-            val raw = custom?.optString("baseUrl").orEmpty()
+            val endpoint = custom?.let { CustomEndpoint.parse(it.toString()).getOrNull() }
 
-            // Which protocol the endpoint speaks decides the route, the auth
-            // header and the body shape. Stored with the endpoint by the probe;
-            // inferred from the URL for one added by hand.
-            val dialect = custom?.optString("dialect").orEmpty().ifEmpty { Dialects.fromUrl(raw) ?: Dialects.OPENAI }
-
-            // The stored base can still be a pasted endpoint (added by hand,
-            // without a probe); appending /chat/completions to a base that
-            // already ends in it asks for a route that does not exist.
-            val base = Dialects.normalizeBase(raw, dialect)
-            if (base.isEmpty()) null to "A custom provider request needs `custom.baseUrl`."
-            else {
-                val headers = mutableMapOf<String, String>()
-                custom?.optJSONObject("headers")?.let { h ->
-                    h.keys().forEach { k -> headers[k] = h.optString(k) }
-                }
-                val apiKey = custom?.optString("apiKey").orEmpty()
-                if (!Dialects.hasAuthHeader(dialect, headers)) {
-                    headers.putAll(Dialects.authHeaders(dialect, apiKey))
-                }
-
-                val model = body.optString("model")
-                val chatPath = custom?.optString("chatPath").orEmpty()
-                // An explicit path is the user overriding detection, and only
-                // makes sense for the OpenAI shape — the others put the model in
-                // the path themselves.
-                val override = chatPath.isNotEmpty() && dialect == Dialects.OPENAI
-
-                Upstream.Config(
-                    url = if (override) base + if (chatPath.startsWith("/")) chatPath else "/$chatPath"
-                    else Dialects.chatUrl(dialect, base, model, true),
-                    headers = headers,
-                    dialect = dialect,
-                    urlFor = if (override) null else ({ stream -> Dialects.chatUrl(dialect, base, model, stream) }),
-                    shapeBody = { body ->
-                        body.remove("stream_options")
-                        Dialects.applyEndpointLimits(
-                            body,
-                            dialect,
-                            custom?.optInt("maxTokens", 0) ?: 0,
-                            custom?.optDouble("temperature", -1.0) ?: -1.0,
-                        )
-                    },
-                ) to null
+            if (endpoint == null || endpoint.baseUrl.isBlank()) {
+                null to "A custom provider request needs `custom.baseUrl`."
+            } else {
+                endpoint.toConfig(body.optString("model")) to null
             }
         }
         else -> null to "Unknown provider \"$provider\"."
@@ -516,10 +482,13 @@ class ApiRouter(private val secrets: SecretStore) {
         // A non-OpenAI endpoint publishes its models at its own path, in its own
         // shape, and none of the OpenAI-shaped fallbacks apply.
         if (dialect != Dialects.OPENAI) {
-            val ids = Dialects.modelIdsFromList(
-                dialect,
-                Upstream.getWithStatus(Dialects.modelListUrl(dialect, base), headers, 15_000).body,
+            // Every path worth asking, in every envelope shape — not just
+            // "{base}/models with {data:[{id}]}", which is the assumption that
+            // reported working endpoints as answering nothing.
+            val found = ModelCatalog.fetchAvailableModels(
+                CustomEndpoint(baseUrl = base, apiKey = apiKey, headers = headers, dialect = dialect)
             )
+            val ids = found.map { it.id }
             if (ids.isNotEmpty()) {
                 routes.put("/models")
                 ids.forEach { id ->

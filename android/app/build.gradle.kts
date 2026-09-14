@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -60,6 +61,10 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.webkit)
+    // Typed request/response models. Hand-rolled optString() parsing is how a
+    // field named owned_by silently became null, and how a missing envelope
+    // shape became "this endpoint answered nothing".
+    implementation(libs.kotlinx.serialization.json)
 
     // android.jar's org.json is a stub that throws; the real implementation is
     // needed for unit tests that exercise the API router end to end.
