@@ -1175,6 +1175,7 @@ function KeysTab() {
 
   const [nim, setNim] = useState('');
   const [pollinations, setPollinations] = useState('');
+  const [tripo, setTripo] = useState('');
   const [reveal, setReveal] = useState(false);
   const [shell, setShell] = useState(false);
   /**
@@ -1197,6 +1198,7 @@ function KeysTab() {
       setShell(hosted);
       setNim(keys.nim);
       setPollinations(keys.pollinations);
+      setTripo(keys.tripo);
       setNimSaved(configured);
     })();
     return () => {
@@ -1218,7 +1220,7 @@ function KeysTab() {
     setSaving(true);
     setStatus({ kind: 'info', text: 'Saving, then checking the key against NVIDIA…' });
     try {
-      await saveKeys(sendNim ? { nim, pollinations } : { pollinations });
+      await saveKeys(sendNim ? { nim, pollinations, tripo } : { pollinations, tripo });
       setVercelCredentials(vercel.trim(), team.trim());
       // The catalogue is the real test: it only returns NIM models if the key
       // was accepted, so a successful reload is proof rather than a guess.
@@ -1246,9 +1248,10 @@ function KeysTab() {
     setNimSaved(false);
     setNim('');
     setPollinations('');
+    setTripo('');
     setVercel('');
     setTeam('');
-    await saveKeys({ nim: '', pollinations: '' });
+    await saveKeys({ nim: '', pollinations: '', tripo: '' });
     setVercelCredentials('', '');
     await loadModels(true);
     setStatus({ kind: 'info', text: 'Keys cleared from this device.' });
@@ -1329,6 +1332,22 @@ function KeysTab() {
           autoComplete="off"
           placeholder="leave empty to stay on the free tier"
           onChange={(e) => setPollinations(e.target.value)}
+        />
+      </Field>
+
+      <Field
+        label="Tripo AI key (optional) — 3D models"
+        hint="Only for generating 3D models from a description. Without it the Godot suite still builds models in code, which needs no key and works offline. Get one at platform.tripo3d.ai."
+      >
+        <input
+          className={inputClass}
+          style={inputStyle}
+          type={reveal ? 'text' : 'password'}
+          value={tripo}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder="tsk_… — leave empty to use code-built geometry"
+          onChange={(e) => setTripo(e.target.value)}
         />
       </Field>
 

@@ -15,6 +15,7 @@ export type SuiteId =
   | 'chat'
   | 'android'
   | 'minecraft'
+  | 'godot'
   | 'studio'
   | 'mcp'
   | 'workdrive'
@@ -252,6 +253,7 @@ export const SUITE_LABELS: Record<SuiteId, string> = {
   assets: 'Asset Studio',
   android: 'Android & Cross-Platform',
   minecraft: 'Minecraft Engineering',
+  godot: 'Godot Game Studio',
   studio: 'Presentations & Canvas',
   mcp: 'MCP Builder',
   workdrive: 'Workdrive Research',

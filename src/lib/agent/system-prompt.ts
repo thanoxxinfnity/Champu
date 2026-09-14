@@ -152,6 +152,55 @@ these right, because each one is the difference between a scene and a black box:
   can tab through is unfinished.
 - Say plainly which parts are placeholders and what the user should replace.`;
 
+export const GODOT_ADDENDUM = `## SUITE: GODOT GAME
+The output is a project that opens in the Godot 4 **Android editor** and runs
+when the user presses play. A project that imports but does nothing is a failed
+build.
+
+### Emit the whole project
+Never answer with loose snippets. Every file, each as a path-tagged block, so
+the workspace can zip it:
+
+- \`project.godot\` — must carry \`config_version=5\`, a \`run/main_scene\` that
+  exists, and \`renderer/rendering_method="mobile"\`. Godot's Forward+ default
+  does not run on most phones, and a phone is where this opens.
+- \`main.tscn\` — the scene named as main_scene.
+- \`*.gd\` — one script per behaviour, \`extends\` the node type it is attached to.
+- \`icon.svg\` — so the project list is not a broken thumbnail.
+
+### .tscn rules that decide whether it loads
+- The header is \`[gd_scene load_steps=N format=3 uid="uid://…"]\`, where **N is
+  the number of ext_resource and sub_resource blocks plus one**. A wrong N is
+  the classic reason a hand-written scene opens with nodes missing.
+- Every \`ExtResource("id")\` and \`SubResource("id")\` must be declared above the
+  node that uses it.
+- A script is attached with \`script = ExtResource("<id>")\`, and that id must
+  point at a \`.gd\` file that is also in the project.
+- Node paths in \`parent="…"\` are relative to the scene root: \`"."\` for a child
+  of the root, \`"Player"\` for a child of Player.
+
+### GDScript that runs on Godot 4
+- \`extends CharacterBody3D\`, not \`KinematicBody\` — that is Godot 3 and will not
+  parse.
+- Movement is \`move_and_slide()\` with no arguments; \`velocity\` is a property.
+- Gravity comes from \`get_gravity()\`, so the project setting stays the one place
+  it is defined.
+- Tabs, not spaces — Godot's parser is strict about mixing them.
+- \`@export var speed: float = 5.0\` makes a value editable in the inspector;
+  prefer it over a constant for anything a user would want to tune.
+
+### It is a phone
+Add touch controls for anything the player must do. A keyboard-only game is
+unplayable on the device it was built for. Feed touch input into the same vector
+the keys produce rather than writing a second movement path.
+
+### 3D models
+Models are \`.glb\` — Godot imports them natively, no conversion step. They are
+instanced into a scene with
+\`[node name="X" parent="." instance=ExtResource("<id>")]\`. One unit is one
+metre: a person is about 2, a room about 4 tall. Never reference a \`.glb\` that
+the build has not actually produced.`;
+
 export interface PromptContext {
   lane: 'A' | 'B';
   suite?: string;
@@ -175,6 +224,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     // Minecraft gets its full file-set contract: the common failure was a pack
     // that parsed but would not import, for want of a lang file or a real uuid.
     if (ctx.suite === 'minecraft') parts.push(MINECRAFT_ADDENDUM);
+    if (ctx.suite === 'godot') parts.push(GODOT_ADDENDUM);
   }
 
   // A website is not a suite of its own — "build me a landing page" arrives in

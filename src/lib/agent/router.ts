@@ -55,7 +55,8 @@ const EXECUTION_SLASH = new Set([
 
 const SUITE_HINTS: Array<[RegExp, string]> = [
   [/\b(apk|aab|android|gradle|jetpack ?compose|exe|\.exe|desktop app|electron|winforms|wpf|tkinter|pyqt)\b/i, 'android'],
-  [/\b(minecraft|bedrock|mcpack|mcaddon|blockbench|behaviou?r ?pack|resource ?pack|\.jar mod|forge|fabric|geometry|voxel)\b/i, 'minecraft'],
+  [/\b(minecraft|bedrock|mcpack|mcaddon|blockbench|behaviou?r ?pack|resource ?pack|\.jar mod|forge|fabric|voxel)\b/i, 'minecraft'],
+  [/\b(godot|gdscript|\.tscn|game ?engine|platformer|(3d|2d) ?game|game ?jam|player ?controller)\b/i, 'godot'],
   [/\b(deck|slide|presentation|pitch|pdf|spreadsheet|landing ?page|canvas|mockup|poster|figma)\b/i, 'studio'],
   [/\b(mcp|model context protocol|tool schema|resource definition|stdio server)\b/i, 'mcp'],
   [/\b(research|investigate|find out|sources|cite|literature|competitor|market|deadline|milestone|schedule)\b/i, 'workdrive'],

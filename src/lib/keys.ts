@@ -23,9 +23,14 @@ import { getSetting, setSetting } from '@/lib/db/history';
 export interface ApiKeys {
   nim: string;
   pollinations: string;
+  /**
+   * Tripo AI, for generating 3D models. Optional by design: without it the
+   * Godot suite builds geometry in code, which needs no key and cannot fail.
+   */
+  tripo: string;
 }
 
-const EMPTY: ApiKeys = { nim: '', pollinations: '' };
+const EMPTY: ApiKeys = { nim: '', pollinations: '', tripo: '' };
 
 export const NIM_KEY_HEADER = 'x-chomugiri-nim-key';
 export const POLLINATIONS_KEY_HEADER = 'x-chomugiri-pollinations-token';
@@ -53,7 +58,7 @@ export async function saveKeys(next: Partial<ApiKeys>): Promise<ApiKeys> {
   cache = { ...cache, ...next };
   // Trim here rather than at every call site: a key pasted from a web page
   // almost always arrives with a trailing newline, and the upstream 401s on it.
-  cache = { nim: cache.nim.trim(), pollinations: cache.pollinations.trim() };
+  cache = { nim: cache.nim.trim(), pollinations: cache.pollinations.trim(), tripo: cache.tripo.trim() };
 
   if (await isShellHosted()) {
     // The shell is the system of record; keeping a second copy in IndexedDB
