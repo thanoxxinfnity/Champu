@@ -14,7 +14,7 @@ import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geome
 import { plannedTextures, texturePrompt, textureArtifact, toPixelArt } from '@/lib/suites/minecraft/texture';
 import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types';
 import type { CustomEndpointConfig } from '@/lib/providers/types';
-import { useWorkspace, type ChatAttachment, THINKING_PHRASES, LANE_B_PHRASES } from '@/lib/store';
+import { useWorkspace, phrasesForRun, type ChatAttachment } from '@/lib/store';
 import { PLANNER_NIM_MODEL } from '@/lib/providers/registry';
 import { endpointConfigFor } from '@/lib/providers/endpoint-models';
 import { draftSystemSuffix, pickAngles } from './drafts';
@@ -180,7 +180,10 @@ async function complete(
 // ── Thinking bubble ─────────────────────────────────────────────────────────
 
 function startPhraseCycle(lane: 'A' | 'B'): () => void {
-  const phrases = lane === 'B' ? [...LANE_B_PHRASES, ...THINKING_PHRASES] : THINKING_PHRASES;
+  // A fresh order every run: the same three phrases in the same order every
+  // time made the app look like it was replaying a recording rather than
+  // working.
+  const phrases = phrasesForRun(lane);
   const { setThinking } = useWorkspace.getState();
 
   let index = 0;

@@ -15,17 +15,53 @@ android {
         applicationId = "com.chomugiri.workspace"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 32
+        versionName = "3.2"
+    }
+
+    /**
+     * Signing for a release anyone can install.
+     *
+     * An unsigned release APK will not install on a phone at all, and a debug
+     * one announces itself as debuggable — neither is something to hand out.
+     * The keystore is read from properties passed at build time and is never
+     * checked in: whoever holds it controls updates to this app id, and every
+     * future version has to be signed with the same one or Android refuses the
+     * update.
+     */
+    signingConfigs {
+        create("release") {
+            val store = providers.gradleProperty("CHOMUGIRI_KEYSTORE").orNull
+            if (store != null) {
+                storeFile = file(store)
+                storePassword = providers.gradleProperty("CHOMUGIRI_KEYSTORE_PASSWORD").orNull
+                keyAlias = providers.gradleProperty("CHOMUGIRI_KEY_ALIAS").orNull
+                keyPassword = providers.gradleProperty("CHOMUGIRI_KEY_PASSWORD").orNull
+            }
+        }
     }
 
     buildTypes {
         release {
+            // R8 is off on purpose: the WebView bridge and the JSON models are
+            // reached reflectively, and a stripped build fails at runtime rather
+            // than at compile time — the worst place to find out.
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (providers.gradleProperty("CHOMUGIRI_KEYSTORE").orNull != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         debug {
             isMinifyEnabled = false
+        }
+    }
+
+    // One name, so the file someone downloads says what it is.
+    applicationVariants.all {
+        outputs.all {
+            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName =
+                if (buildType.name == "release") "Chomugiri.apk" else "Chomugiri-debug.apk"
         }
     }
 

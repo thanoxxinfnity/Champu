@@ -199,35 +199,61 @@ cloudflared tunnel --url http://localhost:7717`}</pre>
   );
 }
 
+/**
+ * Adding an endpoint, as a process rather than a form.
+ *
+ * The old version was one page of fields and a "detect capabilities" button.
+ * It could report a perfectly healthy endpoint and still leave the user with
+ * something that could not answer a single message, because detection only ever
+ * proved a route existed — it never sent one.
+ *
+ * Three steps, each of which has to actually succeed:
+ *   1. connect — the URL and key reach something, and we say what it speaks
+ *   2. model   — pick one, then send a real message and read the real reply
+ *   3. save    — only offered once a reply came back
+ *
+ * Anything that fails says what failed and what to do about it, at the step it
+ * failed on.
+ */
+
+type WizardStep = 1 | 2 | 3;
+
+interface TestResult {
+  ok: boolean;
+  reply?: string;
+  error?: string;
+  ms?: number;
+}
+
 function EndpointsTab() {
   const endpoints = useWorkspace((s) => s.endpoints);
   const setEndpoints = useWorkspace((s) => s.setEndpoints);
 
-  const [label, setLabel] = useState('');
+  const [step, setStep] = useState<WizardStep>(1);
+
+  // Step 1
   const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
-  const [headersText, setHeadersText] = useState('');
-  // '' means "work it out from the URL and the probe", which is right almost
-  // always — but a gateway on an unusual path needs a way to be told.
   const [dialect, setDialect] = useState<'' | Dialect>('');
-  // Some gateways 400 on a max_tokens their model cannot serve. An endpoint
-  // that says its own ceiling gets requests clamped to it instead.
+  const [headersText, setHeadersText] = useState('');
+  const [advanced, setAdvanced] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [probe, setProbe] = useState<CapabilityProbe | null>(null);
+
+  // Step 2
+  const [model, setModel] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [test, setTest] = useState<TestResult | null>(null);
+
+  // Step 3
+  const [label, setLabel] = useState('');
   const [maxTokens, setMaxTokens] = useState('');
   const [temperature, setTemperature] = useState('');
-  // Endpoints that do not publish /models are perfectly usable — you just have
-  // to say which model to call. Without this field they could not be used at all.
-  const [modelsText, setModelsText] = useState('');
-  const [probing, setProbing] = useState(false);
-  const [probe, setProbe] = useState<CapabilityProbe | null>(null);
+  const [saving, setSaving] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
 
-  /**
-   * Editing a field invalidates whatever the last attempt said.
-   *
-   * Without this a validation error outlived the thing it was complaining
-   * about: fix the headers and the "must be a JSON object" message stayed on
-   * screen, pointing at a field that was now valid.
-   */
+  /** Editing anything invalidates what the last attempt said about it. */
   const edited = <T,>(set: (v: T) => void) => (v: T) => {
     setError(null);
     set(v);
@@ -254,16 +280,31 @@ function EndpointsTab() {
     }
   };
 
-  const runProbe = async () => {
+  const restart = () => {
+    setStep(1);
+    setProbe(null);
+    setTest(null);
+    setModel('');
+    setError(null);
+  };
+
+  // ── Step 1: connect ───────────────────────────────────────────────────────
+
+  const connect = async () => {
     const headers = parseHeaders();
     if (headers === null) {
       setError('Custom headers must be a JSON object, e.g. {"X-Org": "acme"}.');
       return;
     }
+    if (!baseUrl.trim()) {
+      setError('Paste the endpoint URL first — the one from your provider’s docs is fine.');
+      return;
+    }
 
-    setProbing(true);
+    setConnecting(true);
     setError(null);
     setProbe(null);
+    setTest(null);
 
     try {
       const res = await fetch('/api/endpoints/probe', {
@@ -271,321 +312,514 @@ function EndpointsTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ baseUrl, apiKey: apiKey || undefined, headers, dialect: dialect || undefined }),
       });
-      const data = (await res.json()) as CapabilityProbe;
-      setProbe(data);
-      if (!data.ok) setError(data.error ?? 'Probe failed.');
+      const result = (await res.json()) as CapabilityProbe & { error?: string };
+      setProbe(result);
+
+      // A failed probe is not a dead end: plenty of endpoints publish no model
+      // list at all, and typing the id by hand is a perfectly good answer. So
+      // the flow continues either way — the next step is where the truth is.
+      setModel(result.models?.[0]?.id ?? '');
+      setStep(2);
     } catch (err) {
-      setError((err as Error).message);
+      setError(`Could not reach the app’s own server: ${(err as Error).message}`);
     } finally {
-      setProbing(false);
+      setConnecting(false);
     }
   };
 
-  /** Manually entered model ids, comma- or newline-separated. */
-  const manualModels = modelsText
-    .split(/[\n,]/)
-    .map((m) => m.trim())
-    .filter(Boolean);
+  // ── Step 2: prove it answers ──────────────────────────────────────────────
 
-  const save = async () => {
-    if (!isBrowser()) return;
-
-    const headers = parseHeaders();
-    if (headers === null) {
-      setError('Custom headers must be a JSON object, e.g. {"X-Org": "acme"}.');
+  const sendTest = async () => {
+    if (!model.trim()) {
+      setError('Pick a model, or type the id your provider gave you.');
       return;
     }
 
-    // A probe is evidence, not permission.
-    //
-    // Requiring `probe.ok` meant an endpoint that does not publish /models
-    // — which is most of them outside the big providers — could never be
-    // added at all, no matter how well it worked. The user knows their own
-    // server; the probe's job is to save them typing, not to veto them.
-    // The probe reports the base it could actually talk to, which may differ
-    // from what was typed; without a probe, at least strip a pasted endpoint
-    // suffix so "/v1/models" does not get stored as the base.
-    const url = probe?.ok ? probe.baseUrl : normalizeBase(baseUrl);
-    let host: string;
+    const headers = parseHeaders() ?? {};
+    setTesting(true);
+    setError(null);
+    setTest(null);
+    const started = Date.now();
+
     try {
-      const parsed = new URL(url);
-      if (!/^https?:$/.test(parsed.protocol)) {
-        setError('The base URL must start with http:// or https://.');
+      // A real completion, not a route check. This is the whole point of the
+      // rebuild: detection proving a route exists is not the same as the
+      // endpoint answering, and the gap between them is where every one of
+      // these failures lived.
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'custom',
+          model: model.trim(),
+          stream: false,
+          maxTokens: 32,
+          messages: [{ role: 'user', content: 'Reply with exactly: ok' }],
+          custom: {
+            baseUrl: probe?.ok ? probe.baseUrl : normalizeBase(baseUrl),
+            apiKey: apiKey || undefined,
+            headers,
+            dialect: dialect || probe?.dialect || undefined,
+          },
+        }),
+      });
+
+      const payload = (await res.json()) as { content?: string; error?: string };
+      if (!res.ok || payload.error) {
+        setTest({ ok: false, error: payload.error ?? `The endpoint answered ${res.status}.`, ms: Date.now() - started });
         return;
       }
-      host = parsed.host;
-    } catch {
-      setError('That base URL is not a valid URL. Include the scheme and version path, e.g. https://api.example.com/v1');
-      return;
+
+      const reply = (payload.content ?? '').trim();
+      if (!reply) {
+        setTest({
+          ok: false,
+          error: 'The endpoint accepted the request and returned an empty reply. Often a wrong model id, or a model that is not a chat model.',
+          ms: Date.now() - started,
+        });
+        return;
+      }
+
+      setTest({ ok: true, reply: reply.slice(0, 200), ms: Date.now() - started });
+      if (!label) setLabel(hostOf(probe?.baseUrl ?? baseUrl));
+      setStep(3);
+    } catch (err) {
+      setTest({ ok: false, error: (err as Error).message, ms: Date.now() - started });
+    } finally {
+      setTesting(false);
     }
-
-    const probedModels = probe?.ok ? probe.models.map((m) => ({ id: m.id, label: m.label, capabilities: m.capabilities })) : [];
-    const typedModels = manualModels
-      .filter((id) => !probedModels.some((m) => m.id === id))
-      .map((id) => ({ id, label: id, capabilities: ['chat'] as EndpointRecord['models'][number]['capabilities'] }));
-    const models = [...probedModels, ...typedModels];
-
-    if (!models.length) {
-      setError('No models. Run "detect capabilities", or type at least one model id below — the endpoint cannot be called without one.');
-      return;
-    }
-
-    const record: EndpointRecord = {
-      id: uid('ep'),
-      label: label || host,
-      baseUrl: url,
-      apiKey: apiKey || undefined,
-      headers,
-      // Which protocol answered. Without it a stored Anthropic or Gemini
-      // endpoint would be called in OpenAI's dialect and fail every time.
-      // A protocol chosen by hand wins over detection; otherwise what the probe
-      // actually spoke, falling back to what the URL announces.
-      dialect: dialect || probe?.dialect || dialectFromUrl(url) || undefined,
-      maxTokens: Number(maxTokens) > 0 ? Number(maxTokens) : undefined,
-      temperature: temperature.trim() === '' ? undefined : Number(temperature),
-      capabilities: probe?.ok && probe.capabilities.length ? probe.capabilities : ['chat'],
-      models,
-      routes: probe?.ok ? probe.routes : ['/chat/completions'],
-      lastProbedAt: Date.now(),
-      // Recorded honestly: this endpoint was added on the user's word, not
-      // verified, so the list can say so rather than implying it was checked.
-      probeOk: probe?.ok ? 1 : 0,
-      enabled: 1,
-      createdAt: Date.now(),
-    };
-
-    await db().endpoints.put(record);
-    await reload();
-
-    setLabel('');
-    setBaseUrl('');
-    setApiKey('');
-    setHeadersText('');
-    setModelsText('');
-    setProbe(null);
-    setError(null);
   };
+
+  // ── Step 3: save ──────────────────────────────────────────────────────────
+
+  const save = async () => {
+    const headers = parseHeaders() ?? {};
+    const url = probe?.ok ? probe.baseUrl : normalizeBase(baseUrl);
+
+    setSaving(true);
+    setError(null);
+    try {
+      const probed = (probe?.models ?? []).map((m) => ({ id: m.id, label: m.label, capabilities: m.capabilities }));
+      const chosen = probed.some((m) => m.id === model.trim())
+        ? probed
+        : [{ id: model.trim(), label: model.trim(), capabilities: ['chat'] }, ...probed];
+
+      const record: EndpointRecord = {
+        id: uid('ep'),
+        label: label.trim() || hostOf(url),
+        baseUrl: url,
+        apiKey: apiKey || undefined,
+        headers,
+        dialect: dialect || probe?.dialect || dialectFromUrl(url) || undefined,
+        maxTokens: Number(maxTokens) > 0 ? Number(maxTokens) : undefined,
+        temperature: temperature.trim() === '' ? undefined : Number(temperature),
+        capabilities: probe?.ok && probe.capabilities.length ? probe.capabilities : ['chat'],
+        models: chosen,
+        routes: probe?.ok ? probe.routes : ['verified by a test message'],
+        lastProbedAt: Date.now(),
+        // Verified means a message actually came back, not that a route existed.
+        probeOk: test?.ok ? 1 : 0,
+        enabled: 1,
+        createdAt: Date.now(),
+      };
+
+      await db().endpoints.put(record);
+      await reload();
+
+      setBaseUrl('');
+      setApiKey('');
+      setHeadersText('');
+      setLabel('');
+      setMaxTokens('');
+      setTemperature('');
+      setDialect('');
+      restart();
+    } catch (err) {
+      setError(`Could not save: ${(err as Error).message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const stepTitles = ['Connect', 'Test a model', 'Name and save'] as const;
 
   return (
     <div className="space-y-4">
-      <p className="text-[11.5px] leading-[1.55]" style={{ color: 'var(--ink-dim)' }}>
-        Add any OpenAI-compatible endpoint. Chomugiri probes it and, when it finds image, video, audio or 3D generation,
-        instantiates a dedicated workspace tab for that modality with its own history.
-      </p>
-
-      <Field label="Label">
-        <input value={label} onChange={(e) => edited(setLabel)(e.target.value)} placeholder="My inference server" className={inputClass} style={inputStyle} />
-      </Field>
-
-      <Field label="Base URL" hint="Include the version path, e.g. https://api.example.com/v1">
-        <input value={baseUrl} onChange={(e) => edited(setBaseUrl)(e.target.value)} placeholder="https://api.example.com/v1" className={inputClass} style={inputStyle} spellCheck={false} />
-      </Field>
-
-      <Field
-        label="API key"
-        hint={
-          dialect === 'anthropic'
-            ? 'Sent as `x-api-key`, with `anthropic-version`, which is what an Anthropic endpoint reads.'
-            : dialect === 'gemini'
-              ? 'Sent as `x-goog-api-key`, which is what Gemini reads.'
-              : 'Sent as `Authorization: Bearer …` unless a custom header below supplies one. Anthropic and Gemini endpoints get their own header instead.'
-        }
-      >
-        <input value={apiKey} onChange={(e) => edited(setApiKey)(e.target.value)} type="password" placeholder="sk-…" className={inputClass} style={inputStyle} spellCheck={false} />
-      </Field>
-
-      <Field
-        label="Protocol"
-        hint="Detected from the URL and confirmed by the probe. Set it by hand only if detection gets it wrong."
-      >
-        <div className="flex flex-wrap gap-1.5">
-          {([['', 'auto'], ['openai', 'OpenAI'], ['anthropic', 'Anthropic'], ['gemini', 'Gemini']] as const).map(
-            ([value, name]) => (
+      {/* Where you are, and what is left. */}
+      <div className="flex items-center gap-1.5">
+        {stepTitles.map((title, i) => {
+          const n = (i + 1) as WizardStep;
+          const done = step > n;
+          const here = step === n;
+          return (
+            <div key={title} className="flex flex-1 items-center gap-1.5">
               <button
-                key={name}
                 type="button"
-                onClick={() => edited(setDialect)(value as '' | Dialect)}
-                className="press mono rounded-lg border px-2.5 py-1.5 text-[10.5px]"
-                style={{
-                  borderColor: dialect === value ? 'var(--accent)' : 'var(--line)',
-                  color: dialect === value ? 'var(--accent)' : 'var(--ink-dim)',
-                  background: dialect === value ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'transparent',
-                }}
+                onClick={() => n < step && setStep(n)}
+                disabled={n > step}
+                className="mono flex items-center gap-1.5 text-[10.5px]"
+                style={{ color: here ? 'var(--accent)' : done ? 'var(--ink-dim)' : 'var(--ink-faint)' }}
               >
-                {name}
+                <span
+                  className="flex h-[18px] w-[18px] items-center justify-center rounded-full border text-[9px]"
+                  style={{
+                    borderColor: here || done ? 'var(--accent)' : 'var(--line)',
+                    background: here ? 'var(--accent)' : 'transparent',
+                    color: here ? 'var(--panel)' : done ? 'var(--accent)' : 'var(--ink-faint)',
+                  }}
+                >
+                  {done ? '✓' : n}
+                </span>
+                {title}
               </button>
-            ),
+              {i < 2 && <span className="h-px flex-1" style={{ background: 'var(--line)' }} />}
+            </div>
+          );
+        })}
+      </div>
+
+      <hr className="ink-rule" />
+
+      {/* ── Step 1 ───────────────────────────────────────────────────────── */}
+      {step === 1 && (
+        <>
+          <p className="text-[11.5px] leading-[1.55]" style={{ color: 'var(--ink-dim)' }}>
+            Paste the URL your provider gives you — the one from their docs, exactly as it is. Anthropic-style
+            (<code>/v1/messages</code>), Gemini and OpenAI-style endpoints all work; which one it is gets worked out
+            from the URL.
+          </p>
+
+          <Field label="Endpoint URL" hint="e.g. https://api.example.com/v1 — a full endpoint path is fine too.">
+            <input
+              value={baseUrl}
+              onChange={(e) => edited(setBaseUrl)(e.target.value)}
+              placeholder="https://api.example.com/v1"
+              className={inputClass}
+              style={inputStyle}
+              spellCheck={false}
+              autoCapitalize="off"
+            />
+          </Field>
+
+          <Field label="API key" hint="Sent in whichever header this endpoint's protocol reads. Stored on this device only.">
+            <input
+              value={apiKey}
+              onChange={(e) => edited(setApiKey)(e.target.value)}
+              type="password"
+              placeholder="sk-…"
+              className={inputClass}
+              style={inputStyle}
+              spellCheck={false}
+            />
+          </Field>
+
+          <button
+            type="button"
+            onClick={() => setAdvanced((v) => !v)}
+            className="mono text-[10.5px]"
+            style={{ color: 'var(--ink-faint)' }}
+          >
+            {advanced ? '− fewer options' : '+ protocol and custom headers'}
+          </button>
+
+          {advanced && (
+            <>
+              <Field label="Protocol" hint="Auto reads it from the URL. Set it by hand only if that gets it wrong.">
+                <div className="flex flex-wrap gap-1.5">
+                  {([['', 'auto'], ['openai', 'OpenAI'], ['anthropic', 'Anthropic'], ['gemini', 'Gemini']] as const).map(
+                    ([value, name]) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => edited(setDialect)(value as '' | Dialect)}
+                        className="press mono rounded-lg border px-2.5 py-1.5 text-[10.5px]"
+                        style={{
+                          borderColor: dialect === value ? 'var(--accent)' : 'var(--line)',
+                          color: dialect === value ? 'var(--accent)' : 'var(--ink-dim)',
+                          background: dialect === value ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : 'transparent',
+                        }}
+                      >
+                        {name}
+                      </button>
+                    ),
+                  )}
+                </div>
+              </Field>
+
+              <Field label="Custom headers" hint='JSON object. Example: {"X-Org": "acme"}'>
+                <textarea
+                  value={headersText}
+                  onChange={(e) => edited(setHeadersText)(e.target.value)}
+                  rows={2}
+                  placeholder="{}"
+                  className={`${inputClass} resize-y`}
+                  style={inputStyle}
+                  spellCheck={false}
+                />
+              </Field>
+            </>
           )}
-        </div>
-      </Field>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Max output tokens" hint="Optional. Requests are clamped to this — useful when a gateway rejects a larger ceiling.">
-          <input
-            value={maxTokens}
-            onChange={(e) => edited(setMaxTokens)(e.target.value.replace(/[^0-9]/g, ''))}
-            inputMode="numeric"
-            placeholder="e.g. 4096"
-            className={inputClass}
-            style={inputStyle}
-          />
-        </Field>
-        <Field label="Temperature" hint="Optional default, used only when the run does not set one.">
-          <input
-            value={temperature}
-            onChange={(e) => edited(setTemperature)(e.target.value.replace(/[^0-9.]/g, ''))}
-            inputMode="decimal"
-            placeholder="e.g. 0.7"
-            className={inputClass}
-            style={inputStyle}
-          />
-        </Field>
-      </div>
+          <button
+            type="button"
+            onClick={() => void connect()}
+            disabled={connecting || !baseUrl.trim()}
+            className="press hand w-full rounded-xl px-4 py-2.5 text-[13px]"
+            style={{ background: 'var(--accent)', color: 'var(--panel)', opacity: connecting || !baseUrl.trim() ? 0.5 : 1 }}
+          >
+            {connecting ? 'connecting…' : 'Connect →'}
+          </button>
+        </>
+      )}
 
-      <Field label="Custom headers" hint='JSON object. Example: {"X-Api-Version": "2024-10", "X-Org": "acme"}'>
-        <textarea
-          value={headersText}
-          onChange={(e) => edited(setHeadersText)(e.target.value)}
-          rows={2}
-          placeholder="{}"
-          className={`${inputClass} resize-y`}
-          style={inputStyle}
-          spellCheck={false}
-        />
-      </Field>
+      {/* ── Step 2 ───────────────────────────────────────────────────────── */}
+      {step === 2 && (
+        <>
+          {probe?.ok ? (
+            <div className="sketch-b p-2.5">
+              <p className="mono text-[10.5px]" style={{ color: 'var(--color-success)' }}>
+                ✔ connected in {probe.latencyMs}ms{probe.dialect ? ` · speaks ${DIALECT_LABELS[probe.dialect]}` : ''}
+              </p>
+              <p className="mono mt-1 text-[10px]" style={{ color: 'var(--ink-faint)' }}>
+                {probe.models.length} model{probe.models.length === 1 ? '' : 's'} found at {probe.baseUrl}
+              </p>
+            </div>
+          ) : (
+            <div className="sketch-b p-2.5">
+              <p className="mono text-[10.5px]" style={{ color: 'var(--color-amber)' }}>
+                {probe?.error ?? 'No model list published.'}
+              </p>
+              <p className="mt-1 text-[10.5px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
+                Not necessarily a problem — plenty of endpoints publish no list. Type the model id your provider gave
+                you and send a test message; that is what decides it.
+              </p>
+            </div>
+          )}
 
-      <Field
-        label="Model ids"
-        hint="Comma-separated. Only needed when the endpoint does not publish /models — detection fills this in when it can."
-      >
-        <input
-          value={modelsText}
-          onChange={(e) => edited(setModelsText)(e.target.value)}
-          placeholder="gpt-4o, gpt-4o-mini"
-          className={inputClass}
-          style={inputStyle}
-          spellCheck={false}
-        />
-      </Field>
+          {probe?.models && probe.models.length > 0 && (
+            <Field label="Pick a model" hint="Tap one, or type a different id below.">
+              <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
+                {probe.models.slice(0, 60).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => edited(setModel)(m.id)}
+                    className="press mono rounded-lg border px-2 py-1 text-[10px]"
+                    style={{
+                      borderColor: model === m.id ? 'var(--accent)' : 'var(--line)',
+                      color: model === m.id ? 'var(--accent)' : 'var(--ink-dim)',
+                    }}
+                  >
+                    {m.id}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          )}
 
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => void runProbe()}
-          disabled={probing || !baseUrl}
-          className="mono flex-1 rounded-lg border px-3 py-2 text-[11.5px] disabled:opacity-35"
-          style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
-        >
-          {probing ? 'probing…' : 'detect capabilities'}
-        </button>
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={!baseUrl.trim() || (!probe?.ok && !manualModels.length)}
-          className="press mono flex-1 rounded-lg px-3 py-2 text-[11.5px] font-semibold disabled:opacity-35"
-          style={{ background: 'var(--accent)', color: 'var(--panel)' }}
-          title={
-            !baseUrl.trim()
-              ? 'Enter a base URL first'
-              : !probe?.ok && !manualModels.length
-                ? 'Run detection, or type a model id — the endpoint cannot be called without one'
-                : 'Add this endpoint'
-          }
-        >
-          add endpoint
-        </button>
-      </div>
+          <Field label="Model id" hint="Exactly as your provider writes it.">
+            <input
+              value={model}
+              onChange={(e) => edited(setModel)(e.target.value)}
+              placeholder="claude-opus-5"
+              className={inputClass}
+              style={inputStyle}
+              spellCheck={false}
+              autoCapitalize="off"
+            />
+          </Field>
+
+          {test && (
+            <div
+              className="sketch-b p-2.5"
+              style={{ borderColor: test.ok ? 'var(--color-success)' : 'var(--color-danger)' }}
+            >
+              <p className="mono text-[10.5px]" style={{ color: test.ok ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                {test.ok ? `✔ it answered in ${test.ms}ms` : '✕ it did not answer'}
+              </p>
+              <p className="mono mt-1 break-words text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+                {test.ok ? `“${test.reply}”` : test.error}
+              </p>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={restart}
+              className="press mono rounded-xl border px-3 py-2.5 text-[11px]"
+              style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
+            >
+              ← back
+            </button>
+            <button
+              type="button"
+              onClick={() => void sendTest()}
+              disabled={testing || !model.trim()}
+              className="press hand flex-1 rounded-xl px-4 py-2.5 text-[13px]"
+              style={{ background: 'var(--accent)', color: 'var(--panel)', opacity: testing || !model.trim() ? 0.5 : 1 }}
+            >
+              {testing ? 'sending a test message…' : 'Send a test message →'}
+            </button>
+          </div>
+
+          {test && !test.ok && (
+            <button
+              type="button"
+              onClick={() => setStep(3)}
+              className="mono w-full text-[10.5px]"
+              style={{ color: 'var(--ink-faint)' }}
+            >
+              save it anyway — I know this endpoint works
+            </button>
+          )}
+        </>
+      )}
+
+      {/* ── Step 3 ───────────────────────────────────────────────────────── */}
+      {step === 3 && (
+        <>
+          {test?.ok ? (
+            <div className="sketch-b p-2.5" style={{ borderColor: 'var(--color-success)' }}>
+              <p className="mono text-[10.5px]" style={{ color: 'var(--color-success)' }}>
+                ✔ {model} answered in {test.ms}ms. This endpoint works.
+              </p>
+              {test.reply && (
+                <p className="mono mt-1 break-words text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+                  it said: “{test.reply}”
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="sketch-b p-2.5" style={{ borderColor: 'var(--color-amber)' }}>
+              <p className="mono text-[10.5px]" style={{ color: 'var(--color-amber)' }}>
+                Saving without a successful test — it will be marked unverified.
+              </p>
+            </div>
+          )}
+
+          <Field label="Name it" hint="Shown in the model switcher next to each of its models.">
+            <input
+              value={label}
+              onChange={(e) => edited(setLabel)(e.target.value)}
+              placeholder={hostOf(probe?.baseUrl ?? baseUrl)}
+              className={inputClass}
+              style={inputStyle}
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Max output tokens" hint="Optional. Set it if this endpoint rejects large requests.">
+              <input
+                value={maxTokens}
+                onChange={(e) => edited(setMaxTokens)(e.target.value.replace(/[^0-9]/g, ''))}
+                inputMode="numeric"
+                placeholder="e.g. 4096"
+                className={inputClass}
+                style={inputStyle}
+              />
+            </Field>
+            <Field label="Temperature" hint="Optional default.">
+              <input
+                value={temperature}
+                onChange={(e) => edited(setTemperature)(e.target.value.replace(/[^0-9.]/g, ''))}
+                inputMode="decimal"
+                placeholder="e.g. 0.7"
+                className={inputClass}
+                style={inputStyle}
+              />
+            </Field>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setStep(2)}
+              className="press mono rounded-xl border px-3 py-2.5 text-[11px]"
+              style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
+            >
+              ← back
+            </button>
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={saving}
+              className="press hand flex-1 rounded-xl px-4 py-2.5 text-[13px]"
+              style={{ background: 'var(--accent)', color: 'var(--panel)', opacity: saving ? 0.5 : 1 }}
+            >
+              {saving ? 'saving…' : 'Add endpoint'}
+            </button>
+          </div>
+        </>
+      )}
 
       {error && (
-        <div
-          className="rounded-lg border px-2.5 py-2"
-          style={{ borderColor: 'color-mix(in oklab, var(--color-danger) 40%, var(--line))' }}
-        >
-          <p className="mono text-[10.5px] leading-[1.5]" style={{ color: 'var(--color-danger)' }}>
-            {error}
-          </p>
-          {probe && !probe.ok && (
-            <p className="mt-1.5 text-[10.5px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
-              Plenty of endpoints do not publish a model list. Type the model id you want to call in the field above and
-              add it anyway — detection is a convenience, not a requirement.
-            </p>
-          )}
-        </div>
+        <p className="mono text-[10.5px]" style={{ color: 'var(--color-danger)' }}>
+          {error}
+        </p>
       )}
 
-      {probe?.ok && (
-        <div className="rounded-lg border p-2.5" style={{ borderColor: 'color-mix(in oklab, var(--accent) 35%, var(--line))' }}>
-          <p className="mono text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--accent)' }}>
-            detected · {probe.latencyMs}ms
-          </p>
-          {probe.dialect && (
-            <p className="mono mt-1 text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-              speaks {DIALECT_LABELS[probe.dialect]}
-            </p>
-          )}
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {probe.capabilities.map((c) => (
-              <span key={c} className="mono rounded px-1.5 py-0.5 text-[9.5px]" style={{ background: 'var(--surface)', color: 'var(--ink-dim)' }}>
-                {c}
-              </span>
-            ))}
-          </div>
-          <p className="mono mt-1.5 text-[10px]" style={{ color: 'var(--ink-faint)' }}>
-            {probe.models.length} model{probe.models.length === 1 ? '' : 's'} · routes {probe.routes.join(', ')}
-          </p>
-          {normalizeBase(baseUrl) !== probe.baseUrl && (
-            <p className="mono mt-1 text-[10px]" style={{ color: 'var(--color-amber)' }}>
-              using {probe.baseUrl} — that is where this endpoint answers chat
-            </p>
-          )}
-        </div>
-      )}
-
+      {/* ── What is already configured ───────────────────────────────────── */}
       {endpoints.length > 0 && (
-        <div>
-          <p className="mono mb-1.5 text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-faint)' }}>
-            configured
-          </p>
-          <div className="space-y-1.5">
-            {endpoints.map((ep) => (
-              <div key={ep.id} className="flex items-center gap-2 rounded-lg border px-2.5 py-2" style={{ borderColor: 'var(--line)' }}>
-                <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-1.5 truncate text-[11.5px]">
-                    {ep.label}
-                    {/* Added on the user's word rather than verified — worth
-                        saying, so a later failure is not a mystery. */}
-                    {!ep.probeOk && (
-                      <span
-                        className="mono shrink-0 rounded px-1 py-0.5 text-[9px]"
-                        style={{ background: 'color-mix(in oklab, var(--color-amber) 16%, transparent)', color: 'var(--color-amber)' }}
-                        title="Added without a successful capability probe"
-                      >
-                        unverified
-                      </span>
-                    )}
-                  </p>
-                  <p className="mono truncate text-[9.5px]" style={{ color: 'var(--ink-faint)' }}>
-                    {ep.baseUrl} · {ep.models.length} model{ep.models.length === 1 ? '' : 's'} · {ep.capabilities.join(', ')}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await db().endpoints.delete(ep.id);
-                    await reload();
-                  }}
-                  className="mono shrink-0 text-[10px]"
-                  style={{ color: 'var(--color-rose)' }}
+        <>
+          <hr className="ink-rule" />
+          <div>
+            <p className="mono mb-2 text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-faint)' }}>
+              configured
+            </p>
+            <div className="space-y-1.5">
+              {endpoints.map((ep) => (
+                <div
+                  key={ep.id}
+                  className="flex items-center gap-2 rounded-lg border px-2.5 py-2"
+                  style={{ borderColor: 'var(--line)' }}
                 >
-                  remove
-                </button>
-              </div>
-            ))}
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-1.5 truncate text-[12px]" style={{ color: 'var(--ink)' }}>
+                      {ep.label}
+                      {!ep.probeOk && (
+                        <span
+                          className="mono shrink-0 rounded px-1 py-px text-[8.5px]"
+                          style={{ background: 'color-mix(in oklab, var(--color-amber) 16%, transparent)', color: 'var(--color-amber)' }}
+                          title="Saved without a successful test message"
+                        >
+                          unverified
+                        </span>
+                      )}
+                    </p>
+                    <p className="mono truncate text-[9.5px]" style={{ color: 'var(--ink-faint)' }}>
+                      {ep.baseUrl} · {ep.models.length} model{ep.models.length === 1 ? '' : 's'}
+                      {ep.dialect ? ` · ${ep.dialect}` : ''}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await db().endpoints.delete(ep.id);
+                      await reload();
+                    }}
+                    className="mono shrink-0 text-[10px]"
+                    style={{ color: 'var(--color-rose)' }}
+                  >
+                    remove
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
+}
+
+/** The host, for a default label. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url.replace(/^https?:\/\//, '').split('/')[0] || 'endpoint';
+  }
 }
 
 /**

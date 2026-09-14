@@ -576,7 +576,29 @@ export const THINKING_PHRASES = [
   'Fingerprinting failure modes...',
   'Mapping execution lanes...',
   'Validating output schema...',
-];
+  'Reading between your lines...',
+  'Checking what could go wrong first...',
+  'Sketching the shape of an answer...',
+  'Weighing two approaches...',
+  'Discarding the clever one...',
+  'Looking for the boring, correct path...',
+  'Tracing the edge cases...',
+  'Asking whether this is really the question...',
+  'Counting the moving parts...',
+  'Pinning down the exact requirement...',
+  'Rehearsing the failure first...',
+  'Reaching for the smallest thing that works...',
+  'Separating what matters from what is loud...',
+  'Testing the premise before the code...',
+  'Following the data, not the guess...',
+  'Naming the thing properly...',
+  'Cutting the scope to what was asked...',
+  'Checking the assumption nobody stated...',
+  'Working out what you already know...',
+  'Deciding what not to build...',
+  'Finding where this has broken before...',
+  'Preferring evidence over confidence...',
+]
 
 export const LANE_B_PHRASES = [
   'Decomposing into atomic steps...',
@@ -584,4 +606,32 @@ export const LANE_B_PHRASES = [
   'Emitting project files...',
   'Compiling artifacts...',
   'Packaging outputs...',
-];
+  'Laying out the file tree...',
+  'Writing the manifest first...',
+  'Wiring the pieces together...',
+  'Making the first version run...',
+  'Removing what was not needed...',
+  'Checking the build would survive a rerun...',
+  'Naming files the way you would...',
+  'Leaving nothing half-written...',
+  'Closing the loop on every step...',
+]
+
+/**
+ * The phrases for one run, in an order that is not last run's order.
+ *
+ * The bubble used to walk the same list from the top every time, so the first
+ * three phrases were the same three forever and the app felt like it was
+ * replaying a recording. Shuffled per run, and the pool is large enough that
+ * two runs rarely open the same way.
+ */
+export function phrasesForRun(lane: 'A' | 'B'): string[] {
+  const pool = lane === 'B' ? [...LANE_B_PHRASES, ...THINKING_PHRASES] : [...THINKING_PHRASES];
+
+  // Fisher-Yates: every order equally likely, which a sort-by-random is not.
+  for (let i = pool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool;
+}
