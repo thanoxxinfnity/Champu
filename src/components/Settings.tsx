@@ -1176,6 +1176,8 @@ function KeysTab() {
   const [nim, setNim] = useState('');
   const [pollinations, setPollinations] = useState('');
   const [tripo, setTripo] = useState('');
+  const [meshy, setMeshy] = useState('');
+  const [trellisUrl, setTrellisUrl] = useState('');
   const [reveal, setReveal] = useState(false);
   const [shell, setShell] = useState(false);
   /**
@@ -1199,6 +1201,8 @@ function KeysTab() {
       setNim(keys.nim);
       setPollinations(keys.pollinations);
       setTripo(keys.tripo);
+      setMeshy(keys.meshy);
+      setTrellisUrl(keys.trellisUrl);
       setNimSaved(configured);
     })();
     return () => {
@@ -1220,7 +1224,8 @@ function KeysTab() {
     setSaving(true);
     setStatus({ kind: 'info', text: 'Saving, then checking the key against NVIDIA…' });
     try {
-      await saveKeys(sendNim ? { nim, pollinations, tripo } : { pollinations, tripo });
+      const modelKeys = { pollinations, tripo, meshy, trellisUrl };
+      await saveKeys(sendNim ? { nim, ...modelKeys } : modelKeys);
       setVercelCredentials(vercel.trim(), team.trim());
       // The catalogue is the real test: it only returns NIM models if the key
       // was accepted, so a successful reload is proof rather than a guess.
@@ -1241,7 +1246,7 @@ function KeysTab() {
     } finally {
       setSaving(false);
     }
-  }, [nim, pollinations, vercel, team, nimTouched, nimSaved, loadModels, setVercelCredentials]);
+  }, [nim, pollinations, tripo, meshy, trellisUrl, vercel, team, nimTouched, nimSaved, loadModels, setVercelCredentials]);
 
   const clear = useCallback(async () => {
     setNimTouched(false);
@@ -1249,9 +1254,11 @@ function KeysTab() {
     setNim('');
     setPollinations('');
     setTripo('');
+    setMeshy('');
+    setTrellisUrl('');
     setVercel('');
     setTeam('');
-    await saveKeys({ nim: '', pollinations: '', tripo: '' });
+    await saveKeys({ nim: '', pollinations: '', tripo: '', meshy: '', trellisUrl: '' });
     setVercelCredentials('', '');
     await loadModels(true);
     setStatus({ kind: 'info', text: 'Keys cleared from this device.' });
@@ -1336,8 +1343,24 @@ function KeysTab() {
       </Field>
 
       <Field
+        label="Meshy AI key (optional) — 3D models, rigged"
+        hint="Tried first when set, because Meshy is the only one of these that rigs what it generates — a rigged model can be animated, an unrigged one is scenery. Get one at meshy.ai."
+      >
+        <input
+          className={inputClass}
+          style={inputStyle}
+          type={reveal ? 'text' : 'password'}
+          value={meshy}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder="msy_… — leave empty to use code-built geometry"
+          onChange={(e) => setMeshy(e.target.value)}
+        />
+      </Field>
+
+      <Field
         label="Tripo AI key (optional) — 3D models"
-        hint="Only for generating 3D models from a description. Without it the Godot suite still builds models in code, which needs no key and works offline. Get one at platform.tripo3d.ai."
+        hint="Used when there is no Meshy key. Tripo makes good meshes but does not rig them, so a character from Tripo will not animate without rigging it by hand. Get one at platform.tripo3d.ai."
       >
         <input
           className={inputClass}
@@ -1350,6 +1373,27 @@ function KeysTab() {
           onChange={(e) => setTripo(e.target.value)}
         />
       </Field>
+
+      <Field
+        label="Self-hosted TRELLIS URL (optional)"
+        hint="NVIDIA's hosted Microsoft TRELLIS only accepts its own sample images — it answers 422 to an uploaded image and 500 to a prompt, so it cannot build from a description. Running the NIM container yourself (nvcr.io/nim/microsoft/trellis, needs an NVIDIA GPU) does work; paste its URL here and your NVIDIA key authenticates it."
+      >
+        <input
+          className={inputClass}
+          style={inputStyle}
+          type="text"
+          value={trellisUrl}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder="http://…:8000/v1/infer — leave empty to skip TRELLIS"
+          onChange={(e) => setTrellisUrl(e.target.value)}
+        />
+      </Field>
+
+      <p className="text-xs opacity-70">
+        With none of these, 3D models are built in code and rigged locally — blocky, but instant, free and
+        always available. That is the fallback whenever a hosted generator is out of credit or slow.
+      </p>
 
       <hr className="ink-rule" />
 

@@ -28,9 +28,22 @@ export interface ApiKeys {
    * Godot suite builds geometry in code, which needs no key and cannot fail.
    */
   tripo: string;
+  /**
+   * Meshy AI. Same job as Tripo, and additionally rigs what it generates —
+   * which is why it is tried first when both are present.
+   */
+  meshy: string;
+  /**
+   * A self-hosted Microsoft TRELLIS NIM container.
+   *
+   * A URL rather than a key because there is no hosted TRELLIS worth calling:
+   * NVIDIA's only accepts its own sample images. See `suites/godot/trellis.ts`
+   * for what it answers to everything else.
+   */
+  trellisUrl: string;
 }
 
-const EMPTY: ApiKeys = { nim: '', pollinations: '', tripo: '' };
+const EMPTY: ApiKeys = { nim: '', pollinations: '', tripo: '', meshy: '', trellisUrl: '' };
 
 export const NIM_KEY_HEADER = 'x-chomugiri-nim-key';
 export const POLLINATIONS_KEY_HEADER = 'x-chomugiri-pollinations-token';
@@ -55,10 +68,15 @@ export async function loadKeys(): Promise<ApiKeys> {
 }
 
 export async function saveKeys(next: Partial<ApiKeys>): Promise<ApiKeys> {
-  cache = { ...cache, ...next };
   // Trim here rather than at every call site: a key pasted from a web page
   // almost always arrives with a trailing newline, and the upstream 401s on it.
-  cache = { nim: cache.nim.trim(), pollinations: cache.pollinations.trim(), tripo: cache.tripo.trim() };
+  // Done by walking the keys rather than naming each field, so adding a
+  // credential cannot quietly skip the trim.
+  const merged = { ...EMPTY, ...cache, ...next };
+  for (const key of Object.keys(merged) as Array<keyof ApiKeys>) {
+    merged[key] = String(merged[key] ?? '').trim();
+  }
+  cache = merged;
 
   if (await isShellHosted()) {
     // The shell is the system of record; keeping a second copy in IndexedDB
