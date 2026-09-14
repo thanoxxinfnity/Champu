@@ -52,15 +52,27 @@ object Upstream {
             readTimeout = cfg.timeoutMs
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Accept", accept)
+            setRequestProperty("User-Agent", Blocked.USER_AGENT)
             cfg.headers.forEach { (k, v) -> setRequestProperty(k, v) }
         }
+
+    /** Response headers as a plain map; HttpURLConnection keys them by list. */
+    private fun HttpURLConnection.flatHeaders(): Map<String, String> =
+        runCatching {
+            headerFields.entries
+                .filter { it.key != null }
+                .associate { it.key to it.value.orEmpty().joinToString(", ") }
+        }.getOrElse { emptyMap() }
 
     private fun HttpURLConnection.errorBody(): String =
         runCatching { errorStream?.bufferedReader()?.use(BufferedReader::readText) }.getOrNull().orEmpty()
 
     private fun retryable(status: Int) = status == 408 || status == 425 || status == 429 || status >= 500
 
-    private fun failure(cfg: Config, status: Int, body: String): ErrorInfo {
+    private fun failure(cfg: Config, status: Int, body: String, headers: Map<String, String> = emptyMap()): ErrorInfo {
+        Blocked.detect(status, headers, body)?.let {
+            return ErrorInfo(it.message, "endpoint_blocked", false)
+        }
         cfg.describeError?.invoke(status, body)?.let { return it }
         Dialects.errorFromBody(cfg.dialect, status, body)?.let { return it }
 
@@ -140,7 +152,7 @@ object Upstream {
 
             val status = conn.responseCode
             if (status !in 200..299) {
-                emit(Frame.Err(failure(cfg, status, conn.errorBody())))
+                emit(Frame.Err(failure(cfg, status, conn.errorBody(), conn.flatHeaders())))
                 emit(Frame.Done("error")); return
             }
 
@@ -207,7 +219,7 @@ object Upstream {
         try {
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
             val status = conn.responseCode
-            if (status !in 200..299) return Completion("", "", failure(cfg, status, conn.errorBody()))
+            if (status !in 200..299) return Completion("", "", failure(cfg, status, conn.errorBody(), conn.flatHeaders()))
 
             val text = conn.inputStream.bufferedReader().use(BufferedReader::readText)
             (cfg.describeError?.invoke(status, text) ?: EndpointProbe.envelopeError(text))
@@ -241,6 +253,7 @@ object Upstream {
             requestMethod = "GET"
             connectTimeout = 15_000
             readTimeout = timeoutMs
+            setRequestProperty("User-Agent", Blocked.USER_AGENT)
             headers.forEach { (k, v) -> setRequestProperty(k, v) }
         }
         try {
@@ -259,6 +272,7 @@ object Upstream {
             requestMethod = "GET"
             connectTimeout = 15_000
             readTimeout = timeoutMs
+            setRequestProperty("User-Agent", Blocked.USER_AGENT)
             headers.forEach { (k, v) -> setRequestProperty(k, v) }
         }
         try {

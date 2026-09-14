@@ -1,3 +1,4 @@
+import { USER_AGENT, wafBlock } from './blocked.ts';
 import { errorFromBody, framesFromResponse, framesFromStreamChunk, requestBody, type Dialect } from './dialects.ts';
 import { envelopeError, type ErrorInfo } from './envelope-error.ts';
 import { ProviderError, type ChatRequest, type StreamFrame } from './types.ts';
@@ -55,6 +56,12 @@ interface DescribedError {
 
 async function readError(res: Response, cfg: UpstreamConfig): Promise<DescribedError> {
   const text = await res.text().catch(() => '');
+
+  // A 403 is far more often a firewall in front of the endpoint than a bad
+  // key, and telling the user to check their key sends them to the one place
+  // the problem is not.
+  const blocked = wafBlock(res.status, res.headers, text);
+  if (blocked) return { message: blocked.message, code: 'endpoint_blocked', retryable: false };
 
   const dialectError = errorFromBody(cfg.dialect ?? 'openai', res.status, text);
   const described = cfg.describeError?.(res.status, text) ?? (dialectError ? { ...dialectError, retryable: isRetryable(res.status) } : null);
@@ -164,7 +171,15 @@ export async function* streamChat(
   try {
     res = await fetch(cfg.urlFor?.(wantStream) ?? cfg.url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: wantStream ? 'text/event-stream' : 'application/json', ...cfg.headers },
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: wantStream ? 'text/event-stream' : 'application/json',
+        // Without this the request goes out as bare Node or `Java/17`, which
+        // some WAFs refuse outright. Identifying honestly is the fix; forging a
+        // browser would be evading a control the endpoint chose to run.
+        'User-Agent': USER_AGENT,
+        ...cfg.headers,
+      },
       body: JSON.stringify(body),
       signal: composed,
     });

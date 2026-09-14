@@ -10,6 +10,7 @@ import {
   normalizeBase as normalizeForDialect,
   type Dialect,
 } from './dialects.ts';
+import { USER_AGENT, wafBlock } from './blocked.ts';
 import { chatBaseCandidates, chatModelsOnly, modelIdsFrom, modelListCandidates, normalizeBase } from './model-list.ts';
 import type { UpstreamConfig } from './openai-compat.ts';
 import { inferCapabilities, labelFor, vendorFor } from './registry.ts';
@@ -195,6 +196,18 @@ export async function probeEndpoint(cfg: CustomEndpointConfig): Promise<Capabili
     const candidateBase = normalizeForDialect(cfg.baseUrl, candidate);
     const answer = await speaks(candidate, candidateBase, customHeaders(cfg, candidate));
     if (!answer.ok) {
+      if (answer.blocked) {
+        return {
+          ok: false,
+          baseUrl: candidateBase,
+          dialect: candidate,
+          capabilities: [],
+          models: [],
+          routes: [],
+          latencyMs: Date.now() - started,
+          error: answer.blocked,
+        };
+      }
       if (answer.auth) {
         return {
           ok: false,
@@ -273,7 +286,10 @@ export async function probeEndpoint(cfg: CustomEndpointConfig): Promise<Capabili
 
     for (const path of modelListCandidates(base)) {
       try {
-        const attempt = await fetch(path.url, { headers, signal: AbortSignal.timeout(12_000) });
+        const attempt = await fetch(path.url, {
+          headers: { ...headers, 'User-Agent': USER_AGENT },
+          signal: AbortSignal.timeout(12_000),
+        });
         // Auth failures are conclusive — stop and report rather than trying
         // every other path and blaming the route.
         if (attempt.status === 401 || attempt.status === 403) {
@@ -420,7 +436,7 @@ async function speaks(
   dialect: Dialect,
   base: string,
   headers: Record<string, string>,
-): Promise<{ ok: boolean; route: string; status?: number; auth?: boolean }> {
+): Promise<{ ok: boolean; route: string; status?: number; auth?: boolean; blocked?: string }> {
   const probeModel = dialect === 'gemini' ? 'gemini-3-flash' : '__chomugiri_probe__';
   const url = chatUrl(dialect, base, probeModel, false);
 
@@ -434,13 +450,20 @@ async function speaks(
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers: { ...headers, 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(12_000),
     });
 
-    if (res.status === 401 || res.status === 403) {
-      return { ok: false, route: '', status: res.status, auth: true };
+    if (res.status === 401 || res.status === 403 || res.status === 503) {
+      // Distinguish the endpoint refusing the key from a firewall refusing the
+      // connection. Reporting a Cloudflare block as "check your API key" is how
+      // a user spends an evening on the wrong problem.
+      const text = await res.clone().text().catch(() => '');
+      const blocked = wafBlock(res.status, res.headers, text);
+      if (blocked) return { ok: false, route: '', status: res.status, blocked: blocked.message };
+      if (res.status !== 503) return { ok: false, route: '', status: res.status, auth: true };
+      return { ok: false, route: '' };
     }
     if (res.status === 404 || res.status === 501 || res.status === 405) return { ok: false, route: '' };
 
@@ -469,7 +492,10 @@ async function speaks(
 /** The model list, read in the dialect's own shape. */
 async function listModelsFor(dialect: Dialect, base: string, headers: Record<string, string>): Promise<string[]> {
   try {
-    const res = await fetch(modelListUrl(dialect, base), { headers, signal: AbortSignal.timeout(12_000) });
+    const res = await fetch(modelListUrl(dialect, base), {
+      headers: { ...headers, 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(12_000),
+    });
     if (!res.ok) return [];
     return modelIdsFromList(dialect, await res.json().catch(() => null));
   } catch {

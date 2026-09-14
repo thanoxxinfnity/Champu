@@ -1,5 +1,6 @@
 package com.chomugiri.workspace.server
 
+import com.chomugiri.workspace.providers.Blocked
 import com.chomugiri.workspace.providers.Dialects
 import com.chomugiri.workspace.providers.EndpointProbe
 import com.chomugiri.workspace.providers.Nim
@@ -476,6 +477,15 @@ class ApiRouter(private val secrets: SecretStore) {
                 if (!Dialects.hasAuthHeader(candidate, this)) putAll(Dialects.authHeaders(candidate, apiKey))
             }
             val answer = speaksDialect(candidate, candidateBase, candidateHeaders)
+            if (answer.blocked != null) {
+                response.json(422, JSONObject()
+                    .put("ok", false).put("baseUrl", candidateBase).put("dialect", candidate)
+                    .put("capabilities", JSONArray()).put("models", JSONArray()).put("routes", JSONArray())
+                    .put("latencyMs", System.currentTimeMillis() - started)
+                    .put("error", answer.blocked)
+                    .toString())
+                return
+            }
             if (answer.auth) {
                 response.json(422, JSONObject()
                     .put("ok", false).put("baseUrl", candidateBase).put("dialect", candidate)
@@ -627,7 +637,14 @@ class ApiRouter(private val secrets: SecretStore) {
         )
     }
 
-    private data class Spoken(val ok: Boolean, val route: String, val status: Int = 0, val auth: Boolean = false)
+    private data class Spoken(
+        val ok: Boolean,
+        val route: String,
+        val status: Int = 0,
+        val auth: Boolean = false,
+        /** Set when a firewall refused the connection rather than the API refusing the key. */
+        val blocked: String? = null,
+    )
 
     /**
      * Whether an endpoint answers in a given dialect.
@@ -662,6 +679,7 @@ class ApiRouter(private val secrets: SecretStore) {
                 requestMethod = "POST"; doOutput = true
                 connectTimeout = 10_000; readTimeout = 12_000
                 setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("User-Agent", Blocked.USER_AGENT)
                 headers.forEach { (k, v) -> setRequestProperty(k, v) }
             }
             try {
@@ -671,11 +689,19 @@ class ApiRouter(private val secrets: SecretStore) {
                     (if (status in 200..299) conn.inputStream else conn.errorStream)
                         ?.bufferedReader()?.use { r -> r.readText() }
                 }.getOrNull().orEmpty()
-                status to text
+                val head = runCatching {
+                    conn.headerFields.entries.filter { it.key != null }
+                        .associate { it.key to it.value.orEmpty().joinToString(", ") }
+                }.getOrElse { emptyMap() }
+                Triple(status, text, head)
             } finally { conn.disconnect() }
         }.getOrNull() ?: return Spoken(false, "")
 
-        val (status, text) = result
+        val (status, text, responseHeaders) = result
+
+        // A firewall refusing the connection is not the API refusing the key,
+        // and saying "check your API key" for the first wastes the user's time.
+        Blocked.detect(status, responseHeaders, text)?.let { return Spoken(false, "", status, blocked = it.message) }
         if (status == 401 || status == 403) return Spoken(false, "", status, auth = true)
         if (status == 404 || status == 405 || status == 501) return Spoken(false, "")
 

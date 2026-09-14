@@ -246,3 +246,50 @@ class DialectsTest {
         } finally { socket.close() }
     }
 }
+
+/**
+ * A 403 from a firewall is not a 403 from the API, and the difference decides
+ * whether the user goes hunting for a key problem that does not exist.
+ */
+class BlockedTest {
+
+    // The real page tabitoken.com answers with, trimmed.
+    private val cloudflare = """
+        <!DOCTYPE html><html lang="en-US"><head><title>Attention Required! | Cloudflare</title></head>
+        <body><h1>Sorry, you have been blocked</h1><h2>You are unable to access tabitoken.com</h2>
+        <span>Cloudflare Ray ID: a3acf1728b172d28</span></body></html>
+    """.trimIndent()
+
+    @Test fun `a Cloudflare block page is not an API key problem`() {
+        val info = com.chomugiri.workspace.providers.Blocked.detect(
+            403,
+            mapOf("Content-Type" to "text/html; charset=UTF-8", "Server" to "cloudflare", "CF-RAY" to "a3acf1728b172d28"),
+            cloudflare,
+        )
+        assertEquals("Cloudflare", info!!.service)
+        assertEquals("a3acf1728b172d28", info.reference)
+        assertTrue(info.message.contains("not your API key"))
+        // The reference is what the endpoint's support actually needs.
+        assertTrue(info.message.contains("a3acf1728b172d28"))
+    }
+
+    @Test fun `the Ray ID is recovered from the page when the header is absent`() {
+        val info = com.chomugiri.workspace.providers.Blocked.detect(403, mapOf("Content-Type" to "text/html"), cloudflare)
+        assertEquals("a3acf1728b172d28", info!!.reference)
+    }
+
+    @Test fun `a JSON error is the API speaking, and is left alone`() {
+        assertNull(
+            com.chomugiri.workspace.providers.Blocked.detect(
+                401,
+                mapOf("Content-Type" to "application/json"),
+                """{"type":"error","error":{"type":"authentication_error","message":"x-api-key header is required"}}""",
+            )
+        )
+    }
+
+    @Test fun `only refusing statuses are considered`() {
+        assertNull(com.chomugiri.workspace.providers.Blocked.detect(200, mapOf("Content-Type" to "text/html"), cloudflare))
+        assertNull(com.chomugiri.workspace.providers.Blocked.detect(500, mapOf("Content-Type" to "text/html"), "<html>oops</html>"))
+    }
+}
