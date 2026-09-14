@@ -15,6 +15,8 @@
  * back.
  */
 
+import { inverseBindMatrix, jointIndexFor, localTranslation, validateRig, type Rig } from './rig.ts';
+
 /** One axis-aligned box, in the same units the caller is already using. */
 export interface Box {
   name: string;
@@ -33,6 +35,9 @@ const FLOAT = 5126;
 const UNSIGNED_SHORT = 5123;
 const ARRAY_BUFFER = 34962;
 const ELEMENT_ARRAY_BUFFER = 34963;
+
+/** Four vertices per face, six faces: the vertex count of one box. */
+const VERTS_PER_BOX = 24;
 
 /** The 8 corners of a box, as 24 vertices — 4 per face, so each face gets flat normals. */
 function boxVertices(origin: [number, number, number], size: [number, number, number]) {
@@ -86,27 +91,94 @@ function pad4(n: number): number {
 }
 
 /**
+ * Accumulates the BIN chunk while recording a bufferView for each piece.
+ *
+ * The offsets and the bytes have to agree exactly, and computing them in two
+ * places is how they stop agreeing the moment a new stream (joints, weights,
+ * bind matrices) is added. One writer keeps them in step.
+ */
+class BinaryBuilder {
+  readonly views: Record<string, unknown>[] = [];
+  private readonly parts: Uint8Array[] = [];
+  private offset = 0;
+
+  /** Appends a typed array and returns the index of its bufferView. */
+  add(data: ArrayBufferView, target?: number): number {
+    const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    const index = this.views.length;
+    this.views.push({
+      buffer: 0,
+      byteOffset: this.offset,
+      byteLength: bytes.byteLength,
+      ...(target ? { target } : {}),
+    });
+    this.parts.push(bytes);
+    this.offset += bytes.byteLength;
+
+    // Every view must start 4-byte aligned; the pad belongs to no view.
+    const padding = pad4(bytes.byteLength);
+    if (padding) {
+      this.parts.push(new Uint8Array(padding));
+      this.offset += padding;
+    }
+    return index;
+  }
+
+  get byteLength(): number {
+    return this.offset;
+  }
+
+  /** Copies every recorded part into `out` starting at `at`. */
+  writeInto(out: Uint8Array, at: number): void {
+    let p = at;
+    for (const part of this.parts) {
+      out.set(part, p);
+      p += part.byteLength;
+    }
+  }
+}
+
+export interface GlbOptions {
+  /** Divides every coordinate. Our box units are 16-to-a-block; Godot uses metres. */
+  scale?: number;
+  name?: string;
+  /**
+   * A skeleton to bind the boxes to. With one, the output is a skinned mesh
+   * Godot imports as a Skeleton3D and an AnimationPlayer can drive. Without
+   * one, the boxes are plain static nodes.
+   */
+  rig?: Rig;
+}
+
+/**
  * A .glb containing one mesh per box, each its own node so the parts stay
  * separable in an editor.
  *
- * `scale` divides every coordinate, because the box sizes we generate elsewhere
- * are in pixel-ish units (16 to a block) while Godot works in metres.
+ * With `options.rig`, each box is additionally bound to one joint at full
+ * weight and every mesh node carries the skin — rigid skinning, which is what a
+ * blocky character wants: an arm swings from the shoulder as a solid piece
+ * instead of bending like rubber.
  */
-export function buildGlb(boxes: Box[], options: { scale?: number; name?: string } = {}): Uint8Array {
+export function buildGlb(boxes: Box[], options: GlbOptions = {}): Uint8Array {
   if (!boxes.length) throw new Error('A model needs at least one box.');
   const scale = options.scale ?? 16;
+  const rig = options.rig;
 
-  const positionChunks: Float32Array[] = [];
-  const normalChunks: Float32Array[] = [];
-  const indexChunks: Uint16Array[] = [];
+  if (rig) {
+    const problems = validateRig(rig);
+    if (problems.length) throw new Error(`The rig will not skin: ${problems.join(' ')}`);
+    if (rig.bones.length > 255) {
+      // JOINTS_0 is written as unsigned short, so the ceiling is far higher than
+      // this — but a skeleton this size is a bug in the caller, not a model.
+      throw new Error(`${rig.bones.length} bones is more than a generated character should have.`);
+    }
+  }
 
+  const bin = new BinaryBuilder();
   const accessors: Record<string, unknown>[] = [];
-  const bufferViews: Record<string, unknown>[] = [];
   const meshes: Record<string, unknown>[] = [];
   const nodes: Record<string, unknown>[] = [];
   const materials: Record<string, unknown>[] = [];
-
-  let offset = 0;
 
   boxes.forEach((box, i) => {
     const { positions, normals, indices } = boxVertices(
@@ -114,28 +186,9 @@ export function buildGlb(boxes: Box[], options: { scale?: number; name?: string 
       [box.size[0] / scale, box.size[1] / scale, box.size[2] / scale],
     );
 
-    const positionData = new Float32Array(positions);
-    const normalData = new Float32Array(normals);
-    const indexData = new Uint16Array(indices);
-
-    // Positions
-    const positionView = bufferViews.length;
-    bufferViews.push({ buffer: 0, byteOffset: offset, byteLength: positionData.byteLength, target: ARRAY_BUFFER });
-    offset += positionData.byteLength;
-    positionChunks.push(positionData);
-
-    // Normals
-    const normalView = bufferViews.length;
-    bufferViews.push({ buffer: 0, byteOffset: offset, byteLength: normalData.byteLength, target: ARRAY_BUFFER });
-    offset += normalData.byteLength;
-    normalChunks.push(normalData);
-
-    // Indices — padded, because the next view has to start 4-byte aligned.
-    const indexView = bufferViews.length;
-    const indexPadding = pad4(indexData.byteLength);
-    bufferViews.push({ buffer: 0, byteOffset: offset, byteLength: indexData.byteLength, target: ELEMENT_ARRAY_BUFFER });
-    offset += indexData.byteLength + indexPadding;
-    indexChunks.push(indexData);
+    const positionView = bin.add(new Float32Array(positions), ARRAY_BUFFER);
+    const normalView = bin.add(new Float32Array(normals), ARRAY_BUFFER);
+    const indexView = bin.add(new Uint16Array(indices), ELEMENT_ARRAY_BUFFER);
 
     const bounds = minMax(positions, 3);
     const positionAccessor = accessors.length;
@@ -155,6 +208,28 @@ export function buildGlb(boxes: Box[], options: { scale?: number; name?: string 
     const indexAccessor = accessors.length;
     accessors.push({ bufferView: indexView, componentType: UNSIGNED_SHORT, count: indices.length, type: 'SCALAR' });
 
+    const attributes: Record<string, number> = { POSITION: positionAccessor, NORMAL: normalAccessor };
+
+    if (rig) {
+      // One joint per vertex at weight 1: the whole box moves with its bone.
+      const joint = jointIndexFor(box, rig);
+      const joints = new Uint16Array(VERTS_PER_BOX * 4);
+      const weights = new Float32Array(VERTS_PER_BOX * 4);
+      for (let v = 0; v < VERTS_PER_BOX; v += 1) {
+        joints[v * 4] = joint;
+        weights[v * 4] = 1;
+      }
+
+      const jointsView = bin.add(joints, ARRAY_BUFFER);
+      const weightsView = bin.add(weights, ARRAY_BUFFER);
+
+      attributes.JOINTS_0 = accessors.length;
+      accessors.push({ bufferView: jointsView, componentType: UNSIGNED_SHORT, count: VERTS_PER_BOX, type: 'VEC4' });
+
+      attributes.WEIGHTS_0 = accessors.length;
+      accessors.push({ bufferView: weightsView, componentType: FLOAT, count: VERTS_PER_BOX, type: 'VEC4' });
+    }
+
     const [r, g, b] = box.color ?? [0.62, 0.62, 0.66];
     materials.push({
       name: `${box.name}_mat`,
@@ -163,29 +238,70 @@ export function buildGlb(boxes: Box[], options: { scale?: number; name?: string 
 
     meshes.push({
       name: box.name,
-      primitives: [
-        {
-          attributes: { POSITION: positionAccessor, NORMAL: normalAccessor },
-          indices: indexAccessor,
-          material: i,
-        },
-      ],
+      primitives: [{ attributes, indices: indexAccessor, material: i }],
     });
 
-    nodes.push({ name: box.name, mesh: i });
+    // A skinned mesh node must not sit under a joint, so these stay at the
+    // scene root alongside the skeleton rather than inside it.
+    nodes.push({ name: box.name, mesh: i, ...(rig ? { skin: 0 } : {}) });
   });
 
-  const binaryLength = offset;
+  const sceneNodes = nodes.map((_, i) => i);
+  let skins: Record<string, unknown>[] | undefined;
+
+  if (rig) {
+    const jointBase = nodes.length;
+    const childrenOf = new Map<string, number[]>();
+
+    rig.bones.forEach((bone, i) => {
+      if (!bone.parent) return;
+      const list = childrenOf.get(bone.parent) ?? [];
+      list.push(jointBase + i);
+      childrenOf.set(bone.parent, list);
+    });
+
+    for (const bone of rig.bones) {
+      const [tx, ty, tz] = localTranslation(bone, rig);
+      const children = childrenOf.get(bone.name);
+      nodes.push({
+        name: bone.name,
+        translation: [tx / scale, ty / scale, tz / scale],
+        ...(children?.length ? { children } : {}),
+      });
+    }
+
+    const matrices = new Float32Array(rig.bones.length * 16);
+    rig.bones.forEach((bone, i) => matrices.set(inverseBindMatrix(bone, scale), i * 16));
+    const matrixView = bin.add(matrices);
+
+    const matrixAccessor = accessors.length;
+    accessors.push({ bufferView: matrixView, componentType: FLOAT, count: rig.bones.length, type: 'MAT4' });
+
+    const rootIndex = jointBase + rig.bones.findIndex((b) => !b.parent);
+    skins = [
+      {
+        name: `${options.name ?? 'Scene'}_skin`,
+        inverseBindMatrices: matrixAccessor,
+        skeleton: rootIndex,
+        joints: rig.bones.map((_, i) => jointBase + i),
+      },
+    ];
+    // Only the root joint goes in the scene; the rest hang off it as children.
+    sceneNodes.push(rootIndex);
+  }
+
+  const binaryLength = bin.byteLength;
 
   const gltf = {
     asset: { version: '2.0', generator: 'Chomugiri' },
     scene: 0,
-    scenes: [{ name: options.name ?? 'Scene', nodes: nodes.map((_, i) => i) }],
+    scenes: [{ name: options.name ?? 'Scene', nodes: sceneNodes }],
     nodes,
     meshes,
     materials,
+    ...(skins ? { skins } : {}),
     accessors,
-    bufferViews,
+    bufferViews: bin.views,
     buffers: [{ byteLength: binaryLength }],
   };
 
@@ -218,13 +334,7 @@ export function buildGlb(boxes: Box[], options: { scale?: number; name?: string 
   // BIN chunk
   view.setUint32(p, binChunkLength, true); p += 4;
   view.setUint32(p, BIN_CHUNK, true); p += 4;
-
-  const binStart = p;
-  for (let i = 0; i < boxes.length; i += 1) {
-    out.set(new Uint8Array(positionChunks[i].buffer), binStart + (bufferViews[i * 3] as { byteOffset: number }).byteOffset);
-    out.set(new Uint8Array(normalChunks[i].buffer), binStart + (bufferViews[i * 3 + 1] as { byteOffset: number }).byteOffset);
-    out.set(new Uint8Array(indexChunks[i].buffer), binStart + (bufferViews[i * 3 + 2] as { byteOffset: number }).byteOffset);
-  }
+  bin.writeInto(out, p);
 
   return out;
 }

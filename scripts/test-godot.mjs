@@ -151,3 +151,56 @@ test('GDScript is indented with tabs, which the parser requires', () => {
     assert.ok(indented.every((l) => l.startsWith('\t')), `${path} indents with tabs`);
   }
 });
+
+// ── Rigged characters ───────────────────────────────────────────────────────
+
+const RIGGED = {
+  name: 'Rig Runner',
+  models: [
+    { path: 'res://hero.glb', node: 'Hero', rigged: true },
+    { path: 'res://rock.glb', node: 'Rock', at: [4, 0, -2] },
+  ],
+};
+
+test('a rigged model hangs off the player, and scenery stays in the world', () => {
+  // A rigged character is the player's body. Left in the world it stands next
+  // to the player rather than being them, which is the bug this pins.
+  const scene = mainScene(RIGGED);
+  assert.match(scene, /\[node name="Hero" parent="Player" instance=/);
+  assert.match(scene, /\[node name="Rock" parent="\." instance=/);
+});
+
+test('the animation script ships only when something is rigged', () => {
+  // An ext_resource pointing at a file the project does not contain stops the
+  // whole scene loading, so the two have to agree.
+  const withRig = buildProject(RIGGED);
+  assert.ok(withRig.some((f) => f.path === 'character.gd'));
+  assert.match(mainScene(RIGGED), /path="res:\/\/character\.gd"/);
+
+  const without = buildProject({ ...SPEC, models: [{ path: 'res://rock.glb', node: 'Rock' }] });
+  assert.ok(!without.some((f) => f.path === 'character.gd'));
+  assert.ok(!mainScene({ ...SPEC, models: [{ path: 'res://rock.glb', node: 'Rock' }] }).includes('character.gd'));
+});
+
+test('a rigged project passes validation, ids and all', () => {
+  // character.gd adds an ext_resource, which shifts every model id after it —
+  // the kind of off-by-one that loads a scene with its models missing.
+  assert.deepEqual(validateProject(buildProject(RIGGED)), []);
+  assert.deepEqual(validateProject(buildProject({ name: 'Solo', models: [{ path: 'res://a.glb', node: 'A', rigged: true }] })), []);
+});
+
+test('the animation script degrades instead of crashing on an unrigged model', () => {
+  // Tripo and Meshy return meshes that may have no skeleton at all, and a
+  // hard reference would take the whole game down on load.
+  const character = buildProject(RIGGED).find((f) => f.path === 'character.gd').content;
+  assert.match(character, /if _skeleton == null:/);
+  assert.match(character, /set_physics_process\(false\)/);
+  assert.match(character, /if index < 0:\n\t\treturn/, 'a missing bone is skipped, not posed');
+});
+
+test('the character script is indented with tabs like the rest', () => {
+  const body = buildProject(RIGGED).find((f) => f.path === 'character.gd').content;
+  const indented = body.split('\n').filter((l) => /^\s+\S/.test(l));
+  assert.ok(indented.length > 0);
+  assert.ok(indented.every((l) => l.startsWith('\t')));
+});

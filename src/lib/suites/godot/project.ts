@@ -27,7 +27,16 @@ export interface GameSpec {
   /** 3D is the default; a 2D game uses Node2D and a different camera. */
   dimension?: '2d' | '3d';
   /** Models to place in the scene, as res:// paths to .glb files. */
-  models?: Array<{ path: string; node: string; at?: [number, number, number] }>;
+  models?: Array<{
+    path: string;
+    node: string;
+    at?: [number, number, number];
+    /**
+     * A skinned model with a skeleton. Parented to the player and given the
+     * animation script, so it walks rather than standing there.
+     */
+    rigged?: boolean;
+  }>;
 }
 
 /** Godot's own identifier rules: a folder name that will not need escaping. */
@@ -213,6 +222,88 @@ func _draw() -> void:
 }
 
 /**
+ * Animation for a rigged character.
+ *
+ * Procedural rather than a baked AnimationPlayer, deliberately. A hand-written
+ * .tscn animation has to name every track by node path and bone index, and a
+ * single wrong index animates nothing with no error anywhere. This reads the
+ * skeleton at runtime: bones it cannot find are skipped, so a model rigged as a
+ * quadruped — or not rigged at all — degrades to standing still instead of
+ * crashing.
+ *
+ * The cycle is driven by how fast the body is actually moving, so the legs do
+ * not skate while the character stands still.
+ */
+export function characterScript(): string {
+  return `extends Node3D
+## Drives a skinned character's bones from its parent's velocity.
+## Attach to the imported .glb node; the parent should be a CharacterBody3D.
+
+@export var swing: float = 0.9        ## Radians a limb swings at full speed.
+@export var steps_per_metre: float = 0.55
+
+var _skeleton: Skeleton3D
+var _body: CharacterBody3D
+var _phase: float = 0.0
+## Bone indices, resolved once. -1 means this rig does not have that bone.
+var _bones := {}
+
+
+func _ready() -> void:
+	_skeleton = _find_skeleton(self)
+	if _skeleton == null:
+		# Not a rigged model. Nothing to drive, and nothing to complain about.
+		set_physics_process(false)
+		return
+
+	_body = get_parent() as CharacterBody3D
+	for name in ["ArmL", "ArmR", "LegL", "LegR", "Chest", "Head"]:
+		_bones[name] = _skeleton.find_bone(name)
+
+
+func _find_skeleton(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node
+	for child in node.get_children():
+		var found := _find_skeleton(child)
+		if found != null:
+			return found
+	return null
+
+
+func _rotate_bone(bone_name: String, axis: Vector3, angle: float) -> void:
+	var index: int = _bones.get(bone_name, -1)
+	if index < 0:
+		return
+	# Rest is the bind pose; posing relative to it keeps the limb attached.
+	_skeleton.set_bone_pose_rotation(index, Quaternion(axis, angle))
+
+
+func _physics_process(delta: float) -> void:
+	var speed := 0.0
+	if _body != null:
+		speed = Vector2(_body.velocity.x, _body.velocity.z).length()
+
+	if speed > 0.05:
+		_phase += delta * speed * steps_per_metre * TAU
+	else:
+		# Settle back to the rest pose instead of freezing mid-stride.
+		_phase = move_toward(_phase, round(_phase / TAU) * TAU, delta * 6.0)
+
+	var reach := swing * clampf(speed / 5.0, 0.0, 1.0)
+	var stride := sin(_phase) * reach
+
+	# Arms and legs swing opposite each other; left and right are out of phase.
+	_rotate_bone("LegL", Vector3.RIGHT, stride)
+	_rotate_bone("LegR", Vector3.RIGHT, -stride)
+	_rotate_bone("ArmL", Vector3.RIGHT, -stride)
+	_rotate_bone("ArmR", Vector3.RIGHT, stride)
+	# A small counter-rotation in the chest stops it reading as a puppet.
+	_rotate_bone("Chest", Vector3.UP, stride * 0.12)
+`;
+}
+
+/**
  * The main scene.
  *
  * `load_steps` counts every ext_resource and sub_resource plus one. Godot uses
@@ -222,12 +313,19 @@ func _draw() -> void:
 export function mainScene(spec: GameSpec): string {
   const models = spec.models ?? [];
 
+  const rigged = models.filter((m) => m.rigged);
+
   const ext: string[] = [
     `[ext_resource type="Script" path="res://player.gd" id="1_player"]`,
     `[ext_resource type="Script" path="res://joystick.gd" id="2_stick"]`,
   ];
+  // Declared only when something uses it: an ext_resource pointing at a file
+  // the project does not contain stops the scene loading.
+  if (rigged.length) ext.push(`[ext_resource type="Script" path="res://character.gd" id="3_character"]`);
+
+  const modelIdBase = ext.length + 1;
   models.forEach((model, i) => {
-    ext.push(`[ext_resource type="PackedScene" path="${model.path}" id="${3 + i}_model${i}"]`);
+    ext.push(`[ext_resource type="PackedScene" path="${model.path}" id="${modelIdBase + i}_model${i}"]`);
   });
 
   const sub = [
@@ -244,12 +342,28 @@ albedo_color = Color(0.36, 0.47, 0.31, 1)`,
 
   const loadSteps = ext.length + sub.length + 1;
 
-  const modelNodes = models
+  // A rigged model is the player's body, so it hangs off the Player node and
+  // gets the animation script. Everything else is scenery placed in the world.
+  const sceneryNodes = models
     .map((model, i) => {
+      if (model.rigged) return null;
       const [x, y, z] = model.at ?? [0, 0, 0];
-      return `[node name="${model.node}" parent="." instance=ExtResource("${3 + i}_model${i}")]
+      return `[node name="${model.node}" parent="." instance=ExtResource("${modelIdBase + i}_model${i}")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${x}, ${y}, ${z})`;
     })
+    .filter((node): node is string => node !== null)
+    .join('\n\n');
+
+  const riggedNodes = models
+    .map((model, i) => {
+      if (!model.rigged) return null;
+      // Dropped by half the capsule height so the feet meet the floor rather
+      // than hovering at the body's centre.
+      return `[node name="${model.node}" parent="Player" instance=ExtResource("${modelIdBase + i}_model${i}")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1, 0)
+script = ExtResource("3_character")`;
+    })
+    .filter((node): node is string => node !== null)
     .join('\n\n');
 
   return `[gd_scene load_steps=${loadSteps} format=3 uid="${sceneUid(spec.name)}"]
@@ -285,7 +399,9 @@ shape = SubResource("CapsuleShape3D_player")
 [node name="Camera" type="Camera3D" parent="Player"]
 transform = Transform3D(1, 0, 0, 0, 0.92, 0.39, 0, -0.39, 0.92, 0, 2.2, 6)
 
-${modelNodes}
+${riggedNodes}
+
+${sceneryNodes}
 
 [node name="UI" type="CanvasLayer" parent="."]
 
@@ -321,7 +437,13 @@ A Godot 4 project, generated by Chomugiri.
 | \`main.tscn\` | The scene that runs: ground, light, player, camera and the touch stick. |
 | \`player.gd\` | Movement. Touch drag and WASD feed the same vector. |
 | \`joystick.gd\` | The on-screen stick. |
-${(spec.models ?? []).map((m) => `| \`${m.path.replace('res://', '')}\` | A generated model, placed as **${m.node}**. |`).join('\n')}
+${(spec.models ?? []).some((m) => m.rigged) ? '| `character.gd` | Swings the rigged character\'s arms and legs from how fast it is moving. |\n' : ''}${(spec.models ?? [])
+    .map((m) =>
+      m.rigged
+        ? `| \`${m.path.replace('res://', '')}\` | A rigged character with a skeleton, attached to the player as **${m.node}**. |`
+        : `| \`${m.path.replace('res://', '')}\` | A generated model, placed as **${m.node}**. |`,
+    )
+    .join('\n')}
 
 ## Changing it
 
@@ -332,7 +454,7 @@ so they are editable in the inspector without touching code.
 
 /** Every file the project needs, ready to zip. */
 export function buildProject(spec: GameSpec): GodotFile[] {
-  return [
+  const files: GodotFile[] = [
     { path: 'project.godot', content: projectConfig(spec) },
     { path: 'icon.svg', content: projectIcon() },
     { path: 'main.tscn', content: mainScene(spec) },
@@ -340,6 +462,10 @@ export function buildProject(spec: GameSpec): GodotFile[] {
     { path: 'joystick.gd', content: joystickScript() },
     { path: 'README.md', content: readme(spec) },
   ];
+  if ((spec.models ?? []).some((m) => m.rigged)) {
+    files.push({ path: 'character.gd', content: characterScript() });
+  }
+  return files;
 }
 
 /**
