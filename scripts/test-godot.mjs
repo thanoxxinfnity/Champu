@@ -343,7 +343,13 @@ test('the view-model is emissive and casts no shadow', () => {
   // screen — and cast_shadow alone does not fix that, because it is the gun.
   const scene = mainScene(SHOOTER);
   assert.match(scene, /emission_enabled = true/);
-  assert.equal((scene.match(/cast_shadow = 0/g) ?? []).length, 2, 'barrel and grip both');
+  // Every piece of it, counted from the scene rather than against a number
+  // that goes stale the moment the gun grows a stock.
+  const parts = [...scene.matchAll(/\[node name="\w+" type="MeshInstance3D" parent="Player\/Camera\/Weapon"\]\n([\s\S]*?)(?=\n\[node|$)/g)];
+  assert.ok(parts.length >= 2, 'the gun should be more than one box');
+  for (const [, body] of parts) {
+    assert.match(body, /cast_shadow = 0/, 'a view-model piece that still casts a shadow');
+  }
 });
 
 test('no generated script carries an unterminated template artifact', () => {

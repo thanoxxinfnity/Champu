@@ -16,6 +16,8 @@
  * Pure: returns a file map. Zipping and downloading happen elsewhere.
  */
 
+import { animatorScript, effectsScript, pickupScript } from './effects.ts';
+import { campaign, describeMissions, missionData, missionRunner, missionSelect } from './missions.ts';
 import {
   directorScript,
   enemyScript,
@@ -134,7 +136,7 @@ config_version=5
 [application]
 
 config/name="${spec.name.replace(/"/g, '\\"')}"
-run/main_scene="res://main.tscn"
+${isShooter(spec) ? 'run/main_scene="res://mission_select.tscn"' : 'run/main_scene="res://main.tscn"'}
 config/features=PackedStringArray("4.3", "Mobile")
 config/icon="res://icon.svg"
 
@@ -475,6 +477,9 @@ export function shooterScene(spec: GameSpec): string {
     `[ext_resource type="Script" path="res://director.gd" id="5_director"]`,
     `[ext_resource type="Script" path="res://hud.gd" id="6_hud"]`,
     `[ext_resource type="Script" path="res://wiring.gd" id="7_wiring"]`,
+    `[ext_resource type="Script" path="res://mission_runner.gd" id="8_runner"]`,
+    `[ext_resource type="Script" path="res://missions.gd" id="9_missions"]`,
+    `[ext_resource type="Script" path="res://effects.gd" id="10_effects"]`,
   ];
 
   const modelIdBase = ext.length + 1;
@@ -546,9 +551,11 @@ roughness = 0.85`,
 height = 1.8
 radius = 0.4`,
     `[sub_resource type="BoxMesh" id="BoxMesh_gun"]
-size = Vector3(0.07, 0.09, 0.46)`,
+size = Vector3(0.045, 0.05, 0.5)`,
+    `[sub_resource type="BoxMesh" id="BoxMesh_body"]
+size = Vector3(0.07, 0.13, 0.26)`,
     `[sub_resource type="BoxMesh" id="BoxMesh_grip"]
-size = Vector3(0.06, 0.18, 0.09)`,
+size = Vector3(0.055, 0.16, 0.07)`,
     // Emissive on purpose. A view-model sits a few centimetres from the near
     // plane with its lit faces pointing away from the sun, so a purely lit
     // material renders as a black wedge across the corner of the screen — which
@@ -707,7 +714,7 @@ far = 200.0
 script = ExtResource("3_look")
 
 [node name="Weapon" type="Node3D" parent="Player/Camera"]
-transform = Transform3D(0.995, 0, -0.105, 0, 1, 0, 0.105, 0, 0.995, 0.28, -0.34, -0.85)
+transform = Transform3D(0.995, 0, -0.105, 0, 1, 0, 0.105, 0, 0.995, 0.32, -0.28, -1.15)
 script = ExtResource("4_weapon")
 
 [node name="Mesh" type="MeshInstance3D" parent="Player/Camera/Weapon"]
@@ -715,17 +722,23 @@ mesh = SubResource("BoxMesh_gun")
 material_override = SubResource("StandardMaterial3D_gun")
 cast_shadow = 0
 
+[node name="Body" type="MeshInstance3D" parent="Player/Camera/Weapon"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.02, 0.15)
+mesh = SubResource("BoxMesh_body")
+material_override = SubResource("StandardMaterial3D_gun")
+cast_shadow = 0
+
 [node name="Grip" type="MeshInstance3D" parent="Player/Camera/Weapon"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.12, 0.16)
+transform = Transform3D(0.966, -0.259, 0, 0.259, 0.966, 0, 0, 0, 1, 0, -0.14, 0.22)
 mesh = SubResource("BoxMesh_grip")
 material_override = SubResource("StandardMaterial3D_gun")
 cast_shadow = 0
 
 [node name="Flash" type="OmniLight3D" parent="Player/Camera/Weapon"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.45)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.35)
 light_color = Color(1, 0.79, 0.44, 1)
-light_energy = 6.0
-omni_range = 7.0
+light_energy = 2.2
+omni_range = 3.2
 visible = false
 
 [node name="Director" type="Node3D" parent="."]
@@ -788,6 +801,13 @@ offset_right = 224.0
 offset_bottom = 52.0
 text = "WAVE 1"
 
+[node name="Objective" type="Label" parent="HUD"]
+offset_left = 24.0
+offset_top = 54.0
+offset_right = 460.0
+offset_bottom = 82.0
+text = ""
+
 [node name="Score" type="Label" parent="HUD"]
 offset_left = -184.0
 offset_top = 24.0
@@ -829,6 +849,15 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("2_stick")
+
+[node name="Missions" type="Node" parent="."]
+script = ExtResource("9_missions")
+
+[node name="Mission" type="Node" parent="."]
+script = ExtResource("8_runner")
+
+[node name="Effects" type="Node3D" parent="."]
+script = ExtResource("10_effects")
 
 [node name="Wiring" type="Node" parent="."]
 script = ExtResource("7_wiring")
@@ -974,6 +1003,12 @@ ${
 | \`director.gd\` | Waves. Each one is bigger, faster and tougher than the last. |
 | \`hud.gd\` | Health, ammo, wave, score, and the card you get when you die. |
 | \`wiring.gd\` | Connects those four to each other in one place. |
+| \`missions.gd\` | The campaign, as data. A new mission is a row here. |
+| \`mission_runner.gd\` | Checks the current objective against what the game reports. |
+| \`mission_select.tscn\` | What the game opens to: pick a mission. |
+| \`effects.gd\` | Muzzle flash, sparks off the world, blood off the living. |
+| \`animator.gd\` | Plays a rigged model's walk, whatever its author called it. |
+| \`pickup.gd\` | The things a collect objective counts. |
 `
       : ''
   }${!isShooter(spec) && (spec.models ?? []).some((m) => m.rigged) ? '| `character.gd` | Swings the rigged character\'s arms and legs from how fast it is moving. |\n' : ''}${(spec.models ?? [])
@@ -1001,6 +1036,13 @@ ${
 Left half of the screen moves, right half looks, tap to fire. On a keyboard:
 WASD to move, mouse to look, shift to sprint, click to fire, \`R\` to reload.
 
+### Missions
+
+${describeMissions(campaign(spec.name))}
+
+Each one unlocks the next, and only on a win. Progress is kept in
+\`user://progress.cfg\` — delete it to start over.
+
 Everything that decides how hard it gets is exported on the **Director** node —
 \`first_wave_size\`, \`wave_growth\`, \`speed_step\`, \`health_step\` and the
 \`break_seconds\` between waves. The gun's \`damage\`, \`magazine\` and
@@ -1025,6 +1067,7 @@ export function buildProject(spec: GameSpec): GodotFile[] {
   ];
 
   if (shooter) {
+    const missions = campaign(spec.name);
     files.push(
       { path: 'look.gd', content: lookScript() },
       { path: 'weapon.gd', content: weaponScript() },
@@ -1032,6 +1075,17 @@ export function buildProject(spec: GameSpec): GodotFile[] {
       { path: 'director.gd', content: directorScript() },
       { path: 'hud.gd', content: hudScript() },
       { path: 'wiring.gd', content: wiringScript() },
+      // Missions turn one arena into several nights. The campaign is data, so
+      // a new mission is a row rather than a script that can rot on its own.
+      { path: 'missions.gd', content: missionData(missions) },
+      { path: 'mission_runner.gd', content: missionRunner() },
+      { path: 'mission_select.gd', content: missionSelect(spec.name) },
+      { path: 'mission_select.tscn', content: missionSelectScene(spec.name) },
+      // Feedback. A gun that does not flash and a hit that does not spray read
+      // as unfinished however correct the code underneath is.
+      { path: 'effects.gd', content: effectsScript() },
+      { path: 'animator.gd', content: animatorScript() },
+      { path: 'pickup.gd', content: pickupScript() },
     );
   }
 
@@ -1104,4 +1158,62 @@ export function validateProject(files: GodotFile[]): string[] {
   }
 
   return problems;
+}
+
+/**
+ * The mission select scene.
+ *
+ * The scene the game opens to, so the first thing a player sees is a choice
+ * rather than a horde. A Control tree with no resources of its own, which keeps
+ * `load_steps` at the two scripts and nothing else.
+ */
+export function missionSelectScene(name: string): string {
+  return `[gd_scene load_steps=3 format=3 uid="${sceneUid(`${name}-select`)}"]
+
+[ext_resource type="Script" path="res://mission_select.gd" id="1_select"]
+[ext_resource type="Script" path="res://missions.gd" id="2_missions"]
+
+[node name="MissionSelect" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_select")
+
+[node name="Missions" type="Node" parent="."]
+script = ExtResource("2_missions")
+
+[node name="Background" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.07, 0.06, 0.06, 1)
+
+[node name="Title" type="Label" parent="."]
+offset_left = 32.0
+offset_top = 28.0
+offset_right = 640.0
+offset_bottom = 68.0
+text = "${name.replace(/"/g, '')}"
+
+[node name="Panel" type="Panel" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 84.0
+offset_right = -24.0
+offset_bottom = -24.0
+
+[node name="Scroll" type="ScrollContainer" parent="Panel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+
+[node name="List" type="VBoxContainer" parent="Panel/Scroll"]
+size_flags_horizontal = 3
+`;
 }

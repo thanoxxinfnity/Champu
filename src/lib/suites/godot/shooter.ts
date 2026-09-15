@@ -118,6 +118,8 @@ export function weaponScript(): string {
 signal ammo_changed(in_magazine: int, reserve: int)
 signal fired
 signal hit_enemy
+## Where a shot landed, which way, and whether it hit something alive.
+signal struck(at: Vector3, normal: Vector3, was_alive: bool)
 
 @export var damage: float = 34.0
 @export var rounds_per_second: float = 7.5
@@ -207,10 +209,18 @@ func fire() -> void:
 	if hit.is_empty():
 		return
 
+	var point: Vector3 = hit.get("position", origin)
+	var normal: Vector3 = hit.get("normal", Vector3.UP)
 	var body: Node = hit.get("collider")
+
 	if body != null and body.has_method("take_damage"):
 		body.take_damage(damage, direction.normalized())
 		hit_enemy.emit()
+		struck.emit(point, direction.normalized(), true)
+	else:
+		# The world, not something alive: sparks rather than blood. Telling the
+		# two apart is most of what makes a hit read as a hit.
+		struck.emit(point, normal, false)
 
 
 func reload() -> void:
@@ -342,9 +352,13 @@ export function directorScript(): string {
 signal wave_started(number: int, enemies: int)
 signal score_changed(score: int)
 signal wave_cleared(number: int)
+## One zombie down. The mission counts these; the director does not care why.
+signal enemy_killed
 
 @export var enemy_scene_path: String = ""
 @export var first_wave_size: int = 5
+## Scales speed and health on top of the per-wave ramp. The mission sets it.
+@export var difficulty: float = 1.0
 @export var wave_growth: int = 3
 @export var spawn_radius: float = 26.0
 @export var break_seconds: float = 5.0
@@ -366,7 +380,8 @@ func _ready() -> void:
 	_player = get_parent().get_node_or_null("Player") as Node3D
 	if enemy_scene_path != "" and ResourceLoader.exists(enemy_scene_path):
 		_enemy_scene = load(enemy_scene_path) as PackedScene
-	start()
+	# Not started here. The mission sets the difficulty and the wave size first,
+	# and a wave that spawned before that would be the wrong wave.
 
 
 func start() -> void:
@@ -437,8 +452,8 @@ func _spawn(index: int, total: int) -> void:
 	zombie.position = Vector3(cos(angle) * distance, 1.2, sin(angle) * distance)
 
 	zombie.set("target", _player)
-	zombie.set("speed", 2.4 + float(wave - 1) * speed_step)
-	zombie.set("health", 100.0 + float(wave - 1) * health_step)
+	zombie.set("speed", (2.4 + float(wave - 1) * speed_step) * difficulty)
+	zombie.set("health", (100.0 + float(wave - 1) * health_step) * difficulty)
 	zombie.connect("died", _on_enemy_died)
 	# Deferred, always. The first wave starts from _ready, and a plain add_child
 	# while the parent is still setting up its own children fails with "Parent
@@ -450,6 +465,7 @@ func _spawn(index: int, total: int) -> void:
 func _on_enemy_died(_where: Vector3) -> void:
 	score += 100
 	score_changed.emit(score)
+	enemy_killed.emit()
 	_alive -= 1
 	if _alive > 0:
 		return
@@ -483,6 +499,7 @@ export function hudScript(): string {
 @onready var _centre: Label = $Centre
 @onready var _crosshair: Control = $Crosshair
 @onready var _over: Panel = $GameOver
+@onready var _objective: Label = $Objective
 
 var _dead: bool = false
 
@@ -500,6 +517,27 @@ func set_health(current: float, maximum: float) -> void:
 
 func set_ammo(in_magazine: int, reserve: int) -> void:
 	_ammo.text = "%d / %d" % [in_magazine, reserve]
+
+
+func set_objective(text: String, progress: int, target: int) -> void:
+	# Counted objectives show their count; a one-shot "get to the gate" does not
+	# need "0 / 1" after it.
+	_objective.text = text if target <= 1 else "%s  (%d/%d)" % [text, mini(progress, target), target]
+
+
+func set_mission(name: String, brief: String) -> void:
+	_flash_centre("%s\n%s" % [name, brief.replace("\\n", "  ")])
+
+
+func mission_complete(name: String, score: int) -> void:
+	if _dead:
+		return
+	_dead = true
+	_centre.text = ""
+	_crosshair.visible = false
+	_over.visible = true
+	var label := _over.get_node("Text") as Label
+	label.text = "%s\n\nCOMPLETE\n\nScore %06d\n\nTap to continue" % [name.to_upper(), score]
 
 
 func set_wave(number: int, enemies: int) -> void:
@@ -540,7 +578,9 @@ func _input(event: InputEvent) -> void:
 	var tapped: bool = event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed
 	var clicked: bool = event is InputEventMouseButton and (event as InputEventMouseButton).pressed
 	if tapped or clicked:
-		get_tree().reload_current_scene()
+		# Back to the mission list rather than straight into the same fight:
+		# a mission you just finished is not the one you want replayed.
+		get_tree().change_scene_to_file("res://mission_select.tscn")
 `;
 }
 
@@ -642,27 +682,78 @@ func _on_joystick_moved(direction: Vector2) -> void:
  */
 export function wiringScript(): string {
   return `extends Node
-## Connects player, weapon, director and HUD. Kept in one place so a rename
-## breaks here, visibly, instead of in a scene file that just stops working.
+## Connects player, weapon, director, mission and HUD. Kept in one place so a
+## rename breaks here, visibly, instead of in a scene file that just stops
+## working.
 
 @onready var _player: CharacterBody3D = get_parent().get_node("Player")
 @onready var _weapon: Node3D = get_parent().get_node("Player/Camera/Weapon")
 @onready var _director: Node3D = get_parent().get_node("Director")
 @onready var _hud: CanvasLayer = get_parent().get_node("HUD")
+@onready var _mission: Node = get_parent().get_node("Mission")
+@onready var _missions: Node = get_parent().get_node("Missions")
+@onready var _effects: Node3D = get_parent().get_node("Effects")
 
 
 func _ready() -> void:
 	_player.health_changed.connect(_hud.set_health)
 	_player.died.connect(_on_player_died)
 	_weapon.ammo_changed.connect(_hud.set_ammo)
+	_weapon.struck.connect(_on_struck)
 	_director.wave_started.connect(_hud.set_wave)
 	_director.wave_cleared.connect(_hud.wave_cleared)
 	_director.score_changed.connect(_hud.set_score)
+	_director.enemy_killed.connect(_on_enemy_killed)
+	_mission.objective_changed.connect(_hud.set_objective)
+	_mission.mission_complete.connect(_on_complete)
 	_hud.set_score(0)
+
+	_start_mission()
+
+
+## Which mission the select screen chose. Read from the same file it wrote,
+## because change_scene_to_file cannot carry an argument.
+func _start_mission() -> void:
+	var config := ConfigFile.new()
+	var index: int = 0
+	if config.load("user://progress.cfg") == OK:
+		var chosen: int = config.get_value("progress", "playing", 0)
+		index = chosen
+	var data: Dictionary = _missions.get_mission(index)
+	if data.is_empty():
+		data = _missions.get_mission(0)
+	_director.difficulty = float(data.get("difficulty", 1.0))
+	_director.first_wave_size = int(data.get("first_wave", 5))
+	_hud.set_mission(String(data.get("name", "")), String(data.get("brief", "")))
+	_mission.start(data)
+	_director.start()
+
+
+func _on_enemy_killed() -> void:
+	_mission.record("eliminate")
+
+
+func _on_struck(at: Vector3, normal: Vector3, was_alive: bool) -> void:
+	if was_alive:
+		_effects.hit(at, normal)
+	else:
+		_effects.impact(at, normal)
+
+
+func _on_complete(name: String) -> void:
+	_director.stop()
+	_hud.mission_complete(name, _director.score)
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	# Unlocked only on a win, which is what makes the win mean something.
+	var config := ConfigFile.new()
+	config.load("user://progress.cfg")
+	var played: int = config.get_value("progress", "playing", 0)
+	_missions.unlock(played + 1)
 
 
 func _on_player_died() -> void:
 	_director.stop()
+	_mission.fail("You died.")
 	_hud.game_over(_director.score, _director.wave)
 	# Freed rather than hidden: a captured mouse on a dead player is a window
 	# you cannot click out of.

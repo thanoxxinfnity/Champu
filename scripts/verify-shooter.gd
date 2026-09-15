@@ -89,10 +89,14 @@ func _process(_delta: float) -> bool:
 
 	if _ticks > 400:
 		print("")
-		print("waves started: ", _director.wave, "  zombies spawned at peak: ", _peak_zombies)
+		print("waves started: ", _director.wave, "  peak zombies: ", _peak_zombies, " of ", _director.first_wave_size, " asked for")
 		print("score after kills: ", _director.score)
 		print("player took damage: ", _player.health < _start_health, " (", _start_health, " -> ", _player.health, ")")
-		var ok: bool = _peak_zombies >= 5 and _director.wave >= 1 and _killed and _player.health < _start_health
+		# Against the wave the director was actually told to spawn, not a constant:
+		# the first mission opens with four, and asserting five made a correct build
+		# look broken.
+		var wanted: int = _director.first_wave_size
+		var ok: bool = _peak_zombies >= wanted and _director.wave >= 1 and _killed and _player.health < _start_health
 		print("")
 		print("RESULT: ", "PASS" if ok else "FAIL")
 		quit(0 if ok else 1)
