@@ -31,8 +31,9 @@ import { rigFor } from './rig.ts';
 import * as meshy from './meshy.ts';
 import * as tripo from './tripo.ts';
 import * as trellis from './trellis.ts';
+import * as sketchfab from './sketchfab.ts';
 
-export type SourceId = 'meshy' | 'tripo' | 'trellis' | 'built';
+export type SourceId = 'sketchfab' | 'meshy' | 'tripo' | 'trellis' | 'built';
 
 /**
  * Set once TRELLIS has proved its deployment is down, so the rest of a build
@@ -47,6 +48,8 @@ export function resetTrellisState(): void {
 }
 
 export interface ModelKeys {
+  /** A Sketchfab token, from sketchfab.com/settings/password. */
+  sketchfab?: string;
   meshy?: string;
   tripo?: string;
   /** The NVIDIA key. Enables TRELLIS on NVIDIA's hosted NIM function. */
@@ -78,6 +81,14 @@ export interface ModelRequest {
 
 export interface ModelOutcome {
   source: SourceId;
+  /**
+   * The credit the licence requires, when the model came from someone else.
+   *
+   * Carried out of here rather than printed and forgotten: nearly everything
+   * downloadable on Sketchfab is CC Attribution, and a build that drops the
+   * credit is a licence violation wearing an asset's clothes.
+   */
+  credit?: sketchfab.SketchfabModel;
   /** Set when the model was generated locally. */
   bytes?: Uint8Array;
   /** Set when a hosted generator produced a file to download. */
@@ -103,7 +114,12 @@ export function sourceChain(keys: ModelKeys, role: ModelRole = 'prop'): SourceId
   // two that rig. Both facts point the same way: spend them on the characters,
   // and let TRELLIS do the crates and the scenery. A prop that costs a paid
   // credit is a credit not spent on the thing the player looks at.
+  // Sketchfab first, and only for characters. Somebody has already modelled and
+  // rigged a zombie better than a text-to-3D pass will in ninety seconds, and
+  // it arrives in one download. Props are not worth a search: a crate is a
+  // crate, and TRELLIS makes one faster than choosing between eight of them.
   if (role === 'character') {
+    if (keys.sketchfab?.trim()) chain.push('sketchfab');
     if (keys.meshy?.trim()) chain.push('meshy');
     if (keys.tripo?.trim()) chain.push('tripo');
   }
@@ -128,6 +144,7 @@ export function pipelineStatement(keys: ModelKeys): string {
   const prop = sourceChain(keys, 'prop');
 
   const label: Record<SourceId, string> = {
+    sketchfab: 'Sketchfab (existing rigged models, credited)',
     meshy: 'Meshy (text-to-3D, auto-rigged)',
     tripo: 'Tripo AI (text-to-3D)',
     trellis: keys.trellisUrl?.trim()
@@ -201,6 +218,50 @@ export async function generateModel(
       options.onStage?.('built', 'Building the model in code.');
       const { bytes, rigged } = buildLocally(request);
       return { source: 'built', bytes, rigged, notes };
+    }
+
+    if (source === 'sketchfab') {
+      options.onStage?.('sketchfab', 'Looking for a model somebody has already made.');
+      const found = await sketchfab.searchModels(request.prompt, {
+        // A character is what this source is for, so prefer one that already
+        // has a walk cycle over one that has to be rigged afterwards.
+        animatedOnly: true,
+        count: 4,
+        ...(options.signal ? { signal: options.signal } : {}),
+      });
+
+      // Nothing animated is not nothing: fall back to a static model rather
+      // than skipping a source that had eleven usable results.
+      const models = found.models.length
+        ? found.models
+        : (await sketchfab.searchModels(request.prompt, { count: 4, ...(options.signal ? { signal: options.signal } : {}) })).models;
+
+      if (!models.length) {
+        notes.push(found.error ?? `Sketchfab had nothing usable for "${request.prompt}".`);
+        continue;
+      }
+
+      const pick = models[0];
+      options.onStage?.('sketchfab', `Downloading "${pick.name}" by ${pick.author}.`);
+      const got = await sketchfab.fetchModel(pick.uid, keys.sketchfab!, {
+        ...(options.signal ? { signal: options.signal } : {}),
+      });
+
+      if (got.bytes && sketchfab.isGlb(got.bytes)) {
+        return {
+          source: 'sketchfab',
+          bytes: got.bytes,
+          // Reported from the model's own metadata rather than assumed: an
+          // animated model has a skeleton, a static one does not, and telling
+          // the user the wrong one sends them looking for a bug in the scene.
+          rigged: pick.animations > 0,
+          credit: pick,
+          notes,
+        };
+      }
+      if (got.bytes) notes.push(`Sketchfab sent something that is not a .glb for "${pick.name}".`);
+      if (got.error) notes.push(got.error);
+      continue;
     }
 
     if (source === 'meshy') {

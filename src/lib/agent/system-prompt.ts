@@ -153,9 +153,10 @@ these right, because each one is the difference between a scene and a black box:
 - Say plainly which parts are placeholders and what the user should replace.`;
 
 export const GODOT_ADDENDUM = `## SUITE: GODOT GAME
-Target engine: **Godot 4.3**. That is the version this suite is written against
-and the one every rule below was verified in. Write 4.3-compatible GDScript; do
-not use a feature from a version that has not shipped.
+Target engine: **Godot 4.7** (4.7.2 is the current stable, released August 2026;
+4.8 is the development branch). Everything below is Godot 4 API and holds across
+4.3 through 4.7 — write to it, and do not reach for a feature from an unreleased
+branch.
 
 The output is a project that opens in the Godot 4 **Android editor** and runs
 when the user presses play. A project that imports but does nothing is a failed
@@ -241,11 +242,15 @@ the build has not actually produced.`;
  * Written from the brief the user supplied, with four things corrected because
  * shipping them as written would produce broken advice:
  *
- *   - **The engine version.** The brief named Godot 4.7.2 and 4.8. Neither
- *     exists. This suite is written against, and verified in, Godot 4.3.
+ *   - ~~**The engine version.**~~ I claimed 4.7.2 and 4.8 did not exist and was
+ *     wrong: checked against godotengine.org's archive and endoflife.date,
+ *     4.7.2 is the current stable (August 2026) and 4.8 is the dev branch. The
+ *     brief was right. The target is 4.7, and the scaffold is verified in both
+ *     4.3 and 4.7 so a project opens in either.
  *   - **The renderer.** The brief asked for Forward+ for realistic lighting.
- *     Forward+ does not run on most phones, and the editor this opens in *is* a
- *     phone. Mobile is the default; Forward+ is named only for a desktop export.
+ *     Forward+ still does not run on most phones, and the editor this opens in
+ *     *is* a phone. Mobile is the default; Forward+ is named only for a desktop
+ *     export. This one stands.
  *   - **Bare ```gdscript blocks.** The workspace zips a project out of
  *     path-tagged blocks. An untagged block is text on a screen, not a file, so
  *     the language tag goes *with* the path rather than instead of it.

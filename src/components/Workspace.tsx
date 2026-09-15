@@ -21,7 +21,7 @@ import { RunNotices } from './RunNotices';
 import { BedrockBuilder } from './suites/BedrockBuilder';
 import { BlockbenchStudio } from './suites/Blockbench';
 import { AndroidStudio } from './suites/AndroidStudio';
-import { McpBuilder } from './suites/McpBuilder';
+import { GameStudio } from './suites/GameStudio';
 import { ImageSuite } from './suites/ImageSuite';
 import { Workdrive } from './suites/Workdrive';
 import { SkillsManager } from './suites/SkillsManager';
@@ -60,8 +60,8 @@ function SuiteTool() {
       );
     case 'studio':
       return <Studio />;
-    case 'mcp':
-      return <McpBuilder />;
+    case 'game':
+      return <GameStudio />;
     case 'image':
       return <ImageSuite />;
     case 'workdrive':
@@ -75,7 +75,7 @@ function SuiteTool() {
   }
 }
 
-const HAS_TOOL = new Set(['android', 'minecraft', 'studio', 'mcp', 'image', 'workdrive', 'skills', 'assets']);
+const HAS_TOOL = new Set(['android', 'minecraft', 'studio', 'game', 'image', 'workdrive', 'skills', 'assets']);
 
 export function Workspace() {
   const activeSuite = useWorkspace((s) => s.activeSuite);
@@ -331,7 +331,7 @@ export function Workspace() {
                       files, and real builds over the terminal bridge.
                     </p>
                     <p className="mono mt-5 text-[10.5px] leading-[1.9]" style={{ color: 'var(--ink-faint)', textWrap: 'balance' }}>
-                      /make-apk · /build-mcpack · /build-mcp
+                      /make-apk · /build-mcpack · /build-game
                       <br />
                       /make-deck · /research · /audit-code · /deploy
                     </p>

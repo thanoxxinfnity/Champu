@@ -647,7 +647,7 @@ mesh = SubResource("BoxMesh_grip")
 material_override = SubResource("StandardMaterial3D_gun")
 cast_shadow = 0
 
-[node name="Flash" type="OmniLight3D" parent="Player/Weapon"]
+[node name="Flash" type="OmniLight3D" parent="Player/Camera/Weapon"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.45)
 light_color = Color(1, 0.79, 0.44, 1)
 light_energy = 6.0

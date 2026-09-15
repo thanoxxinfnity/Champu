@@ -156,11 +156,12 @@ export function heuristicPlan(goal: string, suite?: string): Plan {
     steps.push(['Generate resource pack JSON (geometry, textures, render controllers)', 'codegen']);
     steps.push(['Validate schemas against the Bedrock format versions', 'verify']);
     steps.push(['Export .mcpack / .mcaddon', 'export']);
-  } else if (suite === 'mcp' || /mcp server|model context protocol/.test(g)) {
-    steps.push(['Define tool and resource schemas', 'analysis']);
-    steps.push(['Generate the MCP server implementation', 'codegen']);
-    steps.push(['Validate schemas against the MCP specification', 'verify']);
-    steps.push(['Export the server bundle and client config snippets', 'export']);
+  } else if (suite === 'godot' || suite === 'game' || /\bgame\b|godot/.test(g)) {
+    steps.push(['Read the prompt into a game plan', 'analysis']);
+    steps.push(['Source the 3D models — download, generate, or build in code', 'codegen']);
+    steps.push(['Generate the Godot project: scene, scripts, inputs, audio', 'codegen']);
+    steps.push(['Validate that it would actually open and run', 'verify']);
+    steps.push(['Export the project zip, and the APK when the bridge is up', 'export']);
   } else if (suite === 'studio' || /deck|slide|presentation|pdf/.test(g)) {
     steps.push(['Draft the narrative outline and slide beats', 'analysis']);
     steps.push(['Generate the HTML5/CSS deck with transitions', 'codegen']);

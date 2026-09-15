@@ -60,6 +60,11 @@ class ApiRouter(private val secrets: SecretStore) {
         get() = secrets.get("meshy_key")
         set(value) { secrets.put("meshy_key", value) }
 
+    /** Sketchfab download token. Searching needs none; downloading 401s without one. */
+    var sketchfabKey: String
+        get() = secrets.get("sketchfab_key")
+        set(value) { secrets.put("sketchfab_key", value) }
+
     /** A self-hosted TRELLIS NIM container. A URL, not a secret, but it belongs with them. */
     var trellisUrl: String
         get() = secrets.get("trellis_url")
@@ -151,6 +156,7 @@ class ApiRouter(private val secrets: SecretStore) {
             if (body.has("vercelTeamId")) vercelTeamId = body.optString("vercelTeamId")
             if (body.has("tripoKey")) tripoKey = body.optString("tripoKey")
             if (body.has("meshyKey")) meshyKey = body.optString("meshyKey")
+            if (body.has("sketchfabKey")) sketchfabKey = body.optString("sketchfabKey")
             if (body.has("trellisUrl")) trellisUrl = body.optString("trellisUrl")
             response.json(200, state().put("ok", true).toString())
         } else {
@@ -165,7 +171,8 @@ class ApiRouter(private val secrets: SecretStore) {
      * layer never needs to read a key back, and handing it to the page would put
      * a credential somewhere it does not have to be. Vercel is returned because
      * deployment runs through the page's own fetch and genuinely needs it, and
-     * the 3D keys for the same reason: Tripo and Meshy are called from the page.
+     * the 3D keys for the same reason: Tripo, Meshy and Sketchfab are called from
+     * the page.
      */
     private fun state(): JSONObject = JSONObject()
         .put("nimConfigured", nimKey.isNotEmpty())
@@ -174,6 +181,7 @@ class ApiRouter(private val secrets: SecretStore) {
         .put("vercelTeamId", vercelTeamId)
         .put("tripoKey", tripoKey)
         .put("meshyKey", meshyKey)
+        .put("sketchfabKey", sketchfabKey)
         .put("trellisUrl", trellisUrl)
 
     // ── /api/models ─────────────────────────────────────────────────────────

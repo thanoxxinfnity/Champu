@@ -1179,6 +1179,7 @@ function KeysTab() {
   const [pollinations, setPollinations] = useState('');
   const [tripo, setTripo] = useState('');
   const [meshy, setMeshy] = useState('');
+  const [sketchfab, setSketchfab] = useState('');
   const [trellisUrl, setTrellisUrl] = useState('');
   const [reveal, setReveal] = useState(false);
   const [shell, setShell] = useState(false);
@@ -1204,6 +1205,7 @@ function KeysTab() {
       setPollinations(keys.pollinations);
       setTripo(keys.tripo);
       setMeshy(keys.meshy);
+      setSketchfab(keys.sketchfab);
       setTrellisUrl(keys.trellisUrl);
       setNimSaved(configured);
     })();
@@ -1226,7 +1228,7 @@ function KeysTab() {
     setSaving(true);
     setStatus({ kind: 'info', text: 'Saving, then checking the key against NVIDIA…' });
     try {
-      const modelKeys = { pollinations, tripo, meshy, trellisUrl };
+      const modelKeys = { pollinations, tripo, meshy, sketchfab, trellisUrl };
       await saveKeys(sendNim ? { nim, ...modelKeys } : modelKeys);
       setVercelCredentials(vercel.trim(), team.trim());
       // The catalogue is the real test: it only returns NIM models if the key
@@ -1248,7 +1250,7 @@ function KeysTab() {
     } finally {
       setSaving(false);
     }
-  }, [nim, pollinations, tripo, meshy, trellisUrl, vercel, team, nimTouched, nimSaved, loadModels, setVercelCredentials]);
+  }, [nim, pollinations, tripo, meshy, sketchfab, trellisUrl, vercel, team, nimTouched, nimSaved, loadModels, setVercelCredentials]);
 
   const clear = useCallback(async () => {
     setNimTouched(false);
@@ -1260,7 +1262,7 @@ function KeysTab() {
     setTrellisUrl('');
     setVercel('');
     setTeam('');
-    await saveKeys({ nim: '', pollinations: '', tripo: '', meshy: '', trellisUrl: '' });
+    await saveKeys({ nim: '', pollinations: '', tripo: '', meshy: '', sketchfab: '', trellisUrl: '' });
     setVercelCredentials('', '');
     await loadModels(true);
     setStatus({ kind: 'info', text: 'Keys cleared from this device.' });
@@ -1341,6 +1343,22 @@ function KeysTab() {
           autoComplete="off"
           placeholder="leave empty to stay on the free tier"
           onChange={(e) => setPollinations(e.target.value)}
+        />
+      </Field>
+
+      <Field
+        label="Sketchfab token (optional) — download existing models"
+        hint="Tried first for characters: somebody has usually already modelled and rigged the thing, and one download beats ninety seconds of generation. Searching works without this; only downloading needs it. Get one at sketchfab.com/settings/password. Only models whose licence permits shipping are offered, and the credit the licence asks for is written into CREDITS.md."
+      >
+        <input
+          className={inputClass}
+          style={inputStyle}
+          type={reveal ? 'text' : 'password'}
+          value={sketchfab}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder="leave empty to generate models instead"
+          onChange={(e) => setSketchfab(e.target.value)}
         />
       </Field>
 

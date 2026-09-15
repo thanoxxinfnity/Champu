@@ -377,17 +377,45 @@ test('the voice asks for the four parts, and for paths on the code blocks', () =
   assert.match(prompt, /Realistic is the default/);
 });
 
-test('the engine version in the prompt is one that exists', () => {
+test('the prompt targets the Godot that is actually current', () => {
   const prompt = buildSystemPrompt({ lane: 'B', suite: 'godot' });
-  // The brief named 4.7.2 and 4.8. Neither is a Godot release, and advice
-  // written for a version that does not exist is advice nobody can follow.
-  assert.ok(!/4\.7\.2|Godot 4\.8/.test(prompt), 'names a Godot version that was never released');
-  assert.match(prompt, /Godot 4\.3/);
-  // And the renderer stays the one that runs on the device this opens on.
+  // Checked live against godotengine.org's download archive and
+  // endoflife.date: 4.7.2 is the current stable, released August 2026, and 4.8
+  // is the development branch. An earlier version of this test asserted the
+  // opposite from stale memory, which is worse than not testing it at all.
+  assert.match(prompt, /Godot 4\.7/);
+  assert.match(prompt, /4\.8 is the development branch/);
+  // And the renderer stays the one that runs on the device this opens on —
+  // Forward+ is still not it, whatever the version.
   assert.match(prompt, /renderer\/rendering_method="mobile"/);
 });
 
 test('the suite is not told to promise that TRELLIS is fast', () => {
   const prompt = buildSystemPrompt({ lane: 'B', suite: 'godot' });
   assert.ok(!/TRELLIS.{0,40}fast/i.test(prompt));
+});
+
+test('every node hangs off a parent the same scene declares', () => {
+  // Reparenting Weapon under the Camera moved its Mesh and Grip and left the
+  // muzzle Flash behind at Player/Weapon. Godot's scene format addresses each
+  // child by an explicit path, so nothing complained until it ran — and then
+  // `$Flash` was null, the error threw out of fire() before the raycast, and
+  // the gun did nothing at all in both 4.3 and 4.7.2.
+  for (const spec of [SHOOTER, RIGGED, SPEC, { ...SHOOTER, models: [{ path: 'res://z.glb', node: 'Z', rigged: true }] }]) {
+    const scene = mainScene(spec);
+    const declared = new Set(['.']);
+    for (const match of scene.matchAll(/^\[node name="([^"]+)"(?:[^\]]*?)\s+parent="([^"]+)"/gm)) {
+      const [, name, parent] = match;
+      assert.ok(declared.has(parent), `${spec.name}: "${name}" hangs off "${parent}", which this scene never declares`);
+      declared.add(parent === '.' ? name : `${parent}/${name}`);
+    }
+    // The root itself has no parent= and is what "." refers to.
+    assert.match(scene, /^\[node name="Main" type="Node3D"\]$/m);
+  }
+});
+
+test('the muzzle flash is under the weapon, wherever the weapon is', () => {
+  const scene = mainScene(SHOOTER);
+  const weapon = /\[node name="Weapon" type="Node3D" parent="([^"]+)"\]/.exec(scene)[1];
+  assert.match(scene, new RegExp(`\\[node name="Flash" type="OmniLight3D" parent="${weapon}/Weapon"\\]`));
 });

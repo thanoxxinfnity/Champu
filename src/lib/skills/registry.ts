@@ -105,24 +105,26 @@ Produce:
 3. A concrete Script API plan for the highest-value unmapped behaviour.`,
   },
   {
-    command: 'build-mcp',
-    name: 'Build MCP server',
-    description: 'Scaffold a spec-compliant MCP server with tools, resources and client configs.',
-    suite: 'mcp',
+    command: 'build-game',
+    name: 'Build game',
+    description: 'Plan a Godot 4 game from a sentence, source its models, and export a project that runs.',
+    suite: 'godot',
     lane: 'B',
-    icon: '🔌',
-    argHint: '<what the server should expose>',
-    template: `Scaffold an MCP server.
+    icon: '🎮',
+    argHint: '<the game, in a sentence>',
+    template: `Build a Godot 4.3 game.
 
-Purpose: {{input}}
+The game: {{input}}
 
 Requirements:
-- JSON-RPC 2.0 over stdio unless HTTP is explicitly requested.
-- Tool names matching [a-zA-Z0-9_-]{1,64} — clients silently drop invalid names.
-- Every tool description states when to use it and what it returns; the model has nothing else to select on.
-- Input schemas are valid JSON Schema draft-07 with additionalProperties: false.
-- Diagnostics go to stderr. Anything written to stdout corrupts the protocol.
-- Emit client configuration for Claude Code, Claude Desktop, Cursor, VS Code and Gemini CLI.`,
+- Restate the plan in two or three lines first. A misread prompt costs a sentence
+  to correct here and a whole regenerated project later.
+- Every file, each as a path-tagged block: project.godot, main.tscn, the scripts,
+  icon.svg. A loose snippet is not a project.
+- Touch controls for everything the player must do — this opens on a phone.
+- Never reference a .glb the build has not actually produced.
+- Say which 3D source each model came from, and carry the credit when one came
+  from someone else.`,
   },
   {
     command: 'make-deck',

@@ -34,6 +34,15 @@ export interface ApiKeys {
    */
   meshy: string;
   /**
+   * Sketchfab, from sketchfab.com/settings/password.
+   *
+   * Unlike the others this is a token for *downloading*, not generating —
+   * searching Sketchfab needs no credential at all. Tried before the
+   * generators for characters, because somebody has usually already modelled
+   * and rigged the thing, and one download beats ninety seconds of inference.
+   */
+  sketchfab: string;
+  /**
    * A self-hosted Microsoft TRELLIS NIM container.
    *
    * A URL rather than a key because there is no hosted TRELLIS worth calling:
@@ -43,7 +52,7 @@ export interface ApiKeys {
   trellisUrl: string;
 }
 
-const EMPTY: ApiKeys = { nim: '', pollinations: '', tripo: '', meshy: '', trellisUrl: '' };
+const EMPTY: ApiKeys = { nim: '', pollinations: '', tripo: '', meshy: '', sketchfab: '', trellisUrl: '' };
 
 export const NIM_KEY_HEADER = 'x-chomugiri-nim-key';
 export const POLLINATIONS_KEY_HEADER = 'x-chomugiri-pollinations-token';
@@ -73,11 +82,17 @@ export async function loadKeys(): Promise<ApiKeys> {
     try {
       const res = await fetch('/api/shell/keys', { signal: AbortSignal.timeout(4000) });
       if (res.ok) {
-        const json = (await res.json()) as { tripoKey?: string; meshyKey?: string; trellisUrl?: string };
+        const json = (await res.json()) as {
+          tripoKey?: string;
+          meshyKey?: string;
+          sketchfabKey?: string;
+          trellisUrl?: string;
+        };
         cache = {
           ...EMPTY,
           tripo: json.tripoKey ?? '',
           meshy: json.meshyKey ?? '',
+          sketchfab: json.sketchfabKey ?? '',
           trellisUrl: json.trellisUrl ?? '',
         };
         return cache;
@@ -118,6 +133,7 @@ export async function saveKeys(next: Partial<ApiKeys>): Promise<ApiKeys> {
       pollinationsToken: cache.pollinations,
       tripoKey: cache.tripo,
       meshyKey: cache.meshy,
+      sketchfabKey: cache.sketchfab,
       trellisUrl: cache.trellisUrl,
     });
     return cache;

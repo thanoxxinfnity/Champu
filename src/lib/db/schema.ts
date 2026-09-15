@@ -16,7 +16,12 @@ export type SuiteId =
   | 'android'
   | 'minecraft'
   | 'godot'
+  // The Game Studio tab. 'godot' is the suite the agent routes to; this is the
+  // panel it is driven from, and sessions are stored under it.
+  | 'game'
   | 'studio'
+  // Legacy. The MCP Builder was removed, but rows written before that still
+  // carry this id and a stored session must not fail to load because of it.
   | 'mcp'
   | 'workdrive'
   | 'skills'
@@ -254,7 +259,9 @@ export const SUITE_LABELS: Record<SuiteId, string> = {
   android: 'Android & Cross-Platform',
   minecraft: 'Minecraft Engineering',
   godot: 'Godot Game Studio',
+  game: 'Game Studio',
   studio: 'Presentations & Canvas',
+  // Legacy, for sessions saved before the MCP Builder was removed.
   mcp: 'MCP Builder',
   workdrive: 'Workdrive Research',
   skills: 'Skills & Commands',

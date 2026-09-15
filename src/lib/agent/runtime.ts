@@ -14,6 +14,7 @@ import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geome
 import { planBrief, planGame, planSummary, playerParts } from '@/lib/suites/godot/plan';
 import { buildGodotExport, describeExport as describeGodotExport, detectGodotProject, referencedResources } from '@/lib/suites/godot/export';
 import { generateModel, pipelineStatement, sourceChain } from '@/lib/suites/godot/model-source';
+import { creditsFile } from '@/lib/suites/godot/sketchfab';
 import { glbArtifact, wavArtifact } from '@/lib/suites/godot/artifact';
 import { effect as sfxFor, toWav, track as musicTrack, type ScaleName } from '@/lib/suites/godot/audio';
 import {
@@ -995,9 +996,33 @@ export async function send(opts: SendOptions): Promise<void> {
             evidence.artifactProduced = true;
           }
 
+          // The licence's credit goes into the project, not into a chat message
+          // the user has to remember to copy. Nearly every downloadable
+          // Sketchfab model is CC Attribution, and a build that ships without
+          // the credit is a licence violation.
+          if (outcome.credit) {
+            const root = detectGodotProject(files)?.root ?? '';
+            const content = creditsFile([outcome.credit]);
+            const credits = {
+              kind: 'file' as const,
+              path: root ? `${root}/CREDITS.md` : 'CREDITS.md',
+              language: 'markdown',
+              content,
+              complete: true,
+              bytes: new TextEncoder().encode(content).length,
+            };
+            files.push(credits);
+            upsertFile(credits);
+          }
+
           // Said plainly rather than swallowed: a user who pasted a Meshy key
           // and silently got a box model would think the key was ignored.
           const notes = [...outcome.notes];
+          if (outcome.credit) {
+            notes.push(
+              `Model is "${outcome.credit.name}" by ${outcome.credit.author}, ${outcome.credit.licence}. The credit is written into CREDITS.md — keep it with anything you ship.`,
+            );
+          }
           if (outcome.url) {
             notes.push(`${outcome.source} generated the model at ${outcome.url} — download it and save it into the project folder.`);
           }

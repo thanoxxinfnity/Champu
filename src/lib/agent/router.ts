@@ -46,7 +46,7 @@ const EXECUTION_SLASH = new Set([
   'jar-to-bedrock',
   'exe-to-apk',
   'audit-code',
-  'build-mcp',
+  'build-game',
   'make-deck',
   'make-pdf',
   'gen-image',
@@ -64,7 +64,6 @@ const SUITE_HINTS: Array<[RegExp | ((text: string) => boolean), string]> = [
   // suite, because this file only knew "first person shooter".
   [looksLikeGame, 'godot'],
   [/\b(deck|slide|presentation|pitch|pdf|spreadsheet|landing ?page|canvas|mockup|poster|figma)\b/i, 'studio'],
-  [/\b(mcp|model context protocol|tool schema|resource definition|stdio server)\b/i, 'mcp'],
   [/\b(research|investigate|find out|sources|cite|literature|competitor|market|deadline|milestone|schedule)\b/i, 'workdrive'],
   [/\b(skill|slash command|custom command|palette)\b/i, 'skills'],
 ];

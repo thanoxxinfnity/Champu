@@ -20,7 +20,7 @@ const CORE_SUITES: SuiteEntry[] = [
   { id: 'android', label: 'Android', icon: '▤', hint: 'EXE/desktop migration, APK builds' },
   { id: 'minecraft', label: 'Minecraft', icon: '▩', hint: 'Bedrock addons, Java conversion, Blockbench' },
   { id: 'studio', label: 'Studio', icon: '◫', hint: 'Decks, canvas, documents, images' },
-  { id: 'mcp', label: 'MCP Builder', icon: '⬡', hint: 'Model Context Protocol servers' },
+  { id: 'game', label: 'Game Studio', icon: '⬡', hint: 'Godot games — plan, assets, project, APK' },
   { id: 'workdrive', label: 'Workdrive', icon: '◎', hint: 'Autonomous research and milestones' },
   { id: 'assets', label: 'Asset Studio', icon: '◆', hint: 'Background removal, icons and drawables' },
   { id: 'skills', label: 'Skills', icon: '✦', hint: 'Slash commands and custom skills' },
