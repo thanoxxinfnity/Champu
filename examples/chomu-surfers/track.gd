@@ -15,6 +15,9 @@ const LANE_X := [-2.2, 0.0, 2.2]
 var _segments: Array[Node3D] = []
 var _player: Node3D
 var _rng := RandomNumberGenerator.new()
+## Kept so a zone change can recolour the world without rebuilding it.
+var _ground_materials: Array[StandardMaterial3D] = []
+var _rail_materials: Array[StandardMaterial3D] = []
 ## Distance at which the next segment recycles, so difficulty can ramp.
 var _spawned_to: float = 0.0
 
@@ -56,6 +59,7 @@ func _make_segment() -> Node3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(0.22, 0.24, 0.29)
 	mesh.material_override = material
+	_ground_materials.append(material)
 	floor_body.add_child(mesh)
 
 	var shape := CollisionShape3D.new()
@@ -75,6 +79,7 @@ func _make_segment() -> Node3D:
 		rail.mesh = rail_mesh
 		var rail_material := StandardMaterial3D.new()
 		rail_material.albedo_color = Color(0.91, 0.45, 0.16)
+		_rail_materials.append(rail_material)
 		rail.material_override = rail_material
 		rail.position = Vector3(x, 0.15, 0.0)
 		segment.add_child(rail)
@@ -208,3 +213,15 @@ func _make_coin(lane: int, z: float) -> Area3D:
 	area.set_meta("kind", "coin")
 	area.add_to_group("coin")
 	return area
+
+
+## Recolours the whole track for a zone change.
+##
+## The materials are edited in place rather than the segments rebuilt: a runner
+## cannot pause to reload geometry, and swapping a mesh under the player is
+## visible as a stutter at exactly the moment they are being told they did well.
+func repaint(ground: Color, rail: Color) -> void:
+	for m in _ground_materials:
+		m.albedo_color = ground
+	for m in _rail_materials:
+		m.albedo_color = rail

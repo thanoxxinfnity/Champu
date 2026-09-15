@@ -32,3 +32,20 @@ export function glbArtifact(path: string, bytes: Uint8Array): FileArtifact {
     bytes: bytes.byteLength,
   };
 }
+
+/**
+ * A generated .wav as a workspace file.
+ *
+ * Same data-URL carriage as a model, for the same reason: one storage path
+ * means one way for an artifact to go missing rather than two.
+ */
+export function wavArtifact(path: string, bytes: Uint8Array): FileArtifact {
+  return {
+    kind: 'file',
+    path,
+    language: 'wav',
+    content: `data:audio/wav;base64,${toBase64(bytes)}`,
+    complete: true,
+    bytes: bytes.byteLength,
+  };
+}

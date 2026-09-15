@@ -14,7 +14,8 @@ import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geome
 import { planBrief, planGame, planSummary, playerParts } from '@/lib/suites/godot/plan';
 import { buildGodotExport, describeExport as describeGodotExport, detectGodotProject, referencedResources } from '@/lib/suites/godot/export';
 import { generateModel, sourceChain } from '@/lib/suites/godot/model-source';
-import { glbArtifact } from '@/lib/suites/godot/artifact';
+import { glbArtifact, wavArtifact } from '@/lib/suites/godot/artifact';
+import { effect as sfxFor, toWav, track as musicTrack, type ScaleName } from '@/lib/suites/godot/audio';
 import { plannedTextures, texturePrompt, textureArtifact, toPixelArt } from '@/lib/suites/minecraft/texture';
 import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types';
 import type { CustomEndpointConfig } from '@/lib/providers/types';
@@ -960,6 +961,46 @@ export async function send(opts: SendOptions): Promise<void> {
             id: uid('msg'),
             role: 'system',
             content: `Could not build the 3D model — ${(err as Error).message}. The project is still here; it will open without it.`,
+            createdAt: Date.now(),
+          });
+        }
+      }
+
+      // A silent game reads as a tech demo. The model cannot emit a binary, so
+      // the soundtrack is synthesised here — one track per stage plus the four
+      // effects a game needs, all derived from the plan so two stages actually
+      // sound different.
+      if (!files.some((f) => f.path.startsWith('audio/'))) {
+        useWorkspace.getState().setThinking(true, 'Writing the soundtrack…');
+        try {
+          const moods: Array<{ scale: ScaleName; bpm: number; root: number }> = [
+            { scale: 'pentatonic', bpm: 104, root: -12 },
+            { scale: 'minor', bpm: 124, root: -10 },
+            { scale: 'major', bpm: 136, root: -7 },
+            { scale: 'phrygian', bpm: 148, root: -14 },
+            { scale: 'minor', bpm: 160, root: -17 },
+          ];
+          const stages = Math.max(1, Math.min(moods.length, design?.entities.length ?? 3));
+
+          for (let i = 0; i < stages; i += 1) {
+            const mood = moods[i];
+            const wav = toWav(musicTrack({ ...mood, seed: 1101 + i * 1103, seconds: 48 }));
+            const artifact = wavArtifact(`audio/zone_${i}.wav`, wav);
+            files.push(artifact);
+            upsertFile(artifact);
+          }
+          for (const kind of ['coin', 'jump', 'crash', 'levelup'] as const) {
+            const artifact = wavArtifact(`audio/sfx_${kind}.wav`, toWav(sfxFor(kind)));
+            files.push(artifact);
+            upsertFile(artifact);
+          }
+          evidence.artifactProduced = true;
+        } catch (err) {
+          // A game with no music still plays.
+          emit({
+            id: uid('msg'),
+            role: 'system',
+            content: `Could not write the soundtrack — ${(err as Error).message}. The game is still here; it will just be quiet.`,
             createdAt: Date.now(),
           });
         }

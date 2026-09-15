@@ -227,3 +227,27 @@ test('the suite carries the lessons that separate a game from a demo', () => {
     assert.match(GODOT_ADDENDUM, rule);
   }
 });
+
+test('a generated project ships music unless it is turned off', () => {
+  // Silence is the loudest sign a generated game is a tech demo, and it is the
+  // one gap the model cannot fill because it cannot emit a binary.
+  assert.ok(buildProject(SPEC).some((f) => f.path === 'audio.gd'));
+  assert.ok(!buildProject({ ...SPEC, music: false }).some((f) => f.path === 'audio.gd'));
+});
+
+test('the audio script survives files that are not there', () => {
+  // Godot loads by path; a project whose soundtrack failed to generate must
+  // still run rather than crash on a null stream.
+  const audio = buildProject(SPEC).find((f) => f.path === 'audio.gd').content;
+  assert.match(audio, /if stream == null:/);
+  assert.match(audio, /if s != null:/);
+  assert.match(audio, /if not _effects\.has\(effect\):/);
+});
+
+test('the audio script uses two players, not one per zone', () => {
+  // One each holds every stream in memory on a phone; one swapped mid-bar cuts.
+  const audio = buildProject(SPEC).find((f) => f.path === 'audio.gd').content;
+  assert.match(audio, /\$MusicA/);
+  assert.match(audio, /\$MusicB/);
+  assert.match(audio, /_fade/);
+});

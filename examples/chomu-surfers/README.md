@@ -18,9 +18,24 @@ handed over.
 | Jump | Swipe up | Space |
 | Roll under | Swipe down | S |
 
-You run forward on your own and speed up the longer you last, from 9 m/s to a
-cap of 26. Grey blocks you go around or jump; red ones are low, so you roll
-under them. Coins are worth 10 points each on top of the distance.
+You run forward on your own and speed up the longer you last. Grey blocks you
+go around or jump; red ones are low, so you roll under them. Coins are worth 10
+points each on top of the distance.
+
+## The five stages
+
+They arrive as you run — no loading screen, because stopping an endless runner
+every 300 m would break the one thing the genre is for. The world changes
+around you instead: ground, rails, sky, fog, music, top speed and how crowded
+the track gets.
+
+| From | Stage | Feel | Top speed | Music |
+| --- | --- | --- | --- | --- |
+| 0 m | **Sunset Yard** | Warm, forgiving. A first stage that kills you teaches nothing. | 14 m/s | 104 bpm, pentatonic |
+| 350 m | **Neon District** | Purple and pink, night. | 18 m/s | 124 bpm, minor |
+| 750 m | **Frost Line** | White and pale blue, bright. | 21 m/s | 136 bpm, major |
+| 1200 m | **Ember Deep** | Lava reds, heavy fog. | 24 m/s | 148 bpm, phrygian |
+| 1800 m | **The Void** | Near black. Never ends. | 26 m/s | 160 bpm, minor |
 
 ## What is in here
 
@@ -35,6 +50,9 @@ under them. Coins are worth 10 points each on top of the distance.
 | `hud.gd` | Score, coins, and the game-over screen. |
 | `character.gd` | Swings the runner's arms and legs from how fast it is going. |
 | `hero.glb` | The runner. A rigged, skinned mesh — Godot imports it as a Skeleton3D. |
+| `zones.gd` | The five stages and everything that changes between them. |
+| `audio.gd` | Music and sound. Two players, crossfaded on a stage change. |
+| `audio/*.wav` | Five 48-second tracks and four effects, all generated. |
 
 ## Things worth knowing if you change it
 
@@ -54,3 +72,12 @@ under them. Coins are worth 10 points each on top of the distance.
   pass over you rather than clipping your head.
 - `speed`, `jump_velocity`, `acceleration` and the obstacle/coin chances are all
   exported, so they are editable in the inspector without touching code.
+- **Stages live in one place.** `zones.gd` decides what stage 3 means to the
+  track, the sky and the music at once, so they cannot drift apart. Adding a
+  sixth is one entry in that array.
+- **Two music players, not five.** One player per stage would hold five streams
+  in memory on a phone; one player whose stream is swapped cuts mid-bar. Two
+  crossfade, which is cheap and the only version that does not sound like a
+  mistake.
+- **The track is recoloured, not rebuilt.** Swapping geometry under the player
+  is a visible stutter at exactly the moment they are being told they did well.

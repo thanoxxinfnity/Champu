@@ -67,6 +67,9 @@ func jump() -> void:
 	if is_on_floor():
 		velocity.y = jump_velocity
 		_roll_left = 0.0
+		var audio := get_parent().get_node_or_null("Audio")
+		if audio != null:
+			audio.play("jump")
 
 
 func roll() -> void:

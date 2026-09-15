@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3 uid="uid://csurf0runner1"]
+[gd_scene load_steps=17 format=3 uid="uid://csurf0runner1"]
 
 [ext_resource type="Script" path="res://game.gd" id="1_game"]
 [ext_resource type="Script" path="res://track.gd" id="2_track"]
@@ -7,6 +7,23 @@
 [ext_resource type="Script" path="res://hud.gd" id="5_hud"]
 [ext_resource type="PackedScene" path="res://hero.glb" id="6_hero"]
 [ext_resource type="Script" path="res://camera.gd" id="7_camera"]
+[ext_resource type="Script" path="res://zones.gd" id="8_zones"]
+[ext_resource type="Script" path="res://audio.gd" id="9_audio"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_over"]
+bg_color = Color(0.06, 0.06, 0.09, 0.94)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.91, 0.45, 0.16, 1)
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_scrim"]
+bg_color = Color(0, 0, 0, 0.55)
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
 height = 1.8
@@ -41,6 +58,21 @@ shadow_enabled = true
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_main")
+
+[node name="Zones" type="Node" parent="."]
+script = ExtResource("8_zones")
+
+[node name="Audio" type="Node" parent="."]
+script = ExtResource("9_audio")
+
+[node name="MusicA" type="AudioStreamPlayer" parent="Audio"]
+volume_db = -40.0
+
+[node name="MusicB" type="AudioStreamPlayer" parent="Audio"]
+volume_db = -40.0
+
+[node name="Sfx" type="AudioStreamPlayer" parent="Audio"]
+volume_db = -4.0
 
 [node name="Track" type="Node3D" parent="."]
 script = ExtResource("2_track")
@@ -95,12 +127,32 @@ theme_override_font_sizes/font_size = 44
 horizontal_alignment = 2
 text = "● 0"
 
+[node name="Zone" type="Label" parent="HUD"]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -340.0
+offset_top = 150.0
+offset_right = 340.0
+offset_bottom = 216.0
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 40
+horizontal_alignment = 1
+text = "STAGE 1"
+
 [node name="GameOver" type="Control" parent="HUD"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 
+[node name="Scrim" type="Panel" parent="HUD/GameOver"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_scrim")
+
 [node name="Panel" type="Panel" parent="HUD/GameOver"]
+theme_override_styles/panel = SubResource("StyleBoxFlat_over")
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
