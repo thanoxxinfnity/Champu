@@ -27,16 +27,28 @@
  * too — point `baseUrl` at your own `nvcr.io/nim/microsoft/trellis` and the
  * same code runs against it.
  *
- * What NVIDIA's own hosted function currently does, tested with a live key:
- *   text mode    202 Accepted, then the job finishes `errored` / 500
- *   image mode   422 at validation — including with NVIDIA's own example image
- *                from their OpenAPI spec, at 128, 256, 512 and 1024 px
+ * What NVIDIA's own hosted function currently does. Every documented path was
+ * tried with a live key, over about an hour:
  *
- * That is a broken deployment on their side, not a payload we can fix, so
- * `model-source.ts` keeps TRELLIS out of the default chain and falls through to
- * something that works. When NVIDIA repairs it, this starts working with no
- * change here — which is the reason to speak the real protocol rather than give
- * up on it.
+ *   text, full payload            202 Accepted, then errored / 500   (x3)
+ *   text, bare {prompt}           202 Accepted, then errored / 500
+ *   text, low steps / no_texture  202 Accepted, then errored / 500
+ *   text, output_format stl       202 Accepted, then errored / 500
+ *   image, inline base64          422 at validation, 128-1024 px     (x4)
+ *   image, as an array            422
+ *   image, NVIDIA's own example   422   <- from their published spec
+ *   image, NVCF asset upload      422   (slot + S3 PUT 200 + reference)
+ *   version-pinned URL            same as above
+ *
+ * The decisive one: with the same key in the same minute, FLUX.1-dev answered
+ * 200 SUCCESS in 4.2 seconds while TRELLIS answered 500. The key is fine, the
+ * endpoint is right, the payload matches their schema — the deployment fails
+ * its own jobs.
+ *
+ * So `model-source.ts` keeps TRELLIS in the chain but remembers the verdict for
+ * the process rather than paying ninety seconds per model. When NVIDIA repairs
+ * it, this starts working with no change here — which is the whole reason to
+ * speak the real protocol rather than give up on it.
  */
 
 /** NVIDIA's own hosted TRELLIS NIM, as an NVCF function. */

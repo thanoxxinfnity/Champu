@@ -89,10 +89,12 @@ test('the build.nvidia.com demo endpoint is refused rather than called', () => {
 });
 
 test("NVIDIA's own broken deployment is reported as theirs, not as the user's fault", () => {
-  // Verified live: text mode is accepted (202) and then fails 500 on all three
-  // attempts; image mode is refused 422 even with NVIDIA's own documented
-  // example image at four different sizes. A user who reads "500" will retry
-  // and re-enter their key instead.
+  // Verified live across every documented path: text is accepted (202) and then
+  // fails 500 (8 attempts, including the bare {prompt} payload); image is
+  // refused 422 inline, as an array, via NVCF asset upload, and with NVIDIA's
+  // own example image from their spec. Decisive: with the same key in the same
+  // minute, FLUX answered 200 in 4.2s while TRELLIS answered 500. A user who
+  // reads "500" will retry and re-enter their key instead of knowing that.
   const failed = trellisError(500, 'Internal Server Error', 'https://api.nvcf.nvidia.com/x');
   assert.match(failed.error, /accepted the job and then failed it/);
   assert.equal(failed.upstreamBroken, true);
