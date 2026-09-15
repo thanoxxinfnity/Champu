@@ -58,6 +58,9 @@ func _make_segment() -> Node3D:
 	mesh.mesh = box
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(0.22, 0.24, 0.29)
+	# Tiled along the segment: one stretched copy over 24 metres is a smear,
+	# and the repeat is what actually makes the ground read as a surface.
+	material.uv1_scale = Vector3(2.0, SEGMENT_LENGTH / 6.0, 1.0)
 	mesh.material_override = material
 	_ground_materials.append(material)
 	floor_body.add_child(mesh)
@@ -79,6 +82,7 @@ func _make_segment() -> Node3D:
 		rail.mesh = rail_mesh
 		var rail_material := StandardMaterial3D.new()
 		rail_material.albedo_color = Color(0.91, 0.45, 0.16)
+		rail_material.uv1_scale = Vector3(1.0, SEGMENT_LENGTH / 4.0, 1.0)
 		_rail_materials.append(rail_material)
 		rail.material_override = rail_material
 		rail.position = Vector3(x, 0.15, 0.0)
@@ -165,7 +169,13 @@ func _make_obstacle(lane: int, z: float) -> Area3D:
 	box.size = size
 	mesh.mesh = box
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(0.78, 0.22, 0.24) if low else Color(0.32, 0.36, 0.45)
+	material.albedo_color = Color(0.9, 0.85, 0.85) if low else Color(0.85, 0.87, 0.92)
+	var skin: Texture2D = _texture("barrier" if low else "obstacle")
+	if skin != null:
+		material.albedo_texture = skin
+	else:
+		# No texture generated: fall back to the colours that always read.
+		material.albedo_color = Color(0.78, 0.22, 0.24) if low else Color(0.32, 0.36, 0.45)
 	mesh.material_override = material
 	area.add_child(mesh)
 
@@ -199,6 +209,10 @@ func _make_coin(lane: int, z: float) -> Area3D:
 	material.albedo_color = Color(1.0, 0.78, 0.18)
 	material.emission_enabled = true
 	material.emission = Color(0.9, 0.6, 0.1)
+	var skin: Texture2D = _texture("coin")
+	if skin != null:
+		material.albedo_texture = skin
+		material.albedo_color = Color(1, 1, 1)
 	mesh.material_override = material
 	mesh.rotation = Vector3(PI / 2.0, 0.0, 0.0)
 	area.add_child(mesh)
@@ -215,13 +229,38 @@ func _make_coin(lane: int, z: float) -> Area3D:
 	return area
 
 
-## Recolours the whole track for a zone change.
+## A generated texture, or null if this build has none.
+##
+## Cached, because a coin is created three times a segment and loading the same
+## image from disk each time is a stutter you can feel.
+var _texture_cache := {}
+
+func _texture(name: String) -> Texture2D:
+	if _texture_cache.has(name):
+		return _texture_cache[name]
+	var tex: Texture2D = load("res://textures/%s.jpg" % name) as Texture2D
+	_texture_cache[name] = tex
+	return tex
+
+
+## Recolours and re-skins the whole track for a zone change.
 ##
 ## The materials are edited in place rather than the segments rebuilt: a runner
 ## cannot pause to reload geometry, and swapping a mesh under the player is
 ## visible as a stutter at exactly the moment they are being told they did well.
-func repaint(ground: Color, rail: Color) -> void:
+func repaint(ground: Color, rail: Color, zone: int) -> void:
+	# With a texture the colour becomes a tint, so it is lightened — multiplying
+	# a photo by a dark colour just makes mud.
+	var ground_tex: Texture2D = _texture("road_%d" % zone)
+	var rail_tex: Texture2D = _texture("rail_%d" % zone)
+
+	# With a texture the colour is a *tint*, so it is mixed down from white
+	# rather than lightened. lightened() on an already-pale texture — snow, ice —
+	# pushes it past white and the whole stage renders as a blank sheet, which is
+	# exactly what Frost Line did.
 	for m in _ground_materials:
-		m.albedo_color = ground
+		m.albedo_texture = ground_tex
+		m.albedo_color = Color.WHITE.lerp(ground, 0.4) if ground_tex != null else ground
 	for m in _rail_materials:
-		m.albedo_color = rail
+		m.albedo_texture = rail_tex
+		m.albedo_color = Color.WHITE.lerp(rail, 0.55) if rail_tex != null else rail

@@ -83,4 +83,4 @@ func _paint(t: float) -> void:
 	sky.ground_horizon_color = _from.sky_horizon.lerp(_to.sky_horizon, t)
 	env.fog_light_color = _from.fog.lerp(_to.fog, t)
 	env.fog_density = lerpf(_from.fog_density, _to.fog_density, t)
-	_track.repaint(_from.ground.lerp(_to.ground, t), _from.rail.lerp(_to.rail, t))
+	_track.repaint(_from.ground.lerp(_to.ground, t), _from.rail.lerp(_to.rail, t), _zone_index)

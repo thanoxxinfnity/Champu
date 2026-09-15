@@ -12,6 +12,36 @@ var _phase: float = 0.0
 var _bones := {}
 
 
+## Which generated texture each body part wears.
+const SKINS := {
+	"head": "hero_skin", "leftArm": "hero_skin", "rightArm": "hero_skin",
+	"leftLeg": "hero_skin", "rightLeg": "hero_skin", "body": "hero_cloth",
+}
+
+
+## Puts the generated textures on the character.
+##
+## Done here rather than baked into the .glb because the mesh is generated
+## before the textures are: the geometry knows its part names, and that is
+## enough to match a surface to it at load.
+func _skin() -> void:
+	for mesh in _skeleton.get_children():
+		if not (mesh is MeshInstance3D):
+			continue
+		var name: String = SKINS.get(mesh.name, "hero_skin")
+		var tex: Texture2D = load("res://textures/%s.jpg" % name) as Texture2D
+		if tex == null:
+			continue
+		# Duplicated, or every part sharing a material would share one texture.
+		var mat: StandardMaterial3D = (mesh as MeshInstance3D).get_active_material(0)
+		if mat == null:
+			continue
+		var own := mat.duplicate() as StandardMaterial3D
+		own.albedo_texture = tex
+		own.albedo_color = Color.WHITE.lerp(own.albedo_color, 0.45)
+		(mesh as MeshInstance3D).material_override = own
+
+
 func _ready() -> void:
 	_skeleton = _find_skeleton(self)
 	if _skeleton == null:
@@ -22,6 +52,7 @@ func _ready() -> void:
 	_body = get_parent() as CharacterBody3D
 	for name in ["ArmL", "ArmR", "LegL", "LegR", "Chest", "Head"]:
 		_bones[name] = _skeleton.find_bone(name)
+	_skin()
 
 
 func _find_skeleton(node: Node) -> Skeleton3D:

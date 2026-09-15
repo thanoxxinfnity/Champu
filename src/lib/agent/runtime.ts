@@ -16,6 +16,16 @@ import { buildGodotExport, describeExport as describeGodotExport, detectGodotPro
 import { generateModel, sourceChain } from '@/lib/suites/godot/model-source';
 import { glbArtifact, wavArtifact } from '@/lib/suites/godot/artifact';
 import { effect as sfxFor, toWav, track as musicTrack, type ScaleName } from '@/lib/suites/godot/audio';
+import {
+  RUNNER_THEMES,
+  insistOnDetail,
+  looksFlat,
+  // Aliased: the Minecraft suite has its own texture planner, and two
+  // different meanings of `plannedTextures` in one file is how the wrong one
+  // gets called.
+  plannedTextures as plannedGameTextures,
+  texturePrompt as gameTexturePrompt,
+} from '@/lib/suites/godot/textures';
 import { plannedTextures, texturePrompt, textureArtifact, toPixelArt } from '@/lib/suites/minecraft/texture';
 import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types';
 import type { CustomEndpointConfig } from '@/lib/providers/types';
@@ -180,6 +190,39 @@ async function complete(
   }
   const data = (await res.json()) as { content: string };
   return data.content;
+}
+
+
+/**
+ * One texture from the image gateway.
+ *
+ * Returns null rather than throwing: a build wants a dozen of these and one
+ * refusal should cost one surface, not the game.
+ */
+async function paintTexture(prompt: string, seed: number): Promise<{ dataUrl: string; bytes: number } | null> {
+  const res = await fetch('/api/image', withKeys({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'nim',
+      model: 'black-forest-labs/flux.1-dev',
+      prompt,
+      width: 1024,
+      height: 1024,
+      steps: 30,
+      seed: seed % 1_000_000,
+    }),
+  }));
+  if (!res.ok) return null;
+
+  const json = (await res.json()) as { images?: Array<{ dataUrl?: string }> };
+  const dataUrl = json.images?.[0]?.dataUrl;
+  if (!dataUrl) return null;
+
+  // Base64 is 4 bytes per 3 of payload; near enough to judge whether the image
+  // has any detail in it.
+  const b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+  return { dataUrl, bytes: Math.round(b64.length * 0.75) };
 }
 
 // ── Thinking bubble ─────────────────────────────────────────────────────────
@@ -964,6 +1007,38 @@ export async function send(opts: SendOptions): Promise<void> {
             createdAt: Date.now(),
           });
         }
+      }
+
+      // Flat-coloured boxes are what makes a generated game read as a
+      // placeholder. Geometry we can build; a *surface* we cannot, so the
+      // surfaces are generated — NVIDIA's FLUX answers in seconds, which is
+      // what makes a dozen of them practical in one build.
+      if (!files.some((f) => f.path.startsWith('textures/'))) {
+        const planned = plannedGameTextures(RUNNER_THEMES);
+        const themeFor = (i: number) =>
+          i < RUNNER_THEMES.length * 2 ? RUNNER_THEMES[Math.floor(i / 2)] : undefined;
+
+        for (let i = 0; i < planned.length; i += 1) {
+          const texture = planned[i];
+          useWorkspace.getState().setThinking(true, `Painting ${texture.subject}…`);
+          try {
+            let art = await paintTexture(gameTexturePrompt(texture, themeFor(i)), texture.seed);
+            // A flat texture is worse than none: the surface renders as a blank
+            // sheet and the geometry on it disappears. One reroll, insisting.
+            if (art && looksFlat(art.bytes)) {
+              const retry = await paintTexture(insistOnDetail(texture, themeFor(i)), (texture.seed + 7919) % 1_000_000);
+              if (retry && retry.bytes > art.bytes) art = retry;
+            }
+            if (!art) continue;
+            const artifact = textureArtifact(texture.path, art.dataUrl);
+            files.push(artifact);
+            upsertFile(artifact);
+          } catch {
+            // One surface failing costs that surface, not the build; the game
+            // falls back to flat colour for it.
+          }
+        }
+        if (files.some((f) => f.path.startsWith('textures/'))) evidence.artifactProduced = true;
       }
 
       // A silent game reads as a tech demo. The model cannot emit a binary, so
