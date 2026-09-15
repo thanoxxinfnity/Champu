@@ -18,6 +18,13 @@ cp "$here"/index.html "$here"/privacy.html "$here"/vercel.json "$stage/"
 mkdir -p "$stage/voice"
 cp "$root"/public/voice/*.wav "$stage/voice/"
 
+# The APK, when one has been built. Not in git — it is 28 MB of compiled output
+# that Godot can produce again from the project any time.
+if [ -n "${APK:-}" ]; then
+  mkdir -p "$stage/download"
+  cp "$APK" "$stage/download/$(basename "$APK")"
+fi
+
 cd "$stage"
 # Linked by name rather than by a committed .vercel/project.json: the stage is a
 # fresh temp directory every time, and without this Vercel would make a new
