@@ -41,21 +41,22 @@ async function fluxWorks() {
 }
 
 const result = await generateModel(
-  { prompt: 'a wooden treasure chest, game asset' },
+  { prompt: 'a wooden treasure chest' },
   KEY,
-  { timeoutMs: 240_000, onProgress: (n) => console.log(`  ${n}`) },
+  { rounds: 6, onProgress: (n) => console.log(`  ${n}`) },
 );
 
 if (result.model) {
   const path = OUT ?? 'trellis-output.glb';
   writeFileSync(path, result.model);
   const magic = String.fromCharCode(...result.model.slice(0, 4));
-  console.log(`\n${stamp}  TRELLIS WORKS — ${result.model.byteLength} bytes, magic "${magic}" -> ${path}`);
+  console.log(`\n${stamp}  TRELLIS WORKS — ${result.model.byteLength} bytes, magic "${magic}", ${result.attempts} attempt(s) -> ${path}`);
   process.exit(0);
 }
 
 const flux = await fluxWorks();
 console.log(`\n${stamp}  still broken`);
 console.log(`  TRELLIS : ${result.error}`);
+console.log(`  attempts: ${result.attempts}`);
 console.log(`  FLUX    : ${flux ? 'works on the same key — so this is TRELLIS, not your credentials' : 'ALSO failing — check the key or the network first'}`);
 process.exit(1);

@@ -193,7 +193,10 @@ export async function generateModel(
       const result = await trellis.generateModel({ prompt: request.prompt }, keys.nim!, {
         baseUrl: keys.trellisUrl,
         signal: options.signal,
-        timeoutMs: options.timeoutMs,
+        // Fewer rounds than the standalone client: a build wants several
+        // models, and twelve attempts each would be most of an hour before the
+        // first one is drawn.
+        rounds: 3,
         onProgress: (note) => options.onStage?.('trellis', note),
       });
 

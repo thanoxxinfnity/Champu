@@ -16,6 +16,11 @@ var _active: AudioStreamPlayer
 var _idle: AudioStreamPlayer
 var _fade: float = 0.0
 var _volume_db: float = -8.0
+## Ducking is an offset rather than a second volume, so it composes with a
+## crossfade instead of fighting it — and it eases, because an instant drop of
+## fourteen decibels is audible as a click.
+var _duck_db: float = 0.0
+var _duck_target: float = 0.0
 
 var _tracks: Array[AudioStream] = []
 var _effects: Dictionary = {}
@@ -42,12 +47,17 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if not is_equal_approx(_duck_db, _duck_target):
+		_duck_db = move_toward(_duck_db, _duck_target, delta * 40.0)
+		if _fade <= 0.0:
+			_active.volume_db = _volume_db + _duck_db
+
 	if _fade <= 0.0:
 		return
 	_fade = maxf(_fade - delta, 0.0)
 	var t := 1.0 - (_fade / FADE)
-	_active.volume_db = lerpf(-40.0, _volume_db, t)
-	_idle.volume_db = lerpf(_volume_db, -40.0, t)
+	_active.volume_db = lerpf(-40.0, _volume_db + _duck_db, t)
+	_idle.volume_db = lerpf(_volume_db + _duck_db, -40.0, t)
 	if _fade <= 0.0 and _idle.playing:
 		_idle.stop()
 
@@ -81,4 +91,17 @@ func play(effect: String) -> void:
 func set_music_volume(db: float) -> void:
 	_volume_db = db
 	if _fade <= 0.0:
-		_active.volume_db = db
+		_active.volume_db = db + _duck_db
+
+
+## Drops the music under a voice line. 0.0 restores it.
+##
+## Separate from set_music_volume so the two cannot overwrite each other: the
+## user's volume and "someone is talking" are different facts about the same
+## number, and storing them in one variable loses whichever was set second.
+func duck(db: float) -> void:
+	_duck_target = db
+
+
+func is_ducked() -> bool:
+	return _duck_target < -0.5

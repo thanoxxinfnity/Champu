@@ -53,6 +53,8 @@ the track gets.
 | `zones.gd` | The five stages and everything that changes between them. |
 | `audio.gd` | Music and sound. Two players, crossfaded on a stage change. |
 | `audio/*.wav` | Five 48-second tracks and four effects, all generated. |
+| `voice.gd` | Spoken lines. Ducks the music while someone is talking. |
+| `voice/*.wav` | Three AI voice recordings. |
 
 ## Things worth knowing if you change it
 
@@ -81,3 +83,12 @@ the track gets.
   mistake.
 - **The track is recoloured, not rebuilt.** Swapping geometry under the player
   is a visible stutter at exactly the moment they are being told they did well.
+- **Voice ducks the music, it does not compete with it.** Two things at the same
+  volume are two things nobody can make out, and a line the player cannot hear is
+  worse than silence because they know they missed something. The duck is an
+  offset that eases, not a second volume — an instant fourteen-decibel drop is
+  audible as a click, and one variable holding both "the user's volume" and
+  "someone is talking" loses whichever was set last.
+- **Which voice plays when is one dictionary.** `LINES` at the top of `voice.gd`
+  maps a moment to a file. Swap a filename there and that moment says something
+  else; nothing else needs touching.

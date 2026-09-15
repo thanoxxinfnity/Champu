@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { meshyError, resultFrom, taskIdFrom } from '../src/lib/suites/godot/meshy.ts';
-import { DEMO_ENDPOINT, modelFrom, requestBody, trellisError } from '../src/lib/suites/godot/trellis.ts';
+import { SAMPLE_IMAGE, headersFor, modelFrom, requestBody, trellisError } from '../src/lib/suites/godot/trellis.ts';
 import { buildLocally, resetTrellisState, sourceChain, trellisAvailability } from '../src/lib/suites/godot/model-source.ts';
 
 // ── Meshy ───────────────────────────────────────────────────────────────────
@@ -64,60 +64,74 @@ test('Meshy errors say where the key goes, not what the server said', () => {
 
 // ── TRELLIS ─────────────────────────────────────────────────────────────────
 
-test('the request carries a mode, which is what makes it a real request', () => {
-  // Without `mode` the service guesses, and a body carrying both a prompt and
-  // an image is ambiguous. Omitting it is why the first attempts never got past
-  // validation.
-  const text = requestBody({ prompt: 'a stone golem' });
-  assert.equal(text.mode, 'text');
-  assert.equal(text.prompt, 'a stone golem');
-  assert.equal(text.output_format, 'glb');
-
-  const image = requestBody({ imageDataUri: 'data:image/png;base64,AAAA' });
-  assert.equal(image.mode, 'image');
-  assert.equal(image.image, 'data:image/png;base64,AAAA');
-  assert.equal(image.prompt, undefined, 'an image job must not also carry a prompt');
+test('the body carries the prompt and nothing else', () => {
+  // Measured, and the opposite of the published schema: `seed`, `mode` and
+  // `output_format` alongside a prompt do not get a validation error, they get
+  // a 500. Every documented field is a field that breaks it.
+  const body = JSON.parse(requestBody({ prompt: 'a stone golem' }));
+  assert.deepEqual(Object.keys(body), ['prompt']);
+  assert.match(body.prompt, /^a stone golem/);
+  for (const forbidden of ['seed', 'mode', 'output_format', 'slat_cfg_scale']) {
+    assert.equal(body[forbidden], undefined, `${forbidden} makes the service 500`);
+  }
 });
 
-test('the build.nvidia.com demo endpoint is refused rather than called', () => {
-  // It only serves NVIDIA's own sample pictures: an upload answers
-  // 422 "Expected: example_id, got: base64" and a prompt answers 500 after
-  // ninety seconds. Calling it is ninety seconds spent to learn nothing.
-  const refused = trellisError(422, '{"detail":"Expected: example_id, got: base64"}', DEMO_ENDPOINT);
-  assert.match(refused.error, /demo that only accepts their own sample images/);
-  assert.equal(refused.upstreamBroken, true);
+test('detail is steered through the prompt, because there is no parameter for it', () => {
+  const low = JSON.parse(requestBody({ prompt: 'a chest' }, { detail: 'low' }));
+  const high = JSON.parse(requestBody({ prompt: 'a chest' }, { detail: 'high' }));
+  assert.match(low.prompt, /low poly/);
+  assert.match(high.prompt, /detailed/);
+  assert.deepEqual(Object.keys(low), ['prompt'], 'still nothing but the prompt');
 });
 
-test("NVIDIA's own broken deployment is reported as theirs, not as the user's fault", () => {
-  // Verified live across every documented path: text is accepted (202) and then
-  // fails 500 (8 attempts, including the bare {prompt} payload); image is
-  // refused 422 inline, as an array, via NVCF asset upload, and with NVIDIA's
-  // own example image from their spec. Decisive: with the same key in the same
-  // minute, FLUX answered 200 in 4.2s while TRELLIS answered 500. A user who
-  // reads "500" will retry and re-enter their key instead of knowing that.
-  const failed = trellisError(500, 'Internal Server Error', 'https://api.nvcf.nvidia.com/x');
-  assert.match(failed.error, /accepted the job and then failed it/);
-  assert.equal(failed.upstreamBroken, true);
-
-  const refused = trellisError(422, '{"detail":"Inference error"}', 'https://api.nvcf.nvidia.com/x');
-  assert.match(refused.error, /own documented example image is refused the same way/);
-  assert.equal(refused.upstreamBroken, true);
+test('the sample image is the only image the deployment takes', () => {
+  const body = JSON.parse(requestBody({ sampleImage: true }));
+  assert.deepEqual(body, { image: SAMPLE_IMAGE });
+  assert.equal(SAMPLE_IMAGE, 'data:image/png;example_id,0');
+  assert.equal(body.prompt, undefined, 'an image job must not also carry a prompt');
 });
 
-test('a real auth or routing failure is still reported as one', () => {
-  // These are the user's to fix, so they must not be blamed on NVIDIA.
+test('the content type carries no charset', () => {
+  // With one, NVIDIA answers 415 and names the exact string it wanted:
+  // "application/json; charset=utf-8. It must be application/json".
+  const h = headersFor('nvapi-x');
+  assert.equal(h['Content-Type'], 'application/json');
+  assert.ok(!h['Content-Type'].includes('charset'));
+  assert.equal(h['NVCF-POLL-SECONDS'], '300');
+  assert.equal(h['NVCF-INPUT-ASSET-REFERENCES'], undefined, 'only sent with an upload');
+  assert.equal(headersFor('nvapi-x', 'asset-1')['NVCF-INPUT-ASSET-REFERENCES'], 'asset-1');
+});
+
+test('a refused upload is reported as NVIDIA refusing it, not as a failed upload', () => {
+  // The upload genuinely works — you get an assetId and the PUT succeeds. It is
+  // TRELLIS that will not take the result, and a user told "upload failed"
+  // would go and check their connection.
+  const r = trellisError(422, '{"detail":"Expected: example_id, got: asset_id"}');
+  assert.match(r.error, /reached them fine; they refused it/);
+  assert.equal(r.upstreamBroken, true);
+});
+
+test("NVIDIA's own outage is reported as theirs", () => {
+  // FLUX answered 200 in 4.2s on the same key in the same minute, so this is
+  // not the key and not the network — and a user who reads "500" will retry
+  // and re-enter their credentials instead of knowing that.
+  const r = trellisError(500, 'Internal Server Error');
+  assert.match(r.error, /FLUX works on the same key/);
+  assert.equal(r.upstreamBroken, true);
+});
+
+test('a real auth, routing or rate-limit failure is still reported as one', () => {
   for (const status of [401, 403]) {
-    const r = trellisError(status, '{}', 'https://api.nvcf.nvidia.com/x');
+    const r = trellisError(status, '{}');
     assert.match(r.error, /rejected the key/);
     assert.ok(!r.upstreamBroken);
   }
-  const missing = trellisError(404, '{}', 'http://my-gpu:8000/v1/infer');
-  assert.match(missing.error, /does not exist/);
-  assert.ok(!missing.upstreamBroken);
+  assert.match(trellisError(404, '{}').error, /does not exist/);
+  assert.match(trellisError(429, '{}').error, /rate limiting/);
+  assert.match(trellisError(415, '{}').error, /no charset/);
 });
 
-test('the model is read out of the documented response shape', () => {
-  // Object3DResponse: { artifacts: [{ base64, finishReason, seed }] }.
+test('the model is read out of the response shape', () => {
   const glb = Buffer.from('glTF\u0002\u0000\u0000\u0000').toString('base64');
   const ok = modelFrom({ artifacts: [{ base64: glb, finishReason: 'SUCCESS', seed: 0 }] });
   assert.ok(ok.model instanceof Uint8Array);
