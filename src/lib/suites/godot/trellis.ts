@@ -248,6 +248,17 @@ async function pollNvcf(
     });
 
     if (res.status === 202) continue;
+
+    // A 5xx from the status route means two different things, and treating
+    // them alike is how a finished job gets reported as a failure: with
+    // `nvcf-status: errored` the *job* failed and there is nothing to wait
+    // for, but without it the gateway hiccuped and the job may still be
+    // running. Only the first is final.
+    if (res.status >= 500 && res.headers.get('nvcf-status') !== 'errored' && attempt < 4) {
+      options.onProgress?.('The status gateway hiccuped; asking again…');
+      continue;
+    }
+
     if (!res.ok) return trellisError(res.status, await res.text(), NVCF_STATUS);
     return modelFrom(await res.json());
   }
