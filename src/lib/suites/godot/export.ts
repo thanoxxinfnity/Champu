@@ -40,7 +40,7 @@ export interface GodotExport {
 }
 
 /** A path inside the project folder, with any wrapper directory stripped. */
-function relativePath(path: string, root: string): string {
+export function relativePath(path: string, root: string): string {
   const prefix = root ? `${root}/` : '';
   return prefix && path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }

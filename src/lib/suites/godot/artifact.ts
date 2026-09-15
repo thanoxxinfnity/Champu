@@ -49,3 +49,21 @@ export function wavArtifact(path: string, bytes: Uint8Array): FileArtifact {
     bytes: bytes.byteLength,
   };
 }
+
+/**
+ * A compiled APK as a workspace file.
+ *
+ * Unlike a model or a zip, this one genuinely has to be stored: it takes
+ * Godot's native exporter on the bridge to produce, so the download button
+ * cannot rebuild it on click the way the project archive does.
+ */
+export function apkArtifact(path: string, bytes: Uint8Array): FileArtifact {
+  return {
+    kind: 'file',
+    path,
+    language: 'apk',
+    content: `data:application/vnd.android.package-archive;base64,${toBase64(bytes)}`,
+    complete: true,
+    bytes: bytes.byteLength,
+  };
+}

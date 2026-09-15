@@ -12,11 +12,12 @@ import { advancePlan, NO_EVIDENCE, settleRemaining, type RunEvidence } from './p
 import { buildPackExport, describeExport, detectPacks, missingGeometries, validatePacks } from '@/lib/suites/minecraft/pack';
 import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geometry';
 import { planBrief, planGame, planSummary, playerParts } from '@/lib/suites/godot/plan';
-import { buildGodotExport, describeExport as describeGodotExport, detectGodotProject, referencedResources } from '@/lib/suites/godot/export';
+import { buildGodotExport, describeExport as describeGodotExport, detectGodotProject, referencedResources, relativePath } from '@/lib/suites/godot/export';
 import { generateModel, pipelineStatement, sourceChain } from '@/lib/suites/godot/model-source';
 import { creditsFile } from '@/lib/suites/godot/sketchfab';
 import { describeProblems } from '@/lib/suites/godot/verify';
-import { glbArtifact, wavArtifact } from '@/lib/suites/godot/artifact';
+import { apkArtifact, glbArtifact, wavArtifact } from '@/lib/suites/godot/artifact';
+import { buildApkOnBridge } from '@/lib/suites/godot/bridge-build';
 import { effect as sfxFor, toWav, track as musicTrack, type ScaleName } from '@/lib/suites/godot/audio';
 import {
   RUNNER_THEMES,
@@ -1161,6 +1162,68 @@ export async function send(opts: SendOptions): Promise<void> {
         };
         emit(offer);
         void appendMessage({ ...offer, sessionId, suite });
+
+        // ── And the APK, when there is a machine to build it on ────────────
+        //
+        // A browser tab cannot make one: an APK is a zip of compiled native
+        // code, signed, and Godot's exporter is a native binary. So this only
+        // happens with the bridge up, and when it is down the user is told
+        // that plainly rather than left wondering where the button is.
+        if (!exported.problems.length) {
+          const live = useWorkspace.getState().heartbeat.status;
+          if (live !== 'online' && live !== 'degraded') {
+            const parked = {
+              id: uid('msg'),
+              role: 'system' as const,
+              content: `_No APK: making one needs Godot's own exporter on a real machine, and the terminal bridge is ${live}. The project above is complete — bring the bridge up and ask again, or open it in Godot on your phone and export from there._`,
+              createdAt: Date.now(),
+            };
+            emit(parked);
+            void appendMessage({ ...parked, sessionId, suite });
+          } else {
+            useWorkspace.getState().setThinking(true, 'Compiling the APK on the bridge…');
+            const projectRoot = detectGodotProject(files)?.root ?? '';
+            const built = await buildApkOnBridge(
+              useWorkspace.getState().bridge,
+              files.map((f) => ({ path: relativePath(f.path, projectRoot), content: f.content })),
+              {
+                name: design?.name ?? 'Chomugiri Game',
+                versionName: '1.0',
+                onStage: (message) => useWorkspace.getState().setThinking(true, message),
+              },
+            );
+
+            if (built.bytes) {
+              // Stored as a workspace file so the download button has something
+              // to hand over — unlike the zip, it cannot be rebuilt on click.
+              const apkFile = apkArtifact(built.filename, built.bytes);
+              upsertFile(apkFile);
+              const apkOffer = {
+                id: uid('msg'),
+                role: 'system' as const,
+                content: `**${built.filename} is built.** ${(built.bytes.byteLength / 1024 / 1024).toFixed(1)} MB, signed, exported with Godot at \`${built.godot}\`. Android will warn that it came from outside the Play Store — allow it and it installs.`,
+                offer: {
+                  kind: 'apk' as const,
+                  filename: built.filename,
+                  label: `${built.filename} — ${(built.bytes.byteLength / 1024 / 1024).toFixed(1)} MB`,
+                  source: apkFile.path,
+                },
+                createdAt: Date.now(),
+              };
+              emit(apkOffer);
+              void appendMessage({ ...apkOffer, sessionId, suite });
+            } else {
+              const failed = {
+                id: uid('msg'),
+                role: 'system' as const,
+                content: `**The APK did not build.** ${built.error}\n\nThe project itself is fine — the zip above is the same one. Godot's last words:\n\n\`\`\`\n${built.log.slice(-600).trim()}\n\`\`\``,
+                createdAt: Date.now(),
+              };
+              emit(failed);
+              void appendMessage({ ...failed, sessionId, suite });
+            }
+          }
+        }
       }
     }
 

@@ -203,6 +203,9 @@ export function exportFailure(log: string, apkExists: boolean, apkBytes: number)
   if (/No export template found|export templates.*not.*(found|installed)/i.test(log)) {
     return 'Godot has no Android export templates for this version. Install them from Editor → Manage Export Templates, or drop the .tpz into the templates folder.';
   }
+  if (/Target folder does not exist or is inaccessible/i.test(log)) {
+    return 'Godot could not write the APK where it was told to. It resolves the output path against its own working directory rather than against --path, so the output has to be absolute.';
+  }
   if (/Could not find preset|No preset with the name/i.test(log)) {
     return 'The export preset named in the command is not in export_presets.cfg.';
   }

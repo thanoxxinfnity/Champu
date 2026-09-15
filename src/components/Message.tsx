@@ -1,7 +1,7 @@
 'use client';
 
 import { useWorkspace } from '@/lib/store';
-import { downloadZip } from '@/lib/zip';
+import { dataUrlToBytes, downloadBlob, downloadZip } from '@/lib/zip';
 import { buildPackExport, detectPacks } from '@/lib/suites/minecraft/pack';
 import { buildGodotExport } from '@/lib/suites/godot/export';
 import { useMemo, useState } from 'react';
@@ -214,6 +214,24 @@ function OfferDownload({ offer }: { offer: NonNullable<ChatMessageView['offer']>
   const [error, setError] = useState<string | null>(null);
 
   const take = () => {
+    if (offer.kind === 'apk') {
+      // Not rebuildable in the browser: making an APK needs Godot's native
+      // exporter on the bridge. The bytes were stored when it was built.
+      const stored = offer.source ? files.get(offer.source) : undefined;
+      if (!stored?.content?.startsWith('data:')) {
+        setError('That APK is no longer in this workspace — re-run the build to compile it again.');
+        return;
+      }
+      setError(null);
+      // Copied into a plain ArrayBuffer: a Uint8Array can be backed by a
+      // SharedArrayBuffer, which Blob will not take.
+      const bytes = dataUrlToBytes(stored.content);
+      const buffer = new ArrayBuffer(bytes.byteLength);
+      new Uint8Array(buffer).set(bytes);
+      downloadBlob(new Blob([buffer], { type: 'application/vnd.android.package-archive' }), offer.filename);
+      return;
+    }
+
     if (offer.kind === 'godot-project') {
       // Rebuilt from the workspace at click time, like the pack below, so an
       // edit made after the build is in the archive rather than being lost.

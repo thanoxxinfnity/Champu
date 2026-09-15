@@ -50,7 +50,20 @@ export interface ChatMessageView {
    * the current workspace files rather than stored in the message — history
    * should not carry a second copy of every artifact.
    */
-  offer?: { kind: 'minecraft-pack' | 'godot-project'; filename: string; label: string };
+  offer?: {
+    kind: 'minecraft-pack' | 'godot-project' | 'apk';
+    filename: string;
+    label: string;
+    /**
+     * For an APK: the workspace file holding the bytes.
+     *
+     * A zip is rebuilt from the workspace when the button is pressed, so it is
+     * never stored twice. An APK cannot be — it takes a native Godot export on
+     * the bridge to make one — so the bytes are kept as a workspace file and
+     * this points at it.
+     */
+    source?: string;
+  };
 }
 
 export interface TerminalLine {
