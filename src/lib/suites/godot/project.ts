@@ -52,6 +52,22 @@ export interface GameSpec {
   genre?: string;
   /** Where the camera sits. `first-person` puts it in the player's head. */
   view?: string;
+  /**
+   * Real models to stand in for the cover boxes.
+   *
+   * An arena built out of cubes reads as a placeholder however well it plays,
+   * and the crates are the thing the player spends the whole match standing
+   * behind. Given any, they are cycled through the cover positions; given none,
+   * the boxes stay, because a box is better than a hole.
+   */
+  props?: Array<{
+    path: string;
+    /** Metres, after `scale`. The collision box is cut to fit it. */
+    size: [number, number, number];
+    /** Where the model's own floor sits relative to its origin, from the glTF. */
+    baseY?: number;
+    scale?: number;
+  }>;
   /** Models to place in the scene, as res:// paths to .glb files. */
   models?: Array<{
     path: string;
@@ -445,6 +461,9 @@ func set_music_volume(db: float) -> void:
  * scattering, and littered with cover — a flat empty square is where a zombie
  * game stops being one, because there is nothing to break line of sight with.
  */
+/** The top face of the ground slab: 0.5 thick, centred on the origin. */
+const GROUND_TOP = 0.25;
+
 export function shooterScene(spec: GameSpec): string {
   const models = spec.models ?? [];
 
@@ -462,6 +481,19 @@ export function shooterScene(spec: GameSpec): string {
   models.forEach((model, i) => {
     ext.push(`[ext_resource type="PackedScene" path="${model.path}" id="${modelIdBase + i}_model${i}"]`);
   });
+
+  // Real props for the cover, when any were downloaded. Declared once each and
+  // reused across the sixteen positions — sixteen ext_resources pointing at the
+  // same file is sixteen imports of the same textures.
+  const props = spec.props ?? [];
+  const propIds = new Map<string, string>();
+  props.forEach((prop, i) => {
+    if (propIds.has(prop.path)) return;
+    const id = `${modelIdBase + models.length + i}_prop${i}`;
+    propIds.set(prop.path, id);
+    ext.push(`[ext_resource type="PackedScene" path="${prop.path}" id="${id}"]`);
+  });
+  const propId = (path: string): string => propIds.get(path) ?? '';
 
   // The generated character becomes the zombie rather than the player's own
   // body: in first person the player never sees themselves, and a rigged mesh
@@ -535,6 +567,19 @@ emission_energy_multiplier = 0.55`,
 bg_color = Color(0.05, 0.04, 0.04, 0.93)`,
   ];
 
+  // One collision box per distinct prop, sized to that prop.
+  const shapeIds = new Map<string, string>();
+  props.forEach((prop, i) => {
+    if (shapeIds.has(prop.path)) return;
+    const id = `BoxShape3D_prop${i}`;
+    shapeIds.set(prop.path, id);
+    const scale = prop.scale ?? 1;
+    const [w, h, d] = prop.size;
+    sub.push(`[sub_resource type="BoxShape3D" id="${id}"]
+size = Vector3(${(w * scale).toFixed(3)}, ${(h * scale).toFixed(3)}, ${(d * scale).toFixed(3)})`);
+  });
+  const propShapeId = (prop: { path: string }): string => shapeIds.get(prop.path) ?? 'BoxShape3D_crate';
+
   const loadSteps = ext.length + sub.length + 1;
 
   // Four walls off one mesh and one shape. Transform3D is column-major: the
@@ -561,16 +606,25 @@ shape = SubResource("BoxShape3D_wall")`,
 
   // Cover, placed rather than randomised: a layout that changes every build is
   // a layout nobody can learn, and learning the map is the game.
-  const crates = [
+  const coverAt: Array<[number, number, number]> = [
     [-9, 1.4, -7], [-6, 1.4, -7], [-9, 3.8, -7],
     [10, 1.4, -11], [12.4, 1.4, -11],
     [-13, 1.4, 9], [-13, 1.4, 11.4], [-13, 3.8, 9],
     [8, 1.4, 12], [10.4, 1.4, 12], [8, 3.8, 12],
     [0, 1.4, -18], [2.4, 1.4, -18],
     [-19, 1.4, -2], [18, 1.4, 4], [18, 3.8, 4],
-  ]
-    .map(
-      ([x, y, z], i) => `[node name="Crate${i}" type="StaticBody3D" parent="Arena"]
+  ];
+
+  // Ground level. The stacked positions exist so cubes can be piled into a
+  // wall; a real barrel balanced on another real barrel just looks wrong.
+  const positions = props.length ? coverAt.filter(([, y]) => y < 2) : coverAt;
+
+  const crates = positions
+    .map(([x, y, z], i) => {
+      const prop = props[i % props.length];
+
+      if (!prop) {
+        return `[node name="Crate${i}" type="StaticBody3D" parent="Arena"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${x}, ${y}, ${z})
 
 [node name="Mesh" type="MeshInstance3D" parent="Arena/Crate${i}"]
@@ -578,8 +632,28 @@ mesh = SubResource("BoxMesh_crate")
 material_override = SubResource("StandardMaterial3D_crate")
 
 [node name="Collision" type="CollisionShape3D" parent="Arena/Crate${i}"]
-shape = SubResource("BoxShape3D_crate")`,
-    )
+shape = SubResource("BoxShape3D_crate")`;
+      }
+
+      // Stood on the floor, not hung at a box's centre. Read from the model
+      // rather than assumed: the first version dropped every prop by 1.2m
+      // because that suited a 2.4m cube, which put a 0.93m barrel most of a
+      // metre underground.
+      const scale = prop.scale ?? 1;
+      const lift = -(prop.baseY ?? 0) * scale;
+      // The collision box is cut to the prop instead of the prop being scaled
+      // to the box. Hiding behind a barrel that is half the size of the thing
+      // stopping the bullets is the single most obvious way cover feels broken.
+      return `[node name="Crate${i}" type="StaticBody3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${x}, ${GROUND_TOP}, ${z})
+
+[node name="Art" parent="Arena/Crate${i}" instance=ExtResource("${propId(prop.path)}")]
+transform = Transform3D(${scale}, 0, 0, 0, ${scale}, 0, 0, 0, ${scale}, 0, ${lift.toFixed(3)}, 0)
+
+[node name="Collision" type="CollisionShape3D" parent="Arena/Crate${i}"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, ${(prop.size[1] / 2).toFixed(3)}, 0)
+shape = SubResource("${propShapeId(prop)}")`;
+    })
     .join('\n\n');
 
   return `[gd_scene load_steps=${loadSteps} format=3 uid="${sceneUid(spec.name)}"]
