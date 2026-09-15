@@ -160,3 +160,83 @@ test('the apk filename says which build it is', () => {
   assert.equal(apkName('Chomu Game', '1.0'), 'ChomuGame-1.0.apk');
   assert.equal(apkName('!!!'), 'Game-1.0.apk');
 });
+
+// ── What the review found ───────────────────────────────────────────────────
+
+test('a binary asset counts as a file the project has, not a missing one', () => {
+  // Models travel through a workspace with no filesystem as data: URLs.
+  // Filtering them out before verifying made `res://character.glb` read as
+  // missing, and refused every build that actually generated a model.
+  const files = [
+    { path: 'project.godot', content: 'config_version=5\nrun/main_scene="res://main.tscn"' },
+    { path: 'main.tscn', content: '[gd_scene load_steps=2 format=3]\n[ext_resource path="res://character.glb" id="1"]\n[node name="Main" type="Node3D"]' },
+    { path: 'character.glb', content: 'data:model/gltf-binary;base64,Z2xURg==' },
+  ];
+  assert.ok(shippable(verifyProject(files)));
+  // And one that genuinely is not there is still caught.
+  assert.equal(shippable(verifyProject(files.slice(0, 2))), false);
+});
+
+test('a cast followed by a comment is still a cast', () => {
+  const line = 'var label := panel.get_node("Text") as Label # the score';
+  assert.ok(!only(line).some((p) => /Inferred type/.test(p.message)));
+});
+
+test('a project nested in its own folder verifies against the right root', async () => {
+  // buildGodotExport strips the wrapper before checking. Verifying the raw
+  // workspace paths instead made a nested project read as having no
+  // project.godot at all, so every input action and every res:// was fatal.
+  const { buildGodotExport } = await import('../src/lib/suites/godot/export.ts');
+  const { planGame } = await import('../src/lib/suites/godot/plan.ts');
+  const plan = planGame('zombie survival shooter, first person, name Chomu Game');
+  const base = buildProject({
+    name: plan.name,
+    dimension: plan.dimension,
+    genre: plan.genre,
+    view: plan.view,
+    models: [{ path: 'res://character.glb', node: 'C', rigged: true }],
+  }).map((f) => ({ path: f.path, content: f.content }));
+  base.push({ path: 'character.glb', content: 'data:model/gltf-binary;base64,Z2xURg==' });
+
+  for (const files of [base, base.map((f) => ({ path: `my_game/${f.path}`, content: f.content }))]) {
+    const exported = buildGodotExport(files, plan);
+    assert.deepEqual(exported.problems, [], 'a project the suite generated must ship');
+    // The runtime warnings still come through, separately from the refusals.
+    assert.ok(exported.warnings.length > 0);
+    assert.ok(exported.warnings.every((w) => !w.fatal));
+  }
+});
+
+test('a Java keyword is not a package segment', () => {
+  // aapt refuses it: the manifest package becomes a Java identifier.
+  assert.equal(packageNameFor('Class'), 'com.chomugiri.gameclass');
+  assert.equal(packageNameFor('Native'), 'com.chomugiri.gamenative');
+  assert.equal(packageNameFor('Package'), 'com.chomugiri.gamepackage');
+  // And a name that is fine stays untouched.
+  assert.equal(packageNameFor('Chomu Game'), 'com.chomugiri.chomugame');
+  assert.match(exportFailure('is not a valid Java package name', false, 0), /Java keyword/);
+});
+
+test('a quote in a keystore password does not end the string early', () => {
+  // export_presets.cfg has no escape syntax worth trusting: an unescaped quote
+  // truncates the password, Godot signs with the short one, and it fails at
+  // install time with a message about the certificate.
+  const cfg = exportPresets({
+    name: 'My "Game"',
+    release: true,
+    keystore: { path: 'C:\\keys\\a.keystore', user: 'me', password: 'pa"ss' },
+  });
+  assert.match(cfg, /keystore\/release_password="pa\\"ss"/);
+  assert.match(cfg, /package\/name="My \\"Game\\""/);
+  assert.match(cfg, /keystore\/release="C:\\\\keys\\\\a\.keystore"/);
+});
+
+test('a release export with no keystore is refused, not downgraded', () => {
+  // Writing debug keys for a release preset produces an APK Android will not
+  // install, and the reason only shows up on the phone.
+  assert.throws(() => exportPresets({ name: 'G', release: true }), /needs a keystore/);
+  assert.doesNotThrow(() => exportPresets({ name: 'G' }));
+  assert.doesNotThrow(() =>
+    exportPresets({ name: 'G', release: true, keystore: { path: '/k', user: 'u', password: 'p' } }),
+  );
+});

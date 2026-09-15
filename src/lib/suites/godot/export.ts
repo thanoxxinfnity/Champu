@@ -20,6 +20,7 @@
  */
 
 import { buildProject, validateProject, type GameSpec, type GodotFile } from './project.ts';
+import { verifyProject, type Problem } from './verify.ts';
 import type { GamePlan } from './plan.ts';
 
 export interface WorkspaceFile {
@@ -34,6 +35,8 @@ export interface GodotExport {
   filledIn: string[];
   /** What would still stop it opening. Empty means it imports. */
   problems: string[];
+  /** Worth saying, not worth refusing over — a node the scripts build at runtime. */
+  warnings: Problem[];
 }
 
 /** A path inside the project folder, with any wrapper directory stripped. */
@@ -165,11 +168,22 @@ export function buildGodotExport(files: WorkspaceFile[], plan: GamePlan | null, 
   }));
 
   // Validated on the flattened set, which is what Godot will actually see.
-  const problems = validateProject(
-    completed.files
-      .filter((f) => !f.content.startsWith('data:'))
-      .map((f) => ({ path: relativePath(f.path, detected.root), content: f.content })),
-  );
+  //
+  // Binary assets are kept rather than filtered: they are files the project
+  // contains. Dropping them here made the generated model read as missing and
+  // refused every build that produced one.
+  const flattened = completed.files.map((f) => ({ path: relativePath(f.path, detected.root), content: f.content }));
+  const problems = validateProject(flattened.filter((f) => !f.content.startsWith('data:')));
+
+  // The runtime checks live here rather than at each call site. They were
+  // duplicated in two places, and both copies got the root and the completed
+  // set wrong in the same way — a nested project read as having no
+  // project.godot at all, and the files completeProject had just written read
+  // as absent.
+  const runtimeProblems = verifyProject(flattened);
+  for (const problem of runtimeProblems.filter((r) => r.fatal)) {
+    problems.push(`${problem.file}${problem.line ? `:${problem.line}` : ''} — ${problem.message}`);
+  }
 
   // A referenced resource that is not in the archive opens as a missing node,
   // which validateProject cannot see because it only knows about text files.
@@ -180,7 +194,15 @@ export function buildGodotExport(files: WorkspaceFile[], plan: GamePlan | null, 
     }
   }
 
-  return { filename: archiveName(projectName), entries, filledIn: completed.filledIn, problems };
+  return {
+    filename: archiveName(projectName),
+    entries,
+    filledIn: completed.filledIn,
+    problems,
+    // Kept separately so a caller can show the non-blocking ones too — a node
+    // built in code is worth mentioning and not worth refusing over.
+    warnings: runtimeProblems.filter((r) => !r.fatal),
+  };
 }
 
 /** One line describing what is in the archive. */

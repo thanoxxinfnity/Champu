@@ -22,7 +22,6 @@ import { buildGodotExport } from '@/lib/suites/godot/export';
 import { generateModel, pipelineStatement } from '@/lib/suites/godot/model-source';
 import { creditsFile, searchModels, type SketchfabModel } from '@/lib/suites/godot/sketchfab';
 import { glbArtifact } from '@/lib/suites/godot/artifact';
-import { verifyProject } from '@/lib/suites/godot/verify';
 import { loadKeys } from '@/lib/keys';
 import { useWorkspace } from '@/lib/store';
 import { downloadZip } from '@/lib/zip';
@@ -168,10 +167,11 @@ export function GameStudio() {
       // Refused rather than shipped. A project that fails its own validation is
       // one that opens to an empty window, and finding that out on a phone is
       // worse than not getting a file.
-      const found = verifyProject(files.filter((f) => !f.content.startsWith('data:')).map((f) => ({ path: f.path, content: f.content })));
-      const blocking = [...exported.problems, ...found.filter((f) => f.fatal).map((f) => `${f.file}${f.line ? `:${f.line}` : ''} — ${f.message}`)];
-      if (blocking.length) {
-        setNote(`Not shipping this — it would not run:\n${blocking.map((p) => `• ${p}`).join('\n')}`);
+      // buildGodotExport runs the runtime checks itself, on the completed set at
+      // the paths Godot will see. Doing it again here is what got both copies
+      // wrong the first time.
+      if (exported.problems.length) {
+        setNote(`Not shipping this — it would not run:\n${exported.problems.map((p) => `• ${p}`).join('\n')}`);
         return;
       }
 

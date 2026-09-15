@@ -15,7 +15,7 @@ import { planBrief, planGame, planSummary, playerParts } from '@/lib/suites/godo
 import { buildGodotExport, describeExport as describeGodotExport, detectGodotProject, referencedResources } from '@/lib/suites/godot/export';
 import { generateModel, pipelineStatement, sourceChain } from '@/lib/suites/godot/model-source';
 import { creditsFile } from '@/lib/suites/godot/sketchfab';
-import { describeProblems, verifyProject } from '@/lib/suites/godot/verify';
+import { describeProblems } from '@/lib/suites/godot/verify';
 import { glbArtifact, wavArtifact } from '@/lib/suites/godot/artifact';
 import { effect as sfxFor, toWav, track as musicTrack, type ScaleName } from '@/lib/suites/godot/audio';
 import {
@@ -1130,14 +1130,7 @@ export async function send(opts: SendOptions): Promise<void> {
         // addressed at a path its scene does not contain, an input action
         // nothing declares. Godot reports none of those as errors: it opens,
         // and the gun just does not shoot.
-        const found = verifyProject(
-          files
-            .filter((f) => !f.content.startsWith('data:'))
-            .map((f) => ({ path: f.path, content: f.content })),
-        );
-        const blocking = found.filter((f) => f.fatal);
-
-        const header = exported.problems.length || blocking.length
+        const header = exported.problems.length
           ? `**This project will not open cleanly yet.** ${describeGodotExport(exported)}`
           : `**Your game is ready.** ${describeGodotExport(exported)}`;
 
@@ -1146,10 +1139,8 @@ export async function send(opts: SendOptions): Promise<void> {
           '',
           ...(exported.problems.length
             ? ['Fix these first:', '', ...exported.problems.map((p) => `- ${p}`), '']
-            : blocking.length
-              ? []
-              : ['Extract it, open Godot 4 on your phone, press Import and pick the `project.godot` inside.', '']),
-          ...(found.length ? [describeProblems(found), ''] : []),
+            : ['Extract it, open Godot 4 on your phone, press Import and pick the `project.godot` inside.', '']),
+          ...(exported.warnings.length ? [describeProblems(exported.warnings), ''] : []),
           ...(exported.filledIn.length
             ? ['Filled in because the project referenced them and they were not written:', '',
                ...exported.filledIn.map((f) => `- \`${f}\``), '']

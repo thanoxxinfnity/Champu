@@ -31,16 +31,45 @@ export interface ApkOptions {
   keystore?: { path: string; user: string; password: string };
 }
 
+/**
+ * Java's reserved words.
+ *
+ * A package segment that is one of these is rejected by aapt, because the
+ * manifest becomes a Java identifier. "Class", "Native" and "Package" are all
+ * plausible game names, so this is not theoretical.
+ */
+const JAVA_KEYWORDS = new Set([
+  'abstract', 'assert', 'boolean', 'break', 'byte', 'case', 'catch', 'char', 'class', 'const',
+  'continue', 'default', 'do', 'double', 'else', 'enum', 'extends', 'final', 'finally', 'float',
+  'for', 'goto', 'if', 'implements', 'import', 'instanceof', 'int', 'interface', 'long', 'native',
+  'new', 'package', 'private', 'protected', 'public', 'return', 'short', 'static', 'strictfp',
+  'super', 'switch', 'synchronized', 'this', 'throw', 'throws', 'transient', 'try', 'void',
+  'volatile', 'while', 'true', 'false', 'null', '_',
+]);
+
 /** A package name Android accepts: reverse-DNS, no keywords, no leading digits. */
 export function packageNameFor(gameName: string): string {
   const slug = gameName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '')
     .slice(0, 24);
-  // Android rejects a segment that starts with a digit or is a Java keyword,
-  // and an empty one, so the fallback is a real word rather than a number.
-  const safe = /^[a-z]/.test(slug) ? slug : `game${slug}`;
+  // Android rejects a segment that starts with a digit, is a Java keyword, or
+  // is empty. All three get the same prefix rather than three different ones,
+  // so the rule is one line to read.
+  const safe = /^[a-z]/.test(slug) && !JAVA_KEYWORDS.has(slug) ? slug : `game${slug}`;
   return `com.chomugiri.${safe || 'game'}`;
+}
+
+/**
+ * A value that survives being written into `export_presets.cfg`.
+ *
+ * The file is quoted-string config with no escape syntax worth trusting, so a
+ * password containing a double quote does not error — it ends the string early
+ * and Godot signs with a truncated password, which fails at install time with
+ * a message about the certificate.
+ */
+function cfgString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 /**
@@ -54,6 +83,15 @@ export function exportPresets(options: ApkOptions): string {
   const pkg = options.packageName ?? packageNameFor(options.name);
   const release = options.release ?? false;
   const keystore = options.keystore;
+
+  // Refused rather than quietly downgraded. Writing debug keystore keys for a
+  // release preset produces an APK that Android will not install, and the
+  // reason only shows up on the phone, long after the build said it worked.
+  if (release && !keystore) {
+    throw new Error(
+      'A release export needs a keystore. Pass one, or build a debug APK — a debug build signs itself and installs fine.',
+    );
+  }
 
   return `[preset.0]
 
@@ -91,7 +129,7 @@ architectures/x86_64=false
 version/code=${options.versionCode ?? 1}
 version/name="${options.versionName ?? '1.0'}"
 package/unique_name="${pkg}"
-package/name="${options.name.replace(/"/g, '')}"
+package/name="${cfgString(options.name)}"
 package/signed=true
 package/app_category=2
 package/retain_data_on_uninstall=false
@@ -117,9 +155,9 @@ apk_expansion/public_key=""
 permissions/custom_permissions=PackedStringArray()
 ${
     release && keystore
-      ? `keystore/release="${keystore.path}"
-keystore/release_user="${keystore.user}"
-keystore/release_password="${keystore.password}"`
+      ? `keystore/release="${cfgString(keystore.path)}"
+keystore/release_user="${cfgString(keystore.user)}"
+keystore/release_password="${cfgString(keystore.password)}"`
       : `keystore/debug=""
 keystore/debug_user=""
 keystore/debug_password=""`
@@ -170,6 +208,9 @@ export function exportFailure(log: string, apkExists: boolean, apkBytes: number)
   }
   if (/ANDROID_HOME|Android SDK|sdk path/i.test(log)) {
     return 'Godot cannot find the Android SDK. Set the SDK path in Editor Settings → Export → Android.';
+  }
+  if (/is not a valid Java package|not a valid package name|reserved word/i.test(log)) {
+    return 'Android rejected the package name. A segment cannot start with a digit or be a Java keyword — rename the game, or pass packageName explicitly.';
   }
   if (/keystore/i.test(log)) {
     return 'The release keystore was rejected. Check the path, the alias and the password — or export a debug build, which signs itself.';

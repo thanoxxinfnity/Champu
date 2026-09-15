@@ -51,7 +51,7 @@ const UNTYPED_INFER =
  * verifier that reports working code as broken is worse than no verifier —
  * people learn to ignore it, including for the three real ones.
  */
-const TYPE_IS_VISIBLE = /\bas\s+[A-Z]\w*\s*$|\.(?:instantiate|duplicate|new)\s*\(/;
+const TYPE_IS_VISIBLE = /\bas\s+[A-Z]\w*\s*(?:#.*)?$|\.(?:instantiate|duplicate|new)\s*\(/;
 
 /** Actions read from code, so they can be checked against what the project declares. */
 export function actionsPolled(script: string): string[] {
@@ -79,7 +79,15 @@ export function nodesReferenced(script: string): string[] {
  */
 export function verifyProject(files: GodotFile[]): Problem[] {
   const problems: Problem[] = [];
-  const byPath = new Map(files.map((f) => [f.path, f.content]));
+
+  // Binary assets arrive as data: URLs, because that is how a file travels
+  // through a workspace that has no filesystem. They are files the project
+  // contains — they are just not text. Filtering them out before this point is
+  // what made `res://character.glb` read as missing and refused every build
+  // that actually generated a model.
+  const isBinary = (content: string) => content.startsWith('data:');
+  const byPath = new Map(files.filter((f) => !isBinary(f.content)).map((f) => [f.path, f.content]));
+  const packagedPaths = new Set(files.map((f) => f.path));
   const config = byPath.get('project.godot') ?? '';
   const declaredActions = new Set([...config.matchAll(/^([a-z_]+)=\{/gm)].map((m) => m[1]));
   // Godot's own built-ins are always available and are never in project.godot.
@@ -161,7 +169,7 @@ export function verifyProject(files: GodotFile[]): Problem[] {
 
   // A res:// path that is not in the project loads as a missing node, and the
   // scene opens with a hole in it rather than an error.
-  const packaged = new Set(byPath.keys());
+  const packaged = packagedPaths;
   for (const [path, content] of byPath) {
     if (!path.endsWith('.tscn') && path !== 'project.godot') continue;
     for (const match of content.matchAll(/res:\/\/([^"'\s)]+)/g)) {
