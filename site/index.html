@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chomugiri — the autonomous developer workspace</title>
+<meta name="description" content="Chomugiri turns a sentence into a shipped artifact: an APK, a Minecraft add-on, a Godot game, a deck, a site. Runs on your device, with your keys.">
+<style>
+  :root {
+    --paper: #fdfaf4; --ink: #2b2521; --dim: #6b6058; --faint: #9a8f85;
+    --line: #e6ddd0; --accent: #e8722a; --card: #fffdf8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #17130f; --ink: #f0e8dd; --dim: #b3a595; --faint: #7d7266;
+            --line: #2e2721; --accent: #f2884a; --card: #1e1813; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink);
+         font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+         -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 60px 20px 90px; }
+  a { color: var(--accent); }
+  h1 { font-size: clamp(34px, 8vw, 54px); line-height: 1.08; margin: 0 0 14px; letter-spacing: -0.03em; }
+  h2 { font-size: 20px; margin: 52px 0 12px; letter-spacing: -0.01em; }
+  h3 { font-size: 15px; margin: 0 0 2px; letter-spacing: -0.01em; }
+  p, li { color: var(--dim); }
+  strong { color: var(--ink); font-weight: 600; }
+  .lede { font-size: clamp(17px, 3.6vw, 20px); line-height: 1.55; margin: 0 0 30px; }
+  .rule { height: 2px; border: 0; margin: 0 0 34px;
+          background: repeating-linear-gradient(90deg, var(--accent) 0 14px, transparent 14px 22px);
+          opacity: .55; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin: 18px 0 0; }
+  .card { border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; background: var(--card); }
+  .card p { margin: 4px 0 0; font-size: 14.5px; }
+  .kicker { color: var(--faint); font-size: 12px; text-transform: uppercase; letter-spacing: .09em; margin: 0 0 4px; }
+
+  .voice { border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 12px 0; background: var(--card); }
+  .voice .row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .voice .meta { flex: 1 1 180px; min-width: 0; }
+  .voice p { margin: 2px 0 0; font-size: 14px; color: var(--faint); }
+  .voice audio { width: 100%; margin-top: 12px; }
+  button.play { flex: 0 0 auto; border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+                border-radius: 999px; width: 44px; height: 44px; font-size: 15px; cursor: pointer; line-height: 1; }
+  button.play:hover { border-color: var(--accent); color: var(--accent); }
+
+  .cta { display: inline-block; border: 1px solid var(--accent); color: var(--accent);
+         border-radius: 999px; padding: 11px 22px; text-decoration: none; font-weight: 600; font-size: 15px;
+         margin: 8px 10px 0 0; }
+  .cta.solid { background: var(--accent); color: var(--paper); }
+  ul { padding-left: 20px; } li { margin: 6px 0; }
+  footer { margin-top: 66px; padding-top: 22px; border-top: 1px solid var(--line);
+           color: var(--faint); font-size: 13.5px; display: flex; gap: 18px; flex-wrap: wrap; }
+  footer a { color: var(--faint); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="kicker">Chomugiri</p>
+  <h1>Say what you want built.<br>Get the file.</h1>
+  <hr class="rule">
+
+  <p class="lede">Chomugiri is an autonomous developer workspace. You describe a thing — an Android
+  app, a Minecraft add-on, a Godot game, a deck, a website — and it plans it, builds it, compiles it,
+  and hands you the artifact. Not a snippet. The actual signed APK, the actual <code>.mcaddon</code>,
+  the actual playable build.</p>
+
+  <a class="cta solid" href="#voices">Hear it</a>
+  <a class="cta" href="/privacy">Privacy</a>
+
+  <h2>What it makes</h2>
+  <div class="grid">
+    <div class="card"><h3>Android apps</h3><p>Real Gradle project, real signed APK, straight to your phone.</p></div>
+    <div class="card"><h3>Games</h3><p>Godot 4 projects — levels, music, rigged models, exported and packaged.</p></div>
+    <div class="card"><h3>Minecraft add-ons</h3><p>Behaviour and resource packs, Blockbench geometry, packed as <code>.mcaddon</code>.</p></div>
+    <div class="card"><h3>3D models</h3><p>Meshy, Tripo or Microsoft TRELLIS on NVIDIA NIM — with a code-built rigged fallback that never fails.</p></div>
+    <div class="card"><h3>Decks &amp; documents</h3><p>Slides, PDFs, spreadsheets, laid out rather than dumped.</p></div>
+    <div class="card"><h3>Sites</h3><p>Pages like this one, written and deployed.</p></div>
+  </div>
+
+  <h2>How it runs</h2>
+  <ul>
+    <li><strong>On your device.</strong> The workspace is a Next.js app; the Android build carries the
+      whole API surface natively so it works with no server at all.</li>
+    <li><strong>With your keys.</strong> You paste them in Settings, they stay in encrypted device
+      storage, and they go only to the provider they belong to.</li>
+    <li><strong>Nothing collected.</strong> No accounts, no analytics, no database of ours. See the
+      <a href="/privacy">privacy policy</a> for exactly what leaves the device and where it goes.</li>
+  </ul>
+
+  <h2 id="voices">The voices</h2>
+  <p>Chomugiri can speak. These are the workspace voices — the same recordings that ship in the app
+  under <strong>Settings → Voice</strong>. They belong to the app and to this page. They are not
+  baked into anything Chomugiri generates for you: a game it builds ships silent of these, so the
+  thing you make is yours to license as you like.</p>
+
+  <div class="voice">
+    <div class="row">
+      <button class="play" data-for="v1" aria-label="Play narration">▶</button>
+      <div class="meta"><h3>Narration</h3><p>The long-form workspace voice.</p></div>
+    </div>
+    <audio id="v1" preload="none" controls src="/voice/narration.wav"></audio>
+  </div>
+
+  <div class="voice">
+    <div class="row">
+      <button class="play" data-for="v2" aria-label="Play voice A">▶</button>
+      <div class="meta"><h3>Voice A</h3><p>Warmer read, for prompts and confirmations.</p></div>
+    </div>
+    <audio id="v2" preload="none" controls src="/voice/voice_a.wav"></audio>
+  </div>
+
+  <div class="voice">
+    <div class="row">
+      <button class="play" data-for="v3" aria-label="Play voice B">▶</button>
+      <div class="meta"><h3>Voice B</h3><p>The alternate read, selectable in Settings.</p></div>
+    </div>
+    <audio id="v3" preload="none" controls src="/voice/voice_b.wav"></audio>
+  </div>
+
+  <footer>
+    <a href="/privacy">Privacy</a>
+    <span>No accounts. No analytics. No server of ours.</span>
+  </footer>
+
+</div>
+<script>
+  // One at a time: three overlapping voices is noise, and the pause is what
+  // people reach for when they started the wrong one.
+  var players = Array.prototype.slice.call(document.querySelectorAll('audio'));
+  players.forEach(function (a) {
+    a.addEventListener('play', function () {
+      players.forEach(function (other) { if (other !== a) other.pause(); });
+    });
+  });
+  document.querySelectorAll('button.play').forEach(function (b) {
+    var audio = document.getElementById(b.dataset.for);
+    b.addEventListener('click', function () { audio.paused ? audio.play() : audio.pause(); });
+    audio.addEventListener('play', function () { b.textContent = '❚❚'; });
+    audio.addEventListener('pause', function () { b.textContent = '▶'; });
+    audio.addEventListener('ended', function () { b.textContent = '▶'; });
+  });
+</script>
+</body>
+</html>

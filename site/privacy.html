@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy — Chomugiri</title>
+<style>
+  :root {
+    --paper: #fdfaf4; --ink: #2b2521; --dim: #6b6058; --faint: #9a8f85;
+    --line: #e6ddd0; --accent: #e8722a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #17130f; --ink: #f0e8dd; --dim: #b3a595; --faint: #7d7266;
+            --line: #2e2721; --accent: #f2884a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink);
+         font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 56px 20px 80px; }
+  a { color: var(--accent); }
+  h1 { font-size: clamp(28px, 6vw, 40px); line-height: 1.15; margin: 0 0 6px; letter-spacing: -0.02em; }
+  h2 { font-size: 19px; margin: 40px 0 10px; letter-spacing: -0.01em; }
+  .sub { color: var(--dim); margin: 0 0 8px; }
+  .stamp { color: var(--faint); font-size: 13px; margin: 0 0 40px; }
+  p, li { color: var(--dim); }
+  li { margin: 6px 0; }
+  strong { color: var(--ink); font-weight: 600; }
+  .card { border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin: 18px 0;
+          background: color-mix(in oklab, var(--accent) 4%, transparent); }
+  .card p:last-child { margin-bottom: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--ink); font-weight: 600; }
+  td { color: var(--dim); }
+  footer { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--line);
+           color: var(--faint); font-size: 13.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Privacy</h1>
+  <p class="sub">Chomugiri — the autonomous developer workspace.</p>
+  <p class="stamp">Last updated 15 September 2026</p>
+
+  <div class="card">
+    <p><strong>The short version.</strong> Chomugiri has no accounts, no analytics and no server of
+    ours that stores your work. Your chats, files and API keys stay on your device. When you ask it
+    to do something that needs an outside service, it calls that service and nothing else.</p>
+  </div>
+
+  <h2>What stays on your device</h2>
+  <p>All of it, by default:</p>
+  <ul>
+    <li><strong>Chats and generated files</strong> — in your browser's IndexedDB, or in the Android
+      app's own storage. Clearing the app's data deletes them, and nothing keeps a copy.</li>
+    <li><strong>API keys</strong> — in the Android app these go to the system's encrypted
+      preferences. In a browser they sit in the same local storage as the rest of the workspace.</li>
+    <li><strong>Settings</strong> — theme, model choice, custom endpoints.</li>
+  </ul>
+  <p>We do not run a database. There is no account to sign in to, so there is nothing about you for
+  us to hold.</p>
+
+  <h2>What leaves your device, and where it goes</h2>
+  <p>Only what a task needs, and only to the service performing it:</p>
+  <table>
+    <tr><th>When you</th><th>What is sent</th><th>To</th></tr>
+    <tr><td>Chat with a model</td><td>Your message and the conversation so far</td><td>The provider you picked — NVIDIA, Pollinations, or an endpoint you added</td></tr>
+    <tr><td>Generate a texture or image</td><td>The prompt</td><td>NVIDIA or Pollinations</td></tr>
+    <tr><td>Generate a 3D model</td><td>The prompt</td><td>NVIDIA, Meshy or Tripo, depending on which key you supplied</td></tr>
+    <tr><td>Deploy a site</td><td>The files being deployed, and your token</td><td>Vercel</td></tr>
+    <tr><td>Use the terminal bridge</td><td>The command</td><td>The machine you pointed it at</td></tr>
+  </table>
+  <p>Each of these providers has its own privacy policy, and your data is theirs to handle once it
+  arrives. We do not add a middleman: requests go from your device or your own server to them.</p>
+
+  <h2>What we do not do</h2>
+  <ul>
+    <li>No analytics, telemetry, crash reporting or usage tracking.</li>
+    <li>No advertising, and no advertising identifiers.</li>
+    <li>No selling or sharing of anything, because we hold nothing to sell.</li>
+    <li>No training on your prompts or your code.</li>
+  </ul>
+
+  <h2>Permissions the Android app asks for</h2>
+  <ul>
+    <li><strong>Internet</strong> — to reach the model providers you have configured.</li>
+    <li><strong>Storage</strong> — to save the files it generates where you can find them.</li>
+    <li><strong>Notifications</strong> — to tell you a long build has finished. Optional; the app
+      works without it.</li>
+  </ul>
+  <p>No camera, no microphone, no location, no contacts.</p>
+
+  <h2>Voice recordings</h2>
+  <p>The recordings in the app and on this site are ours, and they play from the app. They are
+  deliberately not built into anything Chomugiri generates — a game you export carries none of them,
+  so what you publish is yours.</p>
+
+  <h2>Children</h2>
+  <p>Chomugiri is a developer tool and is not directed at children under 13. We collect nothing from
+  anyone, of any age.</p>
+
+  <h2>Changes</h2>
+  <p>If this policy changes, the date at the top changes with it. There is no mailing list to notify,
+  because there are no addresses to notify.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy: open an issue on the project's repository.</p>
+
+  <footer>
+    Chomugiri &middot; <a href="/">Home</a>
+  </footer>
+</div>
+</body>
+</html>
