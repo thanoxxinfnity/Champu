@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { meshyError, resultFrom, taskIdFrom } from '../src/lib/suites/godot/meshy.ts';
 import { SAMPLE_IMAGE, headersFor, modelFrom, requestBody, trellisError } from '../src/lib/suites/godot/trellis.ts';
-import { buildLocally, resetTrellisState, sourceChain, trellisAvailability } from '../src/lib/suites/godot/model-source.ts';
+import { buildLocally, generateModel, pipelineStatement, resetTrellisState, sourceChain, trellisAvailability } from '../src/lib/suites/godot/model-source.ts';
 
 // ── Meshy ───────────────────────────────────────────────────────────────────
 
@@ -144,20 +144,34 @@ test('the model is read out of the response shape', () => {
 
 // ── The chain ───────────────────────────────────────────────────────────────
 
-test('Meshy comes first when both keys are set, because it rigs', () => {
-  assert.deepEqual(sourceChain({ meshy: 'm', tripo: 't' }), ['meshy', 'tripo', 'built']);
-  assert.deepEqual(sourceChain({ tripo: 't' }), ['tripo', 'built']);
-  assert.deepEqual(sourceChain({ meshy: 'm' }), ['meshy', 'built']);
+test('Meshy comes first for a character, because it rigs', () => {
+  assert.deepEqual(sourceChain({ meshy: 'm', tripo: 't' }, 'character'), ['meshy', 'tripo', 'built']);
+  assert.deepEqual(sourceChain({ tripo: 't' }, 'character'), ['tripo', 'built']);
+  assert.deepEqual(sourceChain({ meshy: 'm' }, 'character'), ['meshy', 'built']);
+});
+
+test('the paid keys are spent on characters and nothing else', () => {
+  // Meshy and Tripo charge per generation and are the only two that rig. A
+  // crate that costs a paid credit is a credit not spent on the thing the
+  // player actually looks at, so props and scenery go to TRELLIS.
+  const keys = { meshy: 'm', tripo: 't', nim: 'n' };
+  assert.deepEqual(sourceChain(keys, 'character'), ['meshy', 'tripo', 'trellis', 'built']);
+  assert.deepEqual(sourceChain(keys, 'prop'), ['trellis', 'built']);
+  assert.deepEqual(sourceChain(keys, 'environment'), ['trellis', 'built']);
+  // A prop is the default, so forgetting the role cannot quietly spend credit.
+  assert.deepEqual(sourceChain(keys), ['trellis', 'built']);
 });
 
 test('the chain always ends in the code-built model', () => {
   // Every hosted source can be out of credit, rate limited or down. None of
   // them failing should mean the user gets no model at all.
   for (const keys of [{}, { meshy: 'm' }, { tripo: 't' }, { meshy: 'm', tripo: 't', nim: 'n' }]) {
-    assert.equal(sourceChain(keys).at(-1), 'built');
+    for (const role of ['character', 'prop', 'environment']) {
+      assert.equal(sourceChain(keys, role).at(-1), 'built');
+    }
   }
   // Whitespace is not a key.
-  assert.deepEqual(sourceChain({ meshy: '   ', tripo: '' }), ['built']);
+  assert.deepEqual(sourceChain({ meshy: '   ', tripo: '' }, 'character'), ['built']);
 });
 
 test('an NVIDIA key alone puts TRELLIS in the chain', () => {
@@ -165,8 +179,8 @@ test('an NVIDIA key alone puts TRELLIS in the chain', () => {
   // URL is an override, not a requirement.
   assert.deepEqual(sourceChain({ nim: 'nvapi-x' }), ['trellis', 'built']);
   assert.deepEqual(sourceChain({ nim: 'nvapi-x', trellisUrl: 'http://gpu:8000' }), ['trellis', 'built']);
-  // But after the keys the user deliberately pasted.
-  assert.deepEqual(sourceChain({ nim: 'n', meshy: 'm', tripo: 't' }), ['meshy', 'tripo', 'trellis', 'built']);
+  // But for a character it comes after the keys the user deliberately pasted.
+  assert.deepEqual(sourceChain({ nim: 'n', meshy: 'm', tripo: 't' }, 'character'), ['meshy', 'tripo', 'trellis', 'built']);
   assert.ok(!sourceChain({ trellisUrl: 'http://gpu:8000' }).includes('trellis'), 'a URL with no key cannot authenticate');
 });
 
@@ -200,4 +214,45 @@ test('the floor produces a real glb, not an empty file', () => {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   assert.equal(view.getUint32(0, true), 0x46546c67, 'magic is "glTF"');
   assert.equal(view.getUint32(8, true), bytes.byteLength, 'the declared length matches');
+});
+
+test('persisting has a deadline, because "until it works" against a 500 is forever', () => {
+  // A budget replaces the round count rather than capping it, and the failure
+  // says how many attempts it took so a user can see it really did keep trying.
+  const started = Date.now();
+  return generateModel(
+    { prompt: 'a crate', plan: 'blob', parts: PARTS },
+    { nim: 'nvapi-not-a-real-key' },
+    { trellisBudgetMs: 1 },
+  ).then((outcome) => {
+    assert.equal(outcome.source, 'built', 'it still falls through to something that works');
+    assert.ok(Date.now() - started < 30_000, 'a spent budget stops immediately');
+  });
+});
+
+// ── The pipeline statement ──────────────────────────────────────────────────
+
+test('the pipeline line names only providers whose keys are set', () => {
+  // A model that announces "Meshy" when no Meshy key exists has just told the
+  // user their key is working.
+  assert.match(pipelineStatement({}), /code-built/);
+  assert.ok(!pipelineStatement({}).includes('Meshy'));
+  assert.ok(!pipelineStatement({}).includes('TRELLIS'));
+
+  assert.match(pipelineStatement({ nim: 'n' }), /TRELLIS via NVIDIA NIM/);
+  assert.ok(!pipelineStatement({ nim: 'n' }).includes('Meshy'));
+
+  assert.match(pipelineStatement({ nim: 'n', trellisUrl: 'http://gpu:8000' }), /self-hosted/);
+});
+
+test('the pipeline line spells out the split when there is one', () => {
+  // The user asked for paid keys to build the characters and TRELLIS to build
+  // everything else. If that is what will happen, the line has to say so.
+  const split = pipelineStatement({ meshy: 'm', nim: 'n' });
+  assert.match(split, /characters → Meshy/);
+  assert.match(split, /props and scenery → Microsoft TRELLIS/);
+
+  // No split when one source does everything.
+  assert.match(pipelineStatement({ nim: 'n' }), /with code-built/);
+  assert.ok(!pipelineStatement({ nim: 'n' }).includes('characters →'));
 });

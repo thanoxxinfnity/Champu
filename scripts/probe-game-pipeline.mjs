@@ -36,7 +36,7 @@ console.log('   tells it to build the plan:', /Do not substitute a different gen
 // 4 — does a model actually come out?
 const t0 = Date.now();
 const outcome = await generateModel(
-  { prompt: `${plan.player.description}, ${plan.genre} game character`, plan: plan.player.body, parts: playerParts(plan) },
+  { prompt: `${plan.player.description}, ${plan.genre} game character`, role: 'character', plan: plan.player.body, parts: playerParts(plan) },
   {},  // no keys: this is the floor everyone gets
   {},
 );

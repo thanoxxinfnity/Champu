@@ -55,9 +55,20 @@ export interface ModelKeys {
   trellisUrl?: string;
 }
 
+/**
+ * What the model is for.
+ *
+ * Decides which generators are even offered. Meshy and Tripo are keys the user
+ * paid for, and they asked for those to be spent on the things that need them —
+ * the characters — with everything else coming from TRELLIS.
+ */
+export type ModelRole = 'character' | 'prop' | 'environment';
+
 export interface ModelRequest {
   /** What to build, in the user's words. */
   prompt: string;
+  /** What it is for. Defaults to a prop, which is the cheaper chain. */
+  role?: ModelRole;
   /** The body plan, for the code-built fallback and for rig height. */
   plan: 'biped' | 'quadruped' | 'blob' | 'flying';
   /** Boxes for the code-built fallback, in 16-to-a-block units. */
@@ -86,10 +97,16 @@ export interface ModelOutcome {
  * Split out from `generateModel` so the ordering can be tested without any
  * network at all.
  */
-export function sourceChain(keys: ModelKeys): SourceId[] {
+export function sourceChain(keys: ModelKeys, role: ModelRole = 'prop'): SourceId[] {
   const chain: SourceId[] = [];
-  if (keys.meshy?.trim()) chain.push('meshy');
-  if (keys.tripo?.trim()) chain.push('tripo');
+  // Meshy and Tripo cost the user money per generation, and they are the only
+  // two that rig. Both facts point the same way: spend them on the characters,
+  // and let TRELLIS do the crates and the scenery. A prop that costs a paid
+  // credit is a credit not spent on the thing the player looks at.
+  if (role === 'character') {
+    if (keys.meshy?.trim()) chain.push('meshy');
+    if (keys.tripo?.trim()) chain.push('tripo');
+  }
   // An NVIDIA key alone is enough: TRELLIS is reachable as a real NVCF
   // function, not only as a self-hosted container. It sits after the keys the
   // user explicitly pasted, because those are a deliberate choice and this is
@@ -97,6 +114,37 @@ export function sourceChain(keys: ModelKeys): SourceId[] {
   if (keys.nim?.trim()) chain.push('trellis');
   chain.push('built');
   return chain;
+}
+
+/**
+ * The pipeline statement, as one line naming what will actually be used.
+ *
+ * Built from the keys that are set rather than written into the system prompt,
+ * because a model that announces "Meshy" when no Meshy key exists has just told
+ * the user their key is working.
+ */
+export function pipelineStatement(keys: ModelKeys): string {
+  const character = sourceChain(keys, 'character');
+  const prop = sourceChain(keys, 'prop');
+
+  const label: Record<SourceId, string> = {
+    meshy: 'Meshy (text-to-3D, auto-rigged)',
+    tripo: 'Tripo AI (text-to-3D)',
+    trellis: keys.trellisUrl?.trim()
+      ? 'Microsoft TRELLIS (self-hosted NIM container)'
+      : 'Microsoft TRELLIS via NVIDIA NIM',
+    built: 'code-built rigged geometry',
+  };
+
+  const first = character.find((id) => id !== 'built');
+  if (!first) return '[3D Asset Pipeline: code-built rigged geometry — no 3D generator key is set]';
+
+  const others = prop.find((id) => id !== 'built');
+  const sameForEverything = first === others;
+
+  return sameForEverything
+    ? `[3D Asset Pipeline: ${label[first]}, with ${label.built} as the floor]`
+    : `[3D Asset Pipeline: characters → ${label[first]}; props and scenery → ${others ? label[others] : label.built}; floor → ${label.built}]`;
 }
 
 /** Why TRELLIS is not being used, in words worth showing a user who asked for it. */
@@ -135,11 +183,20 @@ export async function generateModel(
     onStage?: (source: SourceId, message: string) => void;
     timeoutMs?: number;
     signal?: AbortSignal;
+    /**
+     * How long to keep asking TRELLIS for one model before giving up on it.
+     *
+     * "Ask until a model comes back" is a deadline, not an infinity: a
+     * deployment that answers 500 in four seconds would loop forever and the
+     * build would never finish. Ten minutes by default.
+     */
+    trellisBudgetMs?: number;
   } = {},
 ): Promise<ModelOutcome> {
   const notes: string[] = [];
+  const chain = sourceChain(keys, request.role ?? 'prop');
 
-  for (const source of sourceChain(keys)) {
+  for (const source of chain) {
     if (source === 'built') {
       options.onStage?.('built', 'Building the model in code.');
       const { bytes, rigged } = buildLocally(request);
@@ -182,9 +239,13 @@ export async function generateModel(
     }
 
     if (source === 'trellis') {
-      // A build makes several models. Re-learning that NVIDIA's deployment is
-      // down costs ninety seconds each time, so it is learned once.
-      if (trellisDown) {
+      // A build makes several models, and re-learning that NVIDIA's deployment
+      // is down costs the whole budget each time — but only skip on that memo
+      // when something else in this chain can actually produce a model. When
+      // TRELLIS is the only generator, "it was down a minute ago" is not a
+      // reason to stop asking; that is the whole point of persisting.
+      const hasAlternative = chain.some((id) => id === 'meshy' || id === 'tripo');
+      if (trellisDown && hasAlternative) {
         notes.push(trellisDown);
         continue;
       }
@@ -193,10 +254,12 @@ export async function generateModel(
       const result = await trellis.generateModel({ prompt: request.prompt }, keys.nim!, {
         baseUrl: keys.trellisUrl,
         signal: options.signal,
-        // Fewer rounds than the standalone client: a build wants several
-        // models, and twelve attempts each would be most of an hour before the
-        // first one is drawn.
-        rounds: 3,
+        // Detail is steered through the prompt, because TRELLIS has no
+        // parameter for it and every documented one makes it 500.
+        detail: 'high',
+        // Keeps asking rather than trying a fixed three rounds and settling for
+        // boxes. Backs off between rounds so a down service is not hammered.
+        budgetMs: options.trellisBudgetMs ?? 10 * 60_000,
         onProgress: (note) => options.onStage?.('trellis', note),
       });
 

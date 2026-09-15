@@ -76,6 +76,19 @@ export interface TrellisOptions {
   rounds?: number;
   /** Cut off well below the ~90s a failing call stalls for. */
   attemptMs?: number;
+  /**
+   * Keep asking until a model comes back or this many milliseconds have gone,
+   * whichever is first. `rounds` is ignored while this is set.
+   *
+   * There is no truly unbounded version of this and there should not be: a
+   * deployment that answers 500 in four seconds would spin the loop forever
+   * without ever producing a model, and the build it belongs to would never
+   * finish. A budget is the honest shape of "keep trying" — make it an hour if
+   * an hour is what the model is worth.
+   */
+  budgetMs?: number;
+  /** Seconds to wait between rounds when persisting. Backs off to a minute. */
+  pauseMs?: number;
   onProgress?: (note: string) => void;
   signal?: AbortSignal;
 }
@@ -225,6 +238,20 @@ async function poll(reqId: string, apiKey: string, signal?: AbortSignal): Promis
  * about the request, so the way to get a model is to ask again — quickly,
  * because a failing attempt would otherwise hold the line for ninety seconds.
  */
+/** A cancellable pause. Rejecting on abort would make every caller catch it. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (ms <= 0 || signal?.aborted) return resolve();
+    const timer = setTimeout(done, ms);
+    function done(): void {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', done);
+      resolve();
+    }
+    signal?.addEventListener('abort', done, { once: true });
+  });
+}
+
 export async function generateModel(
   input: { prompt?: string; sampleImage?: boolean },
   apiKey: string,
@@ -234,15 +261,24 @@ export async function generateModel(
     ? `${options.baseUrl.replace(/\/+$/, '').replace(/\/v1\/infer$/, '')}/v1/infer`
     : TRELLIS_URL;
   const body = requestBody(input, options);
-  const rounds = options.rounds ?? 6;
   const attemptMs = options.attemptMs ?? 45_000;
+  const budgetMs = options.budgetMs;
+  // A budget replaces the round count rather than capping it: "until it works"
+  // is a deadline, not a number of tries.
+  const rounds = budgetMs ? Number.MAX_SAFE_INTEGER : options.rounds ?? 6;
+  const deadline = budgetMs ? Date.now() + budgetMs : Infinity;
 
   let last: TrellisResult = { error: 'TRELLIS was never reached.' };
   let tried = 0;
 
   for (let round = 1; round <= rounds; round += 1) {
     if (options.signal?.aborted) return { error: 'Cancelled.', attempts: tried };
-    options.onProgress?.(`Asking TRELLIS (round ${round} of ${rounds})…`);
+    if (Date.now() >= deadline) break;
+    options.onProgress?.(
+      budgetMs
+        ? `Asking TRELLIS (round ${round}, ${Math.ceil((deadline - Date.now()) / 60_000)} min left)…`
+        : `Asking TRELLIS (round ${round} of ${rounds})…`,
+    );
 
     // Two lanes, and the first real model wins. A rejected lane must not settle
     // the round while the other is still going, so failures resolve to null and
@@ -263,7 +299,18 @@ export async function generateModel(
     const won = results.find((r) => r.model);
     if (won) return { ...won, attempts: tried };
     last = results.find((r) => r.error && !/stalled/.test(r.error)) ?? results[0];
+
+    // Hammering a deployment that is down helps nobody and gets the key rate
+    // limited. Backs off from the given pause up to a minute between rounds.
+    if (budgetMs && Date.now() < deadline) {
+      const pause = Math.min(60_000, (options.pauseMs ?? 5_000) * Math.min(round, 12));
+      await sleep(Math.min(pause, deadline - Date.now()), options.signal);
+    }
   }
 
-  return { ...last, attempts: tried };
+  return {
+    ...last,
+    attempts: tried,
+    ...(budgetMs ? { error: `${last.error ?? 'TRELLIS did not answer.'} Gave up after ${tried} attempts.` } : {}),
+  };
 }

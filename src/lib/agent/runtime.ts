@@ -13,7 +13,7 @@ import { buildPackExport, describeExport, detectPacks, missingGeometries, valida
 import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geometry';
 import { planBrief, planGame, planSummary, playerParts } from '@/lib/suites/godot/plan';
 import { buildGodotExport, describeExport as describeGodotExport, detectGodotProject, referencedResources } from '@/lib/suites/godot/export';
-import { generateModel, sourceChain } from '@/lib/suites/godot/model-source';
+import { generateModel, pipelineStatement, sourceChain } from '@/lib/suites/godot/model-source';
 import { glbArtifact, wavArtifact } from '@/lib/suites/godot/artifact';
 import { effect as sfxFor, toWav, track as musicTrack, type ScaleName } from '@/lib/suites/godot/audio';
 import {
@@ -695,6 +695,14 @@ export async function send(opts: SendOptions): Promise<void> {
       workspaceFiles: [...useWorkspace.getState().files.keys()],
       buildingSite: wantsSite(input),
       ...(design ? { gamePlan: planBrief(design) } : {}),
+      // Computed from the keys that are actually set, so the pipeline line the
+      // model prints is a fact about this session rather than a guess.
+      ...(suite === 'godot'
+        ? (() => {
+            const k = getKeys();
+            return { assetPipeline: pipelineStatement({ meshy: k.meshy, tripo: k.tripo, nim: k.nim, trellisUrl: k.trellisUrl }) };
+          })()
+        : {}),
     });
 
     const history = historyFor(10);
@@ -955,7 +963,12 @@ export async function send(opts: SendOptions): Promise<void> {
     // referenced, so the character the plan described was never actually built.
     if (suite === 'godot' && files.length && detectGodotProject(files)) {
       const keys = getKeys();
-      const chain = sourceChain({ meshy: keys.meshy, tripo: keys.tripo, nim: keys.nim, trellisUrl: keys.trellisUrl });
+      // 'character' because this call builds the thing the player looks at —
+      // the one place the paid Meshy and Tripo keys are meant to be spent.
+      const chain = sourceChain(
+        { meshy: keys.meshy, tripo: keys.tripo, nim: keys.nim, trellisUrl: keys.trellisUrl },
+        'character',
+      );
 
       // The scene names the model it wants; only build one if it asked.
       const wantsModel = referencedResources(files, detectGodotProject(files)?.root ?? '').some((r) => r.endsWith('.glb'));
@@ -965,7 +978,8 @@ export async function send(opts: SendOptions): Promise<void> {
         try {
           const outcome = await generateModel(
             {
-              prompt: `${design.player.description}, ${design.genre} game character`,
+              prompt: `${design.player.description}, ${design.genre} game character, realistic, detailed`,
+              role: 'character',
               plan: design.player.body,
               parts: playerParts(design),
             },

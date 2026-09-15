@@ -357,3 +357,37 @@ test('no generated script carries an unterminated template artifact', () => {
     assert.ok(!file.content.includes('\t '), `${file.path} mixes a tab with spaces, which Godot rejects`);
   }
 });
+
+// ── The Chomu Giri voice ────────────────────────────────────────────────────
+
+test('a game prompt carries the pipeline line it was given, not an invented one', () => {
+  const withKey = buildSystemPrompt({ lane: 'B', suite: 'godot', assetPipeline: '[3D Asset Pipeline: Tripo AI]' });
+  assert.match(withKey, /\[3D Asset Pipeline: Tripo AI\]/);
+  assert.match(withKey, /Copy it; do not\ninvent one/);
+
+  // With nothing configured it still says something true rather than nothing.
+  const bare = buildSystemPrompt({ lane: 'B', suite: 'godot' });
+  assert.match(bare, /no 3D generator key is set/);
+});
+
+test('the voice asks for the four parts, and for paths on the code blocks', () => {
+  const prompt = buildSystemPrompt({ lane: 'B', suite: 'godot' });
+  assert.match(prompt, /Node hierarchy/);
+  assert.match(prompt, /gdscript path=/, 'an untagged block is text, not a file the workspace can zip');
+  assert.match(prompt, /Realistic is the default/);
+});
+
+test('the engine version in the prompt is one that exists', () => {
+  const prompt = buildSystemPrompt({ lane: 'B', suite: 'godot' });
+  // The brief named 4.7.2 and 4.8. Neither is a Godot release, and advice
+  // written for a version that does not exist is advice nobody can follow.
+  assert.ok(!/4\.7\.2|Godot 4\.8/.test(prompt), 'names a Godot version that was never released');
+  assert.match(prompt, /Godot 4\.3/);
+  // And the renderer stays the one that runs on the device this opens on.
+  assert.match(prompt, /renderer\/rendering_method="mobile"/);
+});
+
+test('the suite is not told to promise that TRELLIS is fast', () => {
+  const prompt = buildSystemPrompt({ lane: 'B', suite: 'godot' });
+  assert.ok(!/TRELLIS.{0,40}fast/i.test(prompt));
+});

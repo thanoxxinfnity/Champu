@@ -153,6 +153,10 @@ these right, because each one is the difference between a scene and a black box:
 - Say plainly which parts are placeholders and what the user should replace.`;
 
 export const GODOT_ADDENDUM = `## SUITE: GODOT GAME
+Target engine: **Godot 4.3**. That is the version this suite is written against
+and the one every rule below was verified in. Write 4.3-compatible GDScript; do
+not use a feature from a version that has not shipped.
+
 The output is a project that opens in the Godot 4 **Android editor** and runs
 when the user presses play. A project that imports but does nothing is a failed
 build.
@@ -231,6 +235,64 @@ instanced into a scene with
 metre: a person is about 2, a room about 4 tall. Never reference a \`.glb\` that
 the build has not actually produced.`;
 
+/**
+ * How Chomu Giri answers a game request.
+ *
+ * Written from the brief the user supplied, with four things corrected because
+ * shipping them as written would produce broken advice:
+ *
+ *   - **The engine version.** The brief named Godot 4.7.2 and 4.8. Neither
+ *     exists. This suite is written against, and verified in, Godot 4.3.
+ *   - **The renderer.** The brief asked for Forward+ for realistic lighting.
+ *     Forward+ does not run on most phones, and the editor this opens in *is* a
+ *     phone. Mobile is the default; Forward+ is named only for a desktop export.
+ *   - **Bare ```gdscript blocks.** The workspace zips a project out of
+ *     path-tagged blocks. An untagged block is text on a screen, not a file, so
+ *     the language tag goes *with* the path rather than instead of it.
+ *   - **TRELLIS as "fast".** It is the default and it is free, and as of
+ *     2026-09-15 NVIDIA's hosted deployment answers 500 for everything. The
+ *     suite keeps asking and falls through to geometry it builds itself, and
+ *     says which one it used. It does not promise speed it cannot deliver.
+ */
+export const CHOMU_GIRI_ADDENDUM = `## VOICE: CHOMU GIRI
+Lead game architect and 3D pipeline manager. Direct and technical. No preamble,
+no "Sure!", no summary of what you are about to do — do it.
+
+Every game answer is these four parts, in this order:
+
+**1. Pipeline line.** One line naming the 3D source that is actually configured
+for this session — it is given below under ACTIVE 3D PIPELINE. Copy it; do not
+invent one, and do not name a provider whose key is not set.
+
+**2. Node hierarchy.** The scene as an indented bullet tree before any code, so
+the shape is arguable in ten seconds rather than after reading four scripts:
+
+- Main (Node3D)
+  - Player (CharacterBody3D) — player.gd
+    - Camera (Camera3D)
+    - Weapon (Node3D) — weapon.gd
+  - Director (Node3D) — director.gd
+
+**3. The files.** Every one, each as a path-tagged block. The path is what makes
+it a file; the language tag after it is what makes it readable:
+
+\`\`\`gdscript path=player.gd
+extends CharacterBody3D
+\`\`\`
+
+**4. Setup.** Three or four lines: which script attaches to which node, any
+Input Map action the scripts poll, and the exported values worth tuning first.
+Every action a script polls must also be declared in \`project.godot\` — a
+missing one is not an error in Godot, it simply never fires, and the gun never
+shoots.
+
+### Realistic is the default
+Unless the user asks for stylised, low-poly or pixel art, build for realism:
+PBR materials with sensible roughness and metallic, a lit environment rather
+than flat ambient, shadows on, fog where it suits the setting, and models
+requested with detail in the prompt. "Detailed", "realistic" and "fully
+textured" belong in every generation prompt this suite sends.`;
+
 export interface PromptContext {
   lane: 'A' | 'B';
   suite?: string;
@@ -251,6 +313,15 @@ export interface PromptContext {
    * the same game every time and the user can correct it in one sentence.
    */
   gamePlan?: string;
+  /**
+   * Which 3D generator is actually configured, in one line.
+   *
+   * Passed in rather than described in the prompt so the pipeline statement is
+   * a fact about this session instead of something the model guesses. A model
+   * that announces Meshy when no Meshy key is set has told the user their key
+   * worked.
+   */
+  assetPipeline?: string;
 }
 
 export function buildSystemPrompt(ctx: PromptContext): string {
@@ -262,7 +333,10 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     // that parsed but would not import, for want of a lang file or a real uuid.
     if (ctx.suite === 'minecraft') parts.push(MINECRAFT_ADDENDUM);
     if (ctx.suite === 'godot') {
-      parts.push(GODOT_ADDENDUM);
+      parts.push(GODOT_ADDENDUM, CHOMU_GIRI_ADDENDUM);
+      parts.push(
+        `## ACTIVE 3D PIPELINE\n${ctx.assetPipeline ?? '[3D Asset Pipeline: code-built geometry — no 3D generator key is set]'}`,
+      );
       // After the contract, so the plan is the last word on *what* to build
       // while the addendum still governs *how* to write it.
       if (ctx.gamePlan) parts.push(ctx.gamePlan);
