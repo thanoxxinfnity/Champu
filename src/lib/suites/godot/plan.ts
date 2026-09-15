@@ -48,8 +48,16 @@ export interface GamePlan {
   assumptions: string[];
 }
 
-/** Genre cues, most specific first — "endless runner" is a runner, not a platformer. */
-const GENRE_CUES: Array<[Genre, RegExp]> = [
+/**
+ * Genre cues, most specific first — "endless runner" is a runner, not a
+ * platformer.
+ *
+ * Exported because the router matches on them too. Two lists of game words
+ * drift: "zombie survival shooter" planned perfectly as a shooter and never
+ * reached the suite at all, because the router only knew "first person
+ * shooter". One list cannot disagree with itself.
+ */
+export const GENRE_CUES: Array<[Genre, RegExp]> = [
   ['racing', /\b(racing|race|kart|rally|drift|lap|circuit|car game|bike game)\b/],
   ['runner', /\b(runner|endless|infinite|temple run|subway|auto[- ]?run|dodge obstacles)\b/],
   ['shooter', /\b(shooter|shooting|fps|gun|shoot|blaster|bullet|turret|arena)\b/],
@@ -297,6 +305,13 @@ export function inferEntities(prompt: string, genre: Genre, playerDescription = 
   if (genre === 'runner' || genre === 'racing' || genre === 'platformer') {
     add('Obstacle', 'obstacle', 'a block');
   }
+  // A puzzle with nothing in it is an empty room. It was the one genre that
+  // came out of the planner with no entities at all — the exact failure the
+  // rest of this function exists to prevent.
+  if (genre === 'puzzle' && !found.length) {
+    add('Block', 'obstacle', 'a pushable crate');
+    add('Goal', 'pickup', 'a marked target tile');
+  }
 
   // A cap, because a plan with fifteen entity types is a plan nothing will
   // finish building.
@@ -404,4 +419,19 @@ export function planBrief(plan: GamePlan): string {
     'as written, say which part and why, rather than quietly building something',
     'simpler and presenting it as what was asked for.',
   ].join('\n');
+}
+
+
+/**
+ * Whether a prompt is asking for a game at all.
+ *
+ * The same cues the planner reads, so anything it can plan is something the
+ * router will send it. Plus the ways people ask without naming a genre.
+ */
+export function looksLikeGame(prompt: string): boolean {
+  const text = prompt.toLowerCase();
+  if (GENRE_CUES.some(([, cue]) => cue.test(text))) return true;
+  return /\b(godot|gdscript|\.tscn|game ?engine|game ?jam|player ?controller)\b/.test(text)
+    || /\b(2d|3d) ?game\b/.test(text)
+    || /\b(make|build|create) (me )?an? [\w\s-]{0,24}game\b/.test(text);
 }

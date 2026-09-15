@@ -8,6 +8,8 @@
  * a model. ~90% of real traffic is decided locally in microseconds.
  */
 
+import { looksLikeGame } from '../suites/godot/plan.ts';
+
 export type Lane = 'A' | 'B';
 
 export interface Classification {
@@ -26,7 +28,7 @@ const BUILD_VERBS =
 
 /** Nouns that name a deliverable. */
 const ARTIFACT_NOUNS =
-  /\b(apk|aab|app|application|component|module|endpoint|api|service|server|page|screen|deck|slide|presentation|pdf|spreadsheet|mcpack|mcaddon|addon|behaviou?r ?pack|resource ?pack|model|mesh|geometry|blockbench|mcp ?server|skill|script|zip|archive|repo|project|website|site|landing ?page|dashboard|test|suite|pipeline|workflow|docker|schema|migration)\b/i;
+  /\b(apk|aab|app|application|component|module|endpoint|api|service|server|page|screen|deck|slide|presentation|pdf|spreadsheet|mcpack|mcaddon|addon|behaviou?r ?pack|resource ?pack|model|mesh|geometry|blockbench|mcp ?server|skill|script|zip|archive|repo|project|website|site|landing ?page|dashboard|test|suite|pipeline|workflow|docker|schema|migration|game|level|character)\b/i;
 
 /** Pure-discussion signals. */
 const INQUIRY_MARKERS =
@@ -53,17 +55,14 @@ const EXECUTION_SLASH = new Set([
   'test',
 ]);
 
-const SUITE_HINTS: Array<[RegExp, string]> = [
+const SUITE_HINTS: Array<[RegExp | ((text: string) => boolean), string]> = [
   [/\b(apk|aab|android|gradle|jetpack ?compose|exe|\.exe|desktop app|electron|winforms|wpf|tkinter|pyqt)\b/i, 'android'],
   [/\b(minecraft|bedrock|mcpack|mcaddon|blockbench|behaviou?r ?pack|resource ?pack|\.jar mod|forge|fabric|voxel)\b/i, 'minecraft'],
-  // Genres as well as tooling: "an endless runner" and "a first person shooter"
-  // are game requests and were falling through to plain chat, which meant the
-  // suite — and the design plan — never applied to the prompts that needed them
-  // most. Minecraft is matched above, so voxel terms still go there.
-  [
-    /\b(godot|gdscript|\.tscn|game ?engine|game ?jam|player ?controller|platformer|(3d|2d) ?game|endless ?runner|first[- ]person ?shooter|fps ?game|twin[- ]stick|roguelike|rogue[- ]?lite|tower ?defen[cs]e|racing ?game|kart ?racer|survival ?game|top[- ]?down ?game|(make|build|create) (me )?an? [\w\s-]{0,24}game)\b/i,
-    'godot',
-  ],
+  // Games are matched by the planner's own genre vocabulary rather than a
+  // second list here. Two lists drift, and the drift is silent: "zombie
+  // survival shooter" planned perfectly as a shooter and never reached the
+  // suite, because this file only knew "first person shooter".
+  [looksLikeGame, 'godot'],
   [/\b(deck|slide|presentation|pitch|pdf|spreadsheet|landing ?page|canvas|mockup|poster|figma)\b/i, 'studio'],
   [/\b(mcp|model context protocol|tool schema|resource definition|stdio server)\b/i, 'mcp'],
   [/\b(research|investigate|find out|sources|cite|literature|competitor|market|deadline|milestone|schedule)\b/i, 'workdrive'],
@@ -89,7 +88,9 @@ export function wantsSite(text: string): boolean {
 }
 
 export function detectSuite(text: string): string | undefined {
-  for (const [re, suite] of SUITE_HINTS) if (re.test(text)) return suite;
+  for (const [match, suite] of SUITE_HINTS) {
+    if (typeof match === 'function' ? match(text) : match.test(text)) return suite;
+  }
   return undefined;
 }
 
@@ -141,6 +142,14 @@ export function classifyLocal(input: string, opts: { hasAttachments?: boolean } 
   if (opts.hasAttachments) {
     score += 1;
     reasons.push('files attached');
+  }
+  // Naming a suite is itself a statement of intent: nobody describes a zombie
+  // shooter or a Bedrock add-on in order to have it discussed. Without this,
+  // "a zombie survival shooter called Chomu Game" scored zero — no build verb
+  // anywhere in it — and came back as conversation.
+  if (suite) {
+    score += 1.5;
+    reasons.push(`it names something the ${suite} suite builds`);
   }
   // Multi-clause imperatives ("do X, then Y and Z") are almost always work orders.
   if (/\b(then|after that|and then|uske baad|phir)\b/i.test(text) && hasVerb) {

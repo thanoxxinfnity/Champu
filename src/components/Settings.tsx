@@ -1,5 +1,7 @@
 'use client';
 
+import { VoiceTab } from './VoiceTab';
+
 import { useCallback, useEffect, useState } from 'react';
 import { DIALECT_LABELS, dialectFromUrl, type Dialect } from '@/lib/providers/dialects';
 import { useWorkspace } from '@/lib/store';
@@ -12,7 +14,7 @@ import { downloadText } from '@/lib/zip';
 import { isShellHosted, loadKeys, maskKey, nimConfigured, saveKeys, validateNimKey } from '@/lib/keys';
 import { normalizeBase } from '@/lib/providers/model-list';
 
-type Tab = 'guide' | 'keys' | 'bridge' | 'secrets' | 'endpoints' | 'deploy' | 'guard';
+type Tab = 'guide' | 'keys' | 'bridge' | 'secrets' | 'endpoints' | 'deploy' | 'voice' | 'guard';
 
 function Field({
   label,
@@ -1666,6 +1668,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'secrets', label: 'Secrets' },
   { id: 'endpoints', label: 'Custom Endpoints' },
   { id: 'deploy', label: 'Deployment' },
+  { id: 'voice', label: 'Voice' },
   { id: 'guard', label: 'Anti-Loop Ledger' },
 ];
 
@@ -1728,6 +1731,7 @@ export function Settings({ open, onClose }: { open: boolean; onClose: () => void
           {tab === 'secrets' && <SecretsTab />}
           {tab === 'endpoints' && <EndpointsTab />}
           {tab === 'deploy' && <DeployTab />}
+          {tab === 'voice' && <VoiceTab />}
           {tab === 'guard' && <GuardTab />}
         </div>
       </div>

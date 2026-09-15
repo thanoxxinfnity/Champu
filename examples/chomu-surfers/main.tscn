@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=3 uid="uid://csurf0runner1"]
+[gd_scene load_steps=17 format=3 uid="uid://csurf0runner1"]
 
 [ext_resource type="Script" path="res://game.gd" id="1_game"]
 [ext_resource type="Script" path="res://track.gd" id="2_track"]
@@ -9,7 +9,6 @@
 [ext_resource type="Script" path="res://camera.gd" id="7_camera"]
 [ext_resource type="Script" path="res://zones.gd" id="8_zones"]
 [ext_resource type="Script" path="res://audio.gd" id="9_audio"]
-[ext_resource type="Script" path="res://voice.gd" id="10_voice"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_over"]
 bg_color = Color(0.06, 0.06, 0.09, 0.94)
@@ -74,12 +73,6 @@ volume_db = -40.0
 
 [node name="Sfx" type="AudioStreamPlayer" parent="Audio"]
 volume_db = -4.0
-
-[node name="Voice" type="Node" parent="."]
-script = ExtResource("10_voice")
-
-[node name="Player" type="AudioStreamPlayer" parent="Voice"]
-volume_db = 1.0
 
 [node name="Track" type="Node3D" parent="."]
 script = ExtResource("2_track")

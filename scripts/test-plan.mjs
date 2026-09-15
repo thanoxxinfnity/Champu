@@ -13,6 +13,8 @@ import {
   planSummary,
   playerParts,
   article,
+  GENRE_CUES,
+  looksLikeGame,
 } from '../src/lib/suites/godot/plan.ts';
 import { classifyLocal } from '../src/lib/agent/router.ts';
 
@@ -207,4 +209,51 @@ test('widening the game match did not swallow other prompts', () => {
   assert.equal(classifyLocal('a minecraft addon with a custom mob').suite, 'minecraft');
   assert.notEqual(classifyLocal('what is the game plan for this sprint').suite, 'godot');
   assert.notEqual(classifyLocal('explain how css grid works').suite, 'godot');
+});
+
+test('anything the planner can plan, the router sends to the suite', () => {
+  // These drifted apart and the drift was silent: "zombie survival shooter"
+  // planned perfectly as a shooter and never reached the suite, because the
+  // router carried its own shorter list and only knew "first person shooter".
+  // One list cannot disagree with itself.
+  const prompts = [
+    'a kart racing game',
+    'an endless runner on a rooftop',
+    'a zombie survival shooter',
+    'a sokoban style puzzle',
+    'survive the horde at night',
+    'a platformer with moving ledges',
+    'a top-down dungeon crawl',
+    'an open world adventure rpg',
+  ];
+  for (const prompt of prompts) {
+    assert.ok(looksLikeGame(prompt), `"${prompt}" is a game the planner understands`);
+    assert.equal(classifyLocal(prompt).suite, 'godot', prompt);
+    // And it really is planned, not just matched.
+    assert.ok(planGame(prompt).entities.length > 0, prompt);
+  }
+  // Every genre the planner knows is covered by the list above.
+  assert.equal(new Set(prompts.map((p) => planGame(p).genre)).size, GENRE_CUES.length);
+});
+
+test('describing a game is asking for one, even with no build verb in it', () => {
+  // "a zombie survival shooter called Chomu Game where you fight zombies" has
+  // no make/build/create anywhere, scored zero, and came back as conversation.
+  // Nobody describes a zombie shooter in order to have it discussed.
+  const c = classifyLocal('a zombie survival shooter called Chomu Game where you fight zombies');
+  assert.equal(c.suite, 'godot');
+  assert.equal(c.lane, 'B', c.reason);
+  assert.match(c.reason, /godot suite builds/);
+});
+
+test('naming a suite does not turn a question into a build', () => {
+  // The suite bonus must not override an actual question, or asking how
+  // something works answers with a zip.
+  for (const question of [
+    'what is the difference between a platformer and a runner?',
+    'why does my godot scene load with missing nodes?',
+    'explain how a game loop works',
+  ]) {
+    assert.equal(classifyLocal(question).lane, 'A', question);
+  }
 });
