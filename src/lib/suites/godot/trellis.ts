@@ -1,44 +1,67 @@
 /**
- * Microsoft TRELLIS, through an NVIDIA NIM endpoint.
+ * Microsoft TRELLIS, through NVIDIA.
  *
- * ── Read this before wiring it into a default path ──────────────────────────
+ * TRELLIS turns a prompt or a photo into a textured mesh, and it is the model
+ * to want: it is the only 3D generator NVIDIA hosts, so an NVIDIA key that
+ * already works for chat would cover assets too.
  *
- * NVIDIA's *hosted* TRELLIS at ai.api.nvidia.com is a demo, not a generator. It
- * accepts only NVIDIA's own sample images by id. Tested against the live API
- * with a valid NIM key:
+ * ── Two very different endpoints, and only one of them is real ──────────────
  *
- *   { "prompt": "a small stone golem", ... }   HTTP 500, after 91 seconds
- *   { "image": "data:image/png;base64,..." }   HTTP 422
- *                                              "Expected: example_id, got: base64"
- *   NVCF asset upload, then the asset id       HTTP 422
- *                                              "Expected: example_id, got: asset_id"
- *   { }                                        HTTP 422
- *                                              "Input needs to be either image or prompt"
+ * `ai.api.nvidia.com/v1/genai/microsoft/trellis` is the *demo* behind the
+ * build.nvidia.com playground. It only accepts NVIDIA's own sample pictures by
+ * id, and says so: an uploaded image answers
+ * `422 {"detail":"Expected: example_id, got: base64"}`, an NVCF asset id
+ * answers `Expected: example_id, got: asset_id`, and a text prompt answers
+ * `500` after ninety seconds. It is not a generator and nothing can make it one.
  *
- * So the route exists, authenticates, and refuses every input a user could
- * actually supply. It is not a key problem and not a payload problem — the
- * hosted deployment is wired to a fixed set of examples.
+ * The real deployment is the NIM container, and NVIDIA runs one: an NVCF
+ * function named `ai-trellis`, status ACTIVE, health `/v1/health/ready` — which
+ * matches the published NIM OpenAPI exactly. It is invoked at
+ * `api.nvcf.nvidia.com/v2/nvcf/pexec/functions/{id}` and takes the documented
+ * `Object3DRequest`: a `mode` of "text" or "image", a `prompt` or a
+ * `data:image/png;base64,…`, and an `output_format` of glb or stl. It answers
+ * `202 Accepted` with an `nvcf-reqid` to poll, and returns the model as
+ * `{ artifacts: [{ base64, finishReason, seed }] }`.
  *
- * That is why TRELLIS is NOT in the default chain in `model-source.ts`: putting
- * it there costs ninety seconds of a run and then fails, every time.
+ * So this speaks the real protocol, which is what a self-hosted container wants
+ * too — point `baseUrl` at your own `nvcr.io/nim/microsoft/trellis` and the
+ * same code runs against it.
  *
- * The client below is still real and still worth having, because TRELLIS itself
- * is. Point `baseUrl` at a self-hosted NIM container
- * (`nvcr.io/nim/microsoft/trellis:latest`, which needs an NVIDIA GPU) and the
- * same code generates properly. `hostedRefusal()` turns the demo endpoint's
- * answer into an explanation rather than a bare 500.
+ * What NVIDIA's own hosted function currently does, tested with a live key:
+ *   text mode    202 Accepted, then the job finishes `errored` / 500
+ *   image mode   422 at validation — including with NVIDIA's own example image
+ *                from their OpenAPI spec, at 128, 256, 512 and 1024 px
+ *
+ * That is a broken deployment on their side, not a payload we can fix, so
+ * `model-source.ts` keeps TRELLIS out of the default chain and falls through to
+ * something that works. When NVIDIA repairs it, this starts working with no
+ * change here — which is the reason to speak the real protocol rather than give
+ * up on it.
  */
 
-export const HOSTED_TRELLIS = 'https://ai.api.nvidia.com/v1/genai/microsoft/trellis';
+/** NVIDIA's own hosted TRELLIS NIM, as an NVCF function. */
+export const NVCF_TRELLIS_FUNCTION = '7c3ba6c7-1664-4486-a611-bd4475c98d92';
+export const NVCF_INVOKE = 'https://api.nvcf.nvidia.com/v2/nvcf/pexec/functions';
+export const NVCF_STATUS = 'https://api.nvcf.nvidia.com/v2/nvcf/pexec/status';
+
+/** The demo endpoint, named so it can be recognised and refused. */
+export const DEMO_ENDPOINT = 'https://ai.api.nvidia.com/v1/genai/microsoft/trellis';
 
 export interface TrellisOptions {
-  /** Defaults to NVIDIA's hosted endpoint, which only serves its own examples. */
+  /**
+   * A self-hosted NIM container's base URL (its `/v1/infer` is appended).
+   * Omitted means NVIDIA's hosted NVCF function.
+   */
   baseUrl?: string;
-  /** How closely the mesh follows the prompt. */
+  /** How closely the mesh follows the input. 1-10. */
   cfgScale?: number;
-  /** More steps, more detail, more time. */
+  /** More steps, more detail, more time. 10-50. */
   samplingSteps?: number;
+  /** Skips texture baking, which is faster and fine for a greybox. */
+  noTexture?: boolean;
   seed?: number;
+  timeoutMs?: number;
+  onProgress?: (note: string) => void;
   signal?: AbortSignal;
 }
 
@@ -46,97 +69,174 @@ export interface TrellisResult {
   /** The .glb bytes, when it worked. */
   model?: Uint8Array;
   error?: string;
-  /** True when the failure is the hosted demo refusing real input, not a bug. */
-  demoEndpoint?: boolean;
+  /** True when the failure is NVIDIA's deployment, not the request. */
+  upstreamBroken?: boolean;
 }
 
-/**
- * Recognises the hosted demo refusing a real input.
- *
- * Worth separating from a generic failure: a user who sees "TRELLIS returned
- * 500" will retry, re-enter their key, and file a bug. A user told the hosted
- * endpoint only serves NVIDIA's samples knows to stop.
- */
-export function hostedRefusal(status: number, body: string): string | null {
-  if (/Expected:\s*example_id/i.test(body)) {
-    return 'NVIDIA\'s hosted TRELLIS only accepts its own sample images — it will not take a prompt or an uploaded image. Self-host the NIM container, or use Meshy or Tripo instead.';
+/** The documented request body, for either endpoint. */
+export function requestBody(
+  input: { prompt?: string; imageDataUri?: string },
+  options: TrellisOptions = {},
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    output_format: 'glb',
+    seed: options.seed ?? 0,
+    slat_cfg_scale: options.cfgScale ?? 3,
+    ss_cfg_scale: 7.5,
+    slat_sampling_steps: options.samplingSteps ?? 25,
+    ss_sampling_steps: options.samplingSteps ?? 25,
+    ...(options.noTexture ? { no_texture: true } : {}),
+  };
+
+  // `mode` is not optional in practice: without it the service guesses, and a
+  // request carrying both a prompt and an image is ambiguous.
+  if (input.imageDataUri) {
+    body.mode = 'image';
+    body.image = input.imageDataUri;
+  } else {
+    body.mode = 'text';
+    body.prompt = (input.prompt ?? '').slice(0, 600);
   }
-  // The text route answers 500 rather than 422, but it is the same deployment
-  // and the same dead end.
-  if (status >= 500) {
-    return 'NVIDIA\'s hosted TRELLIS failed on a text prompt (it answers 500 for any prompt). It is a demo deployment; use Meshy or Tripo, or self-host the NIM container.';
-  }
-  return null;
+  return body;
 }
 
-/** A NIM error body in words worth showing. */
-export function trellisError(status: number, body: string): string {
-  const refusal = hostedRefusal(status, body);
-  if (refusal) return refusal;
-
+/** Turns a failure into something worth showing a user. */
+export function trellisError(status: number, body: string, endpoint: string): TrellisResult {
+  if (endpoint.startsWith(DEMO_ENDPOINT) || /Expected:\s*example_id/i.test(body)) {
+    return {
+      error:
+        "NVIDIA's build.nvidia.com TRELLIS is a demo that only accepts their own sample images — it cannot take a prompt or an upload. Chomugiri uses the real NIM function instead.",
+      upstreamBroken: true,
+    };
+  }
   if (status === 401 || status === 403) {
-    return 'NVIDIA rejected the NIM key for TRELLIS. Check it in Settings → API Keys.';
+    return { error: 'NVIDIA rejected the key for TRELLIS. Check it in Settings → API Keys.' };
   }
+  if (status === 404) {
+    return { error: 'That TRELLIS endpoint does not exist. For a self-hosted container the URL is its base, not /v1/infer.' };
+  }
+  if (status === 422) {
+    // Their own example image is refused here too, so this is not the caller's
+    // payload however tempting it is to keep tuning it.
+    return {
+      error:
+        "NVIDIA's hosted TRELLIS refused the image (422). Their own documented example image is refused the same way, so the deployment is not accepting image jobs right now. Add a Meshy or Tripo key, or self-host the NIM container.",
+      upstreamBroken: true,
+    };
+  }
+  if (status >= 500) {
+    return {
+      error:
+        "NVIDIA's hosted TRELLIS accepted the job and then failed it (500). That is their deployment, not the request. Add a Meshy or Tripo key, or self-host the NIM container.",
+      upstreamBroken: true,
+    };
+  }
+
+  let detail = '';
   try {
-    const parsed = JSON.parse(body) as { detail?: unknown; message?: string };
-    const detail = typeof parsed.detail === 'string' ? parsed.detail : parsed.message;
-    if (detail) return `TRELLIS: ${detail}.`;
+    const parsed = JSON.parse(body) as { detail?: unknown; title?: string };
+    detail = typeof parsed.detail === 'string' ? parsed.detail : (parsed.title ?? '');
   } catch {
     // Not JSON.
   }
-  return `TRELLIS returned ${status}.`;
+  return { error: detail ? `TRELLIS: ${detail}.` : `TRELLIS returned ${status}.` };
+}
+
+/** The .glb out of an Object3DResponse. */
+export function modelFrom(json: unknown): { model?: Uint8Array; error?: string } {
+  const artifacts = (json as { artifacts?: Array<Record<string, unknown>> })?.artifacts;
+  const first = Array.isArray(artifacts) ? artifacts[0] : undefined;
+  if (!first) return { error: 'TRELLIS answered without a model in it.' };
+
+  const reason = String(first.finishReason ?? '').toUpperCase();
+  if (reason === 'CONTENT_FILTERED') return { error: 'TRELLIS filtered that prompt. Try describing the object differently.' };
+  if (reason && reason !== 'SUCCESS') return { error: `TRELLIS finished as ${reason}.` };
+
+  const b64 = typeof first.base64 === 'string' ? first.base64 : '';
+  if (!b64) return { error: 'TRELLIS reported success but returned no model.' };
+
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return { model: bytes };
 }
 
 /**
- * Generates a mesh from a prompt.
+ * Generates a mesh.
  *
- * Returns bytes rather than a URL: a NIM container answers with the .glb
- * inline, which is the one thing it does more conveniently than a job queue.
+ * Handles both shapes at once: a self-hosted container answers `/v1/infer`
+ * synchronously, while NVCF answers `202` with a request id to poll. Which one
+ * happens is decided by the response, not by configuration, so pointing at your
+ * own container needs nothing but the URL.
  */
-export async function generateModel(prompt: string, apiKey: string, options: TrellisOptions = {}): Promise<TrellisResult> {
-  const url = options.baseUrl ?? HOSTED_TRELLIS;
+export async function generateModel(
+  input: { prompt?: string; imageDataUri?: string },
+  apiKey: string,
+  options: TrellisOptions = {},
+): Promise<TrellisResult> {
+  if (options.baseUrl?.startsWith(DEMO_ENDPOINT)) {
+    return trellisError(422, 'Expected: example_id', DEMO_ENDPOINT);
+  }
+
+  const endpoint = options.baseUrl
+    ? `${options.baseUrl.replace(/\/+$/, '').replace(/\/v1\/infer$/, '')}/v1/infer`
+    : `${NVCF_INVOKE}/${NVCF_TRELLIS_FUNCTION}`;
+
+  const deadline = Date.now() + (options.timeoutMs ?? 300_000);
 
   try {
-    const res = await fetch(url, {
+    options.onProgress?.('Asking TRELLIS for a mesh…');
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify({
-        prompt: prompt.slice(0, 600),
-        slat_cfg_scale: options.cfgScale ?? 3,
-        ss_cfg_scale: 7.5,
-        slat_sampling_steps: options.samplingSteps ?? 12,
-        ss_sampling_steps: options.samplingSteps ?? 12,
-        seed: options.seed ?? 0,
-      }),
-      // Generation is slow even when it works; the hosted one burns 90s before
-      // failing, which is most of this budget.
-      signal: options.signal ?? AbortSignal.timeout(180_000),
+      body: JSON.stringify(requestBody(input, options)),
+      signal: options.signal ?? AbortSignal.timeout(options.timeoutMs ?? 300_000),
     });
 
-    if (!res.ok) {
-      const text = await res.text();
-      return { error: trellisError(res.status, text), demoEndpoint: hostedRefusal(res.status, text) !== null };
+    if (res.status === 202) {
+      const reqId = res.headers.get('nvcf-reqid');
+      if (!reqId) return { error: 'TRELLIS queued the job but returned no request id to poll.' };
+      return await pollNvcf(reqId, apiKey, deadline, options);
     }
 
-    const type = res.headers.get('content-type') ?? '';
-    if (type.includes('model/gltf-binary') || type.includes('octet-stream')) {
-      return { model: new Uint8Array(await res.arrayBuffer()) };
-    }
-
-    // Some NIM builds answer JSON with the asset base64-encoded instead.
-    const json = (await res.json()) as Record<string, unknown>;
-    const encoded = typeof json.artifact === 'string' ? json.artifact : typeof json.model === 'string' ? json.model : null;
-    if (!encoded) return { error: 'TRELLIS answered without a model in it.' };
-
-    const binary = atob(encoded.replace(/^data:[^,]+,/, ''));
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-    return { model: bytes };
+    if (!res.ok) return trellisError(res.status, await res.text(), endpoint);
+    return modelFrom(await res.json());
   } catch (err) {
     return { error: `Could not reach TRELLIS: ${(err as Error).message}` };
+  }
+}
+
+/**
+ * Waits on an NVCF job.
+ *
+ * The status route is long-polling: it holds the connection open and answers
+ * 202 if the job is still running, so the loop needs no sleep of its own — and
+ * adding one would only make a finished job sit unnoticed.
+ */
+async function pollNvcf(
+  reqId: string,
+  apiKey: string,
+  deadline: number,
+  options: TrellisOptions,
+): Promise<TrellisResult> {
+  for (let attempt = 1; ; attempt += 1) {
+    if (Date.now() > deadline) {
+      return { error: 'TRELLIS did not finish in time.' };
+    }
+    if (options.signal?.aborted) return { error: 'Cancelled.' };
+
+    options.onProgress?.(`TRELLIS is generating… (check ${attempt})`);
+    const res = await fetch(`${NVCF_STATUS}/${reqId}`, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
+      signal: options.signal ?? AbortSignal.timeout(Math.max(5_000, deadline - Date.now())),
+    });
+
+    if (res.status === 202) continue;
+    if (!res.ok) return trellisError(res.status, await res.text(), NVCF_STATUS);
+    return modelFrom(await res.json());
   }
 }

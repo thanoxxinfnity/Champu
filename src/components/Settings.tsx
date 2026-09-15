@@ -1375,8 +1375,8 @@ function KeysTab() {
       </Field>
 
       <Field
-        label="Self-hosted TRELLIS URL (optional)"
-        hint="NVIDIA's hosted Microsoft TRELLIS only accepts its own sample images — it answers 422 to an uploaded image and 500 to a prompt, so it cannot build from a description. Running the NIM container yourself (nvcr.io/nim/microsoft/trellis, needs an NVIDIA GPU) does work; paste its URL here and your NVIDIA key authenticates it."
+        label="TRELLIS container URL (optional)"
+        hint="Optional override. Microsoft TRELLIS already runs on your NVIDIA key — Chomugiri calls NVIDIA's real TRELLIS NIM, not the build.nvidia.com demo (that one only serves NVIDIA's own sample pictures). Their hosted one is currently failing its own jobs, so Chomugiri falls through to Meshy, Tripo or built-in geometry and says so. Running the container yourself (nvcr.io/nim/microsoft/trellis, needs a GPU) bypasses that — paste its URL here."
       >
         <input
           className={inputClass}
@@ -1385,14 +1385,15 @@ function KeysTab() {
           value={trellisUrl}
           spellCheck={false}
           autoComplete="off"
-          placeholder="http://…:8000/v1/infer — leave empty to skip TRELLIS"
+          placeholder="http://…:8000 — leave empty to use NVIDIA's hosted TRELLIS"
           onChange={(e) => setTrellisUrl(e.target.value)}
         />
       </Field>
 
       <p className="text-xs opacity-70">
-        With none of these, 3D models are built in code and rigged locally — blocky, but instant, free and
-        always available. That is the fallback whenever a hosted generator is out of credit or slow.
+        Order is Meshy, then Tripo, then TRELLIS on your NVIDIA key, then code-built geometry that is
+        rigged locally — blocky, but instant, free and always available. That last one is the floor
+        whenever a hosted generator is out of credit, slow, or down.
       </p>
 
       <hr className="ink-rule" />

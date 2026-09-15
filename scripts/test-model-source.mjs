@@ -2,8 +2,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { meshyError, resultFrom, taskIdFrom } from '../src/lib/suites/godot/meshy.ts';
-import { hostedRefusal, trellisError } from '../src/lib/suites/godot/trellis.ts';
-import { buildLocally, sourceChain, trellisAvailability } from '../src/lib/suites/godot/model-source.ts';
+import { DEMO_ENDPOINT, modelFrom, requestBody, trellisError } from '../src/lib/suites/godot/trellis.ts';
+import { buildLocally, resetTrellisState, sourceChain, trellisAvailability } from '../src/lib/suites/godot/model-source.ts';
 
 // ── Meshy ───────────────────────────────────────────────────────────────────
 
@@ -64,20 +64,66 @@ test('Meshy errors say where the key goes, not what the server said', () => {
 
 // ── TRELLIS ─────────────────────────────────────────────────────────────────
 
-test('the hosted TRELLIS demo is recognised and explained, not reported as a bug', () => {
-  // Verified against the live API: an uploaded image answers 422 with this
-  // wording, and a prompt answers 500 after ~90 seconds. Both mean the same
-  // thing — the hosted deployment only serves NVIDIA's own examples — and a
-  // user who reads "500" will retry and re-enter their key instead.
-  const refusal = hostedRefusal(422, '{"detail":"Expected: example_id, got: base64"}');
-  assert.match(refusal, /only accepts its own sample images/);
-  assert.match(hostedRefusal(500, 'Internal Server Error'), /demo deployment/);
-  assert.equal(hostedRefusal(401, '{}'), null, 'a real auth failure is not a demo refusal');
+test('the request carries a mode, which is what makes it a real request', () => {
+  // Without `mode` the service guesses, and a body carrying both a prompt and
+  // an image is ambiguous. Omitting it is why the first attempts never got past
+  // validation.
+  const text = requestBody({ prompt: 'a stone golem' });
+  assert.equal(text.mode, 'text');
+  assert.equal(text.prompt, 'a stone golem');
+  assert.equal(text.output_format, 'glb');
+
+  const image = requestBody({ imageDataUri: 'data:image/png;base64,AAAA' });
+  assert.equal(image.mode, 'image');
+  assert.equal(image.image, 'data:image/png;base64,AAAA');
+  assert.equal(image.prompt, undefined, 'an image job must not also carry a prompt');
 });
 
-test('a TRELLIS auth failure still reads as an auth failure', () => {
-  assert.match(trellisError(401, '{}'), /rejected the NIM key/);
-  assert.match(trellisError(403, '{}'), /rejected the NIM key/);
+test('the build.nvidia.com demo endpoint is refused rather than called', () => {
+  // It only serves NVIDIA's own sample pictures: an upload answers
+  // 422 "Expected: example_id, got: base64" and a prompt answers 500 after
+  // ninety seconds. Calling it is ninety seconds spent to learn nothing.
+  const refused = trellisError(422, '{"detail":"Expected: example_id, got: base64"}', DEMO_ENDPOINT);
+  assert.match(refused.error, /demo that only accepts their own sample images/);
+  assert.equal(refused.upstreamBroken, true);
+});
+
+test("NVIDIA's own broken deployment is reported as theirs, not as the user's fault", () => {
+  // Verified live: text mode is accepted (202) and then fails 500 on all three
+  // attempts; image mode is refused 422 even with NVIDIA's own documented
+  // example image at four different sizes. A user who reads "500" will retry
+  // and re-enter their key instead.
+  const failed = trellisError(500, 'Internal Server Error', 'https://api.nvcf.nvidia.com/x');
+  assert.match(failed.error, /accepted the job and then failed it/);
+  assert.equal(failed.upstreamBroken, true);
+
+  const refused = trellisError(422, '{"detail":"Inference error"}', 'https://api.nvcf.nvidia.com/x');
+  assert.match(refused.error, /own documented example image is refused the same way/);
+  assert.equal(refused.upstreamBroken, true);
+});
+
+test('a real auth or routing failure is still reported as one', () => {
+  // These are the user's to fix, so they must not be blamed on NVIDIA.
+  for (const status of [401, 403]) {
+    const r = trellisError(status, '{}', 'https://api.nvcf.nvidia.com/x');
+    assert.match(r.error, /rejected the key/);
+    assert.ok(!r.upstreamBroken);
+  }
+  const missing = trellisError(404, '{}', 'http://my-gpu:8000/v1/infer');
+  assert.match(missing.error, /does not exist/);
+  assert.ok(!missing.upstreamBroken);
+});
+
+test('the model is read out of the documented response shape', () => {
+  // Object3DResponse: { artifacts: [{ base64, finishReason, seed }] }.
+  const glb = Buffer.from('glTF\u0002\u0000\u0000\u0000').toString('base64');
+  const ok = modelFrom({ artifacts: [{ base64: glb, finishReason: 'SUCCESS', seed: 0 }] });
+  assert.ok(ok.model instanceof Uint8Array);
+  assert.deepEqual([...ok.model.slice(0, 4)], [0x67, 0x6c, 0x54, 0x46]);
+
+  assert.match(modelFrom({ artifacts: [{ base64: '', finishReason: 'SUCCESS' }] }).error, /no model/);
+  assert.match(modelFrom({ artifacts: [{ base64: 'x', finishReason: 'CONTENT_FILTERED' }] }).error, /filtered/);
+  assert.match(modelFrom({}).error, /without a model/);
 });
 
 // ── The chain ───────────────────────────────────────────────────────────────
@@ -91,26 +137,27 @@ test('Meshy comes first when both keys are set, because it rigs', () => {
 test('the chain always ends in the code-built model', () => {
   // Every hosted source can be out of credit, rate limited or down. None of
   // them failing should mean the user gets no model at all.
-  for (const keys of [{}, { meshy: 'm' }, { tripo: 't' }, { meshy: 'm', tripo: 't', nim: 'n', trellisUrl: 'http://x' }]) {
+  for (const keys of [{}, { meshy: 'm' }, { tripo: 't' }, { meshy: 'm', tripo: 't', nim: 'n' }]) {
     assert.equal(sourceChain(keys).at(-1), 'built');
   }
   // Whitespace is not a key.
   assert.deepEqual(sourceChain({ meshy: '   ', tripo: '' }), ['built']);
 });
 
-test('TRELLIS is only reachable through a self-hosted URL', () => {
-  // The hosted endpoint cannot serve a prompt, so putting it in the chain would
-  // cost ninety seconds and then fail on every single run.
-  assert.ok(!sourceChain({ nim: 'nvapi-x' }).includes('trellis'));
-  assert.ok(sourceChain({ nim: 'nvapi-x', trellisUrl: 'http://gpu:8000/v1/infer' }).includes('trellis'));
-  // A URL with no key cannot authenticate.
-  assert.ok(!sourceChain({ trellisUrl: 'http://gpu:8000' }).includes('trellis'));
+test('an NVIDIA key alone puts TRELLIS in the chain', () => {
+  // TRELLIS is reachable as a real NVCF function on the NIM key — a self-hosted
+  // URL is an override, not a requirement.
+  assert.deepEqual(sourceChain({ nim: 'nvapi-x' }), ['trellis', 'built']);
+  assert.deepEqual(sourceChain({ nim: 'nvapi-x', trellisUrl: 'http://gpu:8000' }), ['trellis', 'built']);
+  // But after the keys the user deliberately pasted.
+  assert.deepEqual(sourceChain({ nim: 'n', meshy: 'm', tripo: 't' }), ['meshy', 'tripo', 'trellis', 'built']);
+  assert.ok(!sourceChain({ trellisUrl: 'http://gpu:8000' }).includes('trellis'), 'a URL with no key cannot authenticate');
 });
 
-test('the reason TRELLIS is skipped is available to show, not swallowed', () => {
-  assert.match(trellisAvailability({}), /only serves its own sample images/);
-  assert.match(trellisAvailability({ trellisUrl: 'http://x' }), /no NVIDIA key/);
-  assert.equal(trellisAvailability({ trellisUrl: 'http://x', nim: 'n' }), null);
+test('the reason TRELLIS is unavailable is available to show, not swallowed', () => {
+  resetTrellisState();
+  assert.match(trellisAvailability({}), /needs an NVIDIA key/);
+  assert.equal(trellisAvailability({ nim: 'nvapi-x' }), null);
 });
 
 // ── The floor ───────────────────────────────────────────────────────────────
