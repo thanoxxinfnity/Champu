@@ -146,9 +146,14 @@ export function buildGodotExport(files: WorkspaceFile[], plan: GamePlan | null, 
   if (!detected) return null;
 
   const projectName = name ?? plan?.name ?? 'Chomugiri Game';
+  // Genre and view are carried through, not dropped. The plan read "shooter,
+  // first-person" out of the prompt correctly and then this function threw both
+  // away, so every genre scaffolded as the same character in a field.
   const spec: GameSpec = {
     name: projectName,
     dimension: plan?.dimension ?? '3d',
+    ...(plan?.genre ? { genre: plan.genre } : {}),
+    ...(plan?.view ? { view: plan.view } : {}),
   };
 
   const completed = completeProject(detected.files, spec);

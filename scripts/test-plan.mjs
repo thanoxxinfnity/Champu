@@ -64,6 +64,29 @@ test('a name the user gave is used as given', () => {
   assert.equal(inferName("a platformer titled Pixel Leap").name, 'Pixel Leap');
 });
 
+test('a name asked for in Hinglish is a name too', () => {
+  // The suite is used in Hinglish more than in English, and "name X" / "naam X"
+  // is how it is asked for there. Missing it threw the title away and left the
+  // fallback to pick adjectives — a zombie shooter came out "Accha High".
+  assert.equal(inferName('zombie survival shooter, name Chomu Game').name, 'Chomu Game');
+  assert.equal(inferName('iska naam Chomu Game hai, zombie shooter').name, 'Chomu Game');
+  assert.equal(inferName('naam Chomu Game rakho').name, 'Chomu Game');
+  // `named` must still win over `name`, or the title starts with a stray "d".
+  assert.equal(inferName('a game named Sky Dash').name, 'Sky Dash');
+});
+
+test('a prompt that merely contains the word "name" is not naming the game', () => {
+  // "a name generator" is a feature of the game, not its title.
+  assert.equal(inferName('a platformer with a name generator for levels').stated, false);
+  assert.equal(inferName('a game where you name the planets').stated, false);
+});
+
+test('words about how good the game should be are not its title', () => {
+  const { name } = inferName('ek accha sa high resolution details wala zombie survival shooter bana');
+  assert.ok(!/accha|high|resolution|detail|wala|bana/i.test(name), `"${name}" is made of filler`);
+  assert.match(name, /Zombie|Survival|Shooter/);
+});
+
 test('an invented name uses the idea, not the first words of the sentence', () => {
   // "Make Me" is the kind of name that makes generated work feel generated.
   const { name, stated } = inferName('please make me a game about a ninja in a temple');

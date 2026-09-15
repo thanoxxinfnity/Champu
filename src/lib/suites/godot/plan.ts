@@ -154,7 +154,16 @@ export function inferName(prompt: string): { name: string; stated: boolean } {
   const bare = /["“']([^"”']{2,40})["”']/.exec(prompt);
   if (bare) return { name: titleCase(bare[1].trim()), stated: true };
 
-  const quoted = /(?:called|named|titled)\s+([^"”'.,\n]{2,60})/i.exec(prompt);
+  // `named` has to precede `name` in the alternation, or "named Sky Dash" matches
+  // the `name` branch and the title comes out as "D Sky Dash". Hinglish asks for
+  // it as often as English does — "name Chomu Game", "iska naam Chomu Game" —
+  // and without those the name is thrown away and the fallback picks adjectives.
+  // The lookbehind keeps the bare `name` branch imperative: "name Chomu Game" is
+  // a title, "a name generator for levels" is a feature, and without it the
+  // second one named the project "Generator".
+  const quoted =
+    /(?:called|named|titled|naam|(?<!\b(?:a|an|the|any|no|its|his|her|their|new)\s)name)\s+([^"”'.,\n]{2,60})/i
+      .exec(prompt);
   if (quoted) {
     // "called Sky Dash where a ninja dodges robots" — the name is the first few
     // words, and the clause after it is the rest of the sentence. Without a
@@ -183,12 +192,23 @@ export function inferName(prompt: string): { name: string; stated: boolean } {
 const NAME_BOUNDARY = new Set([
   'where', 'which', 'that', 'with', 'in', 'on', 'about', 'for', 'and', 'when', 'while',
   'you', 'the', 'a', 'an', 'set', 'featuring', 'starring',
+  // Hinglish puts the verb after the name — "naam Chomu Game hai", "naam Chomu
+  // Game rakho" — so without these the copula ends up inside the title.
+  'hai', 'hain', 'ha', 'ho', 'hoga', 'rakho', 'rakh', 'rakhna', 'do', 'dena', 'de',
 ]);
 
 const STOP_WORDS = new Set([
   'make', 'build', 'create', 'want', 'need', 'please', 'game', 'the', 'and', 'for', 'with', 'can', 'you',
   'like', 'that', 'this', 'some', 'kind', 'type', 'where', 'which', 'have', 'has', 'should', 'would',
   'godot', 'android', 'phone', 'mobile', 'simple', 'basic', 'small', 'little', 'new',
+  // Words about how good the game should be. They are the loudest adjectives in
+  // a prompt and they carry none of the idea, so the fallback used to name a
+  // zombie shooter "Accha High" off "ek accha sa high resolution ... zombie".
+  'accha', 'acha', 'good', 'nice', 'cool', 'best', 'great', 'proper', 'real', 'realistic',
+  'high', 'resolution', 'detail', 'details', 'detailed', 'quality', 'big', 'bada', 'huge',
+  // Hinglish scaffolding around the request.
+  'bana', 'banao', 'banana', 'banade', 'karo', 'kardo', 'kar', 'chahiye', 'mujhe', 'muja',
+  'wala', 'wali', 'jaisa', 'jasa', 'jaise', 'aur', 'bro', 'yaar', 'yar', 'ek',
 ]);
 
 function titleCase(text: string): string {

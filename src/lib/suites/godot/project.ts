@@ -16,6 +16,22 @@
  * Pure: returns a file map. Zipping and downloading happen elsewhere.
  */
 
+import {
+  directorScript,
+  enemyScript,
+  hudScript,
+  lookScript,
+  shooterInput,
+  shooterPlayerScript,
+  weaponScript,
+  wiringScript,
+} from './shooter.ts';
+
+/** Whether this spec describes a game the shooter scaffold should build. */
+export function isShooter(spec: GameSpec): boolean {
+  return spec.genre === 'shooter' && (spec.dimension ?? '3d') === '3d';
+}
+
 export interface GodotFile {
   path: string;
   content: string;
@@ -26,6 +42,16 @@ export interface GameSpec {
   name: string;
   /** 3D is the default; a 2D game uses Node2D and a different camera. */
   dimension?: '2d' | '3d';
+  /**
+   * What kind of game this is, straight off the plan.
+   *
+   * Read, not decorative: asking the suite for a zombie survival shooter used to
+   * produce the same character-in-a-field project as asking it for anything
+   * else, because the plan said `shooter` and nothing downstream looked.
+   */
+  genre?: string;
+  /** Where the camera sits. `first-person` puts it in the player's head. */
+  view?: string;
   /** Models to place in the scene, as res:// paths to .glb files. */
   models?: Array<{
     path: string;
@@ -126,7 +152,7 @@ jump={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"keycode":32,"pressed":true)]
 }
-
+${isShooter(spec) ? shooterInput() : ''}
 [rendering]
 
 renderer/rendering_method="mobile"
@@ -412,7 +438,334 @@ func set_music_volume(db: float) -> void:
  * it to size its load table, and a wrong count is the classic reason a
  * hand-written .tscn opens with nodes missing.
  */
+/**
+ * The arena a shooter is fought in.
+ *
+ * Bigger than the generic ground plane, walled so the horde funnels rather than
+ * scattering, and littered with cover — a flat empty square is where a zombie
+ * game stops being one, because there is nothing to break line of sight with.
+ */
+export function shooterScene(spec: GameSpec): string {
+  const models = spec.models ?? [];
+
+  const ext: string[] = [
+    `[ext_resource type="Script" path="res://player.gd" id="1_player"]`,
+    `[ext_resource type="Script" path="res://joystick.gd" id="2_stick"]`,
+    `[ext_resource type="Script" path="res://look.gd" id="3_look"]`,
+    `[ext_resource type="Script" path="res://weapon.gd" id="4_weapon"]`,
+    `[ext_resource type="Script" path="res://director.gd" id="5_director"]`,
+    `[ext_resource type="Script" path="res://hud.gd" id="6_hud"]`,
+    `[ext_resource type="Script" path="res://wiring.gd" id="7_wiring"]`,
+  ];
+
+  const modelIdBase = ext.length + 1;
+  models.forEach((model, i) => {
+    ext.push(`[ext_resource type="PackedScene" path="${model.path}" id="${modelIdBase + i}_model${i}"]`);
+  });
+
+  // The generated character becomes the zombie rather than the player's own
+  // body: in first person the player never sees themselves, and a rigged mesh
+  // parented around the camera is a wall of polygons at the near plane.
+  const enemyModel = models.find((m) => m.rigged) ?? models[0];
+
+  const sub = [
+    `[sub_resource type="ProceduralSkyMaterial" id="Sky_dusk"]
+sky_top_color = Color(0.12, 0.13, 0.18, 1)
+sky_horizon_color = Color(0.36, 0.26, 0.22, 1)
+ground_bottom_color = Color(0.08, 0.08, 0.09, 1)
+ground_horizon_color = Color(0.3, 0.22, 0.18, 1)
+sun_angle_max = 24.0`,
+    `[sub_resource type="Sky" id="Sky_main"]
+sky_material = SubResource("Sky_dusk")`,
+    // Fog is what sells a horde: zombies resolve out of it instead of popping
+    // in at the spawn ring in full view.
+    `[sub_resource type="Environment" id="Environment_main"]
+background_mode = 2
+sky = SubResource("Sky_main")
+ambient_light_source = 3
+ambient_light_color = Color(0.45, 0.42, 0.44, 1)
+ambient_light_energy = 0.85
+fog_enabled = true
+fog_light_color = Color(0.29, 0.25, 0.25, 1)
+fog_density = 0.022
+tonemap_mode = 3`,
+    `[sub_resource type="BoxMesh" id="BoxMesh_ground"]
+size = Vector3(64, 0.5, 64)`,
+    `[sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
+size = Vector3(64, 0.5, 64)`,
+    `[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
+albedo_color = Color(0.21, 0.2, 0.17, 1)
+roughness = 0.95`,
+    `[sub_resource type="BoxMesh" id="BoxMesh_wall"]
+size = Vector3(64, 5, 1)`,
+    `[sub_resource type="BoxShape3D" id="BoxShape3D_wall"]
+size = Vector3(64, 5, 1)`,
+    `[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wall"]
+albedo_color = Color(0.27, 0.26, 0.25, 1)
+roughness = 0.9`,
+    `[sub_resource type="BoxMesh" id="BoxMesh_crate"]
+size = Vector3(2.4, 2.4, 2.4)`,
+    `[sub_resource type="BoxShape3D" id="BoxShape3D_crate"]
+size = Vector3(2.4, 2.4, 2.4)`,
+    `[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_crate"]
+albedo_color = Color(0.36, 0.28, 0.18, 1)
+roughness = 0.85`,
+    `[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
+height = 1.8
+radius = 0.4`,
+    `[sub_resource type="BoxMesh" id="BoxMesh_gun"]
+size = Vector3(0.07, 0.09, 0.46)`,
+    `[sub_resource type="BoxMesh" id="BoxMesh_grip"]
+size = Vector3(0.06, 0.18, 0.09)`,
+    // Emissive on purpose. A view-model sits a few centimetres from the near
+    // plane with its lit faces pointing away from the sun, so a purely lit
+    // material renders as a black wedge across the corner of the screen — which
+    // is exactly what the first render of this arena showed. \`cast_shadow = 0\`
+    // does not help, because the wedge is the gun, not its shadow.
+    `[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gun"]
+albedo_color = Color(0.34, 0.34, 0.37, 1)
+metallic = 0.6
+roughness = 0.45
+emission_enabled = true
+emission = Color(0.42, 0.43, 0.48, 1)
+emission_energy_multiplier = 0.55`,
+    // A Panel with no style override uses the default theme's translucent one,
+    // so "YOU DIED" appears over a game that is still visibly running behind it.
+    `[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_over"]
+bg_color = Color(0.05, 0.04, 0.04, 0.93)`,
+  ];
+
+  const loadSteps = ext.length + sub.length + 1;
+
+  // Four walls off one mesh and one shape. Transform3D is column-major: the
+  // first nine numbers are the basis, and the side walls are that basis turned
+  // a quarter turn about Y.
+  const walls = [
+    ['North', '1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, -32'],
+    ['South', '1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 32'],
+    ['East', '0, 0, -1, 0, 1, 0, 1, 0, 0, 32, 2.5, 0'],
+    ['West', '0, 0, -1, 0, 1, 0, 1, 0, 0, -32, 2.5, 0'],
+  ]
+    .map(
+      ([name, transform]) => `[node name="Wall${name}" type="StaticBody3D" parent="Arena"]
+transform = Transform3D(${transform})
+
+[node name="Mesh" type="MeshInstance3D" parent="Arena/Wall${name}"]
+mesh = SubResource("BoxMesh_wall")
+material_override = SubResource("StandardMaterial3D_wall")
+
+[node name="Collision" type="CollisionShape3D" parent="Arena/Wall${name}"]
+shape = SubResource("BoxShape3D_wall")`,
+    )
+    .join('\n\n');
+
+  // Cover, placed rather than randomised: a layout that changes every build is
+  // a layout nobody can learn, and learning the map is the game.
+  const crates = [
+    [-9, 1.4, -7], [-6, 1.4, -7], [-9, 3.8, -7],
+    [10, 1.4, -11], [12.4, 1.4, -11],
+    [-13, 1.4, 9], [-13, 1.4, 11.4], [-13, 3.8, 9],
+    [8, 1.4, 12], [10.4, 1.4, 12], [8, 3.8, 12],
+    [0, 1.4, -18], [2.4, 1.4, -18],
+    [-19, 1.4, -2], [18, 1.4, 4], [18, 3.8, 4],
+  ]
+    .map(
+      ([x, y, z], i) => `[node name="Crate${i}" type="StaticBody3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${x}, ${y}, ${z})
+
+[node name="Mesh" type="MeshInstance3D" parent="Arena/Crate${i}"]
+mesh = SubResource("BoxMesh_crate")
+material_override = SubResource("StandardMaterial3D_crate")
+
+[node name="Collision" type="CollisionShape3D" parent="Arena/Crate${i}"]
+shape = SubResource("BoxShape3D_crate")`,
+    )
+    .join('\n\n');
+
+  return `[gd_scene load_steps=${loadSteps} format=3 uid="${sceneUid(spec.name)}"]
+
+${ext.join('\n')}
+
+${sub.join('\n\n')}
+
+[node name="Main" type="Node3D"]
+
+[node name="Environment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_main")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.87, -0.35, 0.35, 0, 0.7, 0.71, -0.5, -0.61, 0.61, 0, 14, 0)
+light_color = Color(1, 0.86, 0.72, 1)
+light_energy = 1.15
+shadow_enabled = true
+
+[node name="Arena" type="Node3D" parent="."]
+
+[node name="Ground" type="StaticBody3D" parent="Arena"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Arena/Ground"]
+mesh = SubResource("BoxMesh_ground")
+material_override = SubResource("StandardMaterial3D_ground")
+
+[node name="Collision" type="CollisionShape3D" parent="Arena/Ground"]
+shape = SubResource("BoxShape3D_ground")
+
+${walls}
+
+${crates}
+
+[node name="Player" type="CharacterBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 0)
+collision_layer = 1
+collision_mask = 1
+script = ExtResource("1_player")
+
+[node name="Collision" type="CollisionShape3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_player")
+
+[node name="Camera" type="Camera3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
+current = true
+far = 200.0
+
+[node name="Look" type="Node" parent="Player"]
+script = ExtResource("3_look")
+
+[node name="Weapon" type="Node3D" parent="Player/Camera"]
+transform = Transform3D(0.995, 0, -0.105, 0, 1, 0, 0.105, 0, 0.995, 0.28, -0.34, -0.85)
+script = ExtResource("4_weapon")
+
+[node name="Mesh" type="MeshInstance3D" parent="Player/Camera/Weapon"]
+mesh = SubResource("BoxMesh_gun")
+material_override = SubResource("StandardMaterial3D_gun")
+cast_shadow = 0
+
+[node name="Grip" type="MeshInstance3D" parent="Player/Camera/Weapon"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.12, 0.16)
+mesh = SubResource("BoxMesh_grip")
+material_override = SubResource("StandardMaterial3D_gun")
+cast_shadow = 0
+
+[node name="Flash" type="OmniLight3D" parent="Player/Weapon"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.45)
+light_color = Color(1, 0.79, 0.44, 1)
+light_energy = 6.0
+omni_range = 7.0
+visible = false
+
+[node name="Director" type="Node3D" parent="."]
+script = ExtResource("5_director")
+enemy_scene_path = "${enemyModel?.path ?? ''}"
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("6_hud")
+
+[node name="Crosshair" type="Control" parent="HUD"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+
+[node name="Dot" type="ColorRect" parent="HUD/Crosshair"]
+offset_left = -2.0
+offset_top = -2.0
+offset_right = 2.0
+offset_bottom = 2.0
+color = Color(1, 1, 1, 0.75)
+
+[node name="Health" type="ProgressBar" parent="HUD"]
+offset_left = 24.0
+offset_top = -52.0
+offset_right = 264.0
+offset_bottom = -28.0
+anchor_top = 1.0
+anchor_bottom = 1.0
+max_value = 100.0
+value = 100.0
+show_percentage = false
+
+[node name="HealthLabel" type="Label" parent="HUD"]
+offset_left = 276.0
+offset_top = -54.0
+offset_right = 356.0
+offset_bottom = -26.0
+anchor_top = 1.0
+anchor_bottom = 1.0
+text = "100"
+
+[node name="Ammo" type="Label" parent="HUD"]
+offset_left = -184.0
+offset_top = -54.0
+offset_right = -24.0
+offset_bottom = -26.0
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+horizontal_alignment = 2
+text = "30 / 180"
+
+[node name="Wave" type="Label" parent="HUD"]
+offset_left = 24.0
+offset_top = 24.0
+offset_right = 224.0
+offset_bottom = 52.0
+text = "WAVE 1"
+
+[node name="Score" type="Label" parent="HUD"]
+offset_left = -184.0
+offset_top = 24.0
+offset_right = -24.0
+offset_bottom = 52.0
+anchor_left = 1.0
+anchor_right = 1.0
+horizontal_alignment = 2
+text = "000000"
+
+[node name="Centre" type="Label" parent="HUD"]
+offset_left = -260.0
+offset_top = -90.0
+offset_right = 260.0
+offset_bottom = -54.0
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+horizontal_alignment = 1
+text = ""
+
+[node name="GameOver" type="Panel" parent="HUD"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_over")
+
+[node name="Text" type="Label" parent="HUD/GameOver"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "YOU DIED"
+
+[node name="Joystick" type="Control" parent="HUD"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("2_stick")
+
+[node name="Wiring" type="Node" parent="."]
+script = ExtResource("7_wiring")
+
+[connection signal="moved" from="HUD/Joystick" to="Player" method="_on_joystick_moved"]
+`;
+}
+
 export function mainScene(spec: GameSpec): string {
+  if (isShooter(spec)) return shooterScene(spec);
+
   const models = spec.models ?? [];
 
   const rigged = models.filter((m) => m.rigged);
@@ -539,32 +892,78 @@ A Godot 4 project, generated by Chomugiri.
 | \`main.tscn\` | The scene that runs: ground, light, player, camera and the touch stick. |
 | \`player.gd\` | Movement. Touch drag and WASD feed the same vector. |
 | \`joystick.gd\` | The on-screen stick. |
-${(spec.models ?? []).some((m) => m.rigged) ? '| `character.gd` | Swings the rigged character\'s arms and legs from how fast it is moving. |\n' : ''}${(spec.models ?? [])
-    .map((m) =>
-      m.rigged
-        ? `| \`${m.path.replace('res://', '')}\` | A rigged character with a skeleton, attached to the player as **${m.node}**. |`
-        : `| \`${m.path.replace('res://', '')}\` | A generated model, placed as **${m.node}**. |`,
-    )
+${
+    isShooter(spec)
+      ? `| \`look.gd\` | First-person look: drag the right half of the screen, or move the mouse. |
+| \`weapon.gd\` | The gun — hitscan, 30-round magazine, reloads on \`R\` or when it runs dry. |
+| \`enemy.gd\` | One zombie: walks at you, hits at arm's length, falls over when killed. |
+| \`director.gd\` | Waves. Each one is bigger, faster and tougher than the last. |
+| \`hud.gd\` | Health, ammo, wave, score, and the card you get when you die. |
+| \`wiring.gd\` | Connects those four to each other in one place. |
+`
+      : ''
+  }${!isShooter(spec) && (spec.models ?? []).some((m) => m.rigged) ? '| `character.gd` | Swings the rigged character\'s arms and legs from how fast it is moving. |\n' : ''}${(spec.models ?? [])
+    .map((m) => {
+      const file = m.path.replace('res://', '');
+      // In a shooter the rigged model is what the horde is made of, so saying
+      // it is attached to the player would send someone looking for it in the
+      // wrong node.
+      if (isShooter(spec)) return `| \`${file}\` | A generated model. The Director builds every zombie from it. |`;
+      return m.rigged
+        ? `| \`${file}\` | A rigged character with a skeleton, attached to the player as **${m.node}**. |`
+        : `| \`${file}\` | A generated model, placed as **${m.node}**. |`;
+    })
     .join('\n')}
 
 ## Changing it
 
 The player moves at \`speed\` and jumps at \`jump_velocity\` — both are exported,
 so they are editable in the inspector without touching code.
+${
+    isShooter(spec)
+      ? `
+## Playing it
+
+Left half of the screen moves, right half looks, tap to fire. On a keyboard:
+WASD to move, mouse to look, shift to sprint, click to fire, \`R\` to reload.
+
+Everything that decides how hard it gets is exported on the **Director** node —
+\`first_wave_size\`, \`wave_growth\`, \`speed_step\`, \`health_step\` and the
+\`break_seconds\` between waves. The gun's \`damage\`, \`magazine\` and
+\`rounds_per_second\` are on **Player/Weapon**.
+`
+      : ''
+  }
 `;
 }
 
 /** Every file the project needs, ready to zip. */
 export function buildProject(spec: GameSpec): GodotFile[] {
+  const shooter = isShooter(spec);
+
   const files: GodotFile[] = [
     { path: 'project.godot', content: projectConfig(spec) },
     { path: 'icon.svg', content: projectIcon() },
     { path: 'main.tscn', content: mainScene(spec) },
-    { path: 'player.gd', content: playerScript() },
+    { path: 'player.gd', content: shooter ? shooterPlayerScript() : playerScript() },
     { path: 'joystick.gd', content: joystickScript() },
     { path: 'README.md', content: readme(spec) },
   ];
-  if ((spec.models ?? []).some((m) => m.rigged)) {
+
+  if (shooter) {
+    files.push(
+      { path: 'look.gd', content: lookScript() },
+      { path: 'weapon.gd', content: weaponScript() },
+      { path: 'enemy.gd', content: enemyScript() },
+      { path: 'director.gd', content: directorScript() },
+      { path: 'hud.gd', content: hudScript() },
+      { path: 'wiring.gd', content: wiringScript() },
+    );
+  }
+
+  // In first person the rigged model is the enemy, not the player, so the
+  // walk-cycle script that drives the player's own limbs has nothing to drive.
+  if (!shooter && (spec.models ?? []).some((m) => m.rigged)) {
     files.push({ path: 'character.gd', content: characterScript() });
   }
   // Music is on unless it is turned off: silence is what makes a generated

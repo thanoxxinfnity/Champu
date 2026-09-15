@@ -46,7 +46,7 @@ const magic = outcome.bytes ? String.fromCharCode(...outcome.bytes.slice(0, 4)) 
 console.log('   real glTF:   ', magic === 'glTF');
 
 // 5 — do the project files exist, and would Godot open them?
-const files = buildProject({ name: plan.name, dimension: plan.dimension,
+const files = buildProject({ name: plan.name, dimension: plan.dimension, genre: plan.genre, view: plan.view,
   models: [{ path: 'res://hero.glb', node: 'Hero', rigged: true }] })
   .map((f) => ({ path: f.path, content: f.content }));
 // The generated model goes in as a workspace file, the way the runtime adds it:

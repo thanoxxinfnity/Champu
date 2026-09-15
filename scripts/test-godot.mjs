@@ -251,3 +251,109 @@ test('the audio script uses two players, not one per zone', () => {
   assert.match(audio, /\$MusicB/);
   assert.match(audio, /_fade/);
 });
+
+// ── The shooter scaffold ────────────────────────────────────────────────────
+
+const SHOOTER = { name: 'Chomu Game', dimension: '3d', genre: 'shooter', view: 'first-person' };
+
+test('asking for a shooter produces a shooter, not the generic project', () => {
+  // The plan read "shooter, first-person" correctly and then buildProject wrote
+  // the same character-in-a-field for every genre, because nothing downstream
+  // looked at either field.
+  const paths = buildProject(SHOOTER).map((f) => f.path);
+  for (const path of ['look.gd', 'weapon.gd', 'enemy.gd', 'director.gd', 'hud.gd', 'wiring.gd']) {
+    assert.ok(paths.includes(path), `a shooter needs ${path}`);
+  }
+  assert.ok(!buildProject(SPEC).some((f) => f.path === 'weapon.gd'), 'a non-shooter gets none of it');
+});
+
+test('a shooter project passes the same validation as every other one', () => {
+  assert.deepEqual(validateProject(buildProject(SHOOTER)), []);
+  assert.deepEqual(
+    validateProject(buildProject({ ...SHOOTER, models: [{ path: 'res://z.glb', node: 'Z', rigged: true }] })),
+    [],
+  );
+});
+
+test('the shooter declares the inputs its own scripts read', () => {
+  const config = projectConfig(SHOOTER);
+  // A script polling an action that project.godot never declared is not an
+  // error in Godot — the action simply never fires, and the gun never shoots.
+  for (const action of ['fire', 'reload', 'sprint']) {
+    assert.match(config, new RegExp(`^${action}=`, 'm'), `${action} is read by a script but never declared`);
+  }
+  assert.ok(!projectConfig(SPEC).includes('fire='), 'a runner needs no fire button');
+});
+
+test('every action a shooter script polls is one the project declares', () => {
+  const config = projectConfig(SHOOTER);
+  const declared = new Set([...config.matchAll(/^([a-z_]+)=\{/gm)].map((m) => m[1]));
+  for (const file of buildProject(SHOOTER)) {
+    if (!file.path.endsWith('.gd')) continue;
+    for (const match of file.content.matchAll(/is_action_(?:just_)?(?:pressed|released)\("([^"]+)"\)/g)) {
+      assert.ok(declared.has(match[1]), `${file.path} polls "${match[1]}", which project.godot does not declare`);
+    }
+    for (const match of file.content.matchAll(/Input\.get_vector\(([^)]+)\)/g)) {
+      for (const name of match[1].match(/"([^"]+)"/g) ?? []) {
+        assert.ok(declared.has(name.slice(1, -1)), `${file.path} reads ${name}, which project.godot does not declare`);
+      }
+    }
+  }
+});
+
+test('the weapon finds its camera by walking up, not by a fixed path', () => {
+  // It hangs off the camera so it tilts when the player looks up. A hardcoded
+  // get_parent().get_node("Camera") broke the moment it was reparented.
+  const scene = mainScene(SHOOTER);
+  assert.match(scene, /\[node name="Weapon" type="Node3D" parent="Player\/Camera"\]/);
+  const weapon = buildProject(SHOOTER).find((f) => f.path === 'weapon.gd').content;
+  assert.match(weapon, /while node != null/);
+  assert.ok(!weapon.includes('get_parent().get_node_or_null("Camera")'));
+  // And the wiring has to agree about where it lives.
+  const wiring = buildProject(SHOOTER).find((f) => f.path === 'wiring.gd').content;
+  assert.match(wiring, /Player\/Camera\/Weapon/);
+});
+
+test('zombies are added deferred, or most of a wave silently never exists', () => {
+  // Measured in Godot: the first wave starts from _ready, and a plain add_child
+  // while the parent is still setting up its children fails with a printed
+  // error and no exception. Five spawned, two arrived.
+  const director = buildProject(SHOOTER).find((f) => f.path === 'director.gd').content;
+  assert.match(director, /add_child\.call_deferred\(zombie\)/);
+  assert.ok(!/\bget_parent\(\)\.add_child\(zombie\)/.test(director), 'a plain add_child drops spawns');
+});
+
+test('the shot excludes the player, or every bullet hits their own capsule', () => {
+  const weapon = buildProject(SHOOTER).find((f) => f.path === 'weapon.gd').content;
+  assert.match(weapon, /query\.exclude = \[_body\.get_rid\(\)\]/);
+});
+
+test('the death card is opaque', () => {
+  // A Panel with no style override uses the default translucent theme box, so
+  // "YOU DIED" sits over a game that is visibly still running behind it.
+  const scene = mainScene(SHOOTER);
+  assert.match(scene, /theme_override_styles\/panel = SubResource\("StyleBoxFlat_over"\)/);
+  const style = /\[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_over"\]\nbg_color = Color\([^)]*, ([\d.]+)\)/.exec(scene);
+  assert.ok(style && Number(style[1]) > 0.85, 'the card has to actually cover what is behind it');
+});
+
+test('the view-model is emissive and casts no shadow', () => {
+  // It sits centimetres from the near plane with its lit faces away from the
+  // sun. Rendered, the first version was a black wedge across the corner of the
+  // screen — and cast_shadow alone does not fix that, because it is the gun.
+  const scene = mainScene(SHOOTER);
+  assert.match(scene, /emission_enabled = true/);
+  assert.equal((scene.match(/cast_shadow = 0/g) ?? []).length, 2, 'barrel and grip both');
+});
+
+test('no generated script carries an unterminated template artifact', () => {
+  // Three separate parse failures came from a backtick inside a TypeScript
+  // template literal. tsc catches the ones that break the build; this catches
+  // the ones that slip through as text.
+  for (const file of [...buildProject(SHOOTER), ...buildProject(RIGGED)]) {
+    if (!file.path.endsWith('.gd')) continue;
+    assert.ok(file.content.length > 40, `${file.path} came out empty`);
+    assert.ok(!file.content.includes('${'), `${file.path} has an uninterpolated \${...}`);
+    assert.ok(!file.content.includes('\t '), `${file.path} mixes a tab with spaces, which Godot rejects`);
+  }
+});
