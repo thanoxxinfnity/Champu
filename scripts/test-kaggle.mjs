@@ -329,3 +329,17 @@ test('the gated background remover is replaced, not just avoided', () => {
   // And it is written before anything imports it.
   assert.ok(nb.indexOf('fh.write(SHIM)') < nb.indexOf('_compile()'));
 });
+
+test('the timeout it reports is the timeout it actually waited', async () => {
+  // A cold run gets 75 minutes and a cached one 30. The message used to compute
+  // its own number from a different default, so a cold run that waited 75
+  // minutes told the user it had waited 30 — and the obvious next move,
+  // "give it longer", was already what it had done.
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/lib/suites/godot/kaggle.ts', import.meta.url), 'utf8');
+  assert.match(src, /const budgetMs = options\.timeoutMs \?\? \(haveCache \? 30 : 75\) \* 60_000;/);
+  assert.match(src, /const deadline = Date\.now\(\) \+ budgetMs;/);
+  assert.match(src, /did not finish within \$\{Math\.round\(budgetMs \/ 60_000\)\} minutes/);
+  // And no second, independently-guessed budget anywhere in the wait path.
+  assert.ok(!/options\.timeoutMs \?\? 30 \* 60_000/.test(src));
+});

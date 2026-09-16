@@ -696,7 +696,10 @@ export async function generateOnKaggle(
   // Everything after this asks about the slug Kaggle actually made.
   const live = pushed.slug ?? slug;
 
-  const deadline = Date.now() + (options.timeoutMs ?? (haveCache ? 30 : 75) * 60_000);
+  // A cold run downloads the Pixal3D weights before it renders anything, and
+  // that alone has run past forty minutes. The cached run skips it.
+  const budgetMs = options.timeoutMs ?? (haveCache ? 30 : 75) * 60_000;
+  const deadline = Date.now() + budgetMs;
   let wait = 4_000;
   let last = '';
   let unknowns = 0;
@@ -705,7 +708,7 @@ export async function generateOnKaggle(
       return {
         models: [],
         log: '',
-        error: `The Kaggle run did not finish within ${Math.round((options.timeoutMs ?? 30 * 60_000) / 60_000)} minutes. It may still be going — ${pushed.url}`,
+        error: `The Kaggle run did not finish within ${Math.round(budgetMs / 60_000)} minutes. It may still be going — ${pushed.url}`,
         ...(pushed.url ? { url: pushed.url } : {}),
         seconds: seconds(),
       };
