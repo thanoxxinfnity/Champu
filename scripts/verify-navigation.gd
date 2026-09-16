@@ -16,6 +16,11 @@ var _player: CharacterBody3D
 var _probes: Array = []
 var _n := 0
 
+## Frames without getting any closer before a zombie counts as stuck. Generous:
+## walking round a building is a long detour that makes no progress towards the
+## player at all while it happens.
+const IDLE_LIMIT := 2500
+
 func _initialize() -> void:
 	_scene = (load("res://main.tscn") as PackedScene).instantiate()
 	root.add_child(_scene)
@@ -44,7 +49,7 @@ func _process(_d: float) -> bool:
 			z.set("target", _player)
 			z.set("speed", 3.0)
 			z.set("health", 100000.0)
-			_probes.append({"z": z, "from": spawns[i], "best": 999.0})
+			_probes.append({"z": z, "from": spawns[i], "best": 999.0, "idle": 0})
 		return false
 	if _n > 2:
 		for p in _probes:
@@ -53,14 +58,33 @@ func _process(_d: float) -> bool:
 			var z: Node3D = p["z"]
 			if not is_instance_valid(z):
 				continue
-			p["best"] = minf(p["best"], z.global_position.distance_to(_player.global_position))
+			var now: float = z.global_position.distance_to(_player.global_position)
+			# Stuck means *no longer getting closer*, not "has not arrived yet".
+			# Timing out on a fixed frame budget made this test a measure of how
+			# fast the machine was: the same level passed with no props and
+			# failed with them, because heavier assets mean fewer physics steps
+			# per frame, not a worse route.
+			if now < p["best"] - 0.05:
+				p["idle"] = 0
+			else:
+				p["idle"] += 1
+			p["best"] = minf(p["best"], now)
 			# Taken off the board once it arrives, the way a zombie that reached
 			# you would be. Sixteen of them converging on one spot otherwise pile
 			# into a scrum three metres deep, and the ones at the back get scored
 			# as blocked by a building when they are only blocked by each other.
 			if p["best"] < 2.0:
 				z.queue_free()
-	if _n < 12000:
+	# Runs until every zombie has either arrived or given up, rather than for a
+	# fixed time.
+	# Not before the probes exist: an empty list is not "everyone has arrived".
+	if _probes.is_empty():
+		return false
+	var busy := false
+	for p in _probes:
+		if p["best"] >= 2.0 and p["idle"] < IDLE_LIMIT:
+			busy = true
+	if busy and _n < 60000:
 		return false
 
 	var reached := 0
@@ -70,7 +94,9 @@ func _process(_d: float) -> bool:
 		if ok:
 			reached += 1
 		else:
-			print("  STUCK  from %-22s got within %.1fm, sitting at %s" % [str(p["from"]), p["best"], (p["z"] as Node3D).global_position])
+			print("  STUCK  from %-22s stopped getting closer at %.1fm, sitting at %s" % [
+				str(p["from"]), p["best"],
+				(p["z"] as Node3D).global_position if is_instance_valid(p["z"]) else Vector3.ZERO])
 	print("")
 	print("%d of %d zombies reached the player" % [reached, _probes.size()])
 	# Every one of them. A single zombie that cannot reach you is a spawn point

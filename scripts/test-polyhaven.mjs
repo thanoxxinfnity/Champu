@@ -119,6 +119,18 @@ test("the collision box is cut to the prop, not the prop scaled to the box", () 
   assert.equal(Number(shape[2]).toFixed(2), (0.93 * 1.34).toFixed(2));
 });
 
+test('the collision box sits on the floor, like the model it stands in for', () => {
+  // The shape is scaled but its offset was not, so a barrel scaled 1.34 had its
+  // collision box a third of a metre into the ground and a third of a metre
+  // short at the top. Invisible to look at — and the navigation bake reads
+  // collision, not art, so cover the horde could see but not walk round.
+  const scene = buildProject({ ...SHOOTER, props: [BARREL] }).find((f) => f.path === 'main.tscn').content;
+  const offset = /\[node name="Collision"[^\]]*parent="Navigation\/Arena\/Crate0"\]\ntransform = Transform3D\(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, ([\d.]+), 0\)/.exec(scene);
+  assert.ok(offset, 'no collision transform for the prop');
+  // Half the scaled height, so the box spans exactly the ground to the top.
+  assert.equal(Number(offset[1]).toFixed(3), ((0.93 * 1.34) / 2).toFixed(3));
+});
+
 test('a model whose origin is not on its base is lifted by what the glTF said', () => {
   const sunk = { ...BARREL, baseY: -0.034, scale: 2 };
   const scene = buildProject({ ...SHOOTER, props: [sunk] }).find((f) => f.path === 'main.tscn').content;

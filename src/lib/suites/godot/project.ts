@@ -742,7 +742,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${x}, ${GROUND_TOP}, ${z})
 transform = Transform3D(${scale}, 0, 0, 0, ${scale}, 0, 0, 0, ${scale}, 0, ${lift.toFixed(3)}, 0)
 
 [node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Crate${i}"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, ${(prop.size[1] / 2).toFixed(3)}, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, ${((prop.size[1] * scale) / 2).toFixed(3)}, 0)
 shape = SubResource("${propShapeId(prop)}")`;
     })
     .join('\n\n');
