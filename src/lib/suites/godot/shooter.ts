@@ -21,11 +21,24 @@
  *     `CollisionShape3D` child exists, and it silently falls through the world.
  */
 
-/** Input actions a shooter needs on top of the movement ones. */
+/**
+ * Input actions a shooter needs on top of the movement ones.
+ *
+ * `fire` is deliberately bound to **nothing**. Godot emulates a mouse click
+ * from every touch, and that setting has to stay on or the buttons in the
+ * mission-select screen stop responding — `BaseButton` only reads
+ * `InputEventMouseButton`, never `InputEventScreenTouch`. So a `fire` bound to
+ * mouse button 1 is a gun that goes off when you push the movement stick, which
+ * is what the first build did.
+ *
+ * Instead both presenters press the action themselves: the on-screen button on
+ * a phone, and `weapon.gd` on a desktop where the mouse is captured. One action,
+ * two presenters, and the mouse mode tells them apart.
+ */
 export function shooterInput(): string {
   return `fire={
 "deadzone": 0.2,
-"events": [Object(InputEventMouseButton,"button_index":1,"pressed":true)]
+"events": []
 }
 reload={
 "deadzone": 0.2,
@@ -41,10 +54,14 @@ sprint={
 /**
  * Looking around.
  *
- * Two input paths, because this ships to a phone and to a desktop editor: a
- * drag anywhere on the right half of the screen, and the mouse when it is
- * captured. The joystick owns the left half, so the split is what keeps moving
- * and looking from fighting each other.
+ * Mouse only. Touch is not read here and must not be — `touch.gd` owns every
+ * finger and hands this one a relative movement through the `look` signal.
+ *
+ * The version this replaced listened for `InputEventScreenDrag` in
+ * `_unhandled_input`, and never received one: the movement stick was a
+ * full-rect Control with the default `mouse_filter`, so it consumed every touch
+ * in `_gui_input` first. The camera could not turn, which no amount of reading
+ * this file would have explained.
  */
 export function lookScript(): string {
   return `extends Node
@@ -52,46 +69,34 @@ export function lookScript(): string {
 ## on one node, or the body leans and the capsule catches on the floor.
 
 @export var sensitivity: float = 0.0025
-@export var touch_sensitivity: float = 0.0035
 @export var pitch_limit: float = 1.4
 
 var _player: CharacterBody3D
 var _camera: Camera3D
-## The finger that is looking. -1 when none is, so a second finger on the stick
-## does not steal the camera.
-var _look_finger: int = -1
 
 
 func _ready() -> void:
 	_player = get_parent() as CharacterBody3D
 	_camera = _player.get_node_or_null("Camera") as Camera3D
 	# Captured on desktop so the mouse turns the player instead of leaving the
-	# window. Harmless on Android, where there is no cursor to capture.
-	if DisplayServer.has_feature(DisplayServer.FEATURE_MOUSE):
+	# window. Not on a phone: there is no cursor, and capturing one there has
+	# been known to swallow the touch events the controls need.
+	if DisplayServer.has_feature(DisplayServer.FEATURE_MOUSE) and not DisplayServer.is_touchscreen_available():
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _player == null or _camera == null:
 		return
-
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
-		_turn(event.relative * sensitivity)
-		return
+		_turn((event as InputEventMouseMotion).relative * sensitivity)
 
-	# The left half belongs to the movement stick.
-	if event is InputEventScreenTouch:
-		var touch := event as InputEventScreenTouch
-		if touch.pressed and touch.position.x > get_viewport().get_visible_rect().size.x * 0.5:
-			_look_finger = touch.index
-		elif not touch.pressed and touch.index == _look_finger:
-			_look_finger = -1
-		return
 
-	if event is InputEventScreenDrag:
-		var drag := event as InputEventScreenDrag
-		if drag.index == _look_finger:
-			_turn(drag.relative * touch_sensitivity)
+## Called by the touch layer, which owns the fingers. The amount arrives already
+## scaled, so there is one sensitivity for touch and one for the mouse rather
+## than two multiplications that have to agree.
+func _on_look(relative: Vector2) -> void:
+	_turn(relative)
 
 
 func _turn(amount: Vector2) -> void:
@@ -176,6 +181,25 @@ func _process(delta: float) -> void:
 
 	if Input.is_action_pressed("fire"):
 		fire()
+
+
+## Desktop only, and the mouse mode is what says so.
+##
+## On a phone the on-screen button presses \`fire\` directly. Reading the mouse
+## here as well would fire on every tap, because Godot turns every touch into a
+## mouse click — including the one that grabs the movement stick.
+func _unhandled_input(event: InputEvent) -> void:
+	if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
+		return
+	if not (event is InputEventMouseButton):
+		return
+	var click := event as InputEventMouseButton
+	if click.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if click.pressed:
+		Input.action_press("fire")
+	else:
+		Input.action_release("fire")
 
 
 func fire() -> void:
@@ -361,6 +385,11 @@ signal enemy_killed
 @export var difficulty: float = 1.0
 @export var wave_growth: int = 3
 @export var spawn_radius: float = 26.0
+## Street and alley mouths, set by the scene. A ring of a fixed radius around
+## the origin was fine on an empty square and puts a zombie inside a wall the
+## moment the block has buildings in it — where it stands still, hits nothing,
+## and keeps the wave counter from ever reaching zero.
+@export var spawn_points: PackedVector3Array = PackedVector3Array()
 @export var break_seconds: float = 5.0
 ## Each wave's zombies are a little faster and a little tougher. Without a ramp
 ## wave twelve plays exactly like wave one.
@@ -446,10 +475,7 @@ func _spawn(index: int, total: int) -> void:
 	mesh.visible = _enemy_scene == null
 	zombie.add_child(mesh)
 
-	# Evenly around the ring, jittered, so waves do not arrive in a line.
-	var angle: float = TAU * (float(index) / float(maxi(total, 1))) + randf_range(-0.2, 0.2)
-	var distance: float = spawn_radius + randf_range(-1.5, 1.5)
-	zombie.position = Vector3(cos(angle) * distance, 1.2, sin(angle) * distance)
+	zombie.position = _spawn_point(index, total)
 
 	zombie.set("target", _player)
 	zombie.set("speed", (2.4 + float(wave - 1) * speed_step) * difficulty)
@@ -460,6 +486,27 @@ func _spawn(index: int, total: int) -> void:
 	# node is busy setting up children" — which is not an exception, so the wave
 	# counter says five and three of those zombies never exist.
 	get_parent().add_child.call_deferred(zombie)
+
+
+## Where the next one walks in from.
+##
+## Spread around the given mouths rather than taken at random: picking randomly
+## means the same corner three times running, which reads as the game forgetting
+## the other three sides of the map exist. Starting at a different mouth each
+## wave keeps the pressure from always coming from the north.
+func _spawn_point(index: int, total: int) -> Vector3:
+	if spawn_points.is_empty():
+		# No block, no streets: the old ring, which is right on an open arena.
+		var angle: float = TAU * (float(index) / float(maxi(total, 1))) + randf_range(-0.2, 0.2)
+		var distance: float = spawn_radius + randf_range(-1.5, 1.5)
+		return Vector3(cos(angle) * distance, 1.2, sin(angle) * distance)
+
+	var count: int = spawn_points.size()
+	var step: int = maxi(1, int(round(float(count) / float(maxi(total, 1)))))
+	var at: Vector3 = spawn_points[(wave * 3 + index * step) % count]
+	# A metre or so of jitter, so six arriving at one mouth are a crowd rather
+	# than a column standing inside each other.
+	return at + Vector3(randf_range(-1.2, 1.2), 0.0, randf_range(-1.2, 1.2))
 
 
 func _on_enemy_died(_where: Vector3) -> void:
@@ -668,7 +715,9 @@ func is_dead() -> bool:
 	return _dead
 
 
-func _on_joystick_moved(direction: Vector2) -> void:
+## Fed by the touch layer. Analog, so it stays a vector rather than a synthesised
+## action: a thumb half way up the stick should walk, not run.
+func set_move_input(direction: Vector2) -> void:
 	touch_direction = direction
 `;
 }
@@ -693,9 +742,17 @@ export function wiringScript(): string {
 @onready var _mission: Node = get_parent().get_node("Mission")
 @onready var _missions: Node = get_parent().get_node("Missions")
 @onready var _effects: Node3D = get_parent().get_node("Effects")
+@onready var _look: Node = get_parent().get_node("Player/Look")
+@onready var _touch: Control = _hud.get_node("Touch")
 
 
 func _ready() -> void:
+	# The controls first. Everything below is scoring; this is whether the game
+	# can be played at all, and a get_node that fails here should fail before
+	# the player is looking at a scene they cannot move in.
+	_touch.moved.connect(_player.set_move_input)
+	_touch.look.connect(_look._on_look)
+
 	_player.health_changed.connect(_hud.set_health)
 	_player.died.connect(_on_player_died)
 	_weapon.ammo_changed.connect(_hud.set_ammo)

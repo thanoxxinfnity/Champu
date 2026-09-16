@@ -11,12 +11,13 @@ var _fired := false
 var _peak_zombies := 0
 var _start_health := 0.0
 var _killed := false
+var _target: Node3D
 
 
 func _initialize() -> void:
 	# Every script on its own first, so a parse error names its own file.
 	for path in ["res://player.gd", "res://look.gd", "res://weapon.gd", "res://enemy.gd",
-			"res://director.gd", "res://hud.gd", "res://wiring.gd", "res://joystick.gd", "res://audio.gd"]:
+			"res://director.gd", "res://hud.gd", "res://wiring.gd", "res://touch.gd", "res://audio.gd"]:
 		var script := load(path)
 		print("script ", path, ": ", "loaded" if script != null else "FAILED")
 		if script == null:
@@ -52,31 +53,39 @@ func _process(_delta: float) -> bool:
 			zombies += 1
 	_peak_zombies = maxi(_peak_zombies, zombies)
 
-	# Fire once the horde is up, at a zombie rather than at nothing.
-	# Every zombie in turn, until one of them is actually in the open.
+	# Bring one into the open before firing at it.
 	#
-	# Two earlier versions of this got it wrong in ways that looked like a broken
-	# gun: the first shot at whichever zombie came first and hit a crate, which is
-	# the cover doing its job; the second teleported one into the open and fired
-	# in the same frame, which misses because the physics server still has the
-	# body at its old position until the next physics step.
-	if _ticks >= 150 and zombies > 0 and not _fired:
+	# The arena used to be a flat square with sixteen crates, and shooting at
+	# whichever zombie came first usually found one. It is a city block now, and
+	# at twenty-five metres every single one of them is behind a building —
+	# which is the cover working, not the gun failing. So the test puts one where
+	# it can be seen and asks the only question it is actually asking: does a
+	# shot that reaches a zombie hurt it?
+	if _ticks == 150:
+		for child in _scene.get_children():
+			if child is CharacterBody3D and child != _player:
+				child.global_position = _player.global_position + Vector3(0.0, 0.0, -4.0)
+				_target = child
+				break
+
+	# Four frames later, never the same one: the physics server still has the
+	# body at its old position until the next physics step, so a ray cast in the
+	# frame it was moved goes through empty space where it used to be. Two
+	# earlier versions of this test failed exactly that way and read as a broken
+	# gun.
+	if _ticks == 154 and _target != null and not _fired:
 		_fired = true
 		var camera := _scene.get_node("Player/Camera") as Camera3D
-		for child in _scene.get_children():
-			if not (child is CharacterBody3D) or child == _player:
-				continue
-			camera.look_at(child.global_position + Vector3(0, 0.95, 0), Vector3.UP)
-			var before: float = child.health
-			for i in 8:
-				_weapon.fire()
-				_weapon._cooldown = 0.0
-			if child.health < before:
-				print("zombie health ", before, " -> ", child.health, "  (damage lands: true)")
-				_killed = true
-				break
-		if not _killed:
-			print("no zombie took a hit — every one of them was behind cover")
+		camera.look_at(_target.global_position + Vector3(0, 0.95, 0), Vector3.UP)
+		var before: float = _target.health
+		for i in 8:
+			_weapon.fire()
+			_weapon._cooldown = 0.0
+		if _target.health < before:
+			print("zombie health ", before, " -> ", _target.health, "  (damage lands: true)")
+			_killed = true
+		else:
+			print("a zombie in the open, in the middle of the crosshair, took nothing")
 
 	# One zombie dragged to arm's length, so the melee path is exercised without
 	# waiting the eleven seconds it takes to walk in from the spawn ring.

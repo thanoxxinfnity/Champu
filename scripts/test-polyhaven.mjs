@@ -106,7 +106,7 @@ const BARREL = { path: 'res://assets/barrel_03/barrel_03.gltf', size: [0.63, 0.9
 test('a prop stands on the floor rather than inside it', () => {
   const scene = buildProject({ ...SHOOTER, props: [BARREL] }).find((f) => f.path === 'main.tscn').content;
   // The body sits on the ground slab's top face, and the art is not dropped.
-  assert.match(scene, /\[node name="Crate0"[^\]]*\]\ntransform = Transform3D\(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 0\.25, -7\)/);
+  assert.match(scene, /\[node name="Crate0"[^\]]*\]\ntransform = Transform3D\(1, 0, 0, 0, 1, 0, 0, 0, 1, -6\.5, 0\.25, -22\)/);
   assert.match(scene, /\[node name="Art" parent="Arena\/Crate0" instance=ExtResource\("[^"]+"\)\]/);
 });
 
