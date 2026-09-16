@@ -19,6 +19,7 @@
 import { animatorScript, effectsScript, pickupScript } from './effects.ts';
 import { SHOOTER_TOUCH, touchControlsNode, touchControlsScript } from './touch.ts';
 import { cityBlock, describeBlock, tiltedBasis } from './layout.ts';
+import { navigationMeshResource, navigationScript } from './navigation.ts';
 import { campaign, describeMissions, missionData, missionRunner, missionSelect } from './missions.ts';
 import {
   directorScript,
@@ -534,6 +535,7 @@ export function shooterScene(spec: GameSpec): string {
     `[ext_resource type="Script" path="res://mission_runner.gd" id="8_runner"]`,
     `[ext_resource type="Script" path="res://missions.gd" id="9_missions"]`,
     `[ext_resource type="Script" path="res://effects.gd" id="10_effects"]`,
+    `[ext_resource type="Script" path="res://navigation.gd" id="11_nav"]`,
   ];
 
   const modelIdBase = ext.length + 1;
@@ -650,11 +652,18 @@ size = Vector3(${building.size.join(', ')})`);
     sub.push(`[sub_resource type="BoxShape3D" id="BoxShape3D_${building.name}"]
 size = Vector3(${building.size.join(', ')})`);
   }
+  sub.push(navigationMeshResource('NavigationMesh_arena'));
+
   const rampSize = block.ramp.size.map((n) => Number(n.toFixed(3))).join(', ');
   sub.push(`[sub_resource type="BoxMesh" id="BoxMesh_ramp"]
 size = Vector3(${rampSize})`);
   sub.push(`[sub_resource type="BoxShape3D" id="BoxShape3D_ramp"]
 size = Vector3(${rampSize})`);
+  const railSize = block.rails[0].size.map((n) => Number(n.toFixed(3))).join(', ');
+  sub.push(`[sub_resource type="BoxMesh" id="BoxMesh_rail"]
+size = Vector3(${railSize})`);
+  sub.push(`[sub_resource type="BoxShape3D" id="BoxShape3D_rail"]
+size = Vector3(${railSize})`);
   sub.push(`[sub_resource type="BoxMesh" id="BoxMesh_deck"]
 size = Vector3(${block.overlook.size.join(', ')})`);
   sub.push(`[sub_resource type="BoxShape3D" id="BoxShape3D_deck"]
@@ -685,14 +694,14 @@ size = Vector3(${(w * scale).toFixed(3)}, ${(h * scale).toFixed(3)}, ${(d * scal
     ['West', '0, 0, -1, 0, 1, 0, 1, 0, 0, -32, 2.5, 0'],
   ]
     .map(
-      ([name, transform]) => `[node name="Wall${name}" type="StaticBody3D" parent="Arena"]
+      ([name, transform]) => `[node name="Wall${name}" type="StaticBody3D" parent="Navigation/Arena"]
 transform = Transform3D(${transform})
 
-[node name="Mesh" type="MeshInstance3D" parent="Arena/Wall${name}"]
+[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Wall${name}"]
 mesh = SubResource("BoxMesh_wall")
 material_override = SubResource("StandardMaterial3D_wall")
 
-[node name="Collision" type="CollisionShape3D" parent="Arena/Wall${name}"]
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Wall${name}"]
 shape = SubResource("BoxShape3D_wall")`,
     )
     .join('\n\n');
@@ -706,14 +715,14 @@ shape = SubResource("BoxShape3D_wall")`,
       const prop = props[i % props.length];
 
       if (!prop) {
-        return `[node name="Crate${i}" type="StaticBody3D" parent="Arena"]
+        return `[node name="Crate${i}" type="StaticBody3D" parent="Navigation/Arena"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${x}, ${GROUND_TOP + 1.2}, ${z})
 
-[node name="Mesh" type="MeshInstance3D" parent="Arena/Crate${i}"]
+[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Crate${i}"]
 mesh = SubResource("BoxMesh_crate")
 material_override = SubResource("StandardMaterial3D_crate")
 
-[node name="Collision" type="CollisionShape3D" parent="Arena/Crate${i}"]
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Crate${i}"]
 shape = SubResource("BoxShape3D_crate")`;
       }
 
@@ -726,13 +735,13 @@ shape = SubResource("BoxShape3D_crate")`;
       // The collision box is cut to the prop instead of the prop being scaled
       // to the box. Hiding behind a barrel that is half the size of the thing
       // stopping the bullets is the single most obvious way cover feels broken.
-      return `[node name="Crate${i}" type="StaticBody3D" parent="Arena"]
+      return `[node name="Crate${i}" type="StaticBody3D" parent="Navigation/Arena"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${x}, ${GROUND_TOP}, ${z})
 
-[node name="Art" parent="Arena/Crate${i}" instance=ExtResource("${propId(prop.path)}")]
+[node name="Art" parent="Navigation/Arena/Crate${i}" instance=ExtResource("${propId(prop.path)}")]
 transform = Transform3D(${scale}, 0, 0, 0, ${scale}, 0, 0, 0, ${scale}, 0, ${lift.toFixed(3)}, 0)
 
-[node name="Collision" type="CollisionShape3D" parent="Arena/Crate${i}"]
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Crate${i}"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, ${(prop.size[1] / 2).toFixed(3)}, 0)
 shape = SubResource("${propShapeId(prop)}")`;
     })
@@ -744,14 +753,14 @@ shape = SubResource("${propShapeId(prop)}")`;
     .map((building) => {
       const [w, h, d] = building.size;
       const [x, z] = building.at;
-      return `[node name="${building.name}" type="StaticBody3D" parent="Arena"]
+      return `[node name="${building.name}" type="StaticBody3D" parent="Navigation/Arena"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${x}, ${GROUND_TOP + h / 2}, ${z})
 
-[node name="Mesh" type="MeshInstance3D" parent="Arena/${building.name}"]
+[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/${building.name}"]
 mesh = SubResource("BoxMesh_${building.name}")
 material_override = SubResource("${WALL_MATERIALS[building.material]}")
 
-[node name="Collision" type="CollisionShape3D" parent="Arena/${building.name}"]
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/${building.name}"]
 shape = SubResource("BoxShape3D_${building.name}")`;
     })
     .join('\n\n');
@@ -759,24 +768,38 @@ shape = SubResource("BoxShape3D_${building.name}")`;
   // The only way up, and a slope rather than a ledge: a CharacterBody3D walks
   // up anything under floor_max_angle and cannot climb a step taller than its
   // jump, so a ramp is the one route that cannot be got wrong.
-  const climb = `[node name="Ramp" type="StaticBody3D" parent="Arena"]
+  const climb = `[node name="Ramp" type="StaticBody3D" parent="Navigation/Arena"]
 transform = Transform3D(${tiltedBasis(block.ramp.tilt)}, ${block.ramp.at.join(', ')})
 
-[node name="Mesh" type="MeshInstance3D" parent="Arena/Ramp"]
+[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Ramp"]
 mesh = SubResource("BoxMesh_ramp")
 material_override = SubResource("StandardMaterial3D_wallC")
 
-[node name="Collision" type="CollisionShape3D" parent="Arena/Ramp"]
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Ramp"]
 shape = SubResource("BoxShape3D_ramp")
 
-[node name="Overlook" type="StaticBody3D" parent="Arena"]
+${block.rails
+    .map(
+      (rail, i) => `[node name="Rail${i}" type="StaticBody3D" parent="Navigation/Arena"]
+transform = Transform3D(${tiltedBasis(block.ramp.tilt)}, ${rail.at.join(', ')})
+
+[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Rail${i}"]
+mesh = SubResource("BoxMesh_rail")
+material_override = SubResource("StandardMaterial3D_wallC")
+
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Rail${i}"]
+shape = SubResource("BoxShape3D_rail")`,
+    )
+    .join('\n\n')}
+
+[node name="Overlook" type="StaticBody3D" parent="Navigation/Arena"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${block.overlook.at.join(', ')})
 
-[node name="Mesh" type="MeshInstance3D" parent="Arena/Overlook"]
+[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Overlook"]
 mesh = SubResource("BoxMesh_deck")
 material_override = SubResource("StandardMaterial3D_wallC")
 
-[node name="Collision" type="CollisionShape3D" parent="Arena/Overlook"]
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Overlook"]
 shape = SubResource("BoxShape3D_deck")`;
 
   return `[gd_scene load_steps=${loadSteps} format=3 uid="${sceneUid(spec.name)}"]
@@ -796,15 +819,19 @@ light_color = Color(1, 0.86, 0.72, 1)
 light_energy = 1.15
 shadow_enabled = true
 
-[node name="Arena" type="Node3D" parent="."]
+[node name="Navigation" type="NavigationRegion3D" parent="."]
+navigation_mesh = SubResource("NavigationMesh_arena")
+script = ExtResource("11_nav")
 
-[node name="Ground" type="StaticBody3D" parent="Arena"]
+[node name="Arena" type="Node3D" parent="Navigation"]
 
-[node name="Mesh" type="MeshInstance3D" parent="Arena/Ground"]
+[node name="Ground" type="StaticBody3D" parent="Navigation/Arena"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Ground"]
 mesh = SubResource("BoxMesh_ground")
 material_override = SubResource("StandardMaterial3D_ground")
 
-[node name="Collision" type="CollisionShape3D" parent="Arena/Ground"]
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Ground"]
 shape = SubResource("BoxShape3D_ground")
 
 ${walls}
@@ -1210,6 +1237,9 @@ export function buildProject(spec: GameSpec): GodotFile[] {
       // Feedback. A gun that does not flash and a hit that does not spray read
       // as unfinished however correct the code underneath is.
       { path: 'effects.gd', content: effectsScript() },
+      // The horde has to get round the block. Without this, ten of the sixteen
+      // street mouths lead into a wall the zombie presses against forever.
+      { path: 'navigation.gd', content: navigationScript() },
       { path: 'animator.gd', content: animatorScript() },
       { path: 'pickup.gd', content: pickupScript() },
     );

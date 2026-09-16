@@ -63,6 +63,19 @@ export interface Block {
   spawns: Array<[number, number]>;
   /** The ramp up to the overlook: centre, size, and its tilt in radians. */
   ramp: { at: [number, number, number]; size: [number, number, number]; tilt: number };
+  /**
+   * Kerbs down both edges of the ramp.
+   *
+   * Not decoration. A bare ramp is a wedge, and along its sides it passes
+   * through every height between nothing and four metres. The navigation bake
+   * sees the shallow part of that and connects it to the street — `agent_max_climb`
+   * says a step of a few centimetres is fine — so it routes an enemy at the
+   * ramp's *side*. A `CharacterBody3D` has no step-up at all, so the enemy
+   * grinds against the edge forever, one waypoint from a path that was
+   * otherwise perfectly good. A real loading ramp has kerbs; this one needs
+   * them to be true.
+   */
+  rails: Array<{ at: [number, number, number]; size: [number, number, number] }>;
   /** The roof it leads to. */
   overlook: { at: [number, number, number]; size: [number, number, number] };
 }
@@ -173,7 +186,14 @@ export function cityBlock(): Block {
   const deckTop = 4.25;
   /** The deck's far edge, hard against the Store's south face. */
   const deckFar = -8;
-  const rampCentreZ = 0;
+  // Pushed north so the ramp does not straddle the east-west street.
+  //
+  // Centred, its footprint ran from z=-5 to z=+5 in a street whose obstacles
+  // start at z=8, leaving gaps too thin on both sides for a navigation agent to
+  // route through — and a zombie coming down that street simply stopped at the
+  // ramp's corner. A ramp is allowed to be in the road; it is not allowed to be
+  // the road's only width.
+  const rampCentreZ = -1.5;
 
   // Both corners of the walkable surface, from the box's own geometry rather
   // than from a guess. Half the length along the slope, plus half the thickness
@@ -187,12 +207,30 @@ export function cityBlock(): Block {
   /** Where the climb ends. The deck has to start here or you walk off it. */
   const rampTopZ = rampCentreZ - alongZ + outZ;
 
+  // Along the ramp's own up-vector, which is (0, cos, sin) once it is tilted.
+  const up: [number, number] = [Math.cos(tilt), Math.sin(tilt)];
+  const railHeight = 1.3;
+  const railWidth = 0.35;
+  const rampX = 16.5;
+  const rampWidth = 5;
+  // From the slab's centre out to its surface, then half a rail higher.
+  const lift = thickness / 2 + railHeight / 2;
+  const rail = (side: -1 | 1): { at: [number, number, number]; size: [number, number, number] } => ({
+    at: [
+      rampX + side * (rampWidth / 2 - railWidth / 2),
+      round(centreY + up[0] * lift),
+      round(rampCentreZ + up[1] * lift),
+    ],
+    size: [railWidth, railHeight, slope],
+  });
+
   return {
     extent: 32,
     buildings,
     cover,
     spawns,
-    ramp: { at: [16.5, round(centreY), rampCentreZ], size: [5, thickness, slope], tilt },
+    ramp: { at: [rampX, round(centreY), rampCentreZ], size: [rampWidth, thickness, slope], tilt },
+    rails: [rail(-1), rail(1)],
     // Sized to meet the ramp, never set by hand. Set by hand it was a metre
     // short, and a metre short is a player who climbs the whole ramp, steps off
     // the top into thin air, and lands wedged against the front of the roof

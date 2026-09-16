@@ -28,7 +28,7 @@ func _initialize() -> void:
 	_scene = (load("res://main.tscn") as PackedScene).instantiate()
 	root.add_child(_scene)
 	_player = _scene.get_node("Player")
-	_arena = _scene.get_node("Arena")
+	_arena = _scene.get_node("Navigation/Arena")
 	# Nothing should shoot at us while we survey the map.
 	_scene.get_node("Director").set_process(false)
 

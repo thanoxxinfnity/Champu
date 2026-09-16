@@ -21,6 +21,8 @@
  *     `CollisionShape3D` child exists, and it silently falls through the world.
  */
 
+import { ENEMY_NAVIGATION } from './navigation.ts';
+
 /**
  * Input actions a shooter needs on top of the movement ones.
  *
@@ -284,6 +286,7 @@ signal died(position: Vector3)
 @export var damage: float = 12.0
 @export var attack_range: float = 1.9
 @export var attack_seconds: float = 1.1
+${ENEMY_NAVIGATION.fields}
 
 var target: Node3D
 var _attack_cooldown: float = 0.0
@@ -298,6 +301,8 @@ func _ready() -> void:
 	var mesh := get_node_or_null("Mesh") as MeshInstance3D
 	if mesh != null and mesh.get_surface_override_material(0) is StandardMaterial3D:
 		_material = mesh.get_surface_override_material(0) as StandardMaterial3D
+
+${ENEMY_NAVIGATION.ready}
 
 
 func _physics_process(delta: float) -> void:
@@ -323,7 +328,9 @@ func _physics_process(delta: float) -> void:
 	var distance: float = to_target.length()
 
 	if distance > attack_range:
-		var direction: Vector3 = to_target.normalized()
+		# Around the block, not through it. Ten of sixteen used to press into a
+		# building and stay there, which is a wave that never clears.
+		var direction: Vector3 = _walk_direction(to_target, delta)
 		velocity.x = direction.x * speed
 		velocity.z = direction.z * speed
 		# Faces where it is going. Only the yaw, or it tips forward into the floor.
@@ -338,6 +345,9 @@ func _physics_process(delta: float) -> void:
 				target.take_damage(damage)
 
 	move_and_slide()
+
+
+${ENEMY_NAVIGATION.direction}
 
 
 func take_damage(amount: float, _from: Vector3 = Vector3.ZERO) -> void:

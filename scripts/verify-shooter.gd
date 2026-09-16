@@ -40,7 +40,7 @@ func _initialize() -> void:
 		"  Weapon: ", _weapon != null, "  HUD: ", _hud != null)
 	print("Camera at eye height: ", _scene.get_node_or_null("Player/Camera").position)
 	print("Look node: ", _scene.get_node_or_null("Player/Look") != null)
-	print("cover pieces: ", _scene.get_node("Arena").get_child_count() - 5, "  walls: 4")
+	print("cover pieces: ", _scene.get_node("Navigation/Arena").get_child_count() - 5, "  walls: 4")
 	_start_health = _player.health
 
 
