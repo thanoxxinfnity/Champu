@@ -17,9 +17,19 @@
  */
 
 import { animatorScript, effectsScript, pickupScript } from './effects.ts';
-import { SHOOTER_TOUCH, touchControlsNode, touchControlsScript } from './touch.ts';
-import { cityBlock, describeBlock, tiltedBasis } from './layout.ts';
+import { SHOOTER_TOUCH, touchControlsNode, touchControlsScript, type TouchSpec } from './touch.ts';
+import { cityBlock, describeBlock, tiltedBasis, type Block } from './layout.ts';
 import { navigationMeshResource, navigationScript } from './navigation.ts';
+import {
+  cityJobs,
+  isOpenWorld,
+  openWorldInput,
+  openWorldNodes,
+  cityHudScript,
+  openWorldResources,
+  openWorldWiringScript,
+} from './openworld.ts';
+import { carDoorScript, carScript, orbitCameraScript, walkerScript } from './thirdperson.ts';
 import { campaign, describeMissions, missionData, missionRunner, missionSelect } from './missions.ts';
 import {
   directorScript,
@@ -190,7 +200,7 @@ config_version=5
 [application]
 
 config/name="${spec.name.replace(/"/g, '\\"')}"
-${isShooter(spec) ? 'run/main_scene="res://mission_select.tscn"' : 'run/main_scene="res://main.tscn"'}
+${isShooter(spec) || isOpenWorld(spec) ? 'run/main_scene="res://mission_select.tscn"' : 'run/main_scene="res://main.tscn"'}
 config/features=PackedStringArray("4.3", "Mobile")
 config/icon="res://icon.svg"
 
@@ -224,7 +234,7 @@ jump={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"keycode":32,"pressed":true)]
 }
-${isShooter(spec) ? shooterInput() : ''}
+${isShooter(spec) ? shooterInput() : isOpenWorld(spec) ? openWorldInput() : ''}
 [rendering]
 
 renderer/rendering_method="mobile"
@@ -520,48 +530,199 @@ func set_music_volume(db: float) -> void:
 /** The top face of the ground slab: 0.5 thick, centred on the origin. */
 const GROUND_TOP = 0.25;
 
-export function shooterScene(spec: GameSpec): string {
-  const models = spec.models ?? [];
-  const block = cityBlock();
+/**
+ * The block, as scene text.
+ *
+ * Extracted so the shooter and the open-world city are the *same* city rather
+ * than two that drift apart. Every fix to the streets — the ramp that needed
+ * kerbs, the cover that clipped a wall, the spawn points that had to be on a
+ * road — would otherwise have to be made twice, and the second one would be
+ * made late or not at all.
+ *
+ * Returns the sub-resources it needs and the nodes that use them, because a
+ * `.tscn` declares the first before the second and the caller owns the order.
+ */
+export function cityArena(
+  block: Block,
+  props: NonNullable<GameSpec['props']>,
+  ids: { propId: (path: string) => string; propShapeId: (prop: { path: string }) => string },
+): { sub: string[]; nodes: string } {
+  const sub: string[] = [];
+  const propId = ids.propId;
+  const propShapeId = ids.propShapeId;
 
-  const ext: string[] = [
-    `[ext_resource type="Script" path="res://player.gd" id="1_player"]`,
-    `[ext_resource type="Script" path="res://touch.gd" id="2_touch"]`,
-    `[ext_resource type="Script" path="res://look.gd" id="3_look"]`,
-    `[ext_resource type="Script" path="res://weapon.gd" id="4_weapon"]`,
-    `[ext_resource type="Script" path="res://director.gd" id="5_director"]`,
-    `[ext_resource type="Script" path="res://hud.gd" id="6_hud"]`,
-    `[ext_resource type="Script" path="res://wiring.gd" id="7_wiring"]`,
-    `[ext_resource type="Script" path="res://mission_runner.gd" id="8_runner"]`,
-    `[ext_resource type="Script" path="res://missions.gd" id="9_missions"]`,
-    `[ext_resource type="Script" path="res://effects.gd" id="10_effects"]`,
-    `[ext_resource type="Script" path="res://navigation.gd" id="11_nav"]`,
-  ];
+  sub.push(navigationMeshResource('NavigationMesh_arena'));
 
-  const modelIdBase = ext.length + 1;
-  models.forEach((model, i) => {
-    ext.push(`[ext_resource type="PackedScene" path="${model.path}" id="${modelIdBase + i}_model${i}"]`);
-  });
+  // A mesh and a shape per building. One shared 1x1x1 box scaled per node would
+  // be fewer resources and a worse idea: non-uniform scale on a StaticBody3D
+  // scales its collision shape too, and the two drift apart the moment anyone
+  // edits one of them.
+  for (const building of block.buildings) {
+    sub.push(`[sub_resource type="BoxMesh" id="BoxMesh_${building.name}"]
+size = Vector3(${building.size.join(', ')})`);
+    sub.push(`[sub_resource type="BoxShape3D" id="BoxShape3D_${building.name}"]
+size = Vector3(${building.size.join(', ')})`);
+  }
 
-  // Real props for the cover, when any were downloaded. Declared once each and
-  // reused across the sixteen positions — sixteen ext_resources pointing at the
-  // same file is sixteen imports of the same textures.
-  const props = spec.props ?? [];
-  const propIds = new Map<string, string>();
-  props.forEach((prop, i) => {
-    if (propIds.has(prop.path)) return;
-    const id = `${modelIdBase + models.length + i}_prop${i}`;
-    propIds.set(prop.path, id);
-    ext.push(`[ext_resource type="PackedScene" path="${prop.path}" id="${id}"]`);
-  });
-  const propId = (path: string): string => propIds.get(path) ?? '';
+  const rampSize = block.ramp.size.map((n) => Number(n.toFixed(3))).join(', ');
+  const railSize = block.rails[0].size.map((n) => Number(n.toFixed(3))).join(', ');
+  sub.push(`[sub_resource type="BoxMesh" id="BoxMesh_ramp"]
+size = Vector3(${rampSize})`);
+  sub.push(`[sub_resource type="BoxShape3D" id="BoxShape3D_ramp"]
+size = Vector3(${rampSize})`);
+  sub.push(`[sub_resource type="BoxMesh" id="BoxMesh_rail"]
+size = Vector3(${railSize})`);
+  sub.push(`[sub_resource type="BoxShape3D" id="BoxShape3D_rail"]
+size = Vector3(${railSize})`);
+  sub.push(`[sub_resource type="BoxMesh" id="BoxMesh_deck"]
+size = Vector3(${block.overlook.size.join(', ')})`);
+  sub.push(`[sub_resource type="BoxShape3D" id="BoxShape3D_deck"]
+size = Vector3(${block.overlook.size.join(', ')})`);
 
-  // The generated character becomes the zombie rather than the player's own
-  // body: in first person the player never sees themselves, and a rigged mesh
-  // parented around the camera is a wall of polygons at the near plane.
-  const enemyModel = models.find((m) => m.rigged) ?? models[0];
+  // Four walls off one mesh and one shape. Transform3D is row-major: these are
+  // quarter turns of a symmetric box, which is why they are their own transpose
+  // and never revealed that — see layout.ts.
+  const walls = [
+    ['North', '1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, -32'],
+    ['South', '1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 32'],
+    ['East', '0, 0, -1, 0, 1, 0, 1, 0, 0, 32, 2.5, 0'],
+    ['West', '0, 0, -1, 0, 1, 0, 1, 0, 0, -32, 2.5, 0'],
+  ]
+    .map(
+      ([name, transform]) => `[node name="Wall${name}" type="StaticBody3D" parent="Navigation/Arena"]
+transform = Transform3D(${transform})
 
-  const sub = [
+[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Wall${name}"]
+mesh = SubResource("BoxMesh_wall")
+material_override = SubResource("StandardMaterial3D_wall")
+
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Wall${name}"]
+shape = SubResource("BoxShape3D_wall")`,
+    )
+    .join('\n\n');
+
+  const WALL_MATERIALS = ['StandardMaterial3D_wallA', 'StandardMaterial3D_wallB', 'StandardMaterial3D_wallC'];
+
+  const blocks = block.buildings
+    .map((building) => {
+      const [w, h, d] = building.size;
+      const [x, z] = building.at;
+      return `[node name="${building.name}" type="StaticBody3D" parent="Navigation/Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${x}, ${GROUND_TOP + h / 2}, ${z})
+
+[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/${building.name}"]
+mesh = SubResource("BoxMesh_${building.name}")
+material_override = SubResource("${WALL_MATERIALS[building.material]}")
+
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/${building.name}"]
+shape = SubResource("BoxShape3D_${building.name}")`;
+    })
+    .join('\n\n');
+
+  // The only way up, and a slope rather than a ledge. The kerbs are not
+  // decoration: without them the navigation bake connects the shallow part of
+  // the wedge to the street and routes enemies at the ramp's side, where a
+  // CharacterBody3D — which steps up nothing — grinds forever.
+  const climb = `[node name="Ramp" type="StaticBody3D" parent="Navigation/Arena"]
+transform = Transform3D(${tiltedBasis(block.ramp.tilt)}, ${block.ramp.at.join(', ')})
+
+[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Ramp"]
+mesh = SubResource("BoxMesh_ramp")
+material_override = SubResource("StandardMaterial3D_wallC")
+
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Ramp"]
+shape = SubResource("BoxShape3D_ramp")
+
+${block.rails
+  .map(
+    (rail, i) => `[node name="Rail${i}" type="StaticBody3D" parent="Navigation/Arena"]
+transform = Transform3D(${tiltedBasis(block.ramp.tilt)}, ${rail.at.join(', ')})
+
+[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Rail${i}"]
+mesh = SubResource("BoxMesh_rail")
+material_override = SubResource("StandardMaterial3D_wallC")
+
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Rail${i}"]
+shape = SubResource("BoxShape3D_rail")`,
+  )
+  .join('\n\n')}
+
+[node name="Overlook" type="StaticBody3D" parent="Navigation/Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${block.overlook.at.join(', ')})
+
+[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Overlook"]
+mesh = SubResource("BoxMesh_deck")
+material_override = SubResource("StandardMaterial3D_wallC")
+
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Overlook"]
+shape = SubResource("BoxShape3D_deck")`;
+
+  const crates = block.cover
+    .map(([x, z], i) => {
+      const prop = props[i % props.length];
+      if (!prop) {
+        return `[node name="Crate${i}" type="StaticBody3D" parent="Navigation/Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${x}, ${GROUND_TOP + 1.2}, ${z})
+
+[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Crate${i}"]
+mesh = SubResource("BoxMesh_crate")
+material_override = SubResource("StandardMaterial3D_crate")
+
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Crate${i}"]
+shape = SubResource("BoxShape3D_crate")`;
+      }
+      const scale = prop.scale ?? 1;
+      const lift = -(prop.baseY ?? 0) * scale;
+      // The box is scaled *and* so is its offset. Scaling only the first put a
+      // barrel's collision a third of a metre into the ground — invisible to
+      // look at, and the navigation bake reads collision, not art.
+      return `[node name="Crate${i}" type="StaticBody3D" parent="Navigation/Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${x}, ${GROUND_TOP}, ${z})
+
+[node name="Art" parent="Navigation/Arena/Crate${i}" instance=ExtResource("${propId(prop.path)}")]
+transform = Transform3D(${scale}, 0, 0, 0, ${scale}, 0, 0, 0, ${scale}, 0, ${lift.toFixed(3)}, 0)
+
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Crate${i}"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, ${((prop.size[1] * scale) / 2).toFixed(3)}, 0)
+shape = SubResource("${propShapeId(prop)}")`;
+    })
+    .join('\n\n');
+
+  const nodes = `[node name="Navigation" type="NavigationRegion3D" parent="."]
+navigation_mesh = SubResource("NavigationMesh_arena")
+script = ExtResource("11_nav")
+
+[node name="Arena" type="Node3D" parent="Navigation"]
+
+[node name="Ground" type="StaticBody3D" parent="Navigation/Arena"]
+
+[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Ground"]
+mesh = SubResource("BoxMesh_ground")
+material_override = SubResource("StandardMaterial3D_ground")
+
+[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Ground"]
+shape = SubResource("BoxShape3D_ground")
+
+${walls}
+
+${blocks}
+
+${climb}
+
+${crates}`;
+
+  return { sub, nodes };
+}
+
+/**
+ * The city's own resources: sky, ground, walls, cover.
+ *
+ * Shared by every scene built on the block, so a change to the fog or the
+ * roughness of the tarmac lands in both games rather than in whichever one was
+ * being edited that day.
+ */
+const WORLD_RESOURCES: string[] = [
+
     `[sub_resource type="ProceduralSkyMaterial" id="Sky_dusk"]
 sky_top_color = Color(0.12, 0.13, 0.18, 1)
 sky_horizon_color = Color(0.36, 0.26, 0.22, 1)
@@ -615,6 +776,56 @@ size = Vector3(2.4, 2.4, 2.4)`,
     `[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_crate"]
 albedo_color = Color(0.36, 0.28, 0.18, 1)
 roughness = 0.85`,
+    // A Panel with no style override uses the default theme's translucent one,
+    // so the card that ends the game appears over one that is still visibly
+    // running behind it. Shared: both games end.
+    `[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_over"]
+bg_color = Color(0.05, 0.04, 0.04, 0.93)`,
+];
+
+export function shooterScene(spec: GameSpec): string {
+  const models = spec.models ?? [];
+  const block = cityBlock();
+
+  const ext: string[] = [
+    `[ext_resource type="Script" path="res://player.gd" id="1_player"]`,
+    `[ext_resource type="Script" path="res://touch.gd" id="2_touch"]`,
+    `[ext_resource type="Script" path="res://look.gd" id="3_look"]`,
+    `[ext_resource type="Script" path="res://weapon.gd" id="4_weapon"]`,
+    `[ext_resource type="Script" path="res://director.gd" id="5_director"]`,
+    `[ext_resource type="Script" path="res://hud.gd" id="6_hud"]`,
+    `[ext_resource type="Script" path="res://wiring.gd" id="7_wiring"]`,
+    `[ext_resource type="Script" path="res://mission_runner.gd" id="8_runner"]`,
+    `[ext_resource type="Script" path="res://missions.gd" id="9_missions"]`,
+    `[ext_resource type="Script" path="res://effects.gd" id="10_effects"]`,
+    `[ext_resource type="Script" path="res://navigation.gd" id="11_nav"]`,
+  ];
+
+  const modelIdBase = ext.length + 1;
+  models.forEach((model, i) => {
+    ext.push(`[ext_resource type="PackedScene" path="${model.path}" id="${modelIdBase + i}_model${i}"]`);
+  });
+
+  // Real props for the cover, when any were downloaded. Declared once each and
+  // reused across the sixteen positions — sixteen ext_resources pointing at the
+  // same file is sixteen imports of the same textures.
+  const props = spec.props ?? [];
+  const propIds = new Map<string, string>();
+  props.forEach((prop, i) => {
+    if (propIds.has(prop.path)) return;
+    const id = `${modelIdBase + models.length + i}_prop${i}`;
+    propIds.set(prop.path, id);
+    ext.push(`[ext_resource type="PackedScene" path="${prop.path}" id="${id}"]`);
+  });
+  const propId = (path: string): string => propIds.get(path) ?? '';
+
+  // The generated character becomes the zombie rather than the player's own
+  // body: in first person the player never sees themselves, and a rigged mesh
+  // parented around the camera is a wall of polygons at the near plane.
+  const enemyModel = models.find((m) => m.rigged) ?? models[0];
+
+  const sub = [
+    ...WORLD_RESOURCES,
     `[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
 height = 1.8
 radius = 0.4`,
@@ -636,10 +847,6 @@ roughness = 0.45
 emission_enabled = true
 emission = Color(0.42, 0.43, 0.48, 1)
 emission_energy_multiplier = 0.55`,
-    // A Panel with no style override uses the default theme's translucent one,
-    // so "YOU DIED" appears over a game that is still visibly running behind it.
-    `[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_over"]
-bg_color = Color(0.05, 0.04, 0.04, 0.93)`,
   ];
 
   // A mesh and a shape per building. One shared 1x1x1 box scaled per node would
@@ -652,23 +859,6 @@ size = Vector3(${building.size.join(', ')})`);
     sub.push(`[sub_resource type="BoxShape3D" id="BoxShape3D_${building.name}"]
 size = Vector3(${building.size.join(', ')})`);
   }
-  sub.push(navigationMeshResource('NavigationMesh_arena'));
-
-  const rampSize = block.ramp.size.map((n) => Number(n.toFixed(3))).join(', ');
-  sub.push(`[sub_resource type="BoxMesh" id="BoxMesh_ramp"]
-size = Vector3(${rampSize})`);
-  sub.push(`[sub_resource type="BoxShape3D" id="BoxShape3D_ramp"]
-size = Vector3(${rampSize})`);
-  const railSize = block.rails[0].size.map((n) => Number(n.toFixed(3))).join(', ');
-  sub.push(`[sub_resource type="BoxMesh" id="BoxMesh_rail"]
-size = Vector3(${railSize})`);
-  sub.push(`[sub_resource type="BoxShape3D" id="BoxShape3D_rail"]
-size = Vector3(${railSize})`);
-  sub.push(`[sub_resource type="BoxMesh" id="BoxMesh_deck"]
-size = Vector3(${block.overlook.size.join(', ')})`);
-  sub.push(`[sub_resource type="BoxShape3D" id="BoxShape3D_deck"]
-size = Vector3(${block.overlook.size.join(', ')})`);
-
   // One collision box per distinct prop, sized to that prop.
   const shapeIds = new Map<string, string>();
   props.forEach((prop, i) => {
@@ -682,125 +872,12 @@ size = Vector3(${(w * scale).toFixed(3)}, ${(h * scale).toFixed(3)}, ${(d * scal
   });
   const propShapeId = (prop: { path: string }): string => shapeIds.get(prop.path) ?? 'BoxShape3D_crate';
 
+  // The block itself, shared with the open-world city so the two are the same
+  // place rather than two that drift apart.
+  const arena = cityArena(block, props, { propId, propShapeId });
+  sub.push(...arena.sub);
+
   const loadSteps = ext.length + sub.length + 1;
-
-  // Four walls off one mesh and one shape. Transform3D is column-major: the
-  // first nine numbers are the basis, and the side walls are that basis turned
-  // a quarter turn about Y.
-  const walls = [
-    ['North', '1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, -32'],
-    ['South', '1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 32'],
-    ['East', '0, 0, -1, 0, 1, 0, 1, 0, 0, 32, 2.5, 0'],
-    ['West', '0, 0, -1, 0, 1, 0, 1, 0, 0, -32, 2.5, 0'],
-  ]
-    .map(
-      ([name, transform]) => `[node name="Wall${name}" type="StaticBody3D" parent="Navigation/Arena"]
-transform = Transform3D(${transform})
-
-[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Wall${name}"]
-mesh = SubResource("BoxMesh_wall")
-material_override = SubResource("StandardMaterial3D_wall")
-
-[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Wall${name}"]
-shape = SubResource("BoxShape3D_wall")`,
-    )
-    .join('\n\n');
-
-  // Where the cover stands, and what it stands between. See layout.ts: the
-  // streets are designed first and the buildings are what is left over.
-  const positions = block.cover;
-
-  const crates = positions
-    .map(([x, z], i) => {
-      const prop = props[i % props.length];
-
-      if (!prop) {
-        return `[node name="Crate${i}" type="StaticBody3D" parent="Navigation/Arena"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${x}, ${GROUND_TOP + 1.2}, ${z})
-
-[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Crate${i}"]
-mesh = SubResource("BoxMesh_crate")
-material_override = SubResource("StandardMaterial3D_crate")
-
-[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Crate${i}"]
-shape = SubResource("BoxShape3D_crate")`;
-      }
-
-      // Stood on the floor, not hung at a box's centre. Read from the model
-      // rather than assumed: the first version dropped every prop by 1.2m
-      // because that suited a 2.4m cube, which put a 0.93m barrel most of a
-      // metre underground.
-      const scale = prop.scale ?? 1;
-      const lift = -(prop.baseY ?? 0) * scale;
-      // The collision box is cut to the prop instead of the prop being scaled
-      // to the box. Hiding behind a barrel that is half the size of the thing
-      // stopping the bullets is the single most obvious way cover feels broken.
-      return `[node name="Crate${i}" type="StaticBody3D" parent="Navigation/Arena"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${x}, ${GROUND_TOP}, ${z})
-
-[node name="Art" parent="Navigation/Arena/Crate${i}" instance=ExtResource("${propId(prop.path)}")]
-transform = Transform3D(${scale}, 0, 0, 0, ${scale}, 0, 0, 0, ${scale}, 0, ${lift.toFixed(3)}, 0)
-
-[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Crate${i}"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, ${((prop.size[1] * scale) / 2).toFixed(3)}, 0)
-shape = SubResource("${propShapeId(prop)}")`;
-    })
-    .join('\n\n');
-
-  const WALL_MATERIALS = ['StandardMaterial3D_wallA', 'StandardMaterial3D_wallB', 'StandardMaterial3D_wallC'];
-
-  const blocks = block.buildings
-    .map((building) => {
-      const [w, h, d] = building.size;
-      const [x, z] = building.at;
-      return `[node name="${building.name}" type="StaticBody3D" parent="Navigation/Arena"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${x}, ${GROUND_TOP + h / 2}, ${z})
-
-[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/${building.name}"]
-mesh = SubResource("BoxMesh_${building.name}")
-material_override = SubResource("${WALL_MATERIALS[building.material]}")
-
-[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/${building.name}"]
-shape = SubResource("BoxShape3D_${building.name}")`;
-    })
-    .join('\n\n');
-
-  // The only way up, and a slope rather than a ledge: a CharacterBody3D walks
-  // up anything under floor_max_angle and cannot climb a step taller than its
-  // jump, so a ramp is the one route that cannot be got wrong.
-  const climb = `[node name="Ramp" type="StaticBody3D" parent="Navigation/Arena"]
-transform = Transform3D(${tiltedBasis(block.ramp.tilt)}, ${block.ramp.at.join(', ')})
-
-[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Ramp"]
-mesh = SubResource("BoxMesh_ramp")
-material_override = SubResource("StandardMaterial3D_wallC")
-
-[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Ramp"]
-shape = SubResource("BoxShape3D_ramp")
-
-${block.rails
-    .map(
-      (rail, i) => `[node name="Rail${i}" type="StaticBody3D" parent="Navigation/Arena"]
-transform = Transform3D(${tiltedBasis(block.ramp.tilt)}, ${rail.at.join(', ')})
-
-[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Rail${i}"]
-mesh = SubResource("BoxMesh_rail")
-material_override = SubResource("StandardMaterial3D_wallC")
-
-[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Rail${i}"]
-shape = SubResource("BoxShape3D_rail")`,
-    )
-    .join('\n\n')}
-
-[node name="Overlook" type="StaticBody3D" parent="Navigation/Arena"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${block.overlook.at.join(', ')})
-
-[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Overlook"]
-mesh = SubResource("BoxMesh_deck")
-material_override = SubResource("StandardMaterial3D_wallC")
-
-[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Overlook"]
-shape = SubResource("BoxShape3D_deck")`;
 
   return `[gd_scene load_steps=${loadSteps} format=3 uid="${sceneUid(spec.name)}"]
 
@@ -819,28 +896,7 @@ light_color = Color(1, 0.86, 0.72, 1)
 light_energy = 1.15
 shadow_enabled = true
 
-[node name="Navigation" type="NavigationRegion3D" parent="."]
-navigation_mesh = SubResource("NavigationMesh_arena")
-script = ExtResource("11_nav")
-
-[node name="Arena" type="Node3D" parent="Navigation"]
-
-[node name="Ground" type="StaticBody3D" parent="Navigation/Arena"]
-
-[node name="Mesh" type="MeshInstance3D" parent="Navigation/Arena/Ground"]
-mesh = SubResource("BoxMesh_ground")
-material_override = SubResource("StandardMaterial3D_ground")
-
-[node name="Collision" type="CollisionShape3D" parent="Navigation/Arena/Ground"]
-shape = SubResource("BoxShape3D_ground")
-
-${walls}
-
-${blocks}
-
-${climb}
-
-${crates}
+${arena.nodes}
 
 [node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 0)
@@ -1008,8 +1064,182 @@ script = ExtResource("7_wiring")
 `;
 }
 
+/**
+ * The open-world city: walk it, drive it, take the jobs.
+ *
+ * The same block as the shooter, because it already was a city. What is
+ * different is the camera — an orbiting spring arm rather than a head — the
+ * player having a body you can see, and three cars parked on the street.
+ */
+/**
+ * What a phone needs to play the city.
+ *
+ * Two buttons, not three: **USE** to get into or out of a car, and **JUMP**.
+ * There is no gun, so there is no fire button, and adding one that does nothing
+ * would be worse than the gap it hides. Sprint is the stick at its edge, the
+ * same as everywhere else.
+ */
+const OPEN_WORLD_TOUCH: TouchSpec = { buttons: ['use', 'jump'], freeLook: true, stick: true };
+
+/**
+ * The HUD, minus everything the shooter needed and this does not.
+ *
+ * No ammo, no wave counter, no crosshair — a crosshair over a third-person
+ * camera points at the back of your own head. What is left is health, the
+ * current job, and a prompt that appears only when there is a car within reach.
+ */
+const OPEN_WORLD_HUD = `[node name="Health" type="ProgressBar" parent="HUD"]
+offset_left = 24.0
+offset_top = -52.0
+offset_right = 264.0
+offset_bottom = -28.0
+anchor_top = 1.0
+anchor_bottom = 1.0
+max_value = 100.0
+value = 100.0
+show_percentage = false
+
+[node name="HealthLabel" type="Label" parent="HUD"]
+offset_left = 276.0
+offset_top = -54.0
+offset_right = 356.0
+offset_bottom = -26.0
+anchor_top = 1.0
+anchor_bottom = 1.0
+text = "100"
+
+[node name="Objective" type="Label" parent="HUD"]
+offset_left = 24.0
+offset_top = 24.0
+offset_right = 520.0
+offset_bottom = 52.0
+text = ""
+
+[node name="Prompt" type="Label" parent="HUD"]
+offset_left = -120.0
+offset_top = -140.0
+offset_right = 120.0
+offset_bottom = -112.0
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+horizontal_alignment = 1
+text = ""
+
+[node name="Centre" type="Label" parent="HUD"]
+offset_left = -260.0
+offset_top = -90.0
+offset_right = 260.0
+offset_bottom = -54.0
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+horizontal_alignment = 1
+text = ""
+
+[node name="GameOver" type="Panel" parent="HUD"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_over")
+
+[node name="Text" type="Label" parent="HUD/GameOver"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "YOU WENT DOWN"`;
+
+export function openWorldScene(spec: GameSpec): string {
+  const block = cityBlock();
+  const props = spec.props ?? [];
+
+  const ext: string[] = [
+    `[ext_resource type="Script" path="res://player.gd" id="1_player"]`,
+    `[ext_resource type="Script" path="res://touch.gd" id="2_touch"]`,
+    `[ext_resource type="Script" path="res://hud.gd" id="6_hud"]`,
+    `[ext_resource type="Script" path="res://wiring.gd" id="7_wiring"]`,
+    `[ext_resource type="Script" path="res://mission_runner.gd" id="8_runner"]`,
+    `[ext_resource type="Script" path="res://missions.gd" id="9_missions"]`,
+    `[ext_resource type="Script" path="res://navigation.gd" id="11_nav"]`,
+    `[ext_resource type="Script" path="res://car.gd" id="20_car"]`,
+    `[ext_resource type="Script" path="res://car_door.gd" id="21_door"]`,
+    `[ext_resource type="Script" path="res://orbit_camera.gd" id="22_orbit"]`,
+  ];
+
+  const propIds = new Map<string, string>();
+  props.forEach((prop, i) => {
+    if (propIds.has(prop.path)) return;
+    const id = `${ext.length + i + 1}_prop${i}`;
+    propIds.set(prop.path, id);
+    ext.push(`[ext_resource type="PackedScene" path="${prop.path}" id="${id}"]`);
+  });
+  const propId = (path: string): string => propIds.get(path) ?? '';
+
+  const sub: string[] = [...WORLD_RESOURCES, ...openWorldResources()];
+
+  const shapeIds = new Map<string, string>();
+  props.forEach((prop, i) => {
+    if (shapeIds.has(prop.path)) return;
+    const id = `BoxShape3D_prop${i}`;
+    shapeIds.set(prop.path, id);
+    const scale = prop.scale ?? 1;
+    const [w, h, d] = prop.size;
+    sub.push(`[sub_resource type="BoxShape3D" id="${id}"]
+size = Vector3(${(w * scale).toFixed(3)}, ${(h * scale).toFixed(3)}, ${(d * scale).toFixed(3)})`);
+  });
+  const propShapeId = (prop: { path: string }): string => shapeIds.get(prop.path) ?? 'BoxShape3D_crate';
+
+  const arena = cityArena(block, props, { propId, propShapeId });
+  sub.push(...arena.sub);
+
+  const loadSteps = ext.length + sub.length + 1;
+
+  return `[gd_scene load_steps=${loadSteps} format=3 uid="${sceneUid(spec.name)}"]
+
+${ext.join('\n')}
+
+${sub.join('\n\n')}
+
+[node name="Main" type="Node3D"]
+
+[node name="Environment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_main")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.87, -0.35, 0.35, 0, 0.7, 0.71, -0.5, -0.61, 0.61, 0, 14, 0)
+light_color = Color(1, 0.86, 0.72, 1)
+light_energy = 1.15
+shadow_enabled = true
+
+${arena.nodes}
+
+${openWorldNodes()}
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("6_hud")
+
+${OPEN_WORLD_HUD}
+
+${touchControlsNode(OPEN_WORLD_TOUCH, '2_touch', 'HUD')}
+
+[node name="Missions" type="Node" parent="."]
+script = ExtResource("9_missions")
+
+[node name="Mission" type="Node" parent="."]
+script = ExtResource("8_runner")
+
+[node name="Wiring" type="Node" parent="."]
+script = ExtResource("7_wiring")
+`;
+}
+
 export function mainScene(spec: GameSpec): string {
   if (isShooter(spec)) return shooterScene(spec);
+  if (isOpenWorld(spec)) return openWorldScene(spec);
 
   const models = spec.models ?? [];
 
@@ -1204,16 +1434,20 @@ Everything that decides how hard it gets is exported on the **Director** node �
 /** Every file the project needs, ready to zip. */
 export function buildProject(spec: GameSpec): GodotFile[] {
   const shooter = isShooter(spec);
+  const city = isOpenWorld(spec);
 
   const files: GodotFile[] = [
     { path: 'project.godot', content: projectConfig(spec) },
     { path: 'icon.svg', content: projectIcon() },
     { path: 'main.tscn', content: mainScene(spec) },
-    { path: 'player.gd', content: shooter ? shooterPlayerScript() : playerScript() },
+    {
+      path: 'player.gd',
+      content: city ? walkerScript() : shooter ? shooterPlayerScript() : playerScript(),
+    },
     // One or the other, never both: an unused script in the project is a second
     // answer to "where do the controls live", and the wrong one was the answer
     // for long enough that the camera never turned.
-    shooter
+    shooter || city
       ? { path: 'touch.gd', content: touchControlsScript() }
       : { path: 'joystick.gd', content: joystickScript() },
     { path: 'README.md', content: readme(spec) },
@@ -1242,6 +1476,25 @@ export function buildProject(spec: GameSpec): GodotFile[] {
       { path: 'navigation.gd', content: navigationScript() },
       { path: 'animator.gd', content: animatorScript() },
       { path: 'pickup.gd', content: pickupScript() },
+    );
+  }
+
+  if (city) {
+    const jobs = cityJobs(spec.name);
+    files.push(
+      { path: 'orbit_camera.gd', content: orbitCameraScript() },
+      { path: 'car.gd', content: carScript() },
+      { path: 'car_door.gd', content: carDoorScript() },
+      { path: 'hud.gd', content: cityHudScript() },
+      { path: 'wiring.gd', content: openWorldWiringScript() },
+      { path: 'missions.gd', content: missionData(jobs) },
+      { path: 'mission_runner.gd', content: missionRunner() },
+      { path: 'mission_select.gd', content: missionSelect(spec.name) },
+      { path: 'mission_select.tscn', content: missionSelectScene(spec.name) },
+      // The block is navigated even with nothing walking it yet: the mesh is
+      // what anything added later needs, and baking it now means the first
+      // pedestrian is a script rather than a scene change.
+      { path: 'navigation.gd', content: navigationScript() },
     );
   }
 

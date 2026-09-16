@@ -179,6 +179,33 @@ export function verifyProject(files: GodotFile[]): Problem[] {
     }
   }
 
+  // Every SubResource and ExtResource a scene uses has to be declared in it.
+  //
+  // Not a degradation: Godot refuses the whole file. "Condition
+  // !int_resources.has(id) is true" and then "Failed loading resource", and the
+  // game opens to nothing. It happened by moving one style box between two
+  // lists — which is exactly the kind of edit nobody re-tests.
+  for (const [path, scene] of scenes) {
+    const subs = new Set([...scene.matchAll(/^\[sub_resource type="[^"]+" id="([^"]+)"\]/gm)].map((m) => m[1]));
+    for (const [, id] of scene.matchAll(/SubResource\("([^"]+)"\)/g)) {
+      if (subs.has(id)) continue;
+      problems.push({
+        file: path,
+        message: `SubResource("${id}") is used and never declared — Godot refuses the whole scene, not just this node.`,
+        fatal: true,
+      });
+    }
+    const exts = new Set([...scene.matchAll(/^\[ext_resource [^\]]*id="([^"]+)"\]/gm)].map((m) => m[1]));
+    for (const [, id] of scene.matchAll(/ExtResource\("([^"]+)"\)/g)) {
+      if (exts.has(id)) continue;
+      problems.push({
+        file: path,
+        message: `ExtResource("${id}") is used and never declared.`,
+        fatal: true,
+      });
+    }
+  }
+
   return problems;
 }
 

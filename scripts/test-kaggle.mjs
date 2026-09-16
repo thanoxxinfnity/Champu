@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  ENV_KERNEL, PIXAL3D, looksLikeToken, pixal3dNotebook, readLog, resultFromLog, setupNotebook, slugFor, unavailable,
+  ENV_ARCHIVE, ENV_KERNEL, PIXAL3D, looksLikeToken, pixal3dNotebook, readLog, resultFromLog, setupNotebook, slugFor, unavailable,
 } from '../src/lib/suites/godot/kaggle.ts';
 import { bytesToBase64, pipelineStatement, sourceChain } from '../src/lib/suites/godot/model-source.ts';
 
@@ -55,20 +55,43 @@ test('every image reaches the notebook', () => {
   assert.equal(jobs[0].b64, b64(IMAGE));
 });
 
-test('a cached wheel is used when one is attached, and built when it is not', () => {
-  // natten compiles CUDA kernels, and that is nearly all of the setup time.
+test('a compiled environment is restored when one is attached, and built when not', () => {
+  // TRELLIS.2's setup compiles five CUDA extensions and natten compiles a
+  // sixth. That is the better part of an hour, and it is the same hour every
+  // run unless the result is kept.
   const cold = pixal3dNotebook([{ name: 'a', image: IMAGE }], b64);
-  assert.match(cold, /pip install -q natten==0\.21\.0 --no-build-isolation/);
+  assert.match(cold, /setup\.sh --basic --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm/);
 
-  const warm = pixal3dNotebook([{ name: 'a', image: IMAGE }], b64, { cachedWheel: true });
-  assert.match(warm, /glob\.glob\("\/kaggle\/input\/\*\*\/natten-\*\.whl"/);
+  const warm = pixal3dNotebook([{ name: 'a', image: IMAGE }], b64, { cached: true });
+  assert.ok(warm.includes(ENV_ARCHIVE), 'the cached environment is never looked for');
+  assert.match(warm, /tar -I zstd -xf/);
   // And still compiles if the attachment is missing, rather than failing.
-  assert.match(warm, /no cached wheel/);
+  assert.match(warm, /no cached environment/);
 
-  // The setup run builds a wheel rather than installing, because the wheel is
-  // the artifact later runs attach.
-  assert.match(setupNotebook(), /pip wheel natten==0\.21\.0/);
+  // The setup run packs whatever the compile added, by diffing site-packages —
+  // naming the packages by hand goes stale the moment TRELLIS.2 adds a sixth.
+  const setup = setupNotebook();
+  assert.match(setup, /added = sorted\(after - before\)/);
+  assert.ok(setup.includes(ENV_ARCHIVE));
   assert.equal(ENV_KERNEL, 'chomugiri-pixal3d-env');
+});
+
+test('the install is the one the repository documents, not the one I assumed', () => {
+  // The first attempt skipped TRELLIS.2 entirely and got all the way to
+  // `import cumesh` before a ModuleNotFoundError. Pixal3D's README step one is
+  // "follow the TRELLIS.2 installation", and that is not a pip install.
+  const nb = pixal3dNotebook([{ name: 'a', image: IMAGE }], b64);
+  assert.match(nb, /TRELLIS\.2\.git/);
+  assert.match(nb, /--recursive/);
+  // The command line itself, not the whole notebook: the comment above it
+  // *names* the flags it leaves out, and a blunt `includes` reads the
+  // explanation as the thing it explains.
+  const cmd = /setup\.sh ([^"]*)"/.exec(nb)[1];
+  // No --new-env: Kaggle already is the environment.
+  assert.ok(!cmd.includes('--new-env'), cmd);
+  // No --flash-attn: another long CUDA build, and torch has SDPA.
+  assert.ok(!cmd.includes('--flash-attn'), cmd);
+  assert.match(cmd, /--cumesh/);
 });
 
 test('the T4 architecture is named, or the build takes an hour', () => {

@@ -21,7 +21,7 @@
 
 import { bodyPlan, inferPlan, type BodyPlan, type PartSpec } from '../minecraft/geometry.ts';
 
-export type Genre = 'platformer' | 'runner' | 'shooter' | 'racing' | 'puzzle' | 'top-down' | 'survival' | 'adventure';
+export type Genre = 'platformer' | 'runner' | 'shooter' | 'racing' | 'puzzle' | 'top-down' | 'survival' | 'adventure' | 'open-world';
 export type View = 'third-person' | 'first-person' | 'top-down' | 'side-on';
 
 export interface PlannedEntity {
@@ -58,6 +58,10 @@ export interface GamePlan {
  * shooter". One list cannot disagree with itself.
  */
 export const GENRE_CUES: Array<[Genre, RegExp]> = [
+  // Before racing, deliberately. "GTA" is the clearest statement of intent
+  // anyone gives this suite, and it contains a car — matched as racing it
+  // became a lap circuit, which is the one thing GTA is not.
+  ['open-world', /\b(gta|grand theft|open[- ]?world|sandbox city|free roam|freeroam|city game|drive around)\b/],
   ['racing', /\b(racing|race|kart|rally|drift|lap|circuit|car game|bike game)\b/],
   ['runner', /\b(runner|endless|infinite|temple run|subway|auto[- ]?run|dodge obstacles)\b/],
   ['shooter', /\b(shooter|shooting|fps|gun|shoot|blaster|bullet|turret|arena)\b/],
@@ -78,6 +82,7 @@ const VIEW_FOR: Record<Genre, View> = {
   'top-down': 'top-down',
   survival: 'third-person',
   adventure: 'third-person',
+  'open-world': 'third-person',
 };
 
 const MECHANICS_FOR: Record<Genre, string[]> = {
@@ -89,6 +94,11 @@ const MECHANICS_FOR: Record<Genre, string[]> = {
   survival: ['Gather resources from the world', 'Enemies arrive in waves after dark', 'Health and hunger drain over time'],
   'top-down': ['Move in any direction', 'Fight or avoid what wanders the level', 'Find the exit to reach the next room'],
   adventure: ['Explore a connected world', 'Talk to characters and pick up items', 'Reach the objective to finish'],
+  'open-world': [
+    'Walk anywhere in the city, camera orbiting behind you',
+    'Get into a parked car and drive it',
+    'Missions given out around the map, in any order',
+  ],
 };
 
 const GOAL_FOR: Record<Genre, string> = {
@@ -100,6 +110,7 @@ const GOAL_FOR: Record<Genre, string> = {
   survival: 'Stay alive through the night.',
   'top-down': 'Reach the exit of every room.',
   adventure: 'Finish the quest.',
+  'open-world': 'Run the city: take the jobs, drive what you find, stay standing.',
 };
 
 const CONTROLS_FOR: Record<View, string[]> = {
@@ -325,6 +336,15 @@ export function inferEntities(prompt: string, genre: Genre, playerDescription = 
   if (genre === 'runner' || genre === 'racing' || genre === 'platformer') {
     add('Obstacle', 'obstacle', 'a block');
   }
+  // A city with nobody in it is a car park. Open world planned with *no*
+  // entities at all, which is the same failure the puzzle case below was
+  // written for — and the same one that made the puzzle case necessary.
+  if (genre === 'open-world') {
+    if (!found.some((e) => e.role === 'npc')) add('Pedestrian', 'npc', 'a person walking the street');
+    if (!found.some((e) => e.role === 'obstacle')) add('Car', 'obstacle', 'a parked car you can drive');
+    if (!found.some((e) => e.role === 'pickup')) add('Parcel', 'pickup', 'a package to deliver');
+  }
+
   // A puzzle with nothing in it is an empty room. It was the one genre that
   // came out of the planner with no entities at all — the exact failure the
   // rest of this function exists to prevent.

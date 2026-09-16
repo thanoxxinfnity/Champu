@@ -248,6 +248,10 @@ test('anything the planner can plan, the router sends to the suite', () => {
     'a platformer with moving ledges',
     'a top-down dungeon crawl',
     'an open world adventure rpg',
+    // 'open world' now plans as its own genre, so adventure needs its own line
+    // — the assertion below is that *every* genre is covered, and it caught
+    // this the moment open-world took the phrase over.
+    'a quest to explore the old temple',
   ];
   for (const prompt of prompts) {
     assert.ok(looksLikeGame(prompt), `"${prompt}" is a game the planner understands`);
