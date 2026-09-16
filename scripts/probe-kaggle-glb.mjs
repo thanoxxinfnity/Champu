@@ -30,8 +30,10 @@ const run = await generateOnKaggle(
   {
     toBase64: bytesToBase64,
     label: 'glb probe',
-    onStage: (m) => console.log('        ·', m),
-    timeoutMs: 40 * 60_000,
+    onStage: (m) => console.log('        \u00b7', m),
+    // No override: a cold run gets the module's own 75 minutes. The one that
+    // reached the attention stage took 57, and forty was cutting it off before
+    // it could tell us anything.
   },
 );
 
