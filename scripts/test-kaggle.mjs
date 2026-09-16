@@ -266,11 +266,13 @@ test('a run does not rely on a cache nobody built', async () => {
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../src/lib/suites/godot/kaggle.ts', import.meta.url), 'utf8');
   // Attaching a kernel that does not exist is not harmless: the notebook falls
-  // through to compiling — half an hour — against a thirty-minute deadline.
+  // through to compiling — the better part of an hour — on top of everything a
+  // cached run already has to do.
   assert.match(src, /kernelStatus\(token, me\.user, ENV_KERNEL/);
   assert.match(src, /has not been built on this Kaggle account yet/);
-  // And the deadline covers a compile when one was actually asked for.
-  assert.match(src, /haveCache \? 30 : 75/);
+  // And the uncached deadline leaves room for that compile on top of the rest.
+  const [, cached, cold] = src.match(/haveCache \? (\d+) : (\d+)\) \* 60_000/);
+  assert.ok(Number(cold) - Number(cached) >= 45, `a compile needs more than ${Number(cold) - Number(cached)}m`);
 });
 
 test('the image is cut out here, so the gated model is never reached', () => {
@@ -337,7 +339,11 @@ test('the timeout it reports is the timeout it actually waited', async () => {
   // "give it longer", was already what it had done.
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../src/lib/suites/godot/kaggle.ts', import.meta.url), 'utf8');
-  assert.match(src, /const budgetMs = options\.timeoutMs \?\? \(haveCache \? 30 : 75\) \* 60_000;/);
+  assert.match(src, /const budgetMs = options\.timeoutMs \?\? \(haveCache \? 90 : 150\) \* 60_000;/);
+  // A cached run reached the attention stage at 57 minutes, so any cached
+  // budget at or under an hour is a timeout reported for a working run.
+  const [, cached] = src.match(/haveCache \? (\d+) : \d+\) \* 60_000/);
+  assert.ok(Number(cached) > 60, `cached budget ${cached}m is under the 57m a run has taken`);
   assert.match(src, /const deadline = Date\.now\(\) \+ budgetMs;/);
   assert.match(src, /did not finish within \$\{Math\.round\(budgetMs \/ 60_000\)\} minutes/);
   // And no second, independently-guessed budget anywhere in the wait path.

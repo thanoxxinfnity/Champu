@@ -767,9 +767,15 @@ export async function generateOnKaggle(
   // Everything after this asks about the slug Kaggle actually made.
   const live = pushed.slug ?? slug;
 
-  // A cold run downloads the Pixal3D weights before it renders anything, and
-  // that alone has run past forty minutes. The cached run skips it.
-  const budgetMs = options.timeoutMs ?? (haveCache ? 30 : 75) * 60_000;
+  // The cached run got thirty minutes on the assumption that the cache is what
+  // makes a run slow. It is not. The cache holds compiled CUDA extensions, so
+  // restoring it skips the build — and nothing else. The weights still download
+  // and the three sampling stages still run: a *cached* run reached the
+  // attention stage at 57 minutes. Thirty was cutting off runs that were
+  // working and calling them timeouts.
+  //
+  // So the cache buys the compile back and that is all it is credited with.
+  const budgetMs = options.timeoutMs ?? (haveCache ? 90 : 150) * 60_000;
   const deadline = Date.now() + budgetMs;
   let wait = 4_000;
   let last = '';
