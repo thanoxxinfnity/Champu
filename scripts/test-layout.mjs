@@ -219,3 +219,43 @@ test('a non-game answer is not made to carry the doctrine', async () => {
   assert.ok(!buildSystemPrompt({ lane: 'B', suite: 'minecraft' }).includes(GAME_DESIGN_ADDENDUM));
   assert.ok(!buildSystemPrompt({ lane: 'A' }).includes(GAME_DESIGN_ADDENDUM));
 });
+
+test('the prompt tells the model what is already in the engine', async () => {
+  const { buildSystemPrompt, GODOT_TOOLBOX_ADDENDUM } = await import('../src/lib/agent/system-prompt.ts');
+  assert.ok(buildSystemPrompt({ lane: 'B', suite: 'godot' }).includes(GODOT_TOOLBOX_ADDENDUM));
+
+  // A model reminded of nothing hand-rolls a worse version of everything, and
+  // the worse version compiles. These are the subsystems most often rebuilt by
+  // hand, navigation first because it was.
+  for (const node of [
+    'NavigationAgent3D', 'NavigationRegion3D', 'Area3D', 'RayCast3D', 'RigidBody3D',
+    'AnimationTree', 'Tween', 'SubViewport', 'ShaderMaterial', 'MultiMeshInstance3D',
+    'AudioStreamPlayer3D', 'TileMapLayer', 'Resource', 'MultiplayerSynchronizer',
+  ]) {
+    assert.ok(GODOT_TOOLBOX_ADDENDUM.includes(node), `the toolbox never mentions ${node}`);
+  }
+  // And the four navmesh traps that each cost a debugging pass here.
+  for (const trap of ['cell_size', 'agent_radius', 'agent_max_climb', 'agent_max_slope']) {
+    assert.ok(GODOT_TOOLBOX_ADDENDUM.includes(trap), `the bake trap "${trap}" is not written down`);
+  }
+  assert.match(GODOT_TOOLBOX_ADDENDUM, /no step-up/);
+});
+
+test('the shooter ships a baked-at-load navigation region', async () => {
+  const { buildProject } = await import('../src/lib/suites/godot/project.ts');
+  const files = buildProject(SHOOTER);
+  const nav = files.find((f) => f.path === 'navigation.gd');
+  assert.ok(nav, 'no navigation script: the horde walks into walls');
+  assert.match(nav.content, /bake_navigation_mesh\(/);
+  assert.match(nav.content, /call_deferred/, 'baking during _ready sees a half-built tree');
+
+  const scene = files.find((f) => f.path === 'main.tscn').content;
+  assert.match(scene, /\[node name="Navigation" type="NavigationRegion3D"/);
+  // The arena has to be *under* the region or the bake finds no geometry.
+  assert.match(scene, /\[node name="Arena" type="Node3D" parent="Navigation"\]/);
+  // Cell sizes must match the navigation map's defaults or the mesh is rejected.
+  assert.match(scene, /cell_size = 0\.25\ncell_height = 0\.25/);
+  // And the ramp has to bake as an obstacle, not as something with a step onto it.
+  assert.match(scene, /agent_max_slope = 20/);
+  assert.match(scene, /\[node name="Rail0"/, 'the ramp has no kerbs');
+});

@@ -366,6 +366,84 @@ spawn point and check it lands on the street rather than on a roof. Each of
 those is five lines and each of them caught a shipped bug.`;
 
 /**
+ * What is actually in the engine.
+ *
+ * The suite spent a while writing enemy AI as "walk towards the player", which
+ * is a complete AI on an open square and, on a level with buildings in it,
+ * leaves ten enemies out of sixteen pressed into a wall for the whole match.
+ * Godot has shipped NavigationAgent3D since 4.0. Nothing was stopping it being
+ * used except that nothing had said it existed.
+ *
+ * That is the failure this section is for. A model writing GDScript will
+ * cheerfully hand-roll a worse version of any subsystem it has not been
+ * reminded of, and the result compiles, loads and runs — badly, silently, in a
+ * way no verifier catches. So: a map of the engine, by the problem it solves.
+ */
+export const GODOT_TOOLBOX_ADDENDUM = `## REACH FOR THE ENGINE FIRST
+
+Godot is a full engine and all of it is available. Before hand-rolling any
+behaviour, check whether a node already does it — a hand-rolled version compiles
+and runs and is quietly worse, which is the hardest kind of mistake to see.
+
+| The problem | The node, not your own code |
+| --- | --- |
+| Anything moving around obstacles | \`NavigationRegion3D\` + \`NavigationAgent3D\`. **Never** "walk towards the target": that is only correct on an empty plane |
+| Crowds walking through each other | \`avoidance_enabled\` on the agent, and \`NavigationObstacle3D\` for things that move |
+| Seeing, hearing, trigger zones | \`Area3D\` with \`body_entered\`, not a distance check every frame |
+| A shot, a line of sight | \`RayCast3D\`, or \`PhysicsDirectSpaceState3D.intersect_ray\` for one-offs |
+| Things that tumble, doors, ragdolls | \`RigidBody3D\`, and the \`Joint3D\` family for hinges and ropes |
+| A car | \`VehicleBody3D\`, which already has wheels, suspension and slip |
+| A character that walks | \`CharacterBody3D\` + \`move_and_slide\`. It has **no step-up**: anything taller than nothing is a wall unless it is a slope |
+| Baked or blended animation | \`AnimationPlayer\`, and \`AnimationTree\` with a state machine for blending |
+| A value moving over time | \`Tween\` — \`create_tween()\`. Never a counter in \`_process\` |
+| Aim, look-at, foot placement | \`SkeletonIK3D\`, or \`Skeleton3D\` bone poses directly |
+| A minimap, a security camera, a portal | \`SubViewport\` + \`SubViewportContainer\` |
+| Anything the material system cannot express | \`ShaderMaterial\` — water, force fields, dissolves, outlines, toon ramps |
+| Thousands of identical things (grass, crowds, debris) | \`MultiMeshInstance3D\`, one draw call |
+| Sound that comes from somewhere | \`AudioStreamPlayer3D\`, with buses and effects rather than pre-mixed files |
+| A 2D level | \`TileMapLayer\` (not \`TileMap\`, deprecated in 4.3) with a \`TileSet\` |
+| 2D lighting and shadow | \`PointLight2D\`, \`LightOccluder2D\`, \`CanvasModulate\` |
+| Rough blockout geometry | \`CSGBox3D\` and friends — good for prototyping, bake it down before shipping |
+| Data a designer should edit | A custom \`Resource\` with \`@export\`, saved as \`.tres\` |
+| Saving progress | \`ConfigFile\` for settings, \`FileAccess\` + \`JSON\` for a save game |
+| Something that should tick | \`Timer\`, or \`get_tree().create_timer(s).timeout\` for one-shots |
+| Talking to distant systems | \`signal\`, and groups (\`add_to_group\` / \`get_tree().call_group\`) |
+| Two players, or online | \`MultiplayerSynchronizer\` and \`MultiplayerSpawner\` |
+| Things off-screen costing frames | \`VisibleOnScreenNotifier3D\`, and \`visibility_range_begin\` for LOD |
+
+### Navigation, specifically, because it is the one most often skipped
+
+A generated level has never been opened in an editor, so there is no editor pass
+in which a navigation mesh could have been baked — and a navmesh is baked
+polygon data, not something to write out by hand. **Bake it at load**: a
+\`NavigationRegion3D\` with the level under it, \`bake_navigation_mesh()\` called
+deferred from \`_ready\`, and a signal when it is done. Then it is always the mesh
+for the level that actually shipped.
+
+Four things about that bake are silent when wrong, and each one looks exactly
+like "the enemies are broken":
+
+- **\`cell_size\` and \`cell_height\` must match the navigation map's** (0.25 and
+  0.25 by default). Mismatched, Godot rejects the region's mesh, every query
+  fails, and every agent falls back to whatever you wrote for "no path yet".
+- **\`agent_radius\` is ceiled to \`cell_size\` and \`agent_height\` is ceiled to
+  \`cell_height\`.** Give them exact multiples or the agent is wider than you
+  asked for and will not fit through gaps the character physically fits through.
+- **\`agent_max_climb\` promises a step-up that \`CharacterBody3D\` does not have.**
+  If the bake connects a ledge to the floor, the path goes over the ledge and the
+  body cannot follow. Either keep it at one cell, or make the ledge a wall.
+- **A ramp is a wedge, so along its sides it passes through every height between
+  nothing and its full height.** The bake connects the shallow part to the floor
+  and routes enemies at the ramp's *side*, where they grind forever. Give a ramp
+  kerbs down both edges the way a real one has, so the only way on is the foot —
+  or set \`agent_max_slope\` under the ramp's angle so it bakes as an obstacle and
+  the high ground belongs to the player.
+
+Always keep a fallback for "the path is not ready yet" — the first frames before
+the server syncs, or a bake that failed. Something standing still because it is
+waiting for a path reads as far more broken than something taking a silly route.`;
+
+/**
  * How Chomu Giri answers a game request.
  *
  * Written from the brief the user supplied, with four things corrected because
@@ -477,7 +555,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
       // Design before engine: the addendum says what compiles, the doctrine says
       // what is worth compiling. Both, always — a game that runs and is unplayable
       // is the failure mode the engine rules cannot catch.
-      parts.push(GODOT_ADDENDUM, GAME_DESIGN_ADDENDUM, CHOMU_GIRI_ADDENDUM);
+      parts.push(GODOT_ADDENDUM, GAME_DESIGN_ADDENDUM, GODOT_TOOLBOX_ADDENDUM, CHOMU_GIRI_ADDENDUM);
       parts.push(
         `## ACTIVE 3D PIPELINE\n${ctx.assetPipeline ?? '[3D Asset Pipeline: code-built geometry — no 3D generator key is set]'}`,
       );
