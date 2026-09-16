@@ -29,6 +29,37 @@ import { downloadZip } from '@/lib/zip';
 const field = 'mono w-full rounded border bg-transparent px-2 py-1.5 text-[11px] outline-none';
 const fieldStyle = { borderColor: 'var(--line)', color: 'var(--ink)' } as const;
 
+/**
+ * A reference image, for the generators that take one rather than a prompt.
+ *
+ * Falls through to Pollinations, which needs no key: a user whose only
+ * credential is a Kaggle token should still get meshes, and refusing for want
+ * of an NVIDIA key would make the free path depend on a paid one.
+ */
+async function referenceImage(prompt: string): Promise<Uint8Array | null> {
+  for (const body of [
+    { provider: 'nim', model: 'black-forest-labs/flux.1-dev', prompt, width: 1024, height: 1024, steps: 30 },
+    { provider: 'pollinations', prompt, width: 1024, height: 1024 },
+  ]) {
+    try {
+      const res = await fetch('/api/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) continue;
+      const json = (await res.json()) as { images?: Array<{ dataUrl?: string }> };
+      const dataUrl = json.images?.[0]?.dataUrl;
+      if (!dataUrl) continue;
+      const bytes = Uint8Array.from(atob(dataUrl.slice(dataUrl.indexOf(',') + 1)), (c) => c.charCodeAt(0));
+      if (bytes.byteLength > 1024) return bytes;
+    } catch {
+      // One provider refusing is not both refusing.
+    }
+  }
+  return null;
+}
+
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-xl border p-3" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
@@ -110,6 +141,7 @@ export function GameStudio() {
         tripo: keys.tripo,
         nim: keys.nim,
         trellisUrl: keys.trellisUrl,
+        kaggle: keys.kaggle,
       };
 
       const outcome = await generateModel(
@@ -120,7 +152,12 @@ export function GameStudio() {
           parts: playerParts(plan),
         },
         modelKeys,
-        { onStage: (_source, message) => setBusy(message) },
+        {
+          onStage: (_source, message) => setBusy(message),
+          // The first half of image-to-3D. Without it the Kaggle source cannot
+          // be reached at all, and skips itself with a note saying why.
+          renderImage: referenceImage,
+        },
       );
 
       const modelPath = 'character.glb';

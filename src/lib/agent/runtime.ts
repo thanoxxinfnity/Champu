@@ -229,6 +229,40 @@ async function paintTexture(prompt: string, seed: number): Promise<{ dataUrl: st
   return { dataUrl, bytes: Math.round(b64.length * 0.75) };
 }
 
+/**
+ * A reference image for an image-to-3D generator.
+ *
+ * Pixal3D lifts an image into a mesh; it cannot read a prompt. This is the
+ * first half of that chain, and it deliberately falls through to Pollinations,
+ * which needs no key: a user whose only credential is a Kaggle token should
+ * still get meshes, and refusing because there is no NVIDIA key would make the
+ * free path depend on a paid one.
+ */
+async function referenceImage(prompt: string): Promise<Uint8Array | null> {
+  for (const body of [
+    { provider: 'nim', model: 'black-forest-labs/flux.1-dev', prompt, width: 1024, height: 1024, steps: 30 },
+    { provider: 'pollinations', prompt, width: 1024, height: 1024 },
+  ]) {
+    try {
+      const res = await fetch('/api/image', withKeys({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }));
+      if (!res.ok) continue;
+      const json = (await res.json()) as { images?: Array<{ dataUrl?: string }> };
+      const dataUrl = json.images?.[0]?.dataUrl;
+      if (!dataUrl) continue;
+      const b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      if (bytes.byteLength > 1024) return bytes;
+    } catch {
+      // One provider refusing is not both refusing.
+    }
+  }
+  return null;
+}
+
 // ── Thinking bubble ─────────────────────────────────────────────────────────
 
 function startPhraseCycle(lane: 'A' | 'B'): () => void {
@@ -970,7 +1004,7 @@ export async function send(opts: SendOptions): Promise<void> {
       // 'character' because this call builds the thing the player looks at —
       // the one place the paid Meshy and Tripo keys are meant to be spent.
       const chain = sourceChain(
-        { meshy: keys.meshy, tripo: keys.tripo, nim: keys.nim, trellisUrl: keys.trellisUrl },
+        { meshy: keys.meshy, tripo: keys.tripo, nim: keys.nim, trellisUrl: keys.trellisUrl, kaggle: keys.kaggle },
         'character',
       );
 
@@ -987,8 +1021,11 @@ export async function send(opts: SendOptions): Promise<void> {
               plan: design.player.body,
               parts: playerParts(design),
             },
-            { meshy: keys.meshy, tripo: keys.tripo, nim: keys.nim, trellisUrl: keys.trellisUrl },
-            { onStage: (_source, message) => useWorkspace.getState().setThinking(true, message) },
+            { meshy: keys.meshy, tripo: keys.tripo, nim: keys.nim, trellisUrl: keys.trellisUrl, kaggle: keys.kaggle },
+            {
+              onStage: (_source, message) => useWorkspace.getState().setThinking(true, message),
+              renderImage: referenceImage,
+            },
           );
 
           if (outcome.bytes) {

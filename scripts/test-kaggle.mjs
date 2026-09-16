@@ -136,3 +136,48 @@ test('base64 survives an image big enough to blow the stack', () => {
   assert.equal(encoded.length, Math.ceil(300_000 / 3) * 4);
   assert.equal(atob(encoded).length, 300_000);
 });
+
+test('the token actually reaches the chain from both places that build a game', async () => {
+  // The source can be in the chain and still be unreachable: the runtime used
+  // to build its key object field by field, and a field left out is a
+  // generator that is configured, listed, and never called.
+  const { readFileSync } = await import('node:fs');
+  for (const file of ['../src/lib/agent/runtime.ts', '../src/components/suites/GameStudio.tsx']) {
+    const src = readFileSync(new URL(file, import.meta.url), 'utf8');
+    assert.match(src, /kaggle: keys\.kaggle/, `${file} never passes the Kaggle token`);
+    // And the image half, or the source skips itself every time.
+    assert.match(src, /renderImage: referenceImage/, `${file} has no way to make the reference image`);
+  }
+});
+
+test('the reference image falls back to the provider that needs no key', async () => {
+  // A user whose only credential is a Kaggle token must still get meshes.
+  // Requiring NVIDIA for the image would make the free path depend on a paid one.
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/lib/agent/runtime.ts', import.meta.url), 'utf8');
+  const fn = /async function referenceImage[\s\S]*?\n}/.exec(src)[0];
+  assert.ok(fn.indexOf("'nim'") < fn.indexOf("'pollinations'"), 'the keyless provider should be the fallback, not the first try');
+  assert.match(fn, /return null/, 'it has to be able to say it could not');
+  // Bigger than a plausible error page rendered as an image.
+  assert.match(fn, /byteLength > 1024/);
+});
+
+test('the settings pane offers the field, and clearing keys clears it too', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/components/Settings.tsx', import.meta.url), 'utf8');
+  assert.match(src, /Kaggle token \(optional\)/);
+  assert.match(src, /setKaggle\(keys\.kaggle\)/, 'the field would show empty on every open');
+  // "Clear all" that leaves one credential behind is worse than no button.
+  assert.match(src, /saveKeys\(\{[^}]*kaggle: ''/);
+});
+
+test('the APK knows about the token too', async () => {
+  // A credential the browser build has and the APK does not is a feature that
+  // works right up until it is installed.
+  const { readFileSync } = await import('node:fs');
+  const kt = readFileSync(new URL('../android/app/src/main/java/com/chomugiri/workspace/server/ApiRouter.kt', import.meta.url), 'utf8');
+  assert.match(kt, /var kaggleToken: String/);
+  assert.match(kt, /secrets\.get\("kaggle_token"\)/);
+  assert.match(kt, /if \(body\.has\("kaggleToken"\)\)/, 'it would never be saved');
+  assert.match(kt, /\.put\("kaggleToken", kaggleToken\)/, 'it would never be read back');
+});
