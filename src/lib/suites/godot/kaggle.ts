@@ -56,6 +56,20 @@ export const PIXAL3D = {
   cudaArch: '7.5',
   /** The `flash_attn` build is worse than the compile it replaces. SDPA is in torch. */
   attnBackend: 'sdpa',
+  /**
+   * How far NAF upsamples the DINOv3 feature map before it is point-sampled.
+   *
+   * The texture stage asks for 1024, and DINOv3 ViT-L has 1024 channels, so the
+   * output tensor is 1024 x 1024 x 1024 floats -- 4.29 GiB, which is the 4.00 GiB
+   * allocation that killed a run 71 minutes in.
+   *
+   * Dropping it to 512 is safe in a way that is worth stating: the map is
+   * consumed immediately by `proj_grid`, which samples it with `grid_sample` at
+   * normalised coordinates, so the result is [B, grid_res^3, D] whatever the map's
+   * resolution. Nothing downstream changes shape. Pixal3D's own shape stage
+   * already runs at 512; only the texture stage asks for 1024.
+   */
+  nafTargetSize: 512,
   utils3d: 'https://github.com/LDYang694/Storages/releases/download/20260430/utils3d-0.0.2-py3-none-any.whl',
   /**
    * Microsoft MoGe, for the monocular depth pass.
@@ -258,6 +272,17 @@ def install():
         )
     with open(attn, "w") as fh:
         fh.write(body.replace(want, "from chomugiri_sdpa import chunked_sdpa as _sdpa"))
+    # And the NAF upsample that ran it out of memory a stage later.
+    with open("/kaggle/tmp/pixal3d/inference.py") as fh:
+        inf = fh.read()
+    big = '"naf_target_size": 1024,'
+    if inf.count(big) != 1:
+        raise SystemExit(
+            "PIXAL3D_UNAVAILABLE: the NAF target size moved, so the memory fix "
+            "would not have applied (found %d matches)" % inf.count(big)
+        )
+    with open("/kaggle/tmp/pixal3d/inference.py", "w") as fh:
+        fh.write(inf.replace(big, '"naf_target_size": ${PIXAL3D.nafTargetSize},'))
 ${
     withCache
       ? `    # The environment a previous run compiled, attached as an input. Everything

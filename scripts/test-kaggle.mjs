@@ -394,3 +394,23 @@ test('the shim is real Python and returns the same numbers torch does', async ()
   assert.match(out, /shim compiles/);
   assert.match(out, /chunked SDPA matches torch/);
 });
+
+test('the NAF upsample is cut to a size the T4 can hold', async () => {
+  // With the attention fixed the run reached the texture stage and died there:
+  // NAF was asked for a 1024x1024 map of DINOv3's 1024 channels, and
+  // 1024*1024*1024 floats is 4.29 GiB — the 4.00 GiB allocation in the trace.
+  //
+  // Halving it is safe because proj_grid samples the map with grid_sample at
+  // normalised coordinates, so what comes out is [B, grid_res^3, D] whatever
+  // resolution went in. Pixal3D's own shape stage already runs at 512.
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/lib/suites/godot/kaggle.ts', import.meta.url), 'utf8');
+  const [, size] = src.match(/nafTargetSize: (\d+),/);
+  assert.ok(Number(size) <= 512, `${size} still needs ${(size ** 2 * 1024 * 4) / 2 ** 30} GiB`);
+  assert.match(src, /PIXAL3D_UNAVAILABLE: the NAF target size moved/);
+
+  // The notebook must carry the substitution, with the named size in it.
+  const nb = pixal3dNotebook([{ name: 'a', image: IMAGE }], b64);
+  assert.match(nb, /"naf_target_size": 1024,/);
+  assert.ok(nb.includes(`"naf_target_size": ${size},`));
+});
