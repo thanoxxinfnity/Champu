@@ -344,7 +344,7 @@ export async function pushKernel(
     inputs?: string[];
     signal?: AbortSignal;
   },
-): Promise<{ url?: string; error?: string }> {
+): Promise<{ url?: string; slug?: string; error?: string }> {
   const body = {
     id: null,
     slug: `${options.user}/${options.slug}`,
@@ -372,11 +372,25 @@ export async function pushKernel(
       ...(options.signal ? { signal: options.signal } : {}),
     });
     if (!res.ok) return { error: `Kaggle refused the notebook (${res.status}).` };
-    const json = (await res.json()) as { url?: string; error?: string };
+    const json = (await res.json()) as { url?: string; ref?: string; error?: string };
     // The API answers 200 with an `error` string rather than a status code, so
     // the status is not the check. It never is.
     if (json.error) return { error: json.error };
-    return { url: json.url ? `https://www.kaggle.com${json.url}` : undefined };
+
+    // **The slug Kaggle used, not the one that was asked for.** It derives the
+    // slug from `newTitle`, so `chomugiri-glb-run-m2x8q4k1` went up as plain
+    // `chomugiri-glb-run` — and every status poll afterwards asked about a
+    // notebook that does not exist, got `unknown`, and waited the full forty
+    // minutes for a run that had finished in one.
+    //
+    // `url` is already absolute, which is the other half of the same lesson:
+    // prefixing it produced `https://www.kaggle.comhttps://www.kaggle.com/…`.
+    const ref = json.ref ?? (json.url ? new URL(json.url).pathname : '');
+    const slug = ref.split('/').filter(Boolean).pop();
+    return {
+      ...(json.url ? { url: json.url } : {}),
+      ...(slug ? { slug } : {}),
+    };
   } catch (err) {
     return { error: `Could not reach Kaggle: ${(err as Error).message}` };
   }
@@ -546,10 +560,13 @@ export async function generateOnKaggle(
     ...(options.signal ? { signal: options.signal } : {}),
   });
   if (pushed.error) return { models: [], log: '', error: pushed.error, seconds: seconds() };
+  // Everything after this asks about the slug Kaggle actually made.
+  const live = pushed.slug ?? slug;
 
   const deadline = Date.now() + (options.timeoutMs ?? 30 * 60_000);
   let wait = 4_000;
   let last = '';
+  let unknowns = 0;
   for (;;) {
     if (Date.now() > deadline) {
       return {
@@ -566,7 +583,7 @@ export async function generateOnKaggle(
     // hundreds of pointless requests.
     wait = Math.min(15_000, Math.round(wait * 1.6));
 
-    const state = await kernelStatus(token, me.user, slug, options.signal);
+    const state = await kernelStatus(token, me.user, live, options.signal);
     if (state.status !== last) {
       last = state.status;
       options.onStage?.(
@@ -578,9 +595,22 @@ export async function generateOnKaggle(
       );
     }
     if (state.status === 'complete' || state.status === 'error' || state.status === 'cancelled') break;
+    // `unknown` twice running means the poll is asking about something that is
+    // not there — a wrong slug, a deleted notebook — and no amount of further
+    // waiting will change the answer.
+    unknowns = state.status === 'unknown' ? unknowns + 1 : 0;
+    if (unknowns >= 3) {
+      return {
+        models: [],
+        log: '',
+        error: `Kaggle does not recognise the run "${live}" — ${state.message ?? 'no status came back'}.`,
+        ...(pushed.url ? { url: pushed.url } : {}),
+        seconds: seconds(),
+      };
+    }
   }
 
-  const out = await kernelOutput(token, me.user, slug, options.signal);
+  const out = await kernelOutput(token, me.user, live, options.signal);
   const summary = resultFromLog(out.log);
 
   const models: Array<{ name: string; bytes: Uint8Array }> = [];

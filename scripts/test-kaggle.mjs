@@ -222,3 +222,27 @@ test('the APK knows about the token too', async () => {
   assert.match(kt, /if \(body\.has\("kaggleToken"\)\)/, 'it would never be saved');
   assert.match(kt, /\.put\("kaggleToken", kaggleToken\)/, 'it would never be read back');
 });
+
+test('the run is polled at the slug Kaggle made, not the one it was asked for', async () => {
+  // Kaggle derives the slug from `newTitle`, so `chomugiri-glb-run-m2x8q4k1`
+  // went up as plain `chomugiri-glb-run`. Every poll afterwards asked about a
+  // notebook that does not exist, got `unknown`, and waited the full forty
+  // minutes for a run that had finished in one.
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/lib/suites/godot/kaggle.ts', import.meta.url), 'utf8');
+  assert.match(src, /const live = pushed\.slug \?\? slug/);
+  assert.match(src, /kernelStatus\(token, me\.user, live/);
+  assert.match(src, /kernelOutput\(token, me\.user, live/);
+
+  // And the push URL is used as given: it is already absolute, and prefixing it
+  // produced https://www.kaggle.comhttps://www.kaggle.com/…
+  assert.ok(!src.includes('`https://www.kaggle.com${json.url}`'));
+});
+
+test('an unrecognised run gives up instead of waiting out the timeout', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/lib/suites/godot/kaggle.ts', import.meta.url), 'utf8');
+  // No amount of further waiting turns a wrong slug into a right one.
+  assert.match(src, /unknowns >= 3/);
+  assert.match(src, /does not recognise the run/);
+});
