@@ -64,7 +64,13 @@ test('a compiled environment is restored when one is attached, and built when no
 
   const warm = pixal3dNotebook([{ name: 'a', image: IMAGE }], b64, { cached: true });
   assert.ok(warm.includes(ENV_ARCHIVE), 'the cached environment is never looked for');
-  assert.match(warm, /tar -I zstd -xf/);
+  assert.match(warm, /tar -xzf/);
+  // gzip, because zstd is not on Kaggle's image: `tar -I zstd` answers
+  // "Cannot exec: No such file or directory" and writes nothing, on both ends.
+  assert.ok(!warm.includes('zstd'), 'zstd is not installed there');
+  // And a restore that fails must fall back rather than carry on: a silent one
+  // surfaces later as a ModuleNotFoundError that looks nothing like a cache bug.
+  assert.match(warm, /would not unpack/);
   // And still compiles if the attachment is missing, rather than failing.
   assert.match(warm, /no cached environment/);
 
@@ -72,6 +78,9 @@ test('a compiled environment is restored when one is attached, and built when no
   // naming the packages by hand goes stale the moment TRELLIS.2 adds a sixth.
   const setup = setupNotebook();
   assert.match(setup, /added = sorted\(after - before\)/);
+  assert.ok(!setup.includes("-I 'zstd"), 'zstd is not installed on the image');
+  // tar's exit code is checked, unlike Godot's. tar means it.
+  assert.match(setup, /tar exited/);
   assert.ok(setup.includes(ENV_ARCHIVE));
   assert.equal(ENV_KERNEL, 'chomugiri-pixal3d-env');
 });

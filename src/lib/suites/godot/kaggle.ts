@@ -74,7 +74,7 @@ export const PIXAL3D = {
 export const ENV_KERNEL = 'chomugiri-pixal3d-env';
 
 /** What the setup run leaves behind for every later run to unpack. */
-export const ENV_ARCHIVE = 'pixal3d-env.tar.zst';
+export const ENV_ARCHIVE = 'pixal3d-env.tar.gz';
 
 export interface KaggleJob {
   /** The file this becomes, without an extension: `zombie` → `zombie.glb`. */
@@ -157,7 +157,14 @@ ${
     packed = glob.glob(CACHE + "/**/${ENV_ARCHIVE}", recursive=True)
     if packed:
         print("restoring the compiled environment from", packed[0], flush=True)
-        sh("tar -I zstd -xf " + packed[0] + " -C /usr/local/lib/python3.12/dist-packages")
+        restored = sh("tar -xzf " + packed[0] + " -C /usr/local/lib/python3.12/dist-packages").returncode
+        if restored != 0:
+            # A restore that failed and was not noticed is the worst case: the
+            # run carries on, imports the extension that was supposed to be in
+            # there, and reports a ModuleNotFoundError from somewhere that looks
+            # nothing like a broken cache. Which is exactly what happened.
+            print("the cached environment would not unpack — compiling instead", flush=True)
+            _compile()
     else:
         print("no cached environment — compiling, which takes the better part of an hour", flush=True)
         _compile()`
@@ -224,12 +231,16 @@ after = listing()
 # stale the moment TRELLIS.2 adds a sixth extension; a diff cannot.
 added = sorted(after - before)
 print("compiled:", added, flush=True)
-# zstd -10, not -19. The difference in size is a few percent and the difference
-# in time is minutes on a two-core builder — and -19 on an archive this size is
-# also where the first attempt fell over with "tar: Error is not recoverable".
+# gzip, not zstd. **zstd is not installed on Kaggle's image** — tar -I zstd
+# answers "Cannot exec: No such file or directory" and writes nothing, on both
+# ends. The first attempt read that as a compression-level problem and tuned the
+# level, which was a confident fix to a diagnosis that was simply wrong: the
+# archive had never been written at all.
+#
+# gzip is bigger and slower and is on every machine that has tar.
 packed = 1
 if added:
-    packed = sh("tar -I 'zstd -10 -T2' -cf /kaggle/working/${ENV_ARCHIVE} -C " + SITE + " " + " ".join("'" + a + "'" for a in added)).returncode
+    packed = sh("tar -czf /kaggle/working/${ENV_ARCHIVE} -C " + SITE + " " + " ".join("'" + a + "'" for a in added)).returncode
 
 # The exit code *is* checked here, unlike Godot's: tar means it. An archive that
 # was half written is worse than none, because every later run would restore it
