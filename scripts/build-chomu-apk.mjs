@@ -16,6 +16,18 @@ import { planGame, playerParts } from '../src/lib/suites/godot/plan.ts';
 import { generateModel } from '../src/lib/suites/godot/model-source.ts';
 import { coverProps } from '../src/lib/suites/godot/polyhaven.ts';
 
+// A release export when a keystore is given, and a debug one otherwise. Never a
+// release preset signed with debug keys: that produces an APK Android refuses to
+// install, so `apk.ts` throws rather than quietly downgrading.
+//
+// It is worth doing for the signature, not for the size — a release export of
+// this project came out 1.8MB smaller than the debug one, about 5%. Almost the
+// whole download is `libgodot_android.so`, and nothing in a preset shrinks the
+// engine.
+const KEYSTORE = process.env.KEYSTORE;
+const KEYSTORE_PASSWORD = process.env.KEYSTORE_PASSWORD;
+const KEYSTORE_USER = process.env.KEYSTORE_USER ?? 'chomugiri';
+
 const exec = promisify(execFile);
 const ROOT = process.env.BRIDGE_ROOT ?? '/tmp/chomu-build-root';
 const OUT = process.env.APK_OUT ?? '/tmp/ChomuGame.apk';
@@ -99,10 +111,20 @@ if (props.length) {
 }
 console.log('project  ', files.length, 'files');
 
+if (KEYSTORE) {
+  await fs.copyFile(KEYSTORE, path.join(ROOT, 'release.keystore'));
+}
+
 const built = await buildApkOnBridge(bridge, files, {
   name: plan.name,
   versionName: VERSION,
   godotPath: found.path,
+  ...(KEYSTORE
+    ? {
+        release: true,
+        keystore: { path: path.join(ROOT, 'release.keystore'), user: KEYSTORE_USER, password: KEYSTORE_PASSWORD },
+      }
+    : {}),
   onStage: (m) => console.log('         ·', m),
 });
 
