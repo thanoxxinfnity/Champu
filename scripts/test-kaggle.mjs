@@ -246,3 +246,45 @@ test('an unrecognised run gives up instead of waiting out the timeout', async ()
   assert.match(src, /unknowns >= 3/);
   assert.match(src, /does not recognise the run/);
 });
+
+test('the title carries the unique part, because the title is what is slugified', async () => {
+  // A unique slug under a reused title asks for a notebook that does not exist
+  // while the title points at one that does: 409, after the setup has already
+  // been paid for.
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/lib/suites/godot/kaggle.ts', import.meta.url), 'utf8');
+  assert.match(src, /title: slug\.replace/);
+  assert.ok(!/title: `Chomugiri — \$\{options\.label/.test(src));
+});
+
+test('a run does not rely on a cache nobody built', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/lib/suites/godot/kaggle.ts', import.meta.url), 'utf8');
+  // Attaching a kernel that does not exist is not harmless: the notebook falls
+  // through to compiling — half an hour — against a thirty-minute deadline.
+  assert.match(src, /kernelStatus\(token, me\.user, ENV_KERNEL/);
+  assert.match(src, /has not been built on this Kaggle account yet/);
+  // And the deadline covers a compile when one was actually asked for.
+  assert.match(src, /haveCache \? 30 : 75/);
+});
+
+test('the image is cut out here, so the gated model is never reached', () => {
+  // Pixal3D's preprocess reads: RGBA with any non-opaque pixel → use as is;
+  // otherwise → briaai/RMBG-2.0, which is **gated on HuggingFace**. Without a
+  // token whose account accepted the licence, the run dies with "You are trying
+  // to access a gated repo" five minutes into a GPU booking.
+  const nb = pixal3dNotebook([{ name: 'a', image: IMAGE }], b64);
+  assert.match(nb, /def cut_out/);
+  assert.match(nb, /floodfill/);
+  // Flood-filled from the corners, not thresholded: a brightness threshold also
+  // erases every white part *of the object*, and a white barrel comes back as
+  // a hoop.
+  assert.match(nb, /img\.width - 1, 0/);
+  assert.ok(!/pixels\[:, :, 0\] > 2[0-9][0-9]/.test(nb), 'that is a threshold, not a fill');
+  // A fill that swallowed the image means the object matches its background —
+  // better to fail honestly than to send an empty picture and get an empty mesh.
+  assert.match(nb, /> 0\.92/);
+  // And it never throws: without alpha the run reaches the gated model and
+  // fails there, which is a clearer error than this one.
+  assert.match(nb, /could not cut out/);
+});

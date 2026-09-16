@@ -290,11 +290,66 @@ ok = os.path.exists("/kaggle/tmp/pixal3d/inference.py")
 if not ok:
     print("PIXAL3D_UNAVAILABLE: inference.py is not where the repository says it is", flush=True)
 
+def cut_out(path):
+    """Give the image an alpha channel, so Pixal3D never reaches for RMBG.
+
+    Its preprocess step reads:
+
+        if input.mode == 'RGBA' and not np.all(alpha == 255): use it as-is
+        else:                                                  self.rembg_model(input)
+
+    and that rembg model is briaai/RMBG-2.0, which is **gated on HuggingFace**:
+    without a token whose account has accepted the licence, the run dies with
+    "You are trying to access a gated repo" after five minutes of setup.
+
+    An alpha channel sidesteps it entirely, and the images this suite sends are
+    generated to order with "plain white background" in the prompt — so the
+    background is knowable. Flood-filled from the four corners rather than
+    thresholded on brightness: a threshold also erases every white part *of the
+    object*, and a white barrel would come back as a hoop.
+    """
+    from PIL import Image, ImageDraw
+    import numpy as np
+
+    img = Image.open(path).convert("RGBA")
+    pixels = np.array(img)
+    if not np.all(pixels[:, :, 3] == 255):
+        return  # Already cut out. Leave it alone.
+
+    # A scratch layer to flood: black where the background reaches, white else.
+    mask = Image.new("L", img.size, 255)
+    flat = img.convert("RGB")
+    for corner in [(0, 0), (img.width - 1, 0), (0, img.height - 1), (img.width - 1, img.height - 1)]:
+        work = flat.copy()
+        ImageDraw.floodfill(work, corner, (255, 0, 255), thresh=42)
+        hit = np.all(np.array(work) == (255, 0, 255), axis=-1)
+        m = np.array(mask)
+        m[hit] = 0
+        mask = Image.fromarray(m)
+
+    reached = np.array(mask)
+    # A flood that swallowed nearly everything found an object the same colour
+    # as its background. Better to hand over the original and let the run fail
+    # honestly than to hand over an empty image and get an empty mesh.
+    if (reached == 0).mean() > 0.92:
+        print("  background fill took the whole image — leaving", path, "as it is", flush=True)
+        return
+    pixels[:, :, 3] = reached
+    Image.fromarray(pixels).save(path)
+    print("  cut out %s (%.0f%% background)" % (path, (reached == 0).mean() * 100), flush=True)
+
+
 for job in JOBS:
     name = job["name"]
     src = os.path.join("/kaggle/tmp", name + ".png")
     with open(src, "wb") as fh:
         fh.write(base64.b64decode(job["b64"]))
+    try:
+        cut_out(src)
+    except Exception as exc:
+        # Not fatal: without an alpha channel the run reaches for the gated
+        # model and fails there, which is a clearer error than this one.
+        print("  could not cut out", name, "-", exc, flush=True)
     if not ok:
         results["failed"].append({"name": name, "why": "Pixal3D did not install"})
         continue
@@ -581,7 +636,11 @@ export async function generateOnKaggle(
   const pushed = await pushKernel(token, {
     user: me.user,
     slug,
-    title: `Chomugiri — ${options.label ?? 'assets'}`,
+    // **The title is what Kaggle slugifies**, so the unique part has to be in
+    // it. Passing a unique slug under a reused title asks for a notebook that
+    // does not exist while the title points at one that does, and the push
+    // comes back 409 — after the setup has already been paid for.
+    title: slug.replace(/-/g, ' '),
     source: pixal3dNotebook(jobs, options.toBase64, { cached: haveCache }),
     ...(haveCache ? { inputs: [cached] } : {}),
     gpu: true,
