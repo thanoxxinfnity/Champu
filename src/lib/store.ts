@@ -51,7 +51,7 @@ export interface ChatMessageView {
    * should not carry a second copy of every artifact.
    */
   offer?: {
-    kind: 'minecraft-pack' | 'godot-project' | 'apk';
+    kind: 'minecraft-pack' | 'godot-project' | 'apk' | 'play';
     filename: string;
     label: string;
     /**
@@ -63,6 +63,14 @@ export interface ChatMessageView {
      * this points at it.
      */
     source?: string;
+    /**
+     * For a playable build: the key it is held under for this session.
+     *
+     * Not a workspace file. A WebAssembly build is forty-five megabytes and the
+     * one artifact that is cheap to make again and expensive to keep, so it
+     * lives in memory until the tab reloads.
+     */
+    playId?: string;
   };
 }
 

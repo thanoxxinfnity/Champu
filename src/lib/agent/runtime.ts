@@ -18,6 +18,7 @@ import { creditsFile } from '@/lib/suites/godot/sketchfab';
 import { describeProblems } from '@/lib/suites/godot/verify';
 import { apkArtifact, glbArtifact, wavArtifact } from '@/lib/suites/godot/artifact';
 import { buildApkOnBridge } from '@/lib/suites/godot/bridge-build';
+import { buildWebOnBridge, describeBuild, keepPlayable } from '@/lib/suites/godot/web-export';
 import { effect as sfxFor, toWav, track as musicTrack, type ScaleName } from '@/lib/suites/godot/audio';
 import {
   RUNNER_THEMES,
@@ -1181,11 +1182,50 @@ export async function send(opts: SendOptions): Promise<void> {
             emit(parked);
             void appendMessage({ ...parked, sessionId, suite });
           } else {
-            useWorkspace.getState().setThinking(true, 'Compiling the APK on the bridge…');
             const projectRoot = detectGodotProject(files)?.root ?? '';
+            const forBridge = files.map((f) => ({ path: relativePath(f.path, projectRoot), content: f.content }));
+
+            // ── Playable here, before anything is installed ────────────────
+            //
+            // The same project, exported to WebAssembly. It goes first because
+            // it is the one that costs the user nothing: no install, no
+            // "unknown source" warning, no wait — the game appears under the
+            // message that asked for it. The APK is still worth having, and
+            // still native-fast, but nobody should have to install a thing to
+            // find out whether it is any good.
+            useWorkspace.getState().setThinking(true, 'Compiling it to run in the chat…');
+            const web = await buildWebOnBridge(useWorkspace.getState().bridge, forBridge, {
+              name: design?.name ?? 'Chomugiri Game',
+              onStage: (message) => useWorkspace.getState().setThinking(true, message),
+            });
+
+            if (web.files) {
+              const playId = uid('play');
+              keepPlayable(playId, web.files);
+              const playable = {
+                id: uid('msg'),
+                role: 'system' as const,
+                content: `**${design?.name ?? 'The game'} runs right here.** ${describeBuild(web)}`,
+                offer: {
+                  kind: 'play' as const,
+                  filename: 'index.html',
+                  label: `${(web.size / 1024 / 1024).toFixed(0)} MB, no install`,
+                  playId,
+                },
+                createdAt: Date.now(),
+              };
+              emit(playable);
+              // The offer is kept out of history on purpose: the build it
+              // points at does not survive a reload, and a Play button that
+              // does nothing is worse than no button.
+              const { offer: _transient, ...history } = playable;
+              void appendMessage({ ...history, sessionId, suite });
+            }
+
+            useWorkspace.getState().setThinking(true, 'Compiling the APK on the bridge…');
             const built = await buildApkOnBridge(
               useWorkspace.getState().bridge,
-              files.map((f) => ({ path: relativePath(f.path, projectRoot), content: f.content })),
+              forBridge,
               {
                 name: design?.name ?? 'Chomugiri Game',
                 versionName: '1.0',

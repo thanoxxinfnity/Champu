@@ -7,6 +7,7 @@ import { buildGodotExport } from '@/lib/suites/godot/export';
 import { useMemo, useState } from 'react';
 import { renderMarkdown } from './markdown';
 import type { ChatMessageView } from '@/lib/store';
+import { GamePlayer } from '@/components/GamePlayer';
 
 function Avatar({ role, lane }: { role: string; lane?: 'A' | 'B' }) {
   const isUser = role === 'user';
@@ -212,6 +213,11 @@ export function Message({ message }: { message: ChatMessageView }) {
 function OfferDownload({ offer }: { offer: NonNullable<ChatMessageView['offer']> }) {
   const files = useWorkspace((s) => s.files);
   const [error, setError] = useState<string | null>(null);
+
+  // Not a download at all: the game itself, in the message that built it.
+  if (offer.kind === 'play') {
+    return offer.playId ? <GamePlayer id={offer.playId} label={offer.label} /> : null;
+  }
 
   const take = () => {
     if (offer.kind === 'apk') {
