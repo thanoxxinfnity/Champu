@@ -148,8 +148,43 @@ function installScript(withCache: boolean): string {
   return `
 CACHE = "/kaggle/input"
 
+SHIM = '''from PIL import Image
+
+
+class BiRefNet:
+    """Chomugiri stand-in for Pixal3D background remover.
+
+    The real one loads briaai/RMBG-2.0, which is gated on HuggingFace, and it
+    is constructed *eagerly* in Pipeline.from_pretrained, before any image is
+    looked at. So cutting the image out beforehand is not enough on its own:
+    the run dies loading a model it was never going to need.
+
+    This satisfies the construction and nothing else. Every image that reaches
+    the pipeline already has an alpha channel, so preprocess_image takes the
+    has_alpha branch and never calls this.
+    """
+
+    def __init__(self, model_name: str = ""):
+        self.model = None
+        self.model_name = model_name
+
+    def to(self, *args, **kwargs):
+        # The pipeline moves it to the GPU whether or not it is ever used.
+        return self
+
+    def __call__(self, image):
+        raise RuntimeError(
+            "The background remover was called, which means an image arrived "
+            "without an alpha channel. Chomugiri cuts them out before sending."
+        )
+'''
+
+
 def install():
     sh("git clone --depth 1 -b ${PIXAL3D.branch} ${PIXAL3D.repo} /kaggle/tmp/pixal3d")
+    # Replaced before anything imports it.
+    with open("/kaggle/tmp/pixal3d/pixal3d/pipelines/rembg/__init__.py", "w") as fh:
+        fh.write(SHIM)
 ${
     withCache
       ? `    # The environment a previous run compiled, attached as an input. Everything

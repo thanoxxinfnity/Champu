@@ -1,5 +1,7 @@
 /** node --experimental-strip-types --test scripts/test-kaggle.mjs */
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 import test from 'node:test';
 import {
   ENV_ARCHIVE, ENV_KERNEL, PIXAL3D, looksLikeToken, pixal3dNotebook, readLog, resultFromLog, setupNotebook, slugFor, unavailable,
@@ -44,7 +46,10 @@ test('one model that fails does not lose the others', () => {
   );
   // Each job is tried in turn and its failure recorded, never raised.
   assert.match(nb, /results\["failed"\]\.append/);
-  assert.ok(!/raise\b/.test(nb), 'a raise in the loop loses every model after it');
+  // The *loop*, not the whole notebook: the BiRefNet stub raises on purpose, to
+  // say loudly that it was called when it never should be.
+  const loop = nb.slice(nb.indexOf('for job in JOBS'), nb.indexOf('results["seconds"]'));
+  assert.ok(!/^\s*raise\b/m.test(loop), 'a raise in the loop loses every model after it');
   assert.match(nb, /CHOMUGIRI_RESULT/);
 });
 
@@ -287,4 +292,40 @@ test('the image is cut out here, so the gated model is never reached', () => {
   // And it never throws: without alpha the run reaches the gated model and
   // fails there, which is a clearer error than this one.
   assert.match(nb, /could not cut out/);
+});
+
+test('the notebook is valid Python before a GPU is booked for it', () => {
+  // A syntax error here costs a queue, a boot and an install before anything
+  // says so. Python is on this machine; asking it is free.
+  const { execFileSync } = require('node:child_process');
+  const { writeFileSync, mkdtempSync } = require('node:fs');
+  const { join } = require('node:path');
+  const { tmpdir } = require('node:os');
+
+  const dir = mkdtempSync(join(tmpdir(), 'nb-'));
+  for (const [name, source] of [
+    ['generate.py', pixal3dNotebook([{ name: 'a', image: IMAGE, prompt: 'x' }], b64)],
+    ['generate-cached.py', pixal3dNotebook([{ name: 'a', image: IMAGE }], b64, { cached: true })],
+    ['setup.py', setupNotebook()],
+  ]) {
+    const path = join(dir, name);
+    writeFileSync(path, source);
+    execFileSync('python3', ['-c', 'import ast,sys; ast.parse(open(sys.argv[1]).read())', path]);
+  }
+});
+
+test('the gated background remover is replaced, not just avoided', () => {
+  // Cutting the image out is not enough on its own: BiRefNet is constructed
+  // *eagerly* in Pipeline.from_pretrained, so the run dies loading a model it
+  // was never going to use. Both halves are needed.
+  const nb = pixal3dNotebook([{ name: 'a', image: IMAGE }], b64);
+  assert.match(nb, /class BiRefNet/);
+  assert.match(nb, /rembg\/__init__\.py/);
+  assert.match(nb, /fh\.write\(SHIM\)/);
+  // The stub has the surface the pipeline touches: constructed, moved to a
+  // device, and never called.
+  assert.match(nb, /def to\(self, \*args, \*\*kwargs\)/);
+  assert.match(nb, /raise RuntimeError/);
+  // And it is written before anything imports it.
+  assert.ok(nb.indexOf('fh.write(SHIM)') < nb.indexOf('_compile()'));
 });
