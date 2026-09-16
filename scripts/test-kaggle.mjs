@@ -343,3 +343,48 @@ test('the timeout it reports is the timeout it actually waited', async () => {
   // And no second, independently-guessed budget anywhere in the wait path.
   assert.ok(!/options\.timeoutMs \?\? 30 \* 60_000/.test(src));
 });
+
+test('the attention that ran the T4 out of memory is replaced, and the patch is loud', async () => {
+  // Pixal3D ran for 57 minutes, downloaded the weights and got three stages in
+  // before torch's math backend asked for a 7.17 GiB score matrix on a 14.56 GiB
+  // card. The fix is a shim; a shim that silently fails to apply costs the same
+  // hour and then fails the same way, so the install raises instead.
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/lib/suites/godot/kaggle.ts', import.meta.url), 'utf8');
+  assert.match(src, /from chomugiri_sdpa import chunked_sdpa as _sdpa/);
+  assert.match(src, /PIXAL3D_UNAVAILABLE: the sdpa import moved/);
+  // The allocator hint the out-of-memory error itself asks for.
+  assert.match(src, /PYTORCH_ALLOC_CONF=expandable_segments:True/);
+});
+
+test('the shim is real Python and returns the same numbers torch does', async () => {
+  const { pixal3dNotebook } = await import('../src/lib/suites/godot/kaggle.ts');
+  const { writeFileSync, mkdtempSync } = await import('node:fs');
+  const { execFileSync } = await import('node:child_process');
+  const { join } = await import('node:path');
+  const { tmpdir } = await import('node:os');
+
+  const dir = mkdtempSync(join(tmpdir(), 'chomu-sdpa-'));
+  const book = join(dir, 'notebook.py');
+  writeFileSync(book, pixal3dNotebook(
+    [{ name: 'barrel', image: new Uint8Array([1, 2, 3, 4]), prompt: 'a barrel' }],
+    (bytes) => Buffer.from(bytes).toString('base64'),
+    { cached: false },
+  ));
+
+  const script = new URL('./check-sdpa-shim.py', import.meta.url).pathname;
+  let out = '';
+  try {
+    out = execFileSync('python3', [script, book], { encoding: 'utf8' });
+  } catch (err) {
+    const said = `${err.stdout ?? ''}${err.stderr ?? ''}`;
+    // No torch on this machine is not a failing shim; anything else is.
+    if (/torch is not installed/.test(said)) {
+      assert.match(said, /shim compiles/);
+      return;
+    }
+    throw new Error(said || String(err));
+  }
+  assert.match(out, /shim compiles/);
+  assert.match(out, /chunked SDPA matches torch/);
+});

@@ -187,11 +187,77 @@ class BiRefNet:
 '''
 
 
+SDPA_SHIM = '''import torch
+from torch.nn.functional import scaled_dot_product_attention as _torch_sdpa
+
+try:
+    from torch.nn.attention import SDPBackend, sdpa_kernel
+except ImportError:  # pragma: no cover - older torch
+    SDPBackend = sdpa_kernel = None
+
+# Biggest score matrix the math backend may hold at once, in bytes.
+BUDGET = 1 << 30
+
+
+def chunked_sdpa(q, k, v):
+    """Torch SDPA that cannot allocate an L-by-L score matrix on a T4.
+
+    Pixal3D asks for full attention over every sparse token. At resolution
+    1024 the HR shape stage reaches roughly twenty-two thousand of them, and
+    torch's *math* backend materialises the whole [1, H, Lq, Lkv] matrix:
+    7.17 GiB in a single allocation, on a card with 14.56 GiB and the model
+    already resident. That is the out-of-memory error, and it arrives an hour
+    in, after the weights have downloaded and three stages have run.
+
+    The memory-efficient CUTLASS kernel never builds that matrix and it does
+    support sm_75, so ask for it by name instead of hoping torch picks it.
+
+    When it is unavailable for these shapes torch raises rather than quietly
+    falling back, so the query is split instead. Attention over a slice of Q
+    equals attention over the whole of Q for those rows -- softmax is taken
+    across the key axis, independently per query row -- so the slices are
+    concatenated, not combined. Same numbers, bounded peak.
+    """
+    if sdpa_kernel is not None:
+        try:
+            with sdpa_kernel(SDPBackend.EFFICIENT_ATTENTION):
+                return _torch_sdpa(q, k, v)
+        except (RuntimeError, torch.cuda.OutOfMemoryError):
+            pass
+
+    heads, lq, lkv = q.shape[1], q.shape[-2], k.shape[-2]
+    per_row = max(1, heads * lkv * q.element_size())
+    rows = max(1, min(lq, BUDGET // per_row))
+    if rows >= lq:
+        return _torch_sdpa(q, k, v)
+    return torch.cat(
+        [_torch_sdpa(q[:, :, i:i + rows], k, v) for i in range(0, lq, rows)],
+        dim=-2,
+    )
+'''
+
+
 def install():
     sh("git clone --depth 1 -b ${PIXAL3D.branch} ${PIXAL3D.repo} /kaggle/tmp/pixal3d")
     # Replaced before anything imports it.
     with open("/kaggle/tmp/pixal3d/pixal3d/pipelines/rembg/__init__.py", "w") as fh:
         fh.write(SHIM)
+    # And the attention call that ran the T4 out of memory an hour in.
+    with open("/kaggle/tmp/pixal3d/chomugiri_sdpa.py", "w") as fh:
+        fh.write(SDPA_SHIM)
+    attn = "/kaggle/tmp/pixal3d/pixal3d/modules/sparse/attention/full_attn.py"
+    with open(attn) as fh:
+        body = fh.read()
+    want = "from torch.nn.functional import scaled_dot_product_attention as _sdpa"
+    if body.count(want) != 1:
+        # Loud, because a silent no-op here costs an hour of GPU time and then
+        # fails with the same out-of-memory error as before the fix.
+        raise SystemExit(
+            "PIXAL3D_UNAVAILABLE: the sdpa import moved, so the memory fix "
+            "would not have applied (found %d matches)" % body.count(want)
+        )
+    with open(attn, "w") as fh:
+        fh.write(body.replace(want, "from chomugiri_sdpa import chunked_sdpa as _sdpa"))
 ${
     withCache
       ? `    # The environment a previous run compiled, attached as an input. Everything
@@ -405,9 +471,14 @@ for job in JOBS:
         glb = os.path.join(OUT, name + ".glb")
         # The documented invocation, not an imagined Python API. ATTN_BACKEND
         # is sdpa because flash_attn is another CUDA build and torch already
-        # ships an attention that works.
+        # ships an attention that works — through chomugiri_sdpa, which keeps
+        # it from materialising a score matrix the T4 cannot hold.
+        # expandable_segments is what the out-of-memory error itself asks for:
+        # the stages free tensors of very different sizes, and without it the
+        # card runs out of contiguous block long before it runs out of memory.
         run = sh(
-            "cd /kaggle/tmp/pixal3d && ATTN_BACKEND=${PIXAL3D.attnBackend} python inference.py"
+            "cd /kaggle/tmp/pixal3d && PYTORCH_ALLOC_CONF=expandable_segments:True"
+            " ATTN_BACKEND=${PIXAL3D.attnBackend} python inference.py"
             " --image " + src + " --output " + glb +
             " --low_vram --resolution ${PIXAL3D.resolution}"
         )
