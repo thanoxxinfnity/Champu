@@ -40,72 +40,127 @@
 <div class="wrap">
   <h1>Privacy</h1>
   <p class="sub">Chomugiri — the autonomous developer workspace.</p>
-  <p class="stamp">Last updated 15 September 2026</p>
+  <p class="stamp">Last updated 16 September 2026</p>
 
   <div class="card">
-    <p><strong>The short version.</strong> Chomugiri has no accounts, no analytics and no server of
-    ours that stores your work. Your chats, files and API keys stay on your device. When you ask it
-    to do something that needs an outside service, it calls that service and nothing else.</p>
+    <p><strong>The short version.</strong> There are no accounts, no analytics, and no database of
+    ours holding your work. Your chats, your files and your API keys live on your device. What
+    leaves it is what a task needs, sent to the service doing that task — and every one of those
+    is named below.</p>
+    <p>Everything here is checkable. Chomugiri is open source at
+    <a href="https://github.com/thanoxxinfnity/Champu">github.com/thanoxxinfnity/Champu</a>; if any
+    sentence on this page does not match the code, the code is right and this page is a bug.</p>
   </div>
 
+  <h2>The Android app and the web version are not the same</h2>
+  <p>This matters more than anything else on the page, so it goes first.</p>
+  <ul>
+    <li><strong>The Android app</strong> carries the whole API surface natively — it runs a small
+      HTTP server on the phone itself, on the loopback interface, which nothing outside the phone
+      can reach. Requests to a model provider go <em>from your phone straight to them</em>. No
+      server of ours is involved at any point.</li>
+    <li><strong>The web version</strong> cannot do that. A browser is not allowed to call NVIDIA
+      directly — NVIDIA sends no CORS headers — so requests pass through the Chomugiri server
+      (<code>/api/chat</code> and friends), which forwards them and streams the answer back. It
+      keeps no copy and writes nothing to a database. But it does see the request as it goes by,
+      and so does whoever hosts it. If that is not acceptable to you, use the Android app, or run
+      your own copy — it is the same source.</li>
+  </ul>
+
   <h2>What stays on your device</h2>
-  <p>All of it, by default:</p>
   <ul>
     <li><strong>Chats and generated files</strong> — in your browser's IndexedDB, or in the Android
-      app's own storage. Clearing the app's data deletes them, and nothing keeps a copy.</li>
-    <li><strong>API keys</strong> — in the Android app these go to the system's encrypted
-      preferences. In a browser they sit in the same local storage as the rest of the workspace.</li>
+      app's own private storage. Clearing the app's data deletes them, and nothing keeps a copy.</li>
     <li><strong>Settings</strong> — theme, model choice, custom endpoints.</li>
   </ul>
-  <p>We do not run a database. There is no account to sign in to, so there is nothing about you for
-  us to hold.</p>
+
+  <h2>Where your API keys are kept, precisely</h2>
+  <p>Stated exactly rather than reassuringly, because "encrypted" is the easiest word in the world
+  to put on a page:</p>
+  <ul>
+    <li><strong>In the Android app</strong> they are written to a private
+      <code>SharedPreferences</code> file called <code>chomugiri-secrets</code>, in
+      <code>MODE_PRIVATE</code>. That means no other app on the phone can read it, and it sits
+      inside app storage which Android encrypts at rest along with everything else on a modern
+      device. <strong>The app does not add an encryption layer of its own</strong> — it is not
+      using <code>EncryptedSharedPreferences</code> or the hardware keystore. On an unlocked,
+      rooted phone, or from a full device backup, those keys are readable.</li>
+    <li><strong>In a browser</strong> they sit in the same local storage as the rest of the
+      workspace, which is to say: as safe as that browser profile is, and no safer.</li>
+  </ul>
+  <p>Either way they are sent only to the provider they belong to, and only when a request needs
+  them. They are never sent to us — in the web version they pass through the gateway on their way
+  to the provider, and are not stored there.</p>
 
   <h2>What leaves your device, and where it goes</h2>
-  <p>Only what a task needs, and only to the service performing it:</p>
+  <p>The full list. If a host is not on it, Chomugiri does not talk to it.</p>
   <table>
     <tr><th>When you</th><th>What is sent</th><th>To</th></tr>
-    <tr><td>Chat with a model</td><td>Your message and the conversation so far</td><td>The provider you picked — NVIDIA, Pollinations, or an endpoint you added</td></tr>
-    <tr><td>Generate a texture or image</td><td>The prompt</td><td>NVIDIA or Pollinations</td></tr>
-    <tr><td>Generate a 3D model</td><td>The prompt</td><td>NVIDIA, Meshy or Tripo, depending on which key you supplied</td></tr>
-    <tr><td>Deploy a site</td><td>The files being deployed, and your token</td><td>Vercel</td></tr>
-    <tr><td>Use the terminal bridge</td><td>The command</td><td>The machine you pointed it at</td></tr>
+    <tr><td>Chat with a model</td><td>Your message and the conversation so far</td><td>The provider you picked — NVIDIA NIM, Pollinations, or an endpoint you added yourself</td></tr>
+    <tr><td>Generate an image or texture</td><td>The prompt</td><td>NVIDIA NIM, or Pollinations</td></tr>
+    <tr><td>Generate a 3D model</td><td>The prompt</td><td>NVIDIA NIM (TRELLIS), Meshy or Tripo — whichever key you supplied</td></tr>
+    <tr><td>Build a game that needs props</td><td>Search terms like "barrel"</td><td>Poly Haven, and Sketchfab if you gave it a token</td></tr>
+    <tr><td>Ask it to look something up</td><td><strong>Your search query</strong></td><td>Whichever engine answers: Brave, Tavily, Serper, Wikipedia, DuckDuckGo or Bing</td></tr>
+    <tr><td>Deploy a site</td><td>The files being deployed, and your Vercel token</td><td>Vercel</td></tr>
+    <tr><td>Use the terminal bridge</td><td>The command you asked for</td><td>The machine you pointed it at, and nowhere else</td></tr>
+    <tr><td>Open a generated 3D web page</td><td>Nothing of yours — the page fetches the three.js library</td><td>jsDelivr, in the browser of whoever opens that page</td></tr>
   </table>
-  <p>Each of these providers has its own privacy policy, and your data is theirs to handle once it
-  arrives. We do not add a middleman: requests go from your device or your own server to them.</p>
+  <p>Each of those services has its own privacy policy, and once something arrives there it is
+  governed by theirs, not by this page.</p>
 
   <h2>What we do not do</h2>
   <ul>
-    <li>No analytics, telemetry, crash reporting or usage tracking.</li>
+    <li>No analytics, telemetry, crash reporting or usage tracking. There is no code in the app
+      that reports anything back.</li>
     <li>No advertising, and no advertising identifiers.</li>
-    <li>No selling or sharing of anything, because we hold nothing to sell.</li>
-    <li>No training on your prompts or your code.</li>
+    <li>No selling or sharing of anything, because nothing is held to sell.</li>
+    <li>No model of ours is trained on your prompts or your code. We do not have one.</li>
+  </ul>
+
+  <h2>What this page cannot promise</h2>
+  <p>Two honest limits, because a policy that claims to cover other companies' behaviour is worth
+  nothing:</p>
+  <ul>
+    <li><strong>Whether a provider trains on what you send it is their decision, not ours.</strong>
+      Paid API tiers usually say they do not; free and anonymous ones often reserve the right to.
+      Pollinations is the keyless default here precisely because it needs no account, and that is
+      the trade. If this matters to your work, read the policy of the provider you have selected
+      and prefer one you hold a key for.</li>
+    <li><strong>A search query is a statement about what you are working on.</strong> Sending one
+      tells that search engine something, and there is no way to ask a question of the internet
+      privately. Research is off unless you ask for it.</li>
   </ul>
 
   <h2>Permissions the Android app asks for</h2>
-  <ul>
-    <li><strong>Internet</strong> — to reach the model providers you have configured.</li>
-    <li><strong>Storage</strong> — to save the files it generates where you can find them.</li>
-    <li><strong>Notifications</strong> — to tell you a long build has finished. Optional; the app
-      works without it.</li>
-  </ul>
-  <p>No camera, no microphone, no location, no contacts.</p>
+  <p>All five, as declared in the manifest:</p>
+  <table>
+    <tr><th>Permission</th><th>What it is for</th></tr>
+    <tr><td><code>INTERNET</code></td><td>Reaching the providers you have configured.</td></tr>
+    <tr><td><code>ACCESS_NETWORK_STATE</code></td><td>Telling you the request failed because you are offline, rather than just failing.</td></tr>
+    <tr><td><code>FOREGROUND_SERVICE</code><br><code>FOREGROUND_SERVICE_DATA_SYNC</code></td><td>Keeping a long build running when you switch away from the app. Android kills background work otherwise, and a compile that dies halfway is a compile you have to start again.</td></tr>
+    <tr><td><code>POST_NOTIFICATIONS</code></td><td>Telling you that build finished. You can refuse it; everything else still works.</td></tr>
+  </table>
+  <p>There is <strong>no storage permission</strong>, no camera, no microphone, no location and no
+  contacts. Generated files are written to the app's own storage and handed to you through your
+  browser's downloads, which needs no permission at all.</p>
 
   <h2>Voice recordings</h2>
   <p>The recordings in the app and on this site are ours, and they play from the app. They are
-  deliberately not built into anything Chomugiri generates — a game you export carries none of them,
-  so what you publish is yours.</p>
+  deliberately not built into anything Chomugiri generates — a game you export carries none of
+  them, so what you publish is yours.</p>
 
   <h2>Children</h2>
-  <p>Chomugiri is a developer tool and is not directed at children under 13. We collect nothing from
-  anyone, of any age.</p>
+  <p>Chomugiri is a developer tool and is not directed at children under 13. Nothing is collected
+  from anyone, of any age.</p>
 
   <h2>Changes</h2>
-  <p>If this policy changes, the date at the top changes with it. There is no mailing list to notify,
-  because there are no addresses to notify.</p>
+  <p>If this policy changes, the date at the top changes with it. There is no mailing list to
+  notify, because there are no addresses to notify.</p>
 
   <h2>Contact</h2>
-  <p>Questions about this policy: open an issue on the project's repository.</p>
-
+  <p>Questions, or a claim on this page you think is wrong:
+  <a href="https://github.com/thanoxxinfnity/Champu/issues">open an issue on the repository</a>.
+  That is the only channel, and it is a public one.</p>
   <footer>
     Chomugiri &middot; <a href="/">Home</a>
   </footer>

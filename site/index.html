@@ -77,14 +77,20 @@
   pipeline rather than by hand. Five missions, each unlocking the next: clear the
   yard, hold out ninety seconds, run for supplies, defend the generator, last
   stand. Waves that grow, a hitscan rifle with ammo and reloads, health that
-  comes back when you break off, muzzle flash and blood, and an arena with real
-  cover — crates and barrels from Poly Haven, CC0. Exported with Godot 4.7.2.</p>
+  comes back when you break off, muzzle flash and blood.</p>
+  <p>It is fought over a city block rather than an empty square — two streets
+  crossing at a plaza, four lots with an alley through each, cover against the
+  walls, a watchtower to steer by and a ramp to a roof worth holding. The crates
+  and barrels are real models from Poly Haven, CC0. Exported with Godot 4.7.2.</p>
 
   <div class="card">
-    <p><strong><a href="/download/ChomuGame.apk">ChomuGame.apk</a></strong> — 39 MB, arm64, Android 7 and up.
-    It is signed with a debug key, so Android will warn that it came from outside the
-    Play Store; allow the install from your browser and it runs. Left half of the
-    screen moves, right half looks, tap to fire.</p>
+    <p><strong><a href="/download/ChomuGame.apk">ChomuGame.apk</a></strong> — 33 MB, arm64,
+    Android 7 and up. It is signed, but not by the Play Store, so Android will warn that it came
+    from an unknown source; allow the install from your browser and it runs.</p>
+    <p>Landscape. The left half of the screen is the movement stick — it appears wherever your
+    thumb lands, and shoving it to the edge sprints. The right half turns the camera.
+    <strong>FIRE</strong>, <strong>RELOAD</strong> and <strong>JUMP</strong> sit under your right
+    thumb.</p>
   </div>
   <!--/APK-->
 
@@ -100,10 +106,15 @@
 
   <h2>How it runs</h2>
   <ul>
-    <li><strong>On your device.</strong> The workspace is a Next.js app; the Android build carries the
-      whole API surface natively so it works with no server at all.</li>
-    <li><strong>With your keys.</strong> You paste them in Settings, they stay in encrypted device
-      storage, and they go only to the provider they belong to.</li>
+    <li><strong>On your device.</strong> The workspace is a Next.js app, and the Android build
+      carries the whole API surface natively — it serves itself on the phone's loopback interface,
+      so requests go from your phone to the provider with no server of ours in between. The web
+      version cannot do that, because a browser is not allowed to call NVIDIA directly; there,
+      requests pass through a gateway that forwards and stores nothing.</li>
+    <li><strong>With your keys.</strong> You paste them in Settings, they stay in the app's own
+      private storage on the phone, and they go only to the provider they belong to. The
+      <a href="/privacy">privacy policy</a> says exactly which file and exactly how well protected
+      — no rounder than that.</li>
     <li><strong>Nothing collected.</strong> No accounts, no analytics, no database of ours. See the
       <a href="/privacy">privacy policy</a> for exactly what leaves the device and where it goes.</li>
   </ul>
