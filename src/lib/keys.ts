@@ -50,9 +50,21 @@ export interface ApiKeys {
    * for what it answers to everything else.
    */
   trellisUrl: string;
+  /**
+   * A Kaggle API token, from kaggle.com/settings → API Tokens.
+   *
+   * The only free generator that is actually up. Kaggle gives every account a
+   * Tesla T4 and thirty hours a week of it, and the suite drives Pixal3D on it
+   * through the Kernels API — so a user with no paid key and no working
+   * TRELLIS still gets real meshes rather than code-built geometry.
+   *
+   * Their token, on their account, spending their quota. There is no shared
+   * one to give out and nothing here that could pay for it.
+   */
+  kaggle: string;
 }
 
-const EMPTY: ApiKeys = { nim: '', pollinations: '', tripo: '', meshy: '', sketchfab: '', trellisUrl: '' };
+const EMPTY: ApiKeys = { nim: '', pollinations: '', tripo: '', meshy: '', sketchfab: '', trellisUrl: '', kaggle: '' };
 
 export const NIM_KEY_HEADER = 'x-chomugiri-nim-key';
 export const POLLINATIONS_KEY_HEADER = 'x-chomugiri-pollinations-token';
@@ -87,6 +99,7 @@ export async function loadKeys(): Promise<ApiKeys> {
           meshyKey?: string;
           sketchfabKey?: string;
           trellisUrl?: string;
+          kaggleToken?: string;
         };
         cache = {
           ...EMPTY,
@@ -94,6 +107,7 @@ export async function loadKeys(): Promise<ApiKeys> {
           meshy: json.meshyKey ?? '',
           sketchfab: json.sketchfabKey ?? '',
           trellisUrl: json.trellisUrl ?? '',
+          kaggle: json.kaggleToken ?? '',
         };
         return cache;
       }
@@ -135,6 +149,7 @@ export async function saveKeys(next: Partial<ApiKeys>): Promise<ApiKeys> {
       meshyKey: cache.meshy,
       sketchfabKey: cache.sketchfab,
       trellisUrl: cache.trellisUrl,
+      kaggleToken: cache.kaggle,
     });
     return cache;
   }

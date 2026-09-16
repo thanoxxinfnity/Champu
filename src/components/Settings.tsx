@@ -1180,6 +1180,7 @@ function KeysTab() {
   const [tripo, setTripo] = useState('');
   const [meshy, setMeshy] = useState('');
   const [sketchfab, setSketchfab] = useState('');
+  const [kaggle, setKaggle] = useState('');
   const [trellisUrl, setTrellisUrl] = useState('');
   const [reveal, setReveal] = useState(false);
   const [shell, setShell] = useState(false);
@@ -1206,6 +1207,7 @@ function KeysTab() {
       setTripo(keys.tripo);
       setMeshy(keys.meshy);
       setSketchfab(keys.sketchfab);
+      setKaggle(keys.kaggle);
       setTrellisUrl(keys.trellisUrl);
       setNimSaved(configured);
     })();
@@ -1228,7 +1230,7 @@ function KeysTab() {
     setSaving(true);
     setStatus({ kind: 'info', text: 'Saving, then checking the key against NVIDIA…' });
     try {
-      const modelKeys = { pollinations, tripo, meshy, sketchfab, trellisUrl };
+      const modelKeys = { pollinations, tripo, meshy, sketchfab, trellisUrl, kaggle };
       await saveKeys(sendNim ? { nim, ...modelKeys } : modelKeys);
       setVercelCredentials(vercel.trim(), team.trim());
       // The catalogue is the real test: it only returns NIM models if the key
@@ -1250,7 +1252,7 @@ function KeysTab() {
     } finally {
       setSaving(false);
     }
-  }, [nim, pollinations, tripo, meshy, sketchfab, trellisUrl, vercel, team, nimTouched, nimSaved, loadModels, setVercelCredentials]);
+  }, [nim, pollinations, tripo, meshy, sketchfab, trellisUrl, kaggle, vercel, team, nimTouched, nimSaved, loadModels, setVercelCredentials]);
 
   const clear = useCallback(async () => {
     setNimTouched(false);
@@ -1262,7 +1264,7 @@ function KeysTab() {
     setTrellisUrl('');
     setVercel('');
     setTeam('');
-    await saveKeys({ nim: '', pollinations: '', tripo: '', meshy: '', sketchfab: '', trellisUrl: '' });
+    await saveKeys({ nim: '', pollinations: '', tripo: '', meshy: '', sketchfab: '', trellisUrl: '', kaggle: '' });
     setVercelCredentials('', '');
     await loadModels(true);
     setStatus({ kind: 'info', text: 'Keys cleared from this device.' });
@@ -1359,6 +1361,22 @@ function KeysTab() {
           autoComplete="off"
           placeholder="leave empty to generate models instead"
           onChange={(e) => setSketchfab(e.target.value)}
+        />
+      </Field>
+
+      <Field
+        label="Kaggle token (optional) — 3D models on a free GPU"
+        hint="The free generator that is actually up. Kaggle gives every account a Tesla T4 and thirty hours a week of it, and this runs Pixal3D on it — a prompt becomes an image, the image becomes a GLB with real textures. It is your account and your quota; there is no shared one. Generate a token at kaggle.com/settings → API Tokens. Slower than a hosted endpoint, because a notebook has to queue and boot, so a build asks for every model it needs in one run."
+      >
+        <input
+          className={inputClass}
+          style={inputStyle}
+          type={reveal ? 'text' : 'password'}
+          value={kaggle}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder="KGAT_…"
+          onChange={(e) => setKaggle(e.target.value)}
         />
       </Field>
 

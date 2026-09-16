@@ -31,9 +31,10 @@ import { rigFor } from './rig.ts';
 import * as meshy from './meshy.ts';
 import * as tripo from './tripo.ts';
 import * as trellis from './trellis.ts';
+import * as kaggle from './kaggle.ts';
 import * as sketchfab from './sketchfab.ts';
 
-export type SourceId = 'sketchfab' | 'meshy' | 'tripo' | 'trellis' | 'built';
+export type SourceId = 'sketchfab' | 'meshy' | 'tripo' | 'kaggle' | 'trellis' | 'built';
 
 /**
  * Set once TRELLIS has proved its deployment is down, so the rest of a build
@@ -56,6 +57,14 @@ export interface ModelKeys {
   nim?: string;
   /** A self-hosted TRELLIS container, overriding NVIDIA's hosted one. */
   trellisUrl?: string;
+  /**
+   * A Kaggle API token: a free Tesla T4 to run Pixal3D on.
+   *
+   * The only free generator that has been reliably up. It is slower than a
+   * hosted endpoint — a kernel queues, boots and installs — so it sits behind
+   * anything faster, and in front of the code-built floor.
+   */
+  kaggle?: string;
 }
 
 /**
@@ -108,6 +117,20 @@ export interface ModelOutcome {
  * Split out from `generateModel` so the ordering can be tested without any
  * network at all.
  */
+/**
+ * Bytes to base64, without `Buffer` and without blowing the stack.
+ *
+ * `String.fromCharCode(...bytes)` on a 200KB image is 200,000 arguments, which
+ * throws. Chunked, it is fine.
+ */
+export function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
 export function sourceChain(keys: ModelKeys, role: ModelRole = 'prop'): SourceId[] {
   const chain: SourceId[] = [];
   // Meshy and Tripo cost the user money per generation, and they are the only
@@ -127,6 +150,10 @@ export function sourceChain(keys: ModelKeys, role: ModelRole = 'prop'): SourceId
   // function, not only as a self-hosted container. It sits after the keys the
   // user explicitly pasted, because those are a deliberate choice and this is
   // the default.
+  // Kaggle before TRELLIS, for the same reason Meshy and Tripo come before
+  // both: a token somebody went and pasted is a deliberate choice, and TRELLIS
+  // is the default nobody asked for. It is also the one that has been up.
+  if (keys.kaggle?.trim()) chain.push('kaggle');
   if (keys.nim?.trim()) chain.push('trellis');
   chain.push('built');
   return chain;
@@ -147,6 +174,7 @@ export function pipelineStatement(keys: ModelKeys): string {
     sketchfab: 'Sketchfab (existing rigged models, credited)',
     meshy: 'Meshy (text-to-3D, auto-rigged)',
     tripo: 'Tripo AI (text-to-3D)',
+    kaggle: 'Pixal3D on a Kaggle GPU (image-to-3D, free)',
     trellis: keys.trellisUrl?.trim()
       ? 'Microsoft TRELLIS (self-hosted NIM container)'
       : 'Microsoft TRELLIS via NVIDIA NIM',
@@ -208,6 +236,15 @@ export async function generateModel(
      * build would never finish. Ten minutes by default.
      */
     trellisBudgetMs?: number;
+    /**
+     * Turns a prompt into a reference image.
+     *
+     * Passed in rather than imported, so this module does not drag a provider —
+     * and its server-only bits — into whatever bundle it lands in. Pixal3D is
+     * image-to-3D: without one of these it cannot be reached at all, which is
+     * reported rather than silently skipped.
+     */
+    renderImage?: (prompt: string) => Promise<Uint8Array | null>;
   } = {},
 ): Promise<ModelOutcome> {
   const notes: string[] = [];
@@ -296,6 +333,44 @@ export async function generateModel(
         return { source: 'tripo', url: result.modelUrl, rigged: false, notes };
       }
       if (result.error) notes.push(result.error);
+      continue;
+    }
+
+    if (source === 'kaggle') {
+      // Pixal3D lifts an image into a mesh; it does not read prompts. So the
+      // chain is prompt → image → GLB, and the first half has to exist.
+      if (!options.renderImage) {
+        notes.push('Pixal3D needs a reference image and nothing here can make one — skipping the Kaggle GPU.');
+        continue;
+      }
+
+      options.onStage?.('kaggle', 'Drawing a reference image for Pixal3D.');
+      const image = await options.renderImage(`${request.prompt}, single object, plain background, full view`);
+      if (!image?.byteLength) {
+        notes.push('Could not render a reference image, so there was nothing to send to Pixal3D.');
+        continue;
+      }
+
+      options.onStage?.('kaggle', 'Sending it to a Kaggle GPU.');
+      // One model per kernel here, which pays the setup once per model. A game
+      // build should call `generateOnKaggle` with every model it needs at once
+      // instead — the cost is the kernel, not the mesh.
+      const run = await kaggle.generateOnKaggle(
+        keys.kaggle!,
+        [{ name: 'model', image, prompt: request.prompt }],
+        {
+          toBase64: bytesToBase64,
+          label: request.role ?? 'model',
+          onStage: (message) => options.onStage?.('kaggle', message),
+          ...(options.signal ? { signal: options.signal } : {}),
+        },
+      );
+
+      if (run.models.length) {
+        notes.push('Pixal3D does not rig its models, so this one has no skeleton and will not animate.');
+        return { source: 'kaggle', bytes: run.models[0].bytes, rigged: false, notes };
+      }
+      if (run.error) notes.push(`Kaggle: ${run.error}`);
       continue;
     }
 

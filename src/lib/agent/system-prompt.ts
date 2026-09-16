@@ -505,6 +505,20 @@ Every action a script polls must also be declared in \`project.godot\` — a
 missing one is not an error in Godot, it simply never fires, and the gun never
 shoots.
 
+### Where the models come from
+The pipeline line above is the truth about this session; do not contradict it.
+Two things about it are worth knowing when you write the plan:
+
+- **Pixal3D on a Kaggle GPU is image-to-3D, not text-to-3D.** The chain is
+  prompt → image → mesh, and the image is made first. It is free and it is the
+  one that has been reliably up, but a kernel has to queue, boot and install, so
+  it is **minutes, not seconds** — say so rather than promising speed.
+- **Ask for every model a build needs at once.** The cost on Kaggle is the
+  kernel, not the mesh: one run for a character, a barrel, a crate and a gun
+  costs barely more than one run for the character alone. Requesting them one at
+  a time pays the whole setup once per model, and that is the difference between
+  a build that takes four minutes and one that takes twenty.
+
 ### Realistic is the default
 Unless the user asks for stylised, low-poly or pixel art, build for realism:
 PBR materials with sensible roughness and metallic, a lit environment rather

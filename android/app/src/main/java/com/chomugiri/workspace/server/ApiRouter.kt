@@ -71,6 +71,17 @@ class ApiRouter(private val secrets: SecretStore) {
         set(value) { secrets.put("trellis_url", value) }
 
     /**
+     * A Kaggle API token, which buys a free Tesla T4 to run Pixal3D on.
+     *
+     * Ported the moment the web side gained it. A credential the browser build
+     * knows about and this one does not is a feature that works until it is
+     * installed, which is the worst way for it to fail.
+     */
+    var kaggleToken: String
+        get() = secrets.get("kaggle_token")
+        set(value) { secrets.put("kaggle_token", value) }
+
+    /**
      * The port the workspace was last served on.
      *
      * Stored because browser storage is scoped to the origin, and the origin
@@ -158,6 +169,7 @@ class ApiRouter(private val secrets: SecretStore) {
             if (body.has("meshyKey")) meshyKey = body.optString("meshyKey")
             if (body.has("sketchfabKey")) sketchfabKey = body.optString("sketchfabKey")
             if (body.has("trellisUrl")) trellisUrl = body.optString("trellisUrl")
+            if (body.has("kaggleToken")) kaggleToken = body.optString("kaggleToken")
             response.json(200, state().put("ok", true).toString())
         } else {
             response.json(200, state().toString())
@@ -183,6 +195,7 @@ class ApiRouter(private val secrets: SecretStore) {
         .put("meshyKey", meshyKey)
         .put("sketchfabKey", sketchfabKey)
         .put("trellisUrl", trellisUrl)
+        .put("kaggleToken", kaggleToken)
 
     // ── /api/models ─────────────────────────────────────────────────────────
 
