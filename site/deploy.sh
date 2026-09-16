@@ -14,28 +14,23 @@ root="$(dirname "$here")"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 
-cp "$here"/index.html "$here"/privacy.html "$here"/vercel.json "$stage/"
+cp "$here"/index.html "$here"/privacy.html "$here"/vercel.json "$here"/package.json "$stage/"
+# The upload route. A serverless function alongside a static site, because the
+# Blob token only resolves inside a deployment — see site/api/blob-upload.js.
+cp -r "$here"/api "$stage/"
 mkdir -p "$stage/voice"
 cp "$root"/public/voice/*.wav "$stage/voice/"
 
-# The APK, when one has been built. Not in git — it is tens of megabytes of
-# compiled output that Godot can produce again from the project any time.
+# No APK is staged any more.
 #
-# Published under a fixed name rather than the build's own, so the page's link
-# never has to be edited and can never point at a file the last deploy renamed.
-# With no APK the whole download section is cut out, because a call-to-action
-# that 404s is worse than no call-to-action.
-if [ -n "${APK:-}" ]; then
-  [ -f "$APK" ] || { echo "APK is set to '$APK', which is not a file." >&2; exit 1; }
-  mkdir -p "$stage/download"
-  cp "$APK" "$stage/download/ChomuGame.apk"
-else
-  python3 - "$stage/index.html" <<'TRIM'
-import re, sys, pathlib
-page = pathlib.Path(sys.argv[1])
-page.write_text(re.sub(r'<!--APK-->.*?<!--/APK-->\n?', '', page.read_text(), flags=re.S))
-TRIM
-fi
+# The builds live on Vercel Blob, which is what it is for: thirty megabytes in a
+# static deployment is thirty megabytes re-uploaded on every deploy of a page
+# that is eight kilobytes. `scripts/upload-blob.mjs` puts them there, the page
+# links to them, and the two are deployed independently.
+#
+# This used to stage the file and cut the whole download section out when there
+# was none — which, once the links moved to Blob, silently removed a section
+# whose links were already fine.
 
 cd "$stage"
 # Linked by name rather than by a committed .vercel/project.json: the stage is a

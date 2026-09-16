@@ -74,7 +74,8 @@ const found = await findGodot(bridge, process.env.GODOT ?? undefined);
 if (!found.path) { console.log('no engine:', found.error); process.exit(1); }
 console.log('engine   ', found.path, versionFrom((await bridge.run(`"${found.path}" --version`)).stdout));
 
-const plan = planGame('a realistic zombie survival shooter called Chomu Game, first person');
+const PROMPT = process.env.PROMPT ?? 'a realistic zombie survival shooter called Chomu Game, first person';
+const plan = planGame(PROMPT);
 console.log('plan     ', plan.name, '|', plan.genre, '|', plan.view);
 
 const model = await generateModel(
@@ -93,11 +94,16 @@ const files = buildProject({
   dimension: plan.dimension,
   genre: plan.genre,
   view: plan.view,
-  models: [{ path: 'res://zombie.glb', node: 'Zombie', rigged: model.rigged }],
+  // The generated character is the horde in a shooter and nothing in the city,
+  // whose scene builds its own body. Passing it anyway would declare an
+  // ext_resource nothing instances, which the gate now refuses.
+  ...(plan.genre === 'shooter' ? { models: [{ path: 'res://zombie.glb', node: 'Zombie', rigged: model.rigged }] } : {}),
   props: props.map((p) => ({ path: p.scenePath, size: p.size, baseY: p.baseY, scale: p.scale })),
 }).map((f) => ({ path: f.path, content: f.content }));
 
-files.push({ path: 'zombie.glb', content: `data:model/gltf-binary;base64,${base64(model.bytes)}` });
+if (plan.genre === 'shooter') {
+  files.push({ path: 'zombie.glb', content: `data:model/gltf-binary;base64,${base64(model.bytes)}` });
+}
 for (const prop of props) {
   for (const file of prop.files) {
     files.push({

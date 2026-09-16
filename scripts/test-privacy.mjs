@@ -107,3 +107,26 @@ test('the download is described at the size it actually is', () => {
   assert.ok(!/signed with a debug key/.test(SITE), 'it is signed with the release key now');
   assert.match(SITE, /FIRE<\/strong>/);
 });
+
+test('the privacy page names Blob, now that builds go there', () => {
+  // A host that receives the artifacts and is not on the page is exactly the
+  // omission this file exists to catch.
+  const SITE_NOW = readFileSync(new URL('../site/index.html', import.meta.url), 'utf8');
+  if (!/blob\.vercel-storage\.com/.test(SITE_NOW)) return;
+  assert.match(POLICY, /Blob/, 'builds are served from Vercel Blob and the policy does not say so');
+});
+
+test('the upload route cannot be used by whoever finds it', () => {
+  // An open upload endpoint on a public domain is a free file host for
+  // everyone who finds it.
+  const route = readFileSync(new URL('../site/api/blob-upload.js', import.meta.url), 'utf8');
+  assert.match(route, /process\.env\.UPLOAD_SECRET/);
+  assert.match(route, /clientPayload !== secret/);
+  // Narrow: one prefix, and only the types a build produces.
+  assert.match(route, /pathname\.startsWith\('builds\/'\)/);
+  assert.match(route, /allowedContentTypes/);
+  // And it refuses rather than 500s when the deployment has no secret.
+  assert.match(route, /503/);
+  // The secret itself is never in the repository.
+  assert.ok(!/UPLOAD_SECRET\s*=\s*['"][A-Za-z0-9_-]{10}/.test(route));
+});
