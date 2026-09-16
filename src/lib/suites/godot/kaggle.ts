@@ -57,6 +57,13 @@ export const PIXAL3D = {
   /** The `flash_attn` build is worse than the compile it replaces. SDPA is in torch. */
   attnBackend: 'sdpa',
   utils3d: 'https://github.com/LDYang694/Storages/releases/download/20260430/utils3d-0.0.2-py3-none-any.whl',
+  /**
+   * Microsoft MoGe, for the monocular depth pass.
+   *
+   * `inference.py` imports `moge.model.v2` and `requirements.txt` never mentions
+   * it — so a setup that follows the documented steps exactly still stops here.
+   */
+  moge: 'git+https://github.com/microsoft/MoGe.git',
 } as const;
 
 /**
@@ -207,6 +214,10 @@ ${
   }
     sh("pip install -q -r /kaggle/tmp/pixal3d/requirements.txt")
     sh("pip install -q ${PIXAL3D.utils3d}")
+    # MoGe, which inference.py imports for the depth pass and requirements.txt
+    # does not mention. Pure Python, so it is a download rather than a build and
+    # belongs here with the other seconds-long steps rather than in the cache.
+    sh("pip install -q ${PIXAL3D.moge}")
 
 
 def _compile():
