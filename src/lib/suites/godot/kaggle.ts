@@ -171,7 +171,12 @@ def _compile():
     sh("git clone --depth 1 -b main --recursive https://github.com/microsoft/TRELLIS.2.git /kaggle/tmp/trellis2")
     # No --new-env: Kaggle already is the environment. No --flash-attn: it is
     # another long CUDA build and torch's own SDPA does the same job.
-    sh("cd /kaggle/tmp/trellis2 && . ./setup.sh --basic --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm",
+    # nvdiffrec is left out on purpose. It is a differentiable renderer used for
+    # texture baking, its wheel does not build on Kaggle's image — "Failed
+    # building wheel for nvdiffrec_render" — and inference does not import it.
+    # Asking for it means the whole setup.sh returns non-zero and every other
+    # extension's success is hidden behind one failure that does not matter.
+    sh("cd /kaggle/tmp/trellis2 && . ./setup.sh --basic --nvdiffrast --cumesh --o-voxel --flexgemm",
        executable="/bin/bash")
     wheels = glob.glob(CACHE + "/**/natten-*.whl", recursive=True)
     if wheels:
@@ -219,13 +224,25 @@ after = listing()
 # stale the moment TRELLIS.2 adds a sixth extension; a diff cannot.
 added = sorted(after - before)
 print("compiled:", added, flush=True)
+# zstd -10, not -19. The difference in size is a few percent and the difference
+# in time is minutes on a two-core builder — and -19 on an archive this size is
+# also where the first attempt fell over with "tar: Error is not recoverable".
+packed = 1
 if added:
-    sh("tar -I 'zstd -19 -T2' -cf /kaggle/working/${ENV_ARCHIVE} -C " + SITE + " " + " ".join("'" + a + "'" for a in added))
+    packed = sh("tar -I 'zstd -10 -T2' -cf /kaggle/working/${ENV_ARCHIVE} -C " + SITE + " " + " ".join("'" + a + "'" for a in added)).returncode
 
-built = glob.glob("/kaggle/working/${ENV_ARCHIVE}")
+# The exit code *is* checked here, unlike Godot's: tar means it. An archive that
+# was half written is worse than none, because every later run would restore it
+# and fail somewhere unrelated.
+failed = []
+if packed != 0:
+    failed.append({"name": "archive", "why": "tar exited %s — the cache is incomplete" % packed})
+if not glob.glob("/kaggle/working/${ENV_ARCHIVE}"):
+    failed.append({"name": "environment", "why": "nothing was written"})
+
 print("CHOMUGIRI_RESULT", json.dumps({
     "models": [],
-    "failed": [] if built else [{"name": "environment", "why": "the compile added nothing"}],
+    "failed": failed,
     "packed": added,
     "seconds": round(time.time() - START, 1),
 }), flush=True)

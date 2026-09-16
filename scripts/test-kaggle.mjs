@@ -60,7 +60,7 @@ test('a compiled environment is restored when one is attached, and built when no
   // sixth. That is the better part of an hour, and it is the same hour every
   // run unless the result is kept.
   const cold = pixal3dNotebook([{ name: 'a', image: IMAGE }], b64);
-  assert.match(cold, /setup\.sh --basic --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm/);
+  assert.match(cold, /setup\.sh --basic --nvdiffrast --cumesh --o-voxel --flexgemm/);
 
   const warm = pixal3dNotebook([{ name: 'a', image: IMAGE }], b64, { cached: true });
   assert.ok(warm.includes(ENV_ARCHIVE), 'the cached environment is never looked for');
@@ -86,12 +86,21 @@ test('the install is the one the repository documents, not the one I assumed', (
   // The command line itself, not the whole notebook: the comment above it
   // *names* the flags it leaves out, and a blunt `includes` reads the
   // explanation as the thing it explains.
-  const cmd = /setup\.sh ([^"]*)"/.exec(nb)[1];
+  // Anchored on `./setup.sh`, which only the command has — the comment above it
+  // says "setup.sh" too, and matching that read the explanation as the thing
+  // it explains. Twice now.
+  const cmd = /\.\/setup\.sh ([^"\n]*)/.exec(nb)[1];
   // No --new-env: Kaggle already is the environment.
   assert.ok(!cmd.includes('--new-env'), cmd);
   // No --flash-attn: another long CUDA build, and torch has SDPA.
   assert.ok(!cmd.includes('--flash-attn'), cmd);
+  // No --nvdiffrec: its wheel does not build on Kaggle's image, inference does
+  // not import it, and asking for it makes setup.sh return non-zero — hiding
+  // every other extension's success behind one failure that does not matter.
+  assert.ok(!cmd.includes('--nvdiffrec'), cmd);
   assert.match(cmd, /--cumesh/);
+  assert.match(cmd, /--o-voxel/);
+  assert.match(cmd, /--flexgemm/);
 });
 
 test('the T4 architecture is named, or the build takes an hour', () => {
