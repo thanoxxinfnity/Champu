@@ -530,6 +530,14 @@ export async function generateOnKaggle(
     onStage?: (message: string) => void;
     /** Long, because the first run downloads several gigabytes of weights. */
     timeoutMs?: number;
+    /**
+     * Compile the environment inside this run when it has not been cached yet.
+     *
+     * Off by default, and the default is the honest one: it is half an hour of
+     * CUDA builds, and a caller who did not ask for that should be told rather
+     * than made to wait through it.
+     */
+    compileIfMissing?: boolean;
     signal?: AbortSignal;
   },
 ): Promise<KaggleResult> {
@@ -546,16 +554,36 @@ export async function generateOnKaggle(
   const slug = slugFor(options.label ?? 'assets');
   options.onStage?.(`Sending ${jobs.length} model${jobs.length === 1 ? '' : 's'} to a Kaggle GPU.`);
 
-  // The wheel the setup run built, if it is there. Attaching a kernel output is
-  // free when it exists and harmless when it does not: the notebook looks for
-  // the wheel and compiles if it cannot find one.
+  // Has the environment ever been built on this account?
+  //
+  // Attaching a kernel that does not exist is not harmless: the notebook falls
+  // through to compiling, which its own log calls "the better part of an hour",
+  // against a thirty-minute deadline. Every run would time out, every time, and
+  // the error would be about the clock rather than about the missing cache.
+  //
+  // So it is checked, and when it is absent the caller is told what to do about
+  // it rather than left to wait.
+  const cachedState = await kernelStatus(token, me.user, ENV_KERNEL, options.signal);
   const cached = `${me.user}/${ENV_KERNEL}`;
+  const haveCache = cachedState.status === 'complete';
+  if (!haveCache && !options.compileIfMissing) {
+    return {
+      models: [],
+      log: '',
+      error:
+        `The Pixal3D environment has not been built on this Kaggle account yet. ` +
+        `It compiles five CUDA extensions and takes about half an hour, once. ` +
+        `Run the setup first — \`setupNotebook()\` as the kernel "${ENV_KERNEL}" — ` +
+        `or pass compileIfMissing to build it inside this run and wait.`,
+      seconds: seconds(),
+    };
+  }
   const pushed = await pushKernel(token, {
     user: me.user,
     slug,
     title: `Chomugiri — ${options.label ?? 'assets'}`,
-    source: pixal3dNotebook(jobs, options.toBase64, { cached: true }),
-    inputs: [cached],
+    source: pixal3dNotebook(jobs, options.toBase64, { cached: haveCache }),
+    ...(haveCache ? { inputs: [cached] } : {}),
     gpu: true,
     ...(options.signal ? { signal: options.signal } : {}),
   });
@@ -563,7 +591,7 @@ export async function generateOnKaggle(
   // Everything after this asks about the slug Kaggle actually made.
   const live = pushed.slug ?? slug;
 
-  const deadline = Date.now() + (options.timeoutMs ?? 30 * 60_000);
+  const deadline = Date.now() + (options.timeoutMs ?? (haveCache ? 30 : 75) * 60_000);
   let wait = 4_000;
   let last = '';
   let unknowns = 0;

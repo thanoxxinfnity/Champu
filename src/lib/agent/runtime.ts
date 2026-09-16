@@ -1257,6 +1257,21 @@ export async function send(opts: SendOptions): Promise<void> {
               // does nothing is worse than no button.
               const { offer: _transient, ...history } = playable;
               void appendMessage({ ...history, sessionId, suite });
+            } else {
+              // Said out loud. The only branch used to be the success one, so a
+              // failed web export — a missing export template, a bridge that
+              // went away — left the user watching a progress line that simply
+              // stopped, after they had waited through the whole compile.
+              const nope = {
+                id: uid('msg'),
+                role: 'system' as const,
+                content: `_It did not compile to run in the chat: ${web.error} The APK below is the same game._${
+                  web.log.trim() ? `\n\n\`\`\`\n${web.log.slice(-500).trim()}\n\`\`\`` : ''
+                }`,
+                createdAt: Date.now(),
+              };
+              emit(nope);
+              void appendMessage({ ...nope, sessionId, suite });
             }
 
             useWorkspace.getState().setThinking(true, 'Compiling the APK on the bridge…');

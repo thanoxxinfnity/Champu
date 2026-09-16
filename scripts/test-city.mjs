@@ -149,3 +149,69 @@ test('the city and the shooter are the same city', () => {
     assert.ok(shooter.includes(`name="${name}"`), `the shooter has no ${name}`);
   }
 });
+
+test('the USE button is polled, because a touch button emits no event', () => {
+  // `Input.action_press` sets an action's *state* and emits nothing, so an
+  // `_input` handler watching for `use` never fired on a phone — and the car
+  // could only be entered with a physical E key. Which is every device this
+  // ships to.
+  const wiring = buildProject(CITY).find((f) => f.path === 'wiring.gd').content;
+  assert.match(wiring, /Input\.is_action_just_pressed\("use"\)/);
+  assert.ok(!/func _input\(/.test(wiring), 'an _input handler never sees a synthesised action');
+});
+
+test('every objective in the campaign has something that reports it', () => {
+  // "Scattered" asked for six crates and nothing ever called record("collect"),
+  // so it could not finish — and because each job unlocks the next, the two
+  // after it were unreachable too. Half the campaign behind an objective with
+  // nothing behind it.
+  const wiring = buildProject(CITY).find((f) => f.path === 'wiring.gd').content;
+  const kinds = new Set(cityJobs('C').flatMap((j) => j.objectives.map((o) => o.kind)));
+  for (const kind of kinds) {
+    // survive/defend/reach are ticked by the runner itself against the clock or
+    // the player's position; collect has to be reported by something.
+    if (kind !== 'collect') continue;
+    assert.match(wiring, /_mission\.record\("collect"\)/, 'nothing reports a collect');
+    assert.match(wiring, /_scatter_parcels/, 'nothing creates anything to collect');
+  }
+  // And a parcel per crate the job asks for, at least.
+  const wanted = cityJobs('C').flatMap((j) => j.objectives).find((o) => o.kind === 'collect').target;
+  const placed = (wiring.match(/Vector3\([^)]*0\.6[^)]*\)/g) ?? []).length;
+  assert.ok(placed >= wanted, `${placed} parcels for a job that wants ${wanted}`);
+});
+
+test('a parcel counts once, for the player only', () => {
+  const wiring = buildProject(CITY).find((f) => f.path === 'wiring.gd').content;
+  // An Area3D reports every body that enters it; one that counts twice
+  // finishes a six-crate job at three.
+  assert.match(wiring, /is_instance_valid\(parcel\)/);
+  assert.match(wiring, /body\.has_method\("enter_car"\)/);
+  assert.match(wiring, /parcel\.queue_free\(\)/);
+});
+
+test('a generated character is used, not paid for and ignored', () => {
+  // The runtime spends a Meshy credit or a Kaggle kernel building one. Shipping
+  // a capsule anyway, with the .glb sitting unused in the project, is worse
+  // than not generating it.
+  const withModel = buildProject({ ...CITY, models: [{ path: 'res://hero.glb', node: 'Hero', rigged: true }] });
+  const scene = withModel.find((f) => f.path === 'main.tscn').content;
+  assert.match(scene, /hero\.glb/);
+  assert.match(scene, /\[node name="Art" parent="Player" instance=ExtResource/);
+  assert.ok(withModel.some((f) => f.path === 'animator.gd'), 'a rigged model with nothing to drive it stands in a T-pose');
+  // The collision capsule stays: a .glb is art, and a CharacterBody3D with no
+  // CollisionShape3D falls through the world.
+  assert.match(scene, /shape = SubResource\("CapsuleShape3D_player"\)/);
+  // And with no model, the built body is still there rather than nothing.
+  assert.match(buildProject(CITY).find((f) => f.path === 'main.tscn').content, /name="Body"/);
+});
+
+test('no scene declares the same resource twice', () => {
+  // cityArena took over the building meshes and shooterScene kept emitting them
+  // as well: eighteen duplicate ids in every shooter scene. load_steps agreed,
+  // because it is counted from the same array that holds the duplicates.
+  for (const spec of [CITY, { name: 'S', dimension: '3d', genre: 'shooter', view: 'first-person' }]) {
+    const scene = buildProject(spec).find((f) => f.path === 'main.tscn').content;
+    const ids = [...scene.matchAll(/^\[sub_resource type="[^"]+" id="([^"]+)"\]/gm)].map((m) => m[1]);
+    assert.equal(new Set(ids).size, ids.length, `${spec.genre}: ${ids.filter((id, i) => ids.indexOf(id) !== i)}`);
+  }
+});

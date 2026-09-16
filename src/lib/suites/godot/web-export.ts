@@ -124,6 +124,13 @@ export async function buildWebOnBridge(
   options.onStage?.(`Godot ${versionFrom(version.stdout) ?? '4'} at ${engine.path}.`);
 
   const dir = 'chomugiri-web/game';
+  // Cleared first, the way the APK path does.
+  //
+  // The success check here is "did the files come back", so a reused directory
+  // makes a *failed* export look like a successful one: the previous game's
+  // index.wasm and index.pck are still sitting there, and they are handed over
+  // as this game's build. Someone plays the wrong game and nothing says so.
+  await bridge.run(`rm -rf "${dir}"`, { timeoutMs: 60_000 });
   // Resolved to an absolute path before it is used: Godot resolves the export
   // output against its own working directory, not against --path, and answers
   // "target folder does not exist" — while still exiting 0.
@@ -250,13 +257,16 @@ export function playerPage(html: string, loaderJs: string, urls: Record<string, 
   // Inlined rather than mapped. The shim is in place by the time anything runs,
   // but a <script src> for the loader is a request the browser may start
   // before it, and a race that is usually won is still a race.
-  page = page.replace(
-    /<script src="index\.js"><\/script>/,
-    `<script>\n${loaderJs}\n</script>`,
-  );
+  // A replacer *function*, not a replacement string.
+  //
+  // `$&`, `` $` ``, `$'` and `$<…>` are substitution patterns in a replacement
+  // string, and this one is a minified WebAssembly loader — a single `$&`
+  // anywhere in it would silently splice the matched script tag into the middle
+  // of the engine. A function is passed through byte for byte.
+  page = page.replace(/<script src="index\.js"><\/script>/, () => `<script>\n${loaderJs}\n</script>`);
 
   // First thing in <head>, ahead of GODOT_CONFIG and everything after it.
-  page = page.replace(/<head>/i, `<head>\n${shimScript(urls)}`);
+  page = page.replace(/<head>/i, () => `<head>\n${shimScript(urls)}`);
 
   // The status overlay's "click to play" relies on a gesture the iframe may not
   // have had. Godot starts muted until one arrives, which is correct, and

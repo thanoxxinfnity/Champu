@@ -849,16 +849,6 @@ emission = Color(0.42, 0.43, 0.48, 1)
 emission_energy_multiplier = 0.55`,
   ];
 
-  // A mesh and a shape per building. One shared 1x1x1 box scaled per node would
-  // be fewer resources and a worse idea: non-uniform scale on a StaticBody3D
-  // scales its collision shape too, and the two drift apart the moment anyone
-  // edits one of them.
-  for (const building of block.buildings) {
-    sub.push(`[sub_resource type="BoxMesh" id="BoxMesh_${building.name}"]
-size = Vector3(${building.size.join(', ')})`);
-    sub.push(`[sub_resource type="BoxShape3D" id="BoxShape3D_${building.name}"]
-size = Vector3(${building.size.join(', ')})`);
-  }
   // One collision box per distinct prop, sized to that prop.
   const shapeIds = new Map<string, string>();
   props.forEach((prop, i) => {
@@ -1179,7 +1169,15 @@ export function openWorldScene(spec: GameSpec): string {
   });
   const propId = (path: string): string => propIds.get(path) ?? '';
 
-  const sub: string[] = [...WORLD_RESOURCES, ...openWorldResources()];
+  // The generated character, when the build made one. Without this the runtime
+  // spends a paid credit on a model the scene never mentions.
+  const hero = (spec.models ?? [])[0];
+  if (hero) {
+    ext.push(`[ext_resource type="PackedScene" path="${hero.path}" id="23_hero"]`);
+    ext.push(`[ext_resource type="Script" path="res://animator.gd" id="24_animator"]`);
+  }
+
+  const sub: string[] = [...WORLD_RESOURCES, ...openWorldResources(hero)];
 
   const shapeIds = new Map<string, string>();
   props.forEach((prop, i) => {
@@ -1217,7 +1215,7 @@ shadow_enabled = true
 
 ${arena.nodes}
 
-${openWorldNodes()}
+${openWorldNodes(hero)}
 
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("6_hud")
@@ -1496,6 +1494,11 @@ export function buildProject(spec: GameSpec): GodotFile[] {
       // pedestrian is a script rather than a scene change.
       { path: 'navigation.gd', content: navigationScript() },
     );
+    // Only when there is a rigged model to drive. A walk cycle with no skeleton
+    // to move is a script that disables itself on the first frame.
+    if ((spec.models ?? []).length) {
+      files.push({ path: 'animator.gd', content: animatorScript() });
+    }
   }
 
   // In first person the rigged model is the enemy, not the player, so the

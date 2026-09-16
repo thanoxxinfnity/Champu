@@ -108,8 +108,22 @@ export function cityJobs(gameName: string): Mission[] {
   ];
 }
 
-/** The player's body, seen from behind — so it has to actually look like something. */
-function playerBody(): string {
+/**
+ * The player's body, seen from behind — so it has to actually look like
+ * something, and if a model was generated for this game it should be that.
+ *
+ * The first version ignored `spec.models` entirely: the runtime spent a paid
+ * Meshy credit, or a Kaggle kernel, building a character — and then shipped a
+ * capsule with a sphere on top, with the .glb sitting in the project unused.
+ */
+function playerBody(model?: { path: string }): string {
+  if (model) {
+    return `[node name="Art" parent="Player" instance=ExtResource("23_hero")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+
+[node name="Animator" type="Node" parent="Player"]
+script = ExtResource("24_animator")`;
+  }
   return `[node name="Body" type="MeshInstance3D" parent="Player"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.95, 0)
 mesh = SubResource("CapsuleMesh_player")
@@ -155,8 +169,11 @@ shape = SubResource("BoxShape3D_door")`;
 }
 
 /** Everything the scene needs that is not a script or the block itself. */
-export function openWorldResources(): string[] {
+export function openWorldResources(model?: { path: string }): string[] {
   return [
+    ...(model
+      ? []
+      : [
     `[sub_resource type="CapsuleMesh" id="CapsuleMesh_player"]
 height = 1.8
 radius = 0.35`,
@@ -171,6 +188,10 @@ roughness = 0.75`,
     `[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_skin"]
 albedo_color = Color(0.78, 0.6, 0.48, 1)
 roughness = 0.6`,
+      ]),
+    // The collision capsule stays either way: a .glb is art, and art has no
+    // collision. A CharacterBody3D without a CollisionShape3D silently falls
+    // through the world.
     `[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
 height = 1.8
 radius = 0.35`,
@@ -198,7 +219,7 @@ size = Vector3(4.4, 2.2, 5.6)`,
 }
 
 /** The nodes: player, camera rig, cars. */
-export function openWorldNodes(): string {
+export function openWorldNodes(model?: { path: string }): string {
   return `[node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 4)
 collision_layer = 1
@@ -209,7 +230,7 @@ script = ExtResource("1_player")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.95, 0)
 shape = SubResource("CapsuleShape3D_player")
 
-${playerBody()}
+${playerBody(model)}
 
 [node name="CameraRig" type="SpringArm3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
@@ -264,6 +285,14 @@ func _ready() -> void:
 		if door != null:
 			door.driver_nearby.connect(_on_car_nearby)
 
+	# The parcels the "Scattered" job counts.
+	#
+	# Nothing was creating them and nothing was calling record("collect"), so
+	# that job could never finish — and because each job unlocks the next, the
+	# two after it were unreachable as well. Half the campaign, locked by an
+	# objective with nothing behind it.
+	_scatter_parcels()
+
 	_start_job()
 
 
@@ -283,8 +312,17 @@ func _on_car_nearby(car: VehicleBody3D, near: bool) -> void:
 		_hud.set_prompt("Get in" if near else "")
 
 
-func _input(event: InputEvent) -> void:
-	if not event.is_action_pressed("use"):
+## Polled, not listened for.
+##
+## The on-screen button presses the action with Input.action_press, which sets
+## the action's *state* and emits no event at all — so an _input handler
+## watching for "use" never fires on a phone, and the car could only be entered
+## with a physical E key. Which is every device this ships to.
+##
+## Everything else in the suite polls Input.is_action_* for exactly this
+## reason; this was the one place that did not.
+func _process(_delta: float) -> void:
+	if not Input.is_action_just_pressed("use"):
 		return
 	if _player.is_driving():
 		_player.leave_car()
@@ -298,6 +336,59 @@ func _on_driving_changed(driving: bool) -> void:
 	# puts a four-metre car half off the screen.
 	_rig.distance = 8.0 if driving else 4.5
 	_rig.spring_length = _rig.distance
+
+
+## Where the load came off the back. On the street, spread around the block, and
+## always the same places — a collectable somewhere different every run is one
+## nobody can go back for.
+const PARCELS: Array[Vector3] = [
+	Vector3(-6.5, 0.6, 16),
+	Vector3(6.5, 0.6, -19),
+	Vector3(-16, 0.6, 17),
+	Vector3(16, 0.6, 13),
+	Vector3(-6.5, 0.6, -6.5),
+	Vector3(24, 0.6, -3),
+]
+
+
+func _scatter_parcels() -> void:
+	for at in PARCELS:
+		var parcel := Area3D.new()
+		parcel.position = at
+		# Layer 2 so it is not something the player's own body collides with,
+		# and a mask of 1 so it still notices them walking through it.
+		parcel.collision_layer = 2
+		parcel.collision_mask = 1
+
+		var shape := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = Vector3(1.2, 1.2, 1.2)
+		shape.shape = box
+		parcel.add_child(shape)
+
+		var mesh := MeshInstance3D.new()
+		var cube := BoxMesh.new()
+		cube.size = Vector3(0.55, 0.55, 0.55)
+		mesh.mesh = cube
+		var card := StandardMaterial3D.new()
+		card.albedo_color = Color(0.85, 0.66, 0.36, 1.0)
+		card.emission_enabled = true
+		card.emission = Color(0.9, 0.7, 0.3, 1.0)
+		card.emission_energy_multiplier = 0.35
+		mesh.material_override = card
+		parcel.add_child(mesh)
+
+		parcel.body_entered.connect(_on_parcel_taken.bind(parcel))
+		add_sibling.call_deferred(parcel)
+
+
+func _on_parcel_taken(body: Node3D, parcel: Area3D) -> void:
+	# Only the player, and only once: an Area3D reports every body that enters,
+	# and a parcel that counts twice finishes the job at three of six.
+	if not body.has_method("enter_car") or not is_instance_valid(parcel):
+		return
+	_mission.record("collect")
+	parcel.queue_free()
 
 
 func _start_job() -> void:
