@@ -27,14 +27,16 @@ export interface Box {
   color?: [number, number, number];
 }
 
-const MAGIC = 0x46546c67; // "glTF"
-const JSON_CHUNK = 0x4e4f534a; // "JSON"
-const BIN_CHUNK = 0x004e4942; // "BIN\0"
+export const MAGIC = 0x46546c67; // "glTF"
+export const JSON_CHUNK = 0x4e4f534a; // "JSON"
+export const BIN_CHUNK = 0x004e4942; // "BIN\0"
 
-const FLOAT = 5126;
+export const FLOAT = 5126;
 const UNSIGNED_SHORT = 5123;
-const ARRAY_BUFFER = 34962;
-const ELEMENT_ARRAY_BUFFER = 34963;
+/** For an index buffer past 65,535 vertices, which UNSIGNED_SHORT cannot address. */
+export const UNSIGNED_INT = 5125;
+export const ARRAY_BUFFER = 34962;
+export const ELEMENT_ARRAY_BUFFER = 34963;
 
 /** Four vertices per face, six faces: the vertex count of one box. */
 const VERTS_PER_BOX = 24;
@@ -73,7 +75,7 @@ function boxVertices(origin: [number, number, number], size: [number, number, nu
   return { positions, normals, indices };
 }
 
-function minMax(values: number[], stride: number): { min: number[]; max: number[] } {
+export function minMax(values: number[], stride: number): { min: number[]; max: number[] } {
   const min = new Array(stride).fill(Infinity);
   const max = new Array(stride).fill(-Infinity);
   for (let i = 0; i < values.length; i += stride) {
@@ -86,7 +88,7 @@ function minMax(values: number[], stride: number): { min: number[]; max: number[
 }
 
 /** Pads a byte length up to the 4-byte alignment glTF requires. */
-function pad4(n: number): number {
+export function pad4(n: number): number {
   return (4 - (n % 4)) % 4;
 }
 
@@ -97,7 +99,7 @@ function pad4(n: number): number {
  * places is how they stop agreeing the moment a new stream (joints, weights,
  * bind matrices) is added. One writer keeps them in step.
  */
-class BinaryBuilder {
+export class BinaryBuilder {
   readonly views: Record<string, unknown>[] = [];
   private readonly parts: Uint8Array[] = [];
   private offset = 0;
@@ -290,8 +292,6 @@ export function buildGlb(boxes: Box[], options: GlbOptions = {}): Uint8Array {
     sceneNodes.push(rootIndex);
   }
 
-  const binaryLength = bin.byteLength;
-
   const gltf = {
     asset: { version: '2.0', generator: 'Chomugiri' },
     scene: 0,
@@ -302,10 +302,21 @@ export function buildGlb(boxes: Box[], options: GlbOptions = {}): Uint8Array {
     ...(skins ? { skins } : {}),
     accessors,
     bufferViews: bin.views,
-    buffers: [{ byteLength: binaryLength }],
+    buffers: [{ byteLength: bin.byteLength }],
   };
 
-  // ── Assemble the container ────────────────────────────────────────────────
+  return assembleGlb(gltf, bin);
+}
+
+/**
+ * Packs a glTF JSON document and its binary chunk into one .glb container.
+ *
+ * The container format itself — magic, two chunks, 4-byte alignment — has
+ * nothing to do with what the JSON describes, so it is shared rather than
+ * rewritten by every caller that builds a different kind of mesh.
+ */
+export function assembleGlb(gltf: Record<string, unknown>, bin: BinaryBuilder): Uint8Array {
+  const binaryLength = bin.byteLength;
   const jsonText = JSON.stringify(gltf);
   const jsonBytes = new TextEncoder().encode(jsonText);
   // Chunks are padded with spaces (JSON) and zeros (BIN) to a 4-byte boundary.
