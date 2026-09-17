@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 import test from 'node:test';
 import {
-  ENV_ARCHIVE, ENV_KERNEL, PIXAL3D, looksLikeToken, pixal3dNotebook, readLog, resultFromLog, setupNotebook, slugFor, unavailable,
+  ENV_ARCHIVE, ENV_KERNEL, PIXAL3D, gradioNotebook, looksLikeToken, pixal3dNotebook, readLog, resultFromLog, setupNotebook, slugFor, unavailable,
 } from '../src/lib/suites/godot/kaggle.ts';
 import { bytesToBase64, pipelineStatement, sourceChain } from '../src/lib/suites/godot/model-source.ts';
 
@@ -487,4 +487,48 @@ test('every edit lands on the Pixal3D that actually ships', async () => {
     throw new Error(`${err.stdout ?? ''}${err.stderr ?? ''}` || String(err));
   }
   assert.match(out, /ALL PIXAL3D PATCHES APPLY/);
+});
+
+test('the server notebook can hand its URL back, and will not sit on the GPU', () => {
+  const nb = gradioNotebook({
+    nonce: 'abc123',
+    register: 'https://chomugiri.vercel.app/api/gradio',
+    cached: true,
+  });
+
+  // Kaggle does not publish a running kernel's log — checked twice, an output
+  // call on a running kernel answers with no files and an empty log. So the
+  // share URL has to leave by itself or it never leaves at all.
+  assert.match(nb, /NONCE = "abc123"/);
+  assert.match(nb, /REGISTER = "https:\/\/chomugiri\.vercel\.app\/api\/gradio"/);
+  assert.match(nb, /tell_chomugiri\(share\)/);
+
+  // The launch must not block, or the registration below it never runs.
+  assert.match(nb, /prevent_thread_lock=True/);
+
+  // The whole point: pay init_pipeline before anyone is waiting on it.
+  assert.match(nb, /^warm\(\)$/m);
+
+  // The GPU quota is thirty hours a week, and an idle server spends it as fast
+  // as a busy one. A server with no idle shutdown is a third of the week.
+  const [, seconds] = nb.match(/IDLE_SECONDS = (\d+)/);
+  assert.ok(Number(seconds) > 0, 'the idle shutdown must actually fire');
+  assert.ok(Number(seconds) <= 60 * 60, `${seconds}s idle is too long to hold a free T4`);
+  assert.match(nb, /while time\.time\(\) - LAST_USED\[0\] < IDLE_SECONDS/);
+
+  // And it carries the same patches the batch run does, because it is the same
+  // install — a server that OOMs on every request is not a faster anything.
+  assert.match(nb, /from chomugiri_sdpa import chunked_sdpa as _sdpa/);
+  assert.match(nb, /_chomugiri_init_pipeline\(model_path, device, low_vram\)/);
+});
+
+test('the server notebook is valid Python before a GPU is booked for it', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { writeFileSync, mkdtempSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { tmpdir } = await import('node:os');
+
+  const file = join(mkdtempSync(join(tmpdir(), 'chomu-gradio-')), 'server.py');
+  writeFileSync(file, gradioNotebook({ nonce: 'n', register: 'https://example.com/api/gradio' }));
+  execFileSync('python3', ['-c', 'import ast,sys; ast.parse(open(sys.argv[1]).read())', file]);
 });
