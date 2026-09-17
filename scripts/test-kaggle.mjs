@@ -431,3 +431,60 @@ test('the mesh comes back at game size, not film size', async () => {
   assert.match(nb, /decimation_target=1000000, texture_size=4096,/);
   assert.ok(nb.includes(`decimation_target=${tris}, texture_size=${tex},`));
 });
+
+test('the weights are built once per process, not once per call', async () => {
+  // 230 minutes end to end, of which 28 were the sampling stages and the GLB
+  // extraction. The rest was init_pipeline: the Pixal3D checkpoints, four
+  // DINOv3 ViT-L extractors, NAF and MoGe, constructed from nothing. Nothing
+  // upstream caches that, so a server answering two requests would pay it
+  // twice and be no faster than two separate runs.
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/lib/suites/godot/kaggle.ts', import.meta.url), 'utf8');
+  assert.match(src, /MEMO_SHIM = /);
+  assert.match(src, /_CHOMUGIRI_CACHE = \{\}/);
+  assert.match(src, /so every request would have/);
+
+  const nb = pixal3dNotebook([{ name: 'a', image: IMAGE }], b64);
+  assert.match(nb, /_chomugiri_init_pipeline\(model_path, device, low_vram\)/);
+  assert.match(nb, /_chomugiri_load_moge_model\(device, model_name\)/);
+  // MoGe is moved back to the GPU on a cache hit: run_inference sends it to the
+  // CPU after the camera pass, and the cached object is the same object.
+  assert.match(nb, /return _CHOMUGIRI_CACHE\[key\]\.to\(device\)/);
+});
+
+test('every edit lands on the Pixal3D that actually ships', async () => {
+  // The anchors are lines in someone else's repository. Checking them against a
+  // real checkout is the only way to know they are still there — and the check
+  // runs the notebook's own patch_inference rather than a copy of it, because a
+  // copy passed twice while the notebook would not even parse.
+  const { execFileSync } = await import('node:child_process');
+  const { writeFileSync, mkdtempSync, existsSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { tmpdir } = await import('node:os');
+  const { pixal3dNotebook } = await import('../src/lib/suites/godot/kaggle.ts');
+
+  const checkout = process.env.PIXAL3D_CHECKOUT ?? '/tmp/px';
+  if (!existsSync(join(checkout, 'inference.py'))) {
+    // Cloning inside a unit test would make the suite need the network and a
+    // minute; saying so beats a green tick that checked nothing.
+    console.log(`    (no Pixal3D checkout at ${checkout} — anchors not verified against upstream)`);
+    return;
+  }
+
+  const dir = mkdtempSync(join(tmpdir(), 'chomu-patch-'));
+  const book = join(dir, 'notebook.py');
+  writeFileSync(book, pixal3dNotebook(
+    [{ name: 'barrel', image: new Uint8Array([1, 2, 3, 4]) }],
+    (bytes) => Buffer.from(bytes).toString('base64'),
+    { cached: false },
+  ));
+
+  const script = new URL('./check-pixal3d-patches.py', import.meta.url).pathname;
+  let out = '';
+  try {
+    out = execFileSync('python3', [script, book, join(checkout, 'inference.py')], { encoding: 'utf8' });
+  } catch (err) {
+    throw new Error(`${err.stdout ?? ''}${err.stderr ?? ''}` || String(err));
+  }
+  assert.match(out, /ALL PIXAL3D PATCHES APPLY/);
+});

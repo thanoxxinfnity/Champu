@@ -184,6 +184,42 @@ function installScript(withCache: boolean): string {
   return `
 CACHE = "/kaggle/input"
 
+MEMO_SHIM = '''_CHOMUGIRI_CACHE = {}
+
+
+def init_pipeline(model_path=MODEL_PATH, device="cuda", low_vram=False):
+    """Build the pipeline once per process instead of once per call.
+
+    Measured on a real run: 230 minutes end to end, of which 28 were the four
+    sampling stages and the GLB extraction. The rest went into this function --
+    the Pixal3D checkpoints, four DINOv3 ViT-L feature extractors, the NAF
+    upsampler and MoGe, downloaded and constructed from nothing.
+
+    Nothing upstream caches it, so a server that answers two requests pays that
+    twice and is no faster than two separate runs. This is what makes holding
+    the process open worth anything.
+    """
+    key = ("pipeline", model_path, device, low_vram)
+    if key not in _CHOMUGIRI_CACHE:
+        _CHOMUGIRI_CACHE[key] = _chomugiri_init_pipeline(model_path, device, low_vram)
+    return _CHOMUGIRI_CACHE[key]
+
+
+def load_moge_model(device="cuda", model_name=MOGE_MODEL_NAME):
+    """Same, for the depth pass.
+
+    run_inference moves MoGe to the CPU and drops its reference once the camera
+    is estimated. That frees the VRAM, which is the point, and it does not
+    destroy the weights -- the cache still holds them, and the original moves
+    them back to the GPU on the next call.
+    """
+    key = ("moge", model_name)
+    if key not in _CHOMUGIRI_CACHE:
+        _CHOMUGIRI_CACHE[key] = _chomugiri_load_moge_model(device, model_name)
+        return _CHOMUGIRI_CACHE[key]
+    return _CHOMUGIRI_CACHE[key].to(device)
+'''
+
 SHIM = '''from PIL import Image
 
 
@@ -266,6 +302,55 @@ def chunked_sdpa(q, k, v):
 '''
 
 
+def patch_inference(inf):
+    """Every edit Chomugiri makes to Pixal3D's inference.py.
+
+    A function taking and returning a string, rather than something that reads
+    and writes the file in place, so it can be run against a real checkout
+    without booking a GPU. That matters more than it sounds: a check that
+    re-implements these edits instead of calling this passes happily while the
+    real thing is broken, which is exactly what happened -- twice, both times
+    an escape eaten by the TypeScript template literal that emits this file.
+    """
+    # The NAF upsample that ran the card out of memory a stage after the
+    # attention did.
+    big = '"naf_target_size": 1024,'
+    if inf.count(big) != 1:
+        raise SystemExit(
+            "PIXAL3D_UNAVAILABLE: the NAF target size moved, so the memory fix "
+            "would not have applied (found %d matches)" % inf.count(big)
+        )
+    inf = inf.replace(big, '"naf_target_size": ${PIXAL3D.nafTargetSize},')
+    # And the film-sized mesh it would otherwise hand back.
+    heavy = "decimation_target=1000000, texture_size=4096,"
+    if inf.count(heavy) != 1:
+        raise SystemExit(
+            "PIXAL3D_UNAVAILABLE: the GLB extraction settings moved, so the mesh "
+            "would have come back at film size (found %d matches)" % inf.count(heavy)
+        )
+    inf = inf.replace(
+        heavy,
+        "decimation_target=${PIXAL3D.decimationTarget}, texture_size=${PIXAL3D.textureSize},",
+    )
+    # And the two loaders that rebuild every weight on every call.
+    # Single-quoted on purpose: these carry double quotes of their own, and a
+    # backslash escape here is eaten by the TypeScript template literal that
+    # emits this file long before Python ever sees it.
+    for name in ('init_pipeline(model_path=MODEL_PATH, device="cuda", low_vram=False)',
+                 'load_moge_model(device="cuda", model_name=MOGE_MODEL_NAME)'):
+        head = "def " + name + ":"
+        if inf.count(head) != 1:
+            raise SystemExit(
+                "PIXAL3D_UNAVAILABLE: %s moved, so every request would have "
+                "rebuilt the weights (found %d matches)" % (name.split("(")[0], inf.count(head))
+            )
+        inf = inf.replace(head, "def _chomugiri_" + name + ":")
+    # The wrappers go in after the constants they close over and before the
+    # first caller; module scope is fine because Python binds names at call time.
+    inf = inf.replace("def _chomugiri_load_moge_model", MEMO_SHIM + "\\n\\ndef _chomugiri_load_moge_model", 1)
+    return inf
+
+
 def install():
     sh("git clone --depth 1 -b ${PIXAL3D.branch} ${PIXAL3D.repo} /kaggle/tmp/pixal3d")
     # Replaced before anything imports it.
@@ -287,29 +372,11 @@ def install():
         )
     with open(attn, "w") as fh:
         fh.write(body.replace(want, "from chomugiri_sdpa import chunked_sdpa as _sdpa"))
-    # And the NAF upsample that ran it out of memory a stage later.
+    # And the edits to inference.py, all of them.
     with open("/kaggle/tmp/pixal3d/inference.py") as fh:
         inf = fh.read()
-    big = '"naf_target_size": 1024,'
-    if inf.count(big) != 1:
-        raise SystemExit(
-            "PIXAL3D_UNAVAILABLE: the NAF target size moved, so the memory fix "
-            "would not have applied (found %d matches)" % inf.count(big)
-        )
-    inf = inf.replace(big, '"naf_target_size": ${PIXAL3D.nafTargetSize},')
-    # And the film-sized mesh it would otherwise hand back.
-    heavy = "decimation_target=1000000, texture_size=4096,"
-    if inf.count(heavy) != 1:
-        raise SystemExit(
-            "PIXAL3D_UNAVAILABLE: the GLB extraction settings moved, so the mesh "
-            "would have come back at film size (found %d matches)" % inf.count(heavy)
-        )
-    inf = inf.replace(
-        heavy,
-        "decimation_target=${PIXAL3D.decimationTarget}, texture_size=${PIXAL3D.textureSize},",
-    )
     with open("/kaggle/tmp/pixal3d/inference.py", "w") as fh:
-        fh.write(inf)
+        fh.write(patch_inference(inf))
 ${
     withCache
       ? `    # The environment a previous run compiled, attached as an input. Everything
