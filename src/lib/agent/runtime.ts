@@ -1,6 +1,7 @@
 'use client';
 
 import { classifyLocal, wantsSite, type Classification } from './router';
+import { liveSearchContext, needsLiveSearch, type LiveSearchResult } from './livesearch';
 import { getKeys, withKeys } from '@/lib/keys';
 import { buildSystemPrompt } from './system-prompt';
 import { heuristicPlan, parsePlan, PLANNER_PROMPT, planProgress, parkBridgeTasks, requiresBridge, type Plan } from './planner';
@@ -715,10 +716,33 @@ export async function send(opts: SendOptions): Promise<void> {
       void appendMessage({ ...note, sessionId, suite });
     }
 
+    // ── Live web search, for a question a fixed training cutoff answers badly ──
+    // Deterministic pattern match first, same as lane classification: most
+    // messages ("write me a for loop") decide themselves with no network
+    // round trip, and the ones that do fire cost a free search chain, not a
+    // paid one — see needsLiveSearch's own reasoning for why it leans toward
+    // triggering rather than staying quiet.
+    let liveSearch: LiveSearchResult | null = null;
+    if (needsLiveSearch(input).needed) {
+      useWorkspace.getState().setThinking(true, 'Checking the live web…');
+      liveSearch = await liveSearchContext(input, { signal: controller.signal });
+      if (liveSearch) {
+        const note = {
+          id: uid('msg'),
+          role: 'system' as const,
+          content: `🔍 Searched the web for **${liveSearch.query}** — ${liveSearch.hits.length} result${liveSearch.hits.length === 1 ? '' : 's'} via ${liveSearch.provider}.`,
+          createdAt: Date.now(),
+        };
+        emit(note);
+        void appendMessage({ ...note, sessionId, suite });
+      }
+    }
+
     // ── Stream the answer ───────────────────────────────────────────────────
     const systemPrompt = buildSystemPrompt({
       lane,
       suite,
+      ...(liveSearch ? { liveSearch } : {}),
       bridgeStatus:
         heartbeat.status === 'online' ? 'online'
           : heartbeat.status === 'degraded' ? 'degraded'

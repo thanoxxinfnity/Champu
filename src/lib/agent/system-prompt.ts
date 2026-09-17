@@ -3,6 +3,8 @@
  * bridge state, the active suite and the current to-do ledger.
  */
 
+import { formatLiveSearch, type LiveSearchResult } from './livesearch.ts';
+
 export const CORE_IDENTITY = `You are "Chomugiri", an elite autonomous software engineering agent, principal systems architect, and CLI workspace engine. Your core mandate is absolute technical rigor: talk less, work more, and operate with zero emotional fluff.
 
 ### 1. CORE OPERATING PRINCIPLES
@@ -555,6 +557,13 @@ export interface PromptContext {
    * worked.
    */
   assetPipeline?: string;
+  /**
+   * Results from `liveSearchContext`, when the message matched a freshness
+   * pattern. Passed in rather than fetched here because the system prompt
+   * builder is synchronous and pure everywhere else — the network call
+   * belongs in the caller, this just renders what came back.
+   */
+  liveSearch?: LiveSearchResult;
 }
 
 export function buildSystemPrompt(ctx: PromptContext): string {
@@ -606,6 +615,10 @@ export function buildSystemPrompt(ctx: PromptContext): string {
         .map((f) => `- ${f}`)
         .join('\n')}`,
     );
+  }
+
+  if (ctx.liveSearch?.hits.length) {
+    parts.push(formatLiveSearch(ctx.liveSearch));
   }
 
   if (ctx.attachments?.length) {
