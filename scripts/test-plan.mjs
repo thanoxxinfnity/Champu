@@ -29,6 +29,19 @@ test('the genre comes from the prompt, not from the template', () => {
   assert.equal(inferGenre('survive the zombie horde at night').genre, 'survival');
 });
 
+test('a named franchise plans as the genre it actually is, not a leftover default', () => {
+  // Live bug report: "make a game like Forza Horizon" matched neither the
+  // open-world cue nor the racing cue, fell through to the adventure default,
+  // and built a walking character with no car at all — "jump" was the only
+  // control the plan ever offered a driving game. Forza Horizon is a
+  // free-roam map you drive around, not a closed circuit, so it belongs with
+  // GTA in open-world — the genre with an actual drivable car built for it —
+  // rather than with the still-unscaffolded "racing" genre.
+  assert.equal(inferGenre('make a game like Forza Horizon').genre, 'open-world');
+  assert.equal(inferGenre('a Need for Speed style game').genre, 'racing');
+  assert.equal(inferGenre('something like Gran Turismo').genre, 'racing');
+});
+
 test('a more specific cue wins over a looser one', () => {
   // "endless runner where you jump" is a runner. Ordering the cues wrong makes
   // it a platformer, which is a different game.

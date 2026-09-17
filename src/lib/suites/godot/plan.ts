@@ -60,9 +60,13 @@ export interface GamePlan {
 export const GENRE_CUES: Array<[Genre, RegExp]> = [
   // Before racing, deliberately. "GTA" is the clearest statement of intent
   // anyone gives this suite, and it contains a car — matched as racing it
-  // became a lap circuit, which is the one thing GTA is not.
-  ['open-world', /\b(gta|grand theft|open[- ]?world|sandbox city|free roam|freeroam|city game|drive around)\b/],
-  ['racing', /\b(racing|race|kart|rally|drift|lap|circuit|car game|bike game)\b/],
+  // became a lap circuit, which is the one thing GTA is not. "Forza Horizon"
+  // is the same shape of mistake with a different franchise: it is a
+  // free-roam open map you drive around, not a closed circuit, and "horizon"
+  // named the wrong genre entirely — matched as neither cue it fell through
+  // to "adventure" and built a walking character with no car at all.
+  ['open-world', /\b(gta|grand theft|open[- ]?world|sandbox city|free roam|freeroam|city game|drive around|forza)\b/],
+  ['racing', /\b(racing|race|kart|rally|drift|lap|circuit|car game|bike game|need for speed|nfs|gran turismo|motorsport)\b/],
   ['runner', /\b(runner|endless|infinite|temple run|subway|auto[- ]?run|dodge obstacles)\b/],
   ['shooter', /\b(shooter|shooting|fps|gun|shoot|blaster|bullet|turret|arena)\b/],
   ['puzzle', /\b(puzzle|match|sudoku|riddle|maze|sokoban|tile|block game|brain)\b/],
