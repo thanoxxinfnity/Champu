@@ -414,3 +414,20 @@ test('the NAF upsample is cut to a size the T4 can hold', async () => {
   assert.match(nb, /"naf_target_size": 1024,/);
   assert.ok(nb.includes(`"naf_target_size": ${size},`));
 });
+
+test('the mesh comes back at game size, not film size', async () => {
+  // The first barrel Pixal3D produced was real and it was unusable: 943,904
+  // triangles, a 4096 texture, 37 MB for one prop. Twenty of those is a 700 MB
+  // game on top of a 27 MB engine.
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/lib/suites/godot/kaggle.ts', import.meta.url), 'utf8');
+  const [, tris] = src.match(/decimationTarget: (\d+),/);
+  const [, tex] = src.match(/textureSize: (\d+),/);
+  assert.ok(Number(tris) <= 20000, `${tris} triangles is not a mobile prop`);
+  assert.ok(Number(tex) <= 2048, `a ${tex} texture is not a mobile prop`);
+  assert.match(src, /PIXAL3D_UNAVAILABLE: the GLB extraction settings moved/);
+
+  const nb = pixal3dNotebook([{ name: 'a', image: IMAGE }], b64);
+  assert.match(nb, /decimation_target=1000000, texture_size=4096,/);
+  assert.ok(nb.includes(`decimation_target=${tris}, texture_size=${tex},`));
+});

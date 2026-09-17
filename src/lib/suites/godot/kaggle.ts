@@ -70,6 +70,21 @@ export const PIXAL3D = {
    * already runs at 512; only the texture stage asks for 1024.
    */
   nafTargetSize: 512,
+  /**
+   * What Pixal3D is asked to hand back, rather than what it would hand back.
+   *
+   * Left alone it decimates to a million triangles and bakes a 4096 texture,
+   * which is a film asset: the first barrel that came out was 943,904 triangles
+   * and 37 MB. Twenty props like that is a 700 MB game, and the APK already
+   * carries a 27 MB engine. It also spent nearly five minutes parameterising a
+   * mesh that dense.
+   *
+   * These are game numbers. A prop seen from a few metres away does not need
+   * more than this, and the mesh arrives usable instead of needing a pass
+   * nothing in the pipeline does.
+   */
+  decimationTarget: 8000,
+  textureSize: 1024,
   utils3d: 'https://github.com/LDYang694/Storages/releases/download/20260430/utils3d-0.0.2-py3-none-any.whl',
   /**
    * Microsoft MoGe, for the monocular depth pass.
@@ -281,8 +296,20 @@ def install():
             "PIXAL3D_UNAVAILABLE: the NAF target size moved, so the memory fix "
             "would not have applied (found %d matches)" % inf.count(big)
         )
+    inf = inf.replace(big, '"naf_target_size": ${PIXAL3D.nafTargetSize},')
+    # And the film-sized mesh it would otherwise hand back.
+    heavy = "decimation_target=1000000, texture_size=4096,"
+    if inf.count(heavy) != 1:
+        raise SystemExit(
+            "PIXAL3D_UNAVAILABLE: the GLB extraction settings moved, so the mesh "
+            "would have come back at film size (found %d matches)" % inf.count(heavy)
+        )
+    inf = inf.replace(
+        heavy,
+        "decimation_target=${PIXAL3D.decimationTarget}, texture_size=${PIXAL3D.textureSize},",
+    )
     with open("/kaggle/tmp/pixal3d/inference.py", "w") as fh:
-        fh.write(inf.replace(big, '"naf_target_size": ${PIXAL3D.nafTargetSize},'))
+        fh.write(inf)
 ${
     withCache
       ? `    # The environment a previous run compiled, attached as an input. Everything
