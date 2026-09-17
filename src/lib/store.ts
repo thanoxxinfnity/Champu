@@ -10,6 +10,7 @@ import type { EndpointRecord, SuiteId } from '@/lib/db/schema';
 import type { FileArtifact } from '@/lib/agent/artifacts';
 import { getSetting, setSetting } from '@/lib/db/history';
 import { keyHeaders, loadKeys, loadVercel, saveVercel } from '@/lib/keys';
+import { updateRunProgress } from '@/lib/shell/run-state';
 import { endpointModels } from '@/lib/providers/endpoint-models';
 
 /**
@@ -384,11 +385,20 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   thinking: { active: false, phrase: '', since: 0 },
   setThinking: (active, phrase) =>
-    set((s) => ({
-      thinking: active
-        ? { active: true, phrase: phrase ?? s.thinking.phrase, since: s.thinking.active ? s.thinking.since : Date.now() }
-        : { active: false, phrase: '', since: 0 },
-    })),
+    set((s) => {
+      // Every narrated step goes through here, so this is the one place that
+      // can keep the background notification in step with the transcript
+      // without every call site in runtime.ts having to remember to say so.
+      // A browser tab has no shell to tell; updateRunProgress is a no-op there.
+      if (active && phrase && phrase !== s.thinking.phrase) {
+        void updateRunProgress(phrase);
+      }
+      return {
+        thinking: active
+          ? { active: true, phrase: phrase ?? s.thinking.phrase, since: s.thinking.active ? s.thinking.since : Date.now() }
+          : { active: false, phrase: '', since: 0 },
+      };
+    }),
 
   plan: null,
   setPlan: (plan) => set({ plan }),

@@ -35,6 +35,26 @@ export async function runStarted(topic: string): Promise<void> {
   await tell({ active: true, topic });
 }
 
+/**
+ * Mirrors the step currently being narrated to the background notification.
+ *
+ * `runStarted` sets the notification once, at the top of a run, to the user's
+ * original prompt — and nothing updated it after that. The narration itself
+ * ("Creating `bp/manifest.json`...", "Sending it to a Kaggle GPU.") kept
+ * happening in the transcript the whole time; it just stopped being visible
+ * the moment the screen went off, because nothing told the notification about
+ * it. This is that missing call — same wire shape as `runStarted`
+ * (`{active: true, topic}`), which `RunService` already treats as "update the
+ * ongoing notification's text" whether it is the first call of a run or the
+ * tenth.
+ *
+ * Wired into `setThinking` in the store rather than into every narration call
+ * site in runtime.ts individually, so nothing has to remember to call it.
+ */
+export async function updateRunProgress(phrase: string): Promise<void> {
+  await tell({ active: true, topic: phrase });
+}
+
 export async function runFinished(opts: {
   topic: string;
   ok: boolean;
