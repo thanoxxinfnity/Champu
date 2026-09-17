@@ -241,6 +241,50 @@ const wikipedia: Provider = {
 /** Keyed providers first — they are the only ones with a stable contract. */
 const CHAIN: Provider[] = [brave, tavily, serper, searxng, bing, duckduckgo, wikipedia];
 
+// Function words and the freshness/lookup vocabulary the caller's own query
+// tends to repeat (see agent/livesearch.ts's needsLiveSearch) — excluded so
+// the relevance check below is judging the *subject* of the query, not
+// whether it echoed its own filler words back.
+const STOPWORDS = new Set([
+  'what', 'which', 'who', 'where', 'when', 'why', 'how', 'does', 'do', 'did', 'is', 'are', 'was', 'were',
+  'the', 'this', 'that', 'these', 'those', 'and', 'or', 'with', 'for', 'from', 'about', 'into',
+  'latest', 'current', 'currently', 'newest', 'recent', 'recently', 'version', 'release', 'released',
+  'update', 'updates', 'today', 'now', 'right', 'most', 'any', 'week', 'month', 'year', 'search', 'lookup',
+  'find', 'check', 'online', 'browse', 'news', 'stable', 'should', 'would', 'could',
+]);
+
+function meaningfulWords(query: string): string[] {
+  return query
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !STOPWORDS.has(w));
+}
+
+/**
+ * A cheap sanity gate on what a provider handed back.
+ *
+ * Bing serves a real-looking results page — the right \`<title>\`, real
+ * \`b_algo\` blocks its own scraper is built to read — that is nonetheless
+ * seven unrelated news homepages (Fox News, CNN, the NYT, ...) with zero
+ * connection to the query, to a request Bing's anti-bot layer decided was a
+ * scraper. That page satisfies every check the provider itself makes: it
+ * returns 200, the markup parses, `hits.length` is truthy. So the emptiness
+ * has to be judged one level up, by asking whether anything actually on the
+ * page relates to what was searched for.
+ *
+ * Not perfect — a query with no distinctive word (a single common noun) is
+ * let through uninspected, and a legitimately obscure result could fail this
+ * and get discarded. Both are the safer side to be wrong on: this exists to
+ * stop a confidently-wrong citation, not to be a precise relevance ranker.
+ */
+export function looksRelevant(query: string, hits: SearchHit[]): boolean {
+  const words = meaningfulWords(query);
+  if (!words.length) return true;
+  const haystack = hits.map((h) => `${h.title} ${h.snippet}`.toLowerCase()).join(' ');
+  return words.some((w) => haystack.includes(w));
+}
+
 export async function search(query: string, limit = 10): Promise<SearchOutcome> {
   const attempts: SearchOutcome['attempts'] = [];
 
@@ -252,6 +296,14 @@ export async function search(query: string, limit = 10): Promise<SearchOutcome> 
     try {
       const hits = await provider.run(query, limit);
       if (hits.length) {
+        if (!looksRelevant(query, hits)) {
+          attempts.push({
+            provider: provider.name,
+            ok: false,
+            reason: `${hits.length} hits, none mentioning the query — likely an anti-bot decoy page`,
+          });
+          continue;
+        }
         attempts.push({ provider: provider.name, ok: true, count: hits.length });
         return { hits, provider: provider.name, attempts };
       }
