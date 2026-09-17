@@ -113,7 +113,13 @@ export function asWritable(file: GodotFile, dir: string): { path: string; conten
 export async function buildApkOnBridge(
   bridge: BridgeRunner,
   files: GodotFile[],
-  options: ApkOptions & { godotPath?: string; dir?: string; onStage?: (message: string) => void },
+  options: ApkOptions & {
+    godotPath?: string;
+    dir?: string;
+    onStage?: (message: string) => void;
+    /** Godot's own stdout/stderr, live, as the export runs — for a terminal pane to show. */
+    onOutput?: (chunk: string, stream: 'stdout' | 'stderr') => void;
+  },
 ): Promise<ApkBuild> {
   const filename = apkName(options.name, options.versionName ?? '1.0');
   const dir = options.dir ?? `chomugiri-build/${options.name.replace(/[^A-Za-z0-9]+/g, '-').toLowerCase() || 'game'}`;
@@ -173,11 +179,17 @@ export async function buildApkOnBridge(
   // Quoted per argument, so a path with a space in it stays one argument.
   const cmd = argv.map((a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' ');
 
+  // Shown before anything runs, matching how the plain terminal echoes a
+  // command before its output — otherwise the first thing a terminal pane
+  // shows is Godot's own text with no line saying what produced it.
+  options.onOutput?.(`$ ${cmd}\n`, 'stdout');
+
   const run = await bridge.run(cmd, {
     // An export of a project with real assets takes minutes on a laptop.
     timeoutMs: 20 * 60_000,
-    onOutput: (chunk) => {
+    onOutput: (chunk, stream) => {
       log += chunk;
+      options.onOutput?.(chunk, stream);
     },
   });
   log += run.stdout + run.stderr;

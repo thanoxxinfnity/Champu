@@ -113,7 +113,13 @@ export const WEB_OUTPUTS = [
 export async function buildWebOnBridge(
   bridge: BridgeRunner,
   files: Array<{ path: string; content: string }>,
-  options: { name: string; godotPath?: string; onStage?: (message: string) => void },
+  options: {
+    name: string;
+    godotPath?: string;
+    onStage?: (message: string) => void;
+    /** Godot's own stdout/stderr, live, as the export runs — for a terminal pane to show. */
+    onOutput?: (chunk: string, stream: 'stdout' | 'stderr') => void;
+  },
 ): Promise<WebBuild> {
   let log = '';
   options.onStage?.('Looking for Godot on the bridge machine.');
@@ -148,10 +154,12 @@ export async function buildWebOnBridge(
   options.onStage?.('Compiling to WebAssembly.');
   const out = `${projectDir}/build/index.html`;
   const cmd = `"${engine.path}" --headless --path "${projectDir}" --export-release "Web" "${out}"`;
+  options.onOutput?.(`$ ${cmd}\n`, 'stdout');
   const run = await bridge.run(cmd, {
     timeoutMs: 20 * 60_000,
-    onOutput: (chunk) => {
+    onOutput: (chunk, stream) => {
       log += chunk;
+      options.onOutput?.(chunk, stream);
     },
   });
   log += run.stdout + run.stderr;

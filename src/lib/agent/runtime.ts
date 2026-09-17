@@ -1313,9 +1313,19 @@ export async function send(opts: SendOptions): Promise<void> {
             // still native-fast, but nobody should have to install a thing to
             // find out whether it is any good.
             useWorkspace.getState().setThinking(true, 'Compiling it to run in the chat…');
+            // Godot's own export is the part that used to be invisible: its
+            // stdout/stderr only ever showed up, truncated, in the chat message
+            // after the whole thing finished or failed. Streamed into the same
+            // terminal pane a normal command runs in, and switched to it, so a
+            // multi-minute compile reads as progress rather than a stuck spinner.
+            useWorkspace.getState().setRightPaneTab('terminal');
             const web = await buildWebOnBridge(useWorkspace.getState().bridge, forBridge, {
               name: design?.name ?? 'Chomugiri Game',
-              onStage: (message) => useWorkspace.getState().setThinking(true, message),
+              onStage: (message) => {
+                useWorkspace.getState().setThinking(true, message);
+                useWorkspace.getState().appendTerminal({ stream: 'system', text: `— ${message}` });
+              },
+              onOutput: (chunk, stream) => useWorkspace.getState().appendTerminal({ stream, text: chunk }),
             });
 
             if (web.files) {
@@ -1363,7 +1373,11 @@ export async function send(opts: SendOptions): Promise<void> {
               {
                 name: design?.name ?? 'Chomugiri Game',
                 versionName: '1.0',
-                onStage: (message) => useWorkspace.getState().setThinking(true, message),
+                onStage: (message) => {
+                  useWorkspace.getState().setThinking(true, message);
+                  useWorkspace.getState().appendTerminal({ stream: 'system', text: `— ${message}` });
+                },
+                onOutput: (chunk, stream) => useWorkspace.getState().appendTerminal({ stream, text: chunk }),
               },
             );
 

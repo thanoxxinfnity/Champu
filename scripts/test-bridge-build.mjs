@@ -8,10 +8,17 @@ function fakeBridge({ commands = {}, files = {} } = {}) {
   const ran = [];
   return {
     ran,
-    async run(cmd) {
+    async run(cmd, opts = {}) {
       ran.push(cmd);
       for (const [pattern, reply] of Object.entries(commands)) {
-        if (cmd.includes(pattern)) return { exitCode: 0, stdout: reply, stderr: '' };
+        if (cmd.includes(pattern)) {
+          // Real bridge output arrives as chunks, over time; a fake one still
+          // has to call onOutput at all, or a caller that only wires up
+          // through that callback (a live terminal pane, not the buffered
+          // return value) would pass with nothing actually reaching it.
+          opts.onOutput?.(reply, 'stdout');
+          return { exitCode: 0, stdout: reply, stderr: '' };
+        }
       }
       return { exitCode: 0, stdout: '', stderr: '' };
     },
@@ -128,4 +135,26 @@ test('the log and the engine path come back even when the build worked', async (
   assert.equal(typeof built.log, 'string');
   assert.equal(built.godot, '/usr/bin/godot');
   assert.equal(built.filename, 'G-1.0.apk');
+});
+
+test('Godot\'s own output reaches onOutput live, not just the buffered log at the end', async () => {
+  // Used to be swallowed entirely: bridge.run()'s onOutput only ever fed a
+  // local `log` string that nothing outside buildApkOnBridge could see, so a
+  // terminal pane wired up to watch a build had nothing to show until the
+  // whole multi-minute export finished or failed.
+  const bridge = fakeBridge({
+    commands: { ...READY, '--export-debug': 'Exporting for Android...\nDone.\n' },
+    files: { 'b/g/G-1.0.apk': APK_BYTES },
+  });
+  const seen = [];
+  const built = await buildApkOnBridge(bridge, [{ path: 'project.godot', content: 'x' }], {
+    name: 'G',
+    dir: 'b/g',
+    onOutput: (chunk, stream) => seen.push({ chunk, stream }),
+  });
+  assert.ok(built.bytes, 'the build should still succeed');
+  // The command itself is echoed first, like a real terminal, then Godot's
+  // own text — both on the callback, not only inside the returned log.
+  assert.ok(seen.some((s) => s.chunk.startsWith('$ ') && s.chunk.includes('--export-debug')));
+  assert.ok(seen.some((s) => s.chunk.includes('Exporting for Android...') && s.stream === 'stdout'));
 });

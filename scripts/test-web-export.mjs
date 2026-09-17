@@ -1,7 +1,53 @@
 /** node --experimental-strip-types --test scripts/test-web-export.mjs */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { contentType, describeBuild, playerPage, shimScript, webExportPreset, WEB_OUTPUTS } from '../src/lib/suites/godot/web-export.ts';
+import { buildWebOnBridge, contentType, describeBuild, playerPage, shimScript, webExportPreset, WEB_OUTPUTS } from '../src/lib/suites/godot/web-export.ts';
+
+/** A bridge whose answers are scripted, mirroring test-bridge-build.mjs's fake. */
+function fakeBridge({ commands = {}, files = {} } = {}) {
+  return {
+    async run(cmd, opts = {}) {
+      for (const [pattern, reply] of Object.entries(commands)) {
+        if (cmd.includes(pattern)) {
+          opts.onOutput?.(reply, 'stdout');
+          return { exitCode: 0, stdout: reply, stderr: '' };
+        }
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    async writeFiles(written) {
+      return { count: written.length };
+    },
+    async readFile(path) {
+      const hit = files[path];
+      if (!hit) throw new Error('no such file');
+      return { bytes: hit.length, base64: Buffer.from(hit).toString('base64'), binary: true };
+    },
+  };
+}
+
+test('Godot\'s web-export output reaches onOutput live, not just the buffered log', async () => {
+  // Same shape of bug as the APK path: onOutput used to feed only a local
+  // `log` string nothing outside the function could see.
+  const commands = {
+    'command -v': '/usr/bin/godot',
+    '--version': '4.7.2.stable.official',
+    pwd: '/abs/chomugiri-web/game',
+    '--export-release "Web"': 'Exporting for Web...\nDone.\n',
+  };
+  const files = Object.fromEntries(
+    ['index.html', 'index.js', 'index.wasm', 'index.pck'].map((n) => [`chomugiri-web/game/build/${n}`, Buffer.from('x')]),
+  );
+  const bridge = fakeBridge({ commands, files });
+  const seen = [];
+  const built = await buildWebOnBridge(bridge, [{ path: 'project.godot', content: 'x' }], {
+    name: 'G',
+    onOutput: (chunk, stream) => seen.push({ chunk, stream }),
+  });
+  assert.ok(built.files, 'the export should still succeed');
+  assert.ok(seen.some((s) => s.chunk.startsWith('$ ') && s.chunk.includes('--export-release')));
+  assert.ok(seen.some((s) => s.chunk.includes('Exporting for Web...') && s.stream === 'stdout'));
+});
 
 test('the preset asks for the build that can actually run in a blob', () => {
   const cfg = webExportPreset('Chomu Game');
