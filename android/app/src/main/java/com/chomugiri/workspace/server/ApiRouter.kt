@@ -82,6 +82,18 @@ class ApiRouter(private val secrets: SecretStore) {
         set(value) { secrets.put("kaggle_token", value) }
 
     /**
+     * A HuggingFace access token, from huggingface.co/settings/tokens.
+     *
+     * Two jobs: it authenticates downloads of gated models on the Kaggle GPU
+     * runs (Pixal3D's rembg dependency was gated and needed exactly this kind
+     * of token before it was replaced), and it is what a ZeroGPU Space checks
+     * for quota when Chomugiri calls one instead of running a model itself.
+     */
+    var huggingfaceToken: String
+        get() = secrets.get("huggingface_token")
+        set(value) { secrets.put("huggingface_token", value) }
+
+    /**
      * The port the workspace was last served on.
      *
      * Stored because browser storage is scoped to the origin, and the origin
@@ -170,6 +182,7 @@ class ApiRouter(private val secrets: SecretStore) {
             if (body.has("sketchfabKey")) sketchfabKey = body.optString("sketchfabKey")
             if (body.has("trellisUrl")) trellisUrl = body.optString("trellisUrl")
             if (body.has("kaggleToken")) kaggleToken = body.optString("kaggleToken")
+            if (body.has("huggingfaceToken")) huggingfaceToken = body.optString("huggingfaceToken")
             response.json(200, state().put("ok", true).toString())
         } else {
             response.json(200, state().toString())
@@ -196,6 +209,7 @@ class ApiRouter(private val secrets: SecretStore) {
         .put("sketchfabKey", sketchfabKey)
         .put("trellisUrl", trellisUrl)
         .put("kaggleToken", kaggleToken)
+        .put("huggingfaceToken", huggingfaceToken)
 
     // ── /api/models ─────────────────────────────────────────────────────────
 

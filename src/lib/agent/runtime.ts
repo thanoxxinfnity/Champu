@@ -1021,7 +1021,7 @@ export async function send(opts: SendOptions): Promise<void> {
               plan: design.player.body,
               parts: playerParts(design),
             },
-            { meshy: keys.meshy, tripo: keys.tripo, nim: keys.nim, trellisUrl: keys.trellisUrl, kaggle: keys.kaggle },
+            { meshy: keys.meshy, tripo: keys.tripo, nim: keys.nim, trellisUrl: keys.trellisUrl, kaggle: keys.kaggle, huggingface: keys.huggingface },
             {
               onStage: (_source, message) => useWorkspace.getState().setThinking(true, message),
               renderImage: referenceImage,

@@ -532,3 +532,22 @@ test('the server notebook is valid Python before a GPU is booked for it', async 
   writeFileSync(file, gradioNotebook({ nonce: 'n', register: 'https://example.com/api/gradio' }));
   execFileSync('python3', ['-c', 'import ast,sys; ast.parse(open(sys.argv[1]).read())', file]);
 });
+
+test('a HuggingFace token logs the run in before install() runs, and never when absent', async () => {
+  // Pixal3D's own background remover was gated on HuggingFace, and that was
+  // only found out five minutes into a GPU booking. Any future dependency
+  // that turns out gated fails the same way unless something logs in first.
+  const nbWith = pixal3dNotebook([{ name: 'a', image: IMAGE }], b64, { huggingfaceToken: 'hf_secret123' });
+  assert.match(nbWith, /HF_TOKEN = "hf_secret123"/);
+  assert.match(nbWith, /os\.environ\["HF_TOKEN"\] = HF_TOKEN/);
+  // Before install(), not after — a gated download happens inside install().
+  assert.ok(nbWith.indexOf('HF_TOKEN = "hf_secret123"') < nbWith.indexOf('install()'));
+
+  const nbWithout = pixal3dNotebook([{ name: 'a', image: IMAGE }], b64, {});
+  assert.ok(!nbWithout.includes('HF_TOKEN'), 'no token means no HF_TOKEN line at all');
+
+  const server = gradioNotebook({
+    nonce: 'n', register: 'https://example.com/api/gradio', huggingfaceToken: 'hf_serverside',
+  });
+  assert.match(server, /HF_TOKEN = "hf_serverside"/);
+});

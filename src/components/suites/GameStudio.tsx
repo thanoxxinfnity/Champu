@@ -142,6 +142,7 @@ export function GameStudio() {
         nim: keys.nim,
         trellisUrl: keys.trellisUrl,
         kaggle: keys.kaggle,
+        huggingface: keys.huggingface,
       };
 
       const outcome = await generateModel(

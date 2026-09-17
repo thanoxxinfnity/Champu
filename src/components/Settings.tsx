@@ -1181,6 +1181,7 @@ function KeysTab() {
   const [meshy, setMeshy] = useState('');
   const [sketchfab, setSketchfab] = useState('');
   const [kaggle, setKaggle] = useState('');
+  const [huggingface, setHuggingface] = useState('');
   const [trellisUrl, setTrellisUrl] = useState('');
   const [reveal, setReveal] = useState(false);
   const [shell, setShell] = useState(false);
@@ -1208,6 +1209,7 @@ function KeysTab() {
       setMeshy(keys.meshy);
       setSketchfab(keys.sketchfab);
       setKaggle(keys.kaggle);
+      setHuggingface(keys.huggingface);
       setTrellisUrl(keys.trellisUrl);
       setNimSaved(configured);
     })();
@@ -1230,7 +1232,7 @@ function KeysTab() {
     setSaving(true);
     setStatus({ kind: 'info', text: 'Saving, then checking the key against NVIDIA…' });
     try {
-      const modelKeys = { pollinations, tripo, meshy, sketchfab, trellisUrl, kaggle };
+      const modelKeys = { pollinations, tripo, meshy, sketchfab, trellisUrl, kaggle, huggingface };
       await saveKeys(sendNim ? { nim, ...modelKeys } : modelKeys);
       setVercelCredentials(vercel.trim(), team.trim());
       // The catalogue is the real test: it only returns NIM models if the key
@@ -1252,7 +1254,7 @@ function KeysTab() {
     } finally {
       setSaving(false);
     }
-  }, [nim, pollinations, tripo, meshy, sketchfab, trellisUrl, kaggle, vercel, team, nimTouched, nimSaved, loadModels, setVercelCredentials]);
+  }, [nim, pollinations, tripo, meshy, sketchfab, trellisUrl, kaggle, huggingface, vercel, team, nimTouched, nimSaved, loadModels, setVercelCredentials]);
 
   const clear = useCallback(async () => {
     setNimTouched(false);
@@ -1261,10 +1263,13 @@ function KeysTab() {
     setPollinations('');
     setTripo('');
     setMeshy('');
+    setSketchfab('');
+    setKaggle('');
+    setHuggingface('');
     setTrellisUrl('');
     setVercel('');
     setTeam('');
-    await saveKeys({ nim: '', pollinations: '', tripo: '', meshy: '', sketchfab: '', trellisUrl: '', kaggle: '' });
+    await saveKeys({ nim: '', pollinations: '', tripo: '', meshy: '', sketchfab: '', trellisUrl: '', kaggle: '', huggingface: '' });
     setVercelCredentials('', '');
     await loadModels(true);
     setStatus({ kind: 'info', text: 'Keys cleared from this device.' });
@@ -1377,6 +1382,22 @@ function KeysTab() {
           autoComplete="off"
           placeholder="KGAT_…"
           onChange={(e) => setKaggle(e.target.value)}
+        />
+      </Field>
+
+      <Field
+        label="HuggingFace token (optional) — gated downloads and community GPUs"
+        hint="Two jobs. It lets a Kaggle run log in to HuggingFace, so a gated model dependency is a normal download instead of a 401 partway through a GPU booking. And it is what a community Gradio Space checks for GPU quota when Chomugiri calls one instead of running the model itself, for things like rigging a generated character. It is your account and your quota — get a token at huggingface.co/settings/tokens (a read token is enough)."
+      >
+        <input
+          className={inputClass}
+          style={inputStyle}
+          type={reveal ? 'text' : 'password'}
+          value={huggingface}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder="hf_…"
+          onChange={(e) => setHuggingface(e.target.value)}
         />
       </Field>
 

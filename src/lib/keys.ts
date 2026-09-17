@@ -62,9 +62,22 @@ export interface ApiKeys {
    * one to give out and nothing here that could pay for it.
    */
   kaggle: string;
+  /**
+   * A HuggingFace access token, from huggingface.co/settings/tokens.
+   *
+   * Two jobs: it lets a Kaggle run authenticate to HuggingFace, which matters
+   * because a gated dependency shows up as a 401 five minutes into a GPU
+   * booking rather than as a settings-time error — Pixal3D's background
+   * remover was exactly this until it was replaced outright. And it is what a
+   * community Gradio Space checks for GPU quota when Chomugiri calls one
+   * instead of running the model itself.
+   *
+   * Their account, their quota — same shape as the Kaggle token.
+   */
+  huggingface: string;
 }
 
-const EMPTY: ApiKeys = { nim: '', pollinations: '', tripo: '', meshy: '', sketchfab: '', trellisUrl: '', kaggle: '' };
+const EMPTY: ApiKeys = { nim: '', pollinations: '', tripo: '', meshy: '', sketchfab: '', trellisUrl: '', kaggle: '', huggingface: '' };
 
 export const NIM_KEY_HEADER = 'x-chomugiri-nim-key';
 export const POLLINATIONS_KEY_HEADER = 'x-chomugiri-pollinations-token';
@@ -100,6 +113,7 @@ export async function loadKeys(): Promise<ApiKeys> {
           sketchfabKey?: string;
           trellisUrl?: string;
           kaggleToken?: string;
+          huggingfaceToken?: string;
         };
         cache = {
           ...EMPTY,
@@ -108,6 +122,7 @@ export async function loadKeys(): Promise<ApiKeys> {
           sketchfab: json.sketchfabKey ?? '',
           trellisUrl: json.trellisUrl ?? '',
           kaggle: json.kaggleToken ?? '',
+          huggingface: json.huggingfaceToken ?? '',
         };
         return cache;
       }
@@ -150,6 +165,7 @@ export async function saveKeys(next: Partial<ApiKeys>): Promise<ApiKeys> {
       sketchfabKey: cache.sketchfab,
       trellisUrl: cache.trellisUrl,
       kaggleToken: cache.kaggle,
+      huggingfaceToken: cache.huggingface,
     });
     return cache;
   }

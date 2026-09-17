@@ -65,6 +65,13 @@ export interface ModelKeys {
    * anything faster, and in front of the code-built floor.
    */
   kaggle?: string;
+  /**
+   * A HuggingFace access token, from huggingface.co/settings/tokens.
+   *
+   * Passed straight through to the Kaggle run so a gated dependency logs in
+   * instead of failing partway through a GPU booking.
+   */
+  huggingface?: string;
 }
 
 /**
@@ -362,6 +369,7 @@ export async function generateModel(
           toBase64: bytesToBase64,
           label: request.role ?? 'model',
           onStage: (message) => options.onStage?.('kaggle', message),
+          ...(keys.huggingface ? { huggingfaceToken: keys.huggingface } : {}),
           ...(options.signal ? { signal: options.signal } : {}),
         },
       );
