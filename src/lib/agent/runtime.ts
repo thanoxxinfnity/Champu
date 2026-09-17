@@ -14,6 +14,7 @@ import { buildPackExport, describeExport, detectPacks, missingGeometries, valida
 import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geometry';
 import { planBrief, planGame, planSummary, playerParts } from '@/lib/suites/godot/plan';
 import { buildGodotExport, describeExport as describeGodotExport, detectGodotProject, referencedResources, relativePath } from '@/lib/suites/godot/export';
+import { buildProject } from '@/lib/suites/godot/project';
 import { generateModel, pipelineStatement, sourceChain } from '@/lib/suites/godot/model-source';
 import { creditsFile } from '@/lib/suites/godot/sketchfab';
 import { describeProblems } from '@/lib/suites/godot/verify';
@@ -1030,6 +1031,43 @@ export async function send(opts: SendOptions): Promise<void> {
           }
         }
       }
+    }
+
+    // ── Godot: a chat model that never finishes writing the project ─────────
+    //
+    // Chat-authored code depends on the selected model actually reaching the
+    // code before it runs out of time or budget. Verified live against the
+    // real gateway: a 300-second NIM call and a 100-second Pollinations call
+    // both spent their whole run narrating or reasoning about the plan and
+    // never emitted a single file — the exact shape of "0/7 complete" and no
+    // game. Game Studio's dedicated button never has this problem because it
+    // never asks a model to hand-write the project; it calls the deterministic
+    // builder below directly. Lane B chat gets the same floor: if the model's
+    // own output does not already contain a working project, one is built
+    // from the plan instead of leaving the user with nothing.
+    if (suite === 'godot' && design && !detectGodotProject(files)) {
+      const built = buildProject({ name: design.name, dimension: design.dimension, genre: design.genre, view: design.view });
+      for (const f of built) {
+        const artifact = {
+          kind: 'file' as const,
+          path: f.path,
+          language: f.path.endsWith('.gd') ? 'gdscript' : f.path.endsWith('.md') ? 'markdown' : 'text',
+          content: f.content,
+          complete: true,
+          bytes: new TextEncoder().encode(f.content).length,
+        };
+        files.push(artifact);
+        upsertFile(artifact);
+      }
+      emit({
+        id: uid('msg'),
+        role: 'system',
+        content:
+          `${selection.model} did not finish writing the project — it can happen when the model is slow or spends its ` +
+          `whole answer reasoning about the plan instead of the code. Built **${design.name}** from the plan directly ` +
+          `instead, so the build does not depend on that finishing.`,
+        createdAt: Date.now(),
+      });
     }
 
     // ── Godot: build the model, complete the project, hand over a zip ───────
