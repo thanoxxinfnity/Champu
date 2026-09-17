@@ -11,7 +11,18 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { inflateRawSync } from 'node:zlib';
-import { retextureGlbFile } from '../src/lib/suites/godot/retexture.ts';
+import {
+  computeBoxUvs, computeVertexNormals, generateModelTexture, parseTrimeshGlb, retexturedGlb,
+} from '../src/lib/suites/godot/retexture.ts';
+import { fitBipedRig, riggedGlb, skinToBipedRig } from '../src/lib/suites/godot/autorig.ts';
+
+/**
+ * Which of the forty names read as an upright, roughly symmetric character
+ * rather than a prop. fitBipedRig assumes that shape; a barrel or a fence
+ * does not have one, and a bird (crow_perched) has the wrong one — a biped
+ * skeleton forced onto it would not match how it actually moves.
+ */
+const HUMANOID = /zombie|skeleton|ghoul|doll/i;
 
 // Minimal ZIP reader/writer. Reads both stored (method 0) and deflated
 // (method 8, the zip default and what the source pack actually uses) via
@@ -153,9 +164,28 @@ for (const [i, entry] of models.entries()) {
   process.stdout.write(`[${i + 1}/${models.length}] ${entry.name} (${(before / 1048576).toFixed(1)} MB)… `);
   const began = Date.now();
   try {
-    const { glb, textureSource } = await retextureGlbFile(entry.bytes, name.replace(/_/g, ' '), { timeoutMs: 60_000 });
+    const { positions, indices } = parseTrimeshGlb(entry.bytes);
+    const normals = computeVertexNormals(positions, indices);
+    const uvs = computeBoxUvs(positions, normals);
+    const texture = await generateModelTexture(name.replace(/_/g, ' '), { timeoutMs: 60_000 });
+
+    let glb, rigNote;
+    if (HUMANOID.test(name)) {
+      const rig = fitBipedRig(positions);
+      const skin = skinToBipedRig(positions, rig);
+      glb = riggedGlb(positions, indices, normals, uvs, rig, skin, {
+        name, imageBytes: texture.bytes, imageMimeType: texture.mimeType,
+      });
+      rigNote = ', rigged';
+    } else {
+      glb = retexturedGlb(positions, indices, normals, uvs, {
+        name, imageBytes: texture.bytes, imageMimeType: texture.mimeType,
+      });
+      rigNote = '';
+    }
+
     const took = ((Date.now() - began) / 1000).toFixed(1);
-    console.log(`${textureSource}, ${(glb.length / 1048576).toFixed(1)} MB, ${took}s`);
+    console.log(`${texture.source}${rigNote}, ${(glb.length / 1048576).toFixed(1)} MB, ${took}s`);
     done.push({ name: entry.name, bytes: glb });
   } catch (err) {
     console.log(`FAILED: ${err.message}`);
