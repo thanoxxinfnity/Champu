@@ -202,32 +202,47 @@ async function complete(
  * One texture from the image gateway.
  *
  * Returns null rather than throwing: a build wants a dozen of these and one
- * refusal should cost one surface, not the game.
+ * refusal should cost one surface, not the game. Falls through to Pollinations
+ * on any NIM failure — a stalled/degraded NIM used to mean an unbounded
+ * `fetch` with no fallback, so a dozen textures each hanging out to the
+ * platform's own multi-minute ceiling looked to the user like one frozen step
+ * for nearly two hours. A short per-attempt timeout, composed with the
+ * caller's own abort signal so the stop button actually cuts a hung attempt
+ * short, keeps that from happening again.
  */
-async function paintTexture(prompt: string, seed: number): Promise<{ dataUrl: string; bytes: number } | null> {
-  const res = await fetch('/api/image', withKeys({
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      provider: 'nim',
-      model: 'black-forest-labs/flux.1-dev',
-      prompt,
-      width: 1024,
-      height: 1024,
-      steps: 30,
-      seed: seed % 1_000_000,
-    }),
-  }));
-  if (!res.ok) return null;
+async function paintTexture(
+  prompt: string,
+  seed: number,
+  signal?: AbortSignal,
+): Promise<{ dataUrl: string; bytes: number } | null> {
+  for (const body of [
+    { provider: 'nim', model: 'black-forest-labs/flux.1-dev', prompt, width: 1024, height: 1024, steps: 30, seed: seed % 1_000_000 },
+    { provider: 'pollinations', prompt, width: 1024, height: 1024, seed: seed % 1_000_000 },
+  ]) {
+    try {
+      const timeout = AbortSignal.timeout(45_000);
+      const composed = signal ? AbortSignal.any([signal, timeout]) : timeout;
+      const res = await fetch('/api/image', withKeys({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: composed,
+      }));
+      if (!res.ok) continue;
 
-  const json = (await res.json()) as { images?: Array<{ dataUrl?: string }> };
-  const dataUrl = json.images?.[0]?.dataUrl;
-  if (!dataUrl) return null;
+      const json = (await res.json()) as { images?: Array<{ dataUrl?: string }> };
+      const dataUrl = json.images?.[0]?.dataUrl;
+      if (!dataUrl) continue;
 
-  // Base64 is 4 bytes per 3 of payload; near enough to judge whether the image
-  // has any detail in it.
-  const b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
-  return { dataUrl, bytes: Math.round(b64.length * 0.75) };
+      // Base64 is 4 bytes per 3 of payload; near enough to judge whether the
+      // image has any detail in it.
+      const b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+      return { dataUrl, bytes: Math.round(b64.length * 0.75) };
+    } catch {
+      // One provider stalling or refusing is not both refusing.
+    }
+  }
+  return null;
 }
 
 /**
@@ -1122,14 +1137,19 @@ export async function send(opts: SendOptions): Promise<void> {
           i < RUNNER_THEMES.length * 2 ? RUNNER_THEMES[Math.floor(i / 2)] : undefined;
 
         for (let i = 0; i < planned.length; i += 1) {
+          if (controller.signal.aborted) break;
           const texture = planned[i];
           useWorkspace.getState().setThinking(true, `Painting ${texture.subject}…`);
           try {
-            let art = await paintTexture(gameTexturePrompt(texture, themeFor(i)), texture.seed);
+            let art = await paintTexture(gameTexturePrompt(texture, themeFor(i)), texture.seed, controller.signal);
             // A flat texture is worse than none: the surface renders as a blank
             // sheet and the geometry on it disappears. One reroll, insisting.
             if (art && looksFlat(art.bytes)) {
-              const retry = await paintTexture(insistOnDetail(texture, themeFor(i)), (texture.seed + 7919) % 1_000_000);
+              const retry = await paintTexture(
+                insistOnDetail(texture, themeFor(i)),
+                (texture.seed + 7919) % 1_000_000,
+                controller.signal,
+              );
               if (retry && retry.bytes > art.bytes) art = retry;
             }
             if (!art) continue;
