@@ -290,11 +290,21 @@ function startPhraseCycle(lane: 'A' | 'B'): () => void {
   const { setThinking } = useWorkspace.getState();
 
   let index = 0;
-  setThinking(true, phrases[0]);
+  let lastWritten = phrases[0];
+  setThinking(true, lastWritten);
 
+  // Real progress ("Compiling the APK on the bridge…") calls the same
+  // setThinking() this cycle does, and used to lose every 2.6 seconds to the
+  // next random flavour phrase — a multi-minute compile spent nearly all of
+  // it showing "Verifying terminal heartbeat..." with nothing to do with what
+  // was actually happening. Real narration wins: a tick only advances the
+  // cycle when the bubble still shows what the cycle itself last wrote: once
+  // something else has claimed it, the cycle waits rather than stomping on it.
   const timer = setInterval(() => {
+    if (useWorkspace.getState().thinking.phrase !== lastWritten) return;
     index = (index + 1) % phrases.length;
-    setThinking(true, phrases[index]);
+    lastWritten = phrases[index];
+    setThinking(true, lastWritten);
   }, 2600);
 
   return () => {
