@@ -43,11 +43,11 @@
  *
  * ── Service status ──────────────────────────────────────────────────────────
  *
- * As of 2026-09-15 the endpoint 500s for everything, text and its own sample
- * alike, on every attempt — twelve racing attempts in a row, and the same with
- * the documented NVCF payload. That is NVIDIA's deployment, not this client:
- * FLUX answered 200 in 4.2 seconds on the same key in the same minute. Nothing
- * here works around it, and nothing here needs to change when they fix it.
+ * Down from 2026-09-15 through 2026-09-19 — the endpoint 500'd for everything,
+ * text and its own sample alike, across dozens of hourly checks. Confirmed
+ * working again on 2026-09-19 20:08 UTC: a live call returned a real glTF v2
+ * .glb (1,821,168 bytes) that Godot 4.3 imported cleanly. Nothing here needed
+ * to change — this was NVIDIA's deployment recovering, not a client fix.
  */
 
 export const TRELLIS_URL = 'https://ai.api.nvidia.com/v1/genai/microsoft/trellis';
