@@ -66,11 +66,9 @@ export class BridgeOfflineError extends Error {
   }
 }
 
-function normalizeUrl(url: string): string {
-  const trimmed = url.trim().replace(/\/+$/, '');
-  if (!trimmed) return '';
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-}
+import { normalizeUrl } from './parse';
+
+export { parseBridgeInput, normalizeUrl } from './parse';
 
 export class BridgeClient {
   private config: BridgeConfig;

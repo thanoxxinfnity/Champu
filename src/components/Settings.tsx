@@ -13,6 +13,7 @@ import { isClientExposed, maskSecret, toEnvExample, toEnvFile, validateSecretNam
 import { downloadText } from '@/lib/zip';
 import { isShellHosted, loadKeys, maskKey, nimConfigured, saveKeys, validateNimKey } from '@/lib/keys';
 import { normalizeBase } from '@/lib/providers/model-list';
+import { parseBridgeInput } from '@/lib/bridge/parse';
 
 type Tab = 'guide' | 'keys' | 'bridge' | 'secrets' | 'endpoints' | 'deploy' | 'voice' | 'guard';
 
@@ -53,8 +54,9 @@ function BridgeTab() {
   const configureBridge = useWorkspace((s) => s.configureBridge);
   const bridge = useWorkspace((s) => s.bridge);
 
-  const [url, setUrl] = useState('');
-  const [token, setToken] = useState('');
+  // One field: the agent's own startup banner prints "<tunnel-url>#<token>"
+  // ready to copy in one motion, so the UI shouldn't ask for two boxes.
+  const [combined, setCombined] = useState('');
   const [via, setVia] = useState<'direct' | 'proxy'>('direct');
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -63,12 +65,13 @@ function BridgeTab() {
     void import('@/lib/db/history').then(async ({ getSetting }) => {
       const stored = await getSetting<{ url: string; token: string; via?: 'direct' | 'proxy' } | null>('bridge', null);
       if (stored) {
-        setUrl(stored.url);
-        setToken(stored.token);
+        setCombined(stored.token ? `${stored.url}#${stored.token}` : stored.url);
         setVia(stored.via ?? 'direct');
       }
     });
   }, []);
+
+  const { url, token } = parseBridgeInput(combined);
 
   const test = async () => {
     setTesting(true);
@@ -80,7 +83,11 @@ function BridgeTab() {
         `✔ ${health.agent} v${health.version} · ${health.platform}/${health.arch} · workspace ${health.workspace}`,
       );
     } catch (err) {
-      setResult(`✘ ${(err as Error).message}`);
+      setResult(
+        !token
+          ? '✘ No token found in that paste — append it after a # right after the URL, exactly as the agent printed it.'
+          : `✘ ${(err as Error).message}`,
+      );
     } finally {
       setTesting(false);
     }
@@ -107,28 +114,24 @@ npm run agent
 ngrok http 7717
 #   or
 cloudflared tunnel --url http://localhost:7717`}</pre>
-        <p className="mt-2 text-[10.5px] leading-[1.45]" style={{ color: 'var(--color-amber)' }}>
-          The token grants shell access as your user. Treat it like an SSH key, and stop the tunnel when you are done.
+        <p className="mt-2 text-[10.5px] leading-[1.45]" style={{ color: 'var(--ink-dim)' }}>
+          The agent prints a ready line: <span className="mono">{'<tunnel-url>#<token>'}</span> — paste that whole
+          line below, one box, nothing to copy twice.
+        </p>
+        <p className="mt-1.5 text-[10.5px] leading-[1.45]" style={{ color: 'var(--color-amber)' }}>
+          The token after the # grants shell access as your user. Treat it like an SSH key, and stop the tunnel when
+          you are done.
         </p>
       </div>
 
-      <Field label="Tunnel URL" hint="The public https URL from ngrok or cloudflared.">
+      <Field
+        label="Terminal Bridge"
+        hint="Paste the tunnel URL with the token after a # — exactly the line the agent's startup banner shows you."
+      >
         <input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://abc123.ngrok-free.app"
-          className={inputClass}
-          style={inputStyle}
-          spellCheck={false}
-        />
-      </Field>
-
-      <Field label="Bridge token" hint="Printed in the agent's startup banner.">
-        <input
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          type="password"
-          placeholder="paste the token"
+          value={combined}
+          onChange={(e) => setCombined(e.target.value)}
+          placeholder="https://abc123.ngrok-free.app#your-token"
           className={inputClass}
           style={inputStyle}
           spellCheck={false}
@@ -160,7 +163,7 @@ cloudflared tunnel --url http://localhost:7717`}</pre>
       <button
         type="button"
         onClick={() => void test()}
-        disabled={testing || !url || !token}
+        disabled={testing || !combined}
         className="mono w-full rounded-lg px-3 py-2 text-[11.5px] font-medium disabled:opacity-35"
         style={{ background: 'var(--accent)', color: '#04150e' }}
       >

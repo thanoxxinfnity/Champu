@@ -494,7 +494,8 @@ ${line('git', tools.git)}
     ngrok http ${PORT}
     cloudflared tunnel --url http://localhost:${PORT}
 
-  \x1b[2mThen paste the public URL + token into Chomugiri → Settings → Terminal Bridge.\x1b[0m
+  \x1b[2mThen, in Chomugiri → Settings → Terminal Bridge, paste ONE line:\x1b[0m
+    \x1b[2m<your ngrok/cloudflared URL>\x1b[0m\x1b[38;5;99m#${TOKEN}\x1b[0m
   \x1b[38;5;208mAnyone with this token can run shell commands as you. Do not share it.\x1b[0m
 
 `);
