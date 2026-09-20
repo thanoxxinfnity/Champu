@@ -209,9 +209,31 @@ test('no scene declares the same resource twice', () => {
   // cityArena took over the building meshes and shooterScene kept emitting them
   // as well: eighteen duplicate ids in every shooter scene. load_steps agreed,
   // because it is counted from the same array that holds the duplicates.
-  for (const spec of [CITY, { name: 'S', dimension: '3d', genre: 'shooter', view: 'first-person' }]) {
+  for (const spec of [
+    CITY,
+    { name: 'S', dimension: '3d', genre: 'shooter', view: 'first-person' },
+    { ...CITY, carModel: { path: 'res://models/player_car.glb' } },
+  ]) {
     const scene = buildProject(spec).find((f) => f.path === 'main.tscn').content;
     const ids = [...scene.matchAll(/^\[sub_resource type="[^"]+" id="([^"]+)"\]/gm)].map((m) => m[1]);
     assert.equal(new Set(ids).size, ids.length, `${spec.genre}: ${ids.filter((id, i) => ids.indexOf(id) !== i)}`);
   }
+});
+
+test('a generated car is driven, not paid for and ignored', () => {
+  // Same failure shape as the hero model: a paid Meshy credit or a NIM/TRELLIS
+  // call builds a car, and every car in the city stays the placeholder box
+  // because nothing in the scene ever referenced the .glb.
+  const withCar = buildProject({ ...CITY, carModel: { path: 'res://models/player_car.glb' } });
+  const scene = withCar.find((f) => f.path === 'main.tscn').content;
+  assert.match(scene, /player_car\.glb/);
+  // Every parked car gets the real model, not just the first one.
+  const artNodes = [...scene.matchAll(/\[node name="Art" parent="Cars\/[^"]+" instance=ExtResource\("25_carmodel"\)\]/g)];
+  assert.equal(artNodes.length, PARKED_CARS.length, 'every parked car should carry the real model, not just one');
+  // The collision box stays: a .glb is art, and a VehicleBody3D with no
+  // CollisionShape3D has no wheels to hang and falls through the street.
+  assert.match(scene, /shape = SubResource\("BoxShape3D_car"\)/);
+  // And with no car model, the placeholder box chassis is still there.
+  const withoutCar = buildProject(CITY).find((f) => f.path === 'main.tscn').content;
+  assert.match(withoutCar, /mesh = SubResource\("BoxMesh_car"\)/);
 });

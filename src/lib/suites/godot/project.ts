@@ -95,6 +95,14 @@ export interface GameSpec {
     rigged?: boolean;
   }>;
   /**
+   * A generated car model, for the open-world genre's drivable and parked cars.
+   *
+   * Without this every car is the same placeholder box chassis regardless of
+   * what the prompt asked to drive — a game about a red sports car and one
+   * about a pickup truck rendered identically.
+   */
+  carModel?: { path: string };
+  /**
    * Generate a soundtrack and sound effects.
    *
    * On by default: a silent game is the loudest sign that something is a tech
@@ -1177,7 +1185,15 @@ export function openWorldScene(spec: GameSpec): string {
     ext.push(`[ext_resource type="Script" path="res://animator.gd" id="24_animator"]`);
   }
 
-  const sub: string[] = [...WORLD_RESOURCES, ...openWorldResources(hero)];
+  // The generated car, when the build made one. Same reasoning as the hero
+  // model: without this the runtime spends a paid or GPU-minutes credit on a
+  // model the scene never mentions, and every car stays the placeholder box.
+  const carModel = spec.carModel;
+  if (carModel) {
+    ext.push(`[ext_resource type="PackedScene" path="${carModel.path}" id="25_carmodel"]`);
+  }
+
+  const sub: string[] = [...WORLD_RESOURCES, ...openWorldResources(hero, carModel)];
 
   const shapeIds = new Map<string, string>();
   props.forEach((prop, i) => {
@@ -1215,7 +1231,7 @@ shadow_enabled = true
 
 ${arena.nodes}
 
-${openWorldNodes(hero)}
+${openWorldNodes(hero, carModel)}
 
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("6_hud")

@@ -140,11 +140,28 @@ mesh = SubResource("BoxMesh_nose")
 material_override = SubResource("StandardMaterial3D_skin")`;
 }
 
-/** One parked car, chassis and all. */
-function carNode(car: { name: string; at: [number, number]; facing: number }): string {
+/**
+ * One parked car, chassis and all.
+ *
+ * The collision box stays either way — same reasoning as the player's capsule:
+ * a .glb is art, not physics, and a VehicleBody3D with no CollisionShape3D has
+ * no wheels to hang and falls through the street.
+ */
+function carNode(car: { name: string; at: [number, number]; facing: number }, model?: { path: string }): string {
   const c = Math.cos(car.facing);
   const s = Math.sin(car.facing);
   const basis = [c, 0, s, 0, 1, 0, -s, 0, c].map((n) => Number(n.toFixed(4))).join(', ');
+  const art = model
+    ? `[node name="Art" parent="Cars/${car.name}" instance=ExtResource("25_carmodel")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.4, 0)`
+    : `[node name="Chassis" type="MeshInstance3D" parent="Cars/${car.name}"]
+mesh = SubResource("BoxMesh_car")
+material_override = SubResource("StandardMaterial3D_car")
+
+[node name="Cabin" type="MeshInstance3D" parent="Cars/${car.name}"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.55, 0.1)
+mesh = SubResource("BoxMesh_cabin")
+material_override = SubResource("StandardMaterial3D_glass")`;
   return `[node name="${car.name}" type="VehicleBody3D" parent="Cars"]
 transform = Transform3D(${basis}, ${car.at[0]}, 0.85, ${car.at[1]})
 script = ExtResource("20_car")
@@ -152,14 +169,7 @@ script = ExtResource("20_car")
 [node name="Collision" type="CollisionShape3D" parent="Cars/${car.name}"]
 shape = SubResource("BoxShape3D_car")
 
-[node name="Chassis" type="MeshInstance3D" parent="Cars/${car.name}"]
-mesh = SubResource("BoxMesh_car")
-material_override = SubResource("StandardMaterial3D_car")
-
-[node name="Cabin" type="MeshInstance3D" parent="Cars/${car.name}"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.55, 0.1)
-mesh = SubResource("BoxMesh_cabin")
-material_override = SubResource("StandardMaterial3D_glass")
+${art}
 
 [node name="Door" type="Area3D" parent="Cars/${car.name}"]
 script = ExtResource("21_door")
@@ -169,7 +179,7 @@ shape = SubResource("BoxShape3D_door")`;
 }
 
 /** Everything the scene needs that is not a script or the block itself. */
-export function openWorldResources(model?: { path: string }): string[] {
+export function openWorldResources(model?: { path: string }, carModel?: { path: string }): string[] {
   return [
     ...(model
       ? []
@@ -197,9 +207,14 @@ height = 1.8
 radius = 0.35`,
     // The chassis, low and long. A VehicleBody3D's collision box is what the
     // wheels hang off, so getting it wrong is a car that drives on its bumper.
-    `[sub_resource type="BoxMesh" id="BoxMesh_car"]
-size = Vector3(1.9, 0.75, 4.2)`,
+    // The box stays even with a real model: a .glb is art, not physics, same
+    // as the player's capsule above.
     `[sub_resource type="BoxShape3D" id="BoxShape3D_car"]
+size = Vector3(1.9, 0.75, 4.2)`,
+    ...(carModel
+      ? []
+      : [
+    `[sub_resource type="BoxMesh" id="BoxMesh_car"]
 size = Vector3(1.9, 0.75, 4.2)`,
     `[sub_resource type="BoxMesh" id="BoxMesh_cabin"]
 size = Vector3(1.6, 0.6, 2.0)`,
@@ -212,6 +227,7 @@ albedo_color = Color(0.12, 0.16, 0.2, 0.75)
 metallic = 0.3
 roughness = 0.1
 transparency = 1`,
+      ]),
     // Wider than the car: the reach is "standing next to it", not "touching it".
     `[sub_resource type="BoxShape3D" id="BoxShape3D_door"]
 size = Vector3(4.4, 2.2, 5.6)`,
@@ -219,7 +235,7 @@ size = Vector3(4.4, 2.2, 5.6)`,
 }
 
 /** The nodes: player, camera rig, cars. */
-export function openWorldNodes(model?: { path: string }): string {
+export function openWorldNodes(model?: { path: string }, carModel?: { path: string }): string {
   return `[node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 4)
 collision_layer = 1
@@ -242,7 +258,7 @@ far = 250.0
 
 [node name="Cars" type="Node3D" parent="."]
 
-${PARKED_CARS.map(carNode).join('\n\n')}`;
+${PARKED_CARS.map((car) => carNode(car, carModel)).join('\n\n')}`;
 }
 
 /**
