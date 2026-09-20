@@ -66,6 +66,10 @@ export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void }
     appendTerminal({ stream: 'system', text: `▲ ${verb} "${target}" — ${list.length} files to Vercel…` });
 
     try {
+      // No timeout at all meant a genuinely stuck deploy (not a slow-but-
+      // progressing one — the server route caps itself at maxDuration) left
+      // the "launching…" button spinning forever with no way to tell the two
+      // apart. 310s gives the route's own 300s cap room to answer first.
       const res = await fetch('/api/vercel/deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -78,6 +82,7 @@ export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void }
           env: Object.keys(buildEnv).length ? buildEnv : undefined,
           wait: true,
         }),
+        signal: AbortSignal.timeout(310_000),
       });
 
       const data = (await res.json()) as {

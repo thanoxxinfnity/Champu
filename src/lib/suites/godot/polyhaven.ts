@@ -25,6 +25,20 @@
 
 export const POLYHAVEN_API = 'https://api.polyhaven.com';
 
+/**
+ * A signal that is always bounded, even when the caller supplies one.
+ *
+ * `...(signal ? { signal } : {})` looks defensive but is the opposite: with no
+ * caller signal a call has no timeout at all, and with one it still has none
+ * — only whatever fires that signal, which for a manual Stop button may never
+ * happen on its own. A stalled index, listing, or CDN file then hangs the
+ * whole download forever instead of failing with a readable error.
+ */
+function boundedSignal(signal: AbortSignal | undefined, ms: number): AbortSignal {
+  const timeout = AbortSignal.timeout(ms);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
 /** 1k is the right default: a 4k texture set is tens of megabytes per prop. */
 export type Resolution = '1k' | '2k' | '4k';
 
@@ -103,7 +117,7 @@ export async function searchAssets(
   try {
     response = await fetch(`${POLYHAVEN_API}/assets?type=models`, {
       headers: { Accept: 'application/json' },
-      ...(options.signal ? { signal: options.signal } : {}),
+      signal: boundedSignal(options.signal, 20_000),
     });
   } catch (err) {
     return { assets: [], error: `Could not reach Poly Haven: ${(err as Error).message}` };
@@ -173,7 +187,7 @@ export async function fetchAsset(
   try {
     listing = await fetch(`${POLYHAVEN_API}/files/${encodeURIComponent(id)}`, {
       headers: { Accept: 'application/json' },
-      ...(options.signal ? { signal: options.signal } : {}),
+      signal: boundedSignal(options.signal, 20_000),
     });
   } catch (err) {
     return { files: [], error: `Could not reach Poly Haven: ${(err as Error).message}` };
@@ -194,7 +208,7 @@ export async function fetchAsset(
   for (const item of wanted) {
     let response: Response;
     try {
-      response = await fetch(item.url, { ...(options.signal ? { signal: options.signal } : {}) });
+      response = await fetch(item.url, { signal: boundedSignal(options.signal, 60_000) });
     } catch (err) {
       return { files: [], error: `Downloading ${item.path} failed: ${(err as Error).message}` };
     }

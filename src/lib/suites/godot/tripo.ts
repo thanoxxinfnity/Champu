@@ -95,11 +95,14 @@ export async function startTextToModel(
   signal?: AbortSignal,
 ): Promise<{ taskId?: string; error?: string }> {
   try {
+    // `signal ?? AbortSignal.timeout(...)` drops the deadline the moment a
+    // caller signal exists — a stall then has nothing to end it.
+    const timeout = AbortSignal.timeout(30_000);
     const res = await fetch(`${TRIPO_BASE}/task`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'text_to_model', prompt: prompt.slice(0, 1024) }),
-      signal: signal ?? AbortSignal.timeout(30_000),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
 
     const text = await res.text();
@@ -115,9 +118,10 @@ export async function startTextToModel(
 /** Reads a job's current state. */
 export async function pollTask(apiKey: string, taskId: string, signal?: AbortSignal): Promise<TripoResult> {
   try {
+    const timeout = AbortSignal.timeout(30_000);
     const res = await fetch(`${TRIPO_BASE}/task/${encodeURIComponent(taskId)}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
-      signal: signal ?? AbortSignal.timeout(30_000),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
     const text = await res.text();
     if (!res.ok) return { status: 'failed', error: tripoError(res.status, text) };

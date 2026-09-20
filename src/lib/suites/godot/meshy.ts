@@ -147,11 +147,15 @@ export function resultFrom(json: unknown): MeshyResult {
 }
 
 async function post(apiKey: string, url: string, body: unknown, signal?: AbortSignal) {
+  // `signal ?? AbortSignal.timeout(...)` drops the deadline entirely the
+  // moment a caller signal exists, leaving a stalled request uncancellable
+  // except by the caller's own signal firing.
+  const timeout = AbortSignal.timeout(30_000);
   const res = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: signal ?? AbortSignal.timeout(30_000),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
   return { res, text: await res.text() };
 }
@@ -229,9 +233,10 @@ export async function pollTask(
   signal?: AbortSignal,
 ): Promise<MeshyResult> {
   try {
+    const timeout = AbortSignal.timeout(30_000);
     const res = await fetch(`${pathFor(kind)}/${encodeURIComponent(taskId)}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
-      signal: signal ?? AbortSignal.timeout(30_000),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
     const text = await res.text();
     if (!res.ok) return { status: 'failed', error: meshyError(res.status, text) };

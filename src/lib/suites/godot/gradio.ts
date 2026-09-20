@@ -59,8 +59,11 @@ export async function serverIsUp(
   signal?: AbortSignal,
 ): Promise<{ up: boolean; why?: string }> {
   try {
+    // No signal at all meant a stalled Space (booting, sleeping, or dead)
+    // hung whatever was waiting on this check forever.
+    const timeout = AbortSignal.timeout(15_000);
     const res = await fetch(`${base(url)}/gradio_api/info`, {
-      ...(signal ? { signal } : {}),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
     if (!res.ok) return { up: false, why: `it answered ${res.status}` };
     const json = (await res.json()) as { named_endpoints?: Record<string, unknown> };

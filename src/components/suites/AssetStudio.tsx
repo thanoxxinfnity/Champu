@@ -112,6 +112,9 @@ export function AssetStudio() {
     try {
       // The key colour is written into the prompt, so the cut is exact rather
       // than a guess at where the subject ends.
+      //
+      // No timeout at all meant a stalled image provider hung the "generating"
+      // state forever.
       const res = await fetch('/api/image', withKeys({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -123,6 +126,7 @@ export function AssetStudio() {
           height: 1024,
           count: 1,
         }),
+        signal: AbortSignal.timeout(60_000),
       }));
       const data = (await res.json()) as { images?: Array<{ dataUrl: string }>; error?: string };
       if (!res.ok || !data.images?.length) {

@@ -90,11 +90,19 @@ async function streamCompletion(
 
   let res: Response;
   try {
+    // Same failure shape as complete(): a raw caller signal with no timeout
+    // means a genuinely stuck connection (not the upstream provider erroring,
+    // which the server route already bounds internally) never resolves or
+    // rejects, and the whole chat run — the main path through this app — hangs
+    // forever with nothing to catch. 300s matches the server route's own
+    // maxDuration and openai-compat.ts's streamChat() default.
+    const timeout = AbortSignal.timeout(300_000);
+    const composed = signal ? AbortSignal.any([signal, timeout]) : timeout;
     res = await fetch('/api/chat', withKeys({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...body, stream: true }),
-      signal,
+      signal: composed,
     }));
   } catch (err) {
     const message = (err as Error).name === 'AbortError' ? 'Run cancelled.' : `Gateway unreachable: ${(err as Error).message}`;
@@ -269,10 +277,13 @@ async function referenceImage(prompt: string): Promise<Uint8Array | null> {
     { provider: 'pollinations', prompt, width: 1024, height: 1024 },
   ]) {
     try {
+      // Same fix as paintTexture(): no signal at all meant a stalled provider
+      // hung the Kaggle image-to-3D chain forever instead of falling through.
       const res = await fetch('/api/image', withKeys({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(45_000),
       }));
       if (!res.ok) continue;
       const json = (await res.json()) as { images?: Array<{ dataUrl?: string }> };
@@ -1003,9 +1014,15 @@ export async function send(opts: SendOptions): Promise<void> {
         for (const texture of wanted) {
           if (controller.signal.aborted) break;
           try {
+            // Checking controller.signal.aborted between textures only stops
+            // the *next* one from starting — it does nothing for one already
+            // stalled, since the fetch itself carried no signal and no
+            // timeout. A dozen textures each hanging out to the platform's own
+            // ceiling looked like one frozen step.
             const res = await fetch('/api/image', withKeys({
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
+              signal: AbortSignal.any([controller.signal, AbortSignal.timeout(45_000)]),
               body: JSON.stringify({
                 // The user's chosen image model, falling back to whatever is
                 // actually configured — NIM needs a key, Pollinations does not.

@@ -58,6 +58,8 @@ export function ImageSuite() {
     const endpoint = imageEndpoints.find((e) => e.id === endpointId) ?? imageEndpoints[0];
 
     try {
+      // No timeout at all meant a stalled provider hung the "generating"
+      // state forever.
       const res = await fetch('/api/image', withKeys({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -74,6 +76,7 @@ export function ImageSuite() {
               ? { baseUrl: endpoint.baseUrl, apiKey: endpoint.apiKey, headers: endpoint.headers }
               : undefined,
         }),
+        signal: AbortSignal.timeout(60_000),
       }));
 
       const data = (await res.json()) as {

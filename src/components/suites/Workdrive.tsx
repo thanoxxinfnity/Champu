@@ -71,10 +71,14 @@ export function Workdrive() {
     await refresh();
 
     try {
+      // No timeout at all meant a stalled retrieval left the run stuck at
+      // "running" in IndexedDB forever, with no error and no way out. 310s
+      // gives the route's own 300s cap room to answer first.
       const res = await fetch('/api/research', withKeys({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, maxSources: 7, maxChunks: 16 }),
+        signal: AbortSignal.timeout(310_000),
       }));
 
       const data = (await res.json()) as {

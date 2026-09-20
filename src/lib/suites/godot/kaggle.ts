@@ -138,6 +138,20 @@ function headers(token: string): Record<string, string> {
 }
 
 /**
+ * A signal that is always bounded, even when the caller supplies one.
+ *
+ * `...(signal ? { signal } : {})` looks defensive but is the opposite: with no
+ * caller signal a call has no timeout at all, and with one it has no timeout
+ * either — only whatever fires that signal. A stalled Kaggle response — the
+ * API booting a kernel, the free GPU queue, a slow status poll — then hangs
+ * the calling build step forever instead of failing over to the next source.
+ */
+function boundedSignal(signal: AbortSignal | undefined, ms: number): AbortSignal {
+  const timeout = AbortSignal.timeout(ms);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
+/**
  * Whether a token is one of Kaggle's, before it is spent finding out.
  *
  * Two shapes are in circulation: the newer `KGAT_…` API tokens, and the legacy
@@ -154,7 +168,7 @@ export function looksLikeToken(token: string): boolean {
 /** Who the token belongs to. The username is half of every other call's path. */
 export async function whoAmI(token: string, signal?: AbortSignal): Promise<{ user?: string; error?: string }> {
   try {
-    const res = await fetch(`${API}/hello`, { headers: headers(token), ...(signal ? { signal } : {}) });
+    const res = await fetch(`${API}/hello`, { headers: headers(token), signal: boundedSignal(signal, 20_000) });
     if (res.status === 401 || res.status === 403) {
       return { error: 'Kaggle rejected that token. Generate a new one at kaggle.com/settings → API Tokens.' };
     }
@@ -849,7 +863,7 @@ export async function pushKernel(
       method: 'POST',
       headers: headers(token),
       body: JSON.stringify(body),
-      ...(options.signal ? { signal: options.signal } : {}),
+      signal: boundedSignal(options.signal, 30_000),
     });
     if (!res.ok) return { error: `Kaggle refused the notebook (${res.status}).` };
     const json = (await res.json()) as { url?: string; ref?: string; error?: string };
@@ -887,7 +901,7 @@ export async function kernelStatus(
   try {
     const res = await fetch(`${API}/kernels/status?userName=${encodeURIComponent(user)}&kernelSlug=${encodeURIComponent(slug)}`, {
       headers: headers(token),
-      ...(signal ? { signal } : {}),
+      signal: boundedSignal(signal, 20_000),
     });
     if (!res.ok) return { status: 'unknown', message: `Kaggle answered ${res.status}.` };
     const json = (await res.json()) as { status?: string; failureMessage?: string };
@@ -916,7 +930,7 @@ export async function kernelOutput(
 ): Promise<KernelOutput> {
   const res = await fetch(`${API}/kernels/output?userName=${encodeURIComponent(user)}&kernelSlug=${encodeURIComponent(slug)}`, {
     headers: headers(token),
-    ...(signal ? { signal } : {}),
+    signal: boundedSignal(signal, 30_000),
   });
   if (!res.ok) return { files: [], log: `Kaggle answered ${res.status} for the output.` };
   const json = (await res.json()) as {
@@ -1147,7 +1161,7 @@ export async function generateOnKaggle(
     try {
       // No Authorization header: the URL is already signed, and sending one
       // makes Kaggle's CDN reject it.
-      const res = await fetch(file.url, options.signal ? { signal: options.signal } : {});
+      const res = await fetch(file.url, { signal: boundedSignal(options.signal, 60_000) });
       if (!res.ok) continue;
       const bytes = new Uint8Array(await res.arrayBuffer());
       // glTF binary starts "glTF". Anything else is an error page with a .glb

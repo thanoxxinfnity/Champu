@@ -28,6 +28,19 @@
  * and hoped about.
  */
 
+/**
+ * A signal that is always bounded, even when the caller supplies one.
+ *
+ * `...(signal ? { signal } : {})` looks defensive but is not: with no caller
+ * signal a call has no timeout at all, and with one it still has none — only
+ * whatever fires that signal. A stalled search, download link, or CDN file
+ * then hangs forever instead of failing with a readable error.
+ */
+function boundedSignal(signal: AbortSignal | undefined, ms: number): AbortSignal {
+  const timeout = AbortSignal.timeout(ms);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
 export const SKETCHFAB_API = 'https://api.sketchfab.com/v3';
 
 export interface SketchfabModel {
@@ -180,7 +193,7 @@ export async function searchModels(query: string, options: SearchOptions = {}): 
   try {
     response = await fetch(`${SKETCHFAB_API}/search?${params}`, {
       headers: { Accept: 'application/json' },
-      ...(options.signal ? { signal: options.signal } : {}),
+      signal: boundedSignal(options.signal, 20_000),
     });
   } catch (err) {
     return { models: [], error: `Could not reach Sketchfab: ${(err as Error).message}` };
@@ -275,7 +288,7 @@ export async function fetchModel(
     links = await fetch(`${SKETCHFAB_API}/models/${uid}/download`, {
       // Token, not Bearer. Sketchfab answers 401 to Bearer with a valid token.
       headers: { Authorization: `Token ${token}`, Accept: 'application/json' },
-      ...(options.signal ? { signal: options.signal } : {}),
+      signal: boundedSignal(options.signal, 20_000),
     });
   } catch (err) {
     return { error: `Could not reach Sketchfab: ${(err as Error).message}` };
@@ -289,7 +302,7 @@ export async function fetchModel(
   try {
     // The signed URL is on a CDN and carries its own auth in the query string,
     // so sending the token here as well is what makes it 403.
-    file = await fetch(url, { ...(options.signal ? { signal: options.signal } : {}) });
+    file = await fetch(url, { signal: boundedSignal(options.signal, 60_000) });
   } catch (err) {
     return { error: `The Sketchfab download link failed: ${(err as Error).message}` };
   }

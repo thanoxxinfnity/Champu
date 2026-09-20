@@ -312,10 +312,13 @@ function EndpointsTab() {
     setTest(null);
 
     try {
+      // No timeout at all meant a stalled custom endpoint hung this whole
+      // wizard step forever, with the "connecting…" button never resolving.
       const res = await fetch('/api/endpoints/probe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ baseUrl, apiKey: apiKey || undefined, headers, dialect: dialect || undefined }),
+        signal: AbortSignal.timeout(60_000),
       });
       const result = (await res.json()) as CapabilityProbe & { error?: string };
       setProbe(result);
@@ -367,6 +370,10 @@ function EndpointsTab() {
             dialect: dialect || probe?.dialect || undefined,
           },
         }),
+        // No timeout at all meant a stalled custom endpoint hung the "test
+        // connection" step forever, with no way to tell a slow answer from a
+        // dead one.
+        signal: AbortSignal.timeout(60_000),
       });
 
       const payload = (await res.json()) as { content?: string; error?: string };

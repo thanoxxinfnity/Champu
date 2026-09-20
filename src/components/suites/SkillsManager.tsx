@@ -52,6 +52,8 @@ export function SkillsManager() {
     try {
       const template = BUILTIN_SKILLS.find((s) => s.command === 'skill')!.template.replace('{{input}}', brief);
 
+      // No timeout at all meant a stalled provider hung the "generating"
+      // state forever.
       const res = await fetch('/api/chat', withKeys({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -66,6 +68,7 @@ export function SkillsManager() {
             { role: 'user', content: template },
           ],
         }),
+        signal: AbortSignal.timeout(60_000),
       }));
 
       const data = (await res.json()) as { content?: string; error?: string };

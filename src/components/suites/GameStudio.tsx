@@ -42,10 +42,13 @@ async function referenceImage(prompt: string): Promise<Uint8Array | null> {
     { provider: 'pollinations', prompt, width: 1024, height: 1024 },
   ]) {
     try {
+      // No signal at all meant a stalled provider hung the 3D-generation
+      // chain forever instead of falling through to Pollinations.
       const res = await fetch('/api/image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(45_000),
       });
       if (!res.ok) continue;
       const json = (await res.json()) as { images?: Array<{ dataUrl?: string }> };

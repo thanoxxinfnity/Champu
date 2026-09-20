@@ -316,6 +316,9 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         // all, so this has to carry it like every other provider call.
         headers: keyHeaders(),
         cache: force ? 'no-store' : 'default',
+        // No timeout at all meant a stalled models endpoint blocked app boot
+        // itself (this also runs from hydrate()), not just a refresh button.
+        signal: AbortSignal.timeout(20_000),
       });
       if (!res.ok) throw new Error(`models endpoint returned ${res.status}`);
 

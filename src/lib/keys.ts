@@ -259,10 +259,14 @@ export async function nimConfigured(): Promise<boolean> {
 
 /** Only the fields passed are written, so a partial save clears nothing else. */
 async function postToShell(fields: Record<string, string>): Promise<void> {
+  // No timeout at all meant a stuck native-shell endpoint hung the Settings
+  // "Save"/"Clear keys" button forever. This is a local call and should
+  // answer instantly; 10s is generous, not tight.
   const res = await fetch('/api/shell/keys', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(fields),
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`The app shell refused the credentials (${res.status}).`);
 }

@@ -25,6 +25,9 @@ async function tell(payload: Record<string, unknown>): Promise<void> {
       body: JSON.stringify(payload),
       // A failure here must never take a run down with it.
       keepalive: true,
+      // Fire-and-forget already, but an unbounded hung request is still a
+      // leaked connection nothing ever cleans up.
+      signal: AbortSignal.timeout(10_000),
     });
   } catch {
     // The shell is a convenience; the run continues without it.

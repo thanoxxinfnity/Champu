@@ -197,11 +197,16 @@ async function attempt(
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<TrellisResult> {
+  // `signal ?? AbortSignal.timeout(...)` looks bounded but is not: the moment
+  // a caller signal is supplied, the per-attempt deadline disappears entirely,
+  // and a stall becomes uncancellable except by the caller's own signal firing
+  // — which for a manual Stop button may never happen if nothing else does.
+  const timeout = AbortSignal.timeout(timeoutMs);
   const res = await fetch(url, {
     method: 'POST',
     headers: headersFor(apiKey),
     body,
-    signal: signal ?? AbortSignal.timeout(timeoutMs),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
 
   if (res.status === 202) {
@@ -216,9 +221,13 @@ async function attempt(
 /** Waits on a queued job. The status route long-polls, so this needs no sleep. */
 async function poll(reqId: string, apiKey: string, signal?: AbortSignal): Promise<TrellisResult> {
   for (let i = 1; i <= 6; i += 1) {
+    // Same anti-pattern as attempt(): a caller signal must not erase the
+    // per-poll deadline, or a stuck status route holds a "6 iterations" loop
+    // open indefinitely on iteration 1.
+    const timeout = AbortSignal.timeout(120_000);
     const res = await fetch(`${NVCF_STATUS}/${reqId}`, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
-      signal: signal ?? AbortSignal.timeout(120_000),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
     if (res.status === 202) continue;
 
