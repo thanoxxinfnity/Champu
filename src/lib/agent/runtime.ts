@@ -184,11 +184,19 @@ async function complete(
   body: { provider: ProviderId; model: string; messages: ChatMessage[]; json?: boolean; custom?: CustomEndpointConfig; maxTokens?: number },
   signal?: AbortSignal,
 ): Promise<string> {
+  // Same failure shape paintTexture() was fixed for: a stalled provider on a
+  // non-streaming call had no timeout of its own, only the user's own Stop
+  // button — so a hung planner call left the run stuck on "Decomposing into
+  // atomic steps..." forever, with nothing to catch and fall back to
+  // heuristicPlan(). Composed with the caller's signal so Stop still cuts a
+  // slow-but-alive call short.
+  const timeout = AbortSignal.timeout(45_000);
+  const composed = signal ? AbortSignal.any([signal, timeout]) : timeout;
   const res = await fetch('/api/chat', withKeys({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...body, stream: false }),
-    signal,
+    signal: composed,
   }));
   if (!res.ok) {
     const payload = (await res.json().catch(() => ({}))) as { error?: string };
