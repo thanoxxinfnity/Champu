@@ -797,7 +797,7 @@ export function CommandDock() {
             ? 'blocked — remove or vault the credential above'
             : classification && !showPalette
               ? `Lane ${classification.lane} · ${classification.reason}`
-              : 'Chomugiri · talk less, work more'}
+              : 'Chomugiri · thinks out loud, builds for real'}
         </p>
       </div>
     </div>
