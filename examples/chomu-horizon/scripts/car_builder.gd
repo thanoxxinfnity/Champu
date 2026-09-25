@@ -87,6 +87,7 @@ static func build(car: Dictionary) -> Node3D:
 
 	_add_underglow(root, prof, car, mats)
 	_add_contact_shadow(root, prof, car)
+	_add_logo_decals(root, car)
 	return root
 
 
@@ -172,6 +173,7 @@ static func load_glb_car(path: String, car: Dictionary) -> Node3D:
 	var prof := Profile.new(car)
 	_add_underglow(root, prof, car, mats)
 	_add_contact_shadow(root, prof, car)
+	_add_logo_decals(root, car)
 	return root
 
 
@@ -352,6 +354,28 @@ class Profile:
 
 
 # ─────────────────────────────── materials ─────────────────────────────────
+
+
+## Two blank decal quads on the doors (hidden until the player uploads a
+## custom logo image in the garage). Independent of the body's own UVs: a
+## thin quad offset just outside the paint, facing outward.
+static func _add_logo_decals(root: Node3D, car: Dictionary) -> void:
+	var mid: Dictionary = {}
+	var stations: Array = car.body
+	var station: Array = stations[stations.size() / 2]
+	var half_w: float = station[1]
+	var y: float = lerpf(float(station[2]), float(station[3]), 0.55)
+	for side in [1.0, -1.0]:
+		var quad := MeshInstance3D.new()
+		quad.name = "LogoDecalL" if side > 0.0 else "LogoDecalR"
+		var qm := QuadMesh.new()
+		qm.size = Vector2(0.5, 0.3)
+		quad.mesh = qm
+		quad.position = Vector3(side * (half_w + 0.012), y, 0.0)
+		quad.rotation = Vector3(0.0, PI * 0.5 * side, 0.0)
+		quad.visible = false
+		quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(quad)
 
 
 static func _materials(car: Dictionary) -> Dictionary:

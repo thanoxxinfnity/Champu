@@ -36,7 +36,7 @@ static var _shader: Shader = preload("res://shaders/car_paint.gdshader")
 
 
 static func default_config(car: Dictionary) -> Dictionary:
-	return {"color": car.paint, "finish": 0, "rim": 0, "underglow": false, "glow": 0}
+	return {"color": car.paint, "finish": 0, "rim": 0, "underglow": false, "glow": 0, "logo_path": ""}
 
 
 static func make_paint_material() -> ShaderMaterial:
@@ -103,6 +103,34 @@ static func apply(model: Node3D, config: Dictionary) -> void:
 	set_paint(paint, config.color, config.finish)
 	set_rims(model.get_meta("rim_material"), config.rim)
 	set_underglow(model, config.underglow, GLOW_COLORS[config.glow % GLOW_COLORS.size()])
+	set_logo(model, config.get("logo_path", ""))
+
+
+## A player-uploaded image on both doors, or hidden if `path` is empty/missing.
+static func set_logo(model: Node3D, path: String) -> void:
+	var l := model.get_node_or_null("LogoDecalL") as MeshInstance3D
+	var r := model.get_node_or_null("LogoDecalR") as MeshInstance3D
+	if l == null or r == null:
+		return
+	if path == "" or not FileAccess.file_exists(path):
+		l.visible = false
+		r.visible = false
+		return
+	var img := Image.new()
+	if img.load(path) != OK:
+		l.visible = false
+		r.visible = false
+		return
+	var tex := ImageTexture.create_from_image(img)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = tex
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	l.material_override = mat
+	r.material_override = mat
+	l.visible = true
+	r.visible = true
 
 
 static func set_underglow(model: Node3D, on: bool, color: Color) -> void:

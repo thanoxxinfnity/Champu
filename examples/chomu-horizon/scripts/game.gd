@@ -21,7 +21,7 @@ const MAGNET_RADIUS := 16.0
 var state: State = State.GARAGE
 var garage := {}
 var index := 0
-var quality := 0
+var quality := 2  # EXTRA HIGH by default (desktop / editor)
 
 var showroom: ShowroomManager
 var ui: GarageUI
@@ -44,6 +44,7 @@ var _trap_cooldown := 0.0
 var _in_zone := false
 var _zone_points := 0
 var _history: Array = []          # [transform, linear_velocity, angular_velocity]
+var _nitro_cd: Array = []
 var _history_clock := 0.0
 var _rewind_cooldown := 0.0
 var _portal_lock := 0.0
@@ -56,7 +57,7 @@ var _paint_hue := 0.0
 func _ready() -> void:
 	if OS.has_feature("mobile"):
 		Engine.max_fps = 60
-		quality = 1
+		quality = 1  # HIGH by default on phones
 	garage = PaintCustomizer.load_garage()
 	index = clampi(int(garage.selected), 0, CarCatalog.count() - 1)
 
@@ -88,6 +89,8 @@ func _ready() -> void:
 	ui.map_changed.connect(func(id: String) -> void:
 		garage.map = id
 		PaintCustomizer.save_garage(garage))
+	ui.logo_requested.connect(_on_logo_requested)
+	ui.logo_removed.connect(_on_logo_removed)
 	ui.quality = quality
 	ui._quality_btn.text = "GFX: " + GarageUI.QUALITY_NAMES[quality]
 	ui.set_map(garage.map)
@@ -301,6 +304,10 @@ func _spawn_car(xf: Transform3D) -> void:
 	_last_index = -1
 	_in_zone = false
 	_history.clear()
+	_nitro_cd.resize(world.nitro_pads.size())
+	_nitro_cd.fill(0.0)
+	for i in world.nitro_pads.size():
+		world.nitro_show(i)
 	_portal_lock = 2.0
 	_apply_quality()
 
@@ -390,6 +397,48 @@ func _travel(to: String) -> void:
 		"WARPING TO  " + _map_name(to))
 
 
+## Native file picker (Android's Storage Access Framework via Godot 4.3's
+## DisplayServer). Silently does nothing on a platform without one (desktop
+## test runs, headless CI) rather than failing.
+func _on_logo_requested() -> void:
+	if not DisplayServer.has_feature(DisplayServer.FEATURE_NATIVE_DIALOG_FILE):
+		if hud.visible:
+			hud.toast("NOT SUPPORTED HERE", "", Color(1, 0.5, 0.3), 1.6)
+		return
+	var filters := PackedStringArray(["*.png,*.jpg,*.jpeg,*.webp;Images"])
+	DisplayServer.file_dialog_show("Choose a logo image", "", "", false,
+		DisplayServer.FILE_DIALOG_MODE_OPEN_FILE, filters, Callable(self, "_on_logo_picked"))
+
+
+func _on_logo_picked(status: bool, paths: PackedStringArray, _filter_index: int) -> void:
+	if not status or paths.is_empty():
+		return
+	var img := Image.new()
+	if img.load(paths[0]) != OK:
+		return
+	var biggest := maxi(img.get_width(), img.get_height())
+	if biggest > 512:
+		var s := 512.0 / float(biggest)
+		img.resize(maxi(int(img.get_width() * s), 1), maxi(int(img.get_height() * s), 1), Image.INTERPOLATE_LANCZOS)
+	var car := CarCatalog.get_car(index)
+	DirAccess.make_dir_recursive_absolute("user://logos")
+	var path := "user://logos/%s.png" % car.id
+	if img.save_png(path) != OK:
+		return
+	var cfg := _config_for(car)
+	cfg.logo_path = path
+	showroom.apply_config(cfg)
+	PaintCustomizer.save_garage(garage)
+
+
+func _on_logo_removed() -> void:
+	var car := CarCatalog.get_car(index)
+	var cfg := _config_for(car)
+	cfg.logo_path = ""
+	showroom.apply_config(cfg)
+	PaintCustomizer.save_garage(garage)
+
+
 func _on_coin(value: int, _pos: Vector3) -> void:
 	_award(value)
 	if not _chime.playing:
@@ -448,6 +497,19 @@ func _physics_process(delta: float) -> void:
 
 	# Coins, with the nitro magnet.
 	world.coins.collect(pos, 3.2, MAGNET_RADIUS if vehicle.nitro_active else 0.0, delta)
+
+	# Nitro pads: a full refill, on a cooldown so you cannot just sit on one.
+	for i in _nitro_cd.size():
+		if _nitro_cd[i] > 0.0:
+			_nitro_cd[i] = maxf(_nitro_cd[i] - real_dt, 0.0)
+			if _nitro_cd[i] == 0.0:
+				world.nitro_show(i)
+			continue
+		if pos.distance_to(world.nitro_pads[i]) < 4.2:
+			vehicle.nitro = 1.0
+			_nitro_cd[i] = 10.0
+			world.nitro_hide(i)
+			hud.toast("NITRO REFILL", "", Color(0.3, 0.85, 1.0), 1.0)
 
 	# Big air: slow motion while high in the air, coins on landing.
 	var height := pos.y - ground
@@ -531,30 +593,33 @@ func _between(x: int, a: int, b: int, n: int) -> bool:
 # ─────────────────────────────── quality ───────────────────────────────────
 
 
+## 0 LOW, 1 HIGH, 2 EXTRA HIGH, 3 EXTREME — higher is heavier.
 func _apply_quality() -> void:
 	var vp := get_viewport()
 	match quality:
 		0:
-			vp.msaa_3d = Viewport.MSAA_4X
-			vp.scaling_3d_scale = 1.0
+			vp.msaa_3d = Viewport.MSAA_DISABLED
+			vp.scaling_3d_scale = 0.7
 		1:
 			vp.msaa_3d = Viewport.MSAA_2X
-			vp.scaling_3d_scale = 0.9
+			vp.scaling_3d_scale = 0.85
+		2:
+			vp.msaa_3d = Viewport.MSAA_4X
+			vp.scaling_3d_scale = 1.0
 		_:
-			vp.msaa_3d = Viewport.MSAA_DISABLED
-			vp.scaling_3d_scale = 0.75
-	_postfx.visible = quality < 2
-	if quality == 0:
+			vp.msaa_3d = Viewport.MSAA_4X
+			vp.scaling_3d_scale = 1.15
+	_postfx.visible = quality >= 1
+	if quality >= 1:
 		var pf := _postfx.material as ShaderMaterial
-		pf.set_shader_parameter("sharpen", 0.32)
-		pf.set_shader_parameter("aberration", 0.002)
-	elif quality == 1:
-		var pf2 := _postfx.material as ShaderMaterial
-		pf2.set_shader_parameter("sharpen", 0.2)
-		pf2.set_shader_parameter("aberration", 0.0012)
+		var sharpen: float = [0.0, 0.18, 0.28, 0.4][quality]
+		var aberr: float = [0.0, 0.0009, 0.0016, 0.0024][quality]
+		pf.set_shader_parameter("sharpen", sharpen)
+		pf.set_shader_parameter("aberration", aberr)
 	if world and world.is_inside_tree():
 		world.set_quality(quality)
-		world.sun.directional_shadow_max_distance = 110.0 if quality == 0 else 70.0
-		world.env.glow_enabled = quality < 2
+		world.sun.directional_shadow_max_distance = [0.0, 65.0, 110.0, 165.0][quality]
+		world.env.glow_enabled = quality >= 1
+		world.env.glow_intensity = [0.0, 0.6, 0.75, 0.95][quality]
 	if showroom:
-		showroom.env.glow_enabled = quality < 2
+		showroom.env.glow_enabled = quality >= 1

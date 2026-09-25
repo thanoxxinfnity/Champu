@@ -12,11 +12,13 @@ signal time_changed(mode: String)
 signal quality_changed(level: int)
 signal steer_mode_changed(mode: int)
 signal map_changed(id: String)
+signal logo_requested
+signal logo_removed
 
 const ACCENT := Color(1.0, 0.45, 0.08)
 const TIMES := ["golden", "day", "night"]
 const TIME_NAMES := ["GOLDEN HOUR", "DAY", "NIGHT"]
-const QUALITY_NAMES := ["HIGH", "BALANCED", "BATTERY"]
+const QUALITY_NAMES := ["LOW", "HIGH", "EXTRA HIGH", "EXTREME"]
 const STEER_NAMES := ["STEER: BUTTONS", "STEER: JOYSTICK"]
 const MAP_IDS := ["hills", "metro", "canyon", "frost"]
 const MAP_NAMES := ["HORIZON HILLS", "NEO METRO", "RED CANYON", "FROST PEAK"]
@@ -256,6 +258,16 @@ func _build() -> void:
 		b2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		rims.add_child(b2)
 		_rim_btns.append(b2)
+
+	rv.add_child(_section("CUSTOM LOGO"))
+	var logo_row := HBoxContainer.new()
+	logo_row.add_theme_constant_override("separation", 8)
+	rv.add_child(logo_row)
+	var upload_btn := _pill("UPLOAD IMAGE", func() -> void: logo_requested.emit())
+	upload_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var remove_btn := _pill("REMOVE", func() -> void: logo_removed.emit())
+	logo_row.add_child(upload_btn)
+	logo_row.add_child(remove_btn)
 
 	rv.add_child(_section("NEON UNDERGLOW"))
 	var glow := HBoxContainer.new()

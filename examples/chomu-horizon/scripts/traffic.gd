@@ -50,6 +50,10 @@ func _spawn(ri: int, s: float, lane: float, dir: int, speed: float, rng: RandomN
 	var model: String = MODELS.keys()[rng.randi() % MODELS.size()]
 	var h: float = MODELS[model]
 	var fp: Vector2 = FOOTPRINT[model] * h
+	# Each car gets its own paint colour, tinting the same shared mesh/material
+	# (StandardMaterial3D multiplies albedo_color into the baked vertex/texture
+	# colour, so this is a real repaint, not a swap of a few fixed skins).
+	var tint: Color = PAINT[rng.randi() % PAINT.size()]
 	var body := AnimatableBody3D.new()
 	body.name = "Traffic_%d" % cars.size()
 	body.sync_to_physics = false
@@ -65,7 +69,9 @@ func _spawn(ri: int, s: float, lane: float, dir: int, speed: float, rng: RandomN
 			continue
 		var mi := MeshInstance3D.new()
 		mi.mesh = mesh
-		mi.material_override = AssetLibrary.material(model, lod[0])
+		var mat := AssetLibrary.material(model, lod[0]).duplicate() as StandardMaterial3D
+		mat.albedo_color = tint
+		mi.material_override = mat
 		mi.scale = Vector3.ONE * h
 		mi.visibility_range_begin = lod[1]
 		mi.visibility_range_end = lod[2]

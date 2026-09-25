@@ -59,6 +59,9 @@ var speed_trap_index := 0
 var drift_zone := Vector2i(0, 0)
 var portals: Array[Dictionary] = []
 var coins: CoinField
+var nitro_pads: Array[Vector3] = []
+var _nitro_mm: MultiMesh
+var _nitro_xforms: Array[Transform3D] = []
 var traffic: TrafficSystem
 
 var sun: DirectionalLight3D
@@ -99,6 +102,7 @@ func build() -> void:
 	_build_vegetation()
 	_build_colliders()
 	_build_ramps()
+	_build_nitro_pads()
 	_build_plaza_and_portals()
 	_build_start_arch()
 	_build_far_mountains()
@@ -408,7 +412,7 @@ func set_time_of_day(mode: String) -> void:
 	sky_mat.set_shader_parameter("sun_tint", sun_tint)
 	sky_mat.set_shader_parameter("stars", 1.0 if night else 0.0)
 	env.fog_light_color = fog_col
-	sun.shadow_enabled = not night and quality < 2
+	sun.shadow_enabled = not night and quality >= 1
 	if _lamp_mat:
 		_lamp_mat.emission_energy_multiplier = 6.0 if night else 0.3
 	if _arch_mat:
@@ -421,10 +425,10 @@ func set_time_of_day(mode: String) -> void:
 		traffic.set_lights(night)
 
 
-## 0 = HIGH, 1 = BALANCED, 2 = BATTERY: how far detail is drawn.
+## 0 LOW, 1 HIGH, 2 EXTRA HIGH, 3 EXTREME: how far detail is drawn.
 func set_quality(q: int) -> void:
 	quality = q
-	var k := [1.0, 0.8, 0.55][clampi(q, 0, 2)] as float
+	var k := [0.5, 0.75, 1.0, 1.3][clampi(q, 0, 3)] as float
 	for entry in _veg:
 		var gi: GeometryInstance3D = entry[0]
 		gi.visibility_range_begin = entry[1] * k
@@ -434,8 +438,8 @@ func set_quality(q: int) -> void:
 		mi.visibility_range_end = near_end
 	for mi in _terrain_far:
 		mi.visibility_range_begin = near_end
-	env.fog_density = BIOMES[biome].fog * (1.0 if q == 0 else 1.25 if q == 1 else 1.7)
-	sun.shadow_enabled = time_of_day != "night" and q < 2
+	env.fog_density = BIOMES[biome].fog * [1.8, 1.3, 1.0, 0.8][clampi(q, 0, 3)]
+	sun.shadow_enabled = time_of_day != "night" and q >= 1
 
 
 # ─────────────────────────────── terrain ───────────────────────────────────
@@ -1102,6 +1106,9 @@ func _build_vegetation() -> void:
 			continue
 		var info := AssetLibrary.info(asset)
 		var plant: bool = info.kind == "plant"
+		# Parked cars get a random repaint too, same trick as ambient traffic:
+		# a per-instance colour multiplies into the baked vertex/texture albedo.
+		var tint_cars: bool = asset in ["sedan", "suv", "truck"]
 		var cells := {}
 		for e in list:
 			var x := float(e[0])
@@ -1112,8 +1119,13 @@ func _build_vegetation() -> void:
 			if not cells.has(key):
 				cells[key] = [[] as Array[Transform3D], [] as Array[Color]]
 			(cells[key][0] as Array).append(xf)
-			var v := rng.randf_range(0.82, 1.12)
-			(cells[key][1] as Array).append(Color(v * rng.randf_range(0.95, 1.05), v, v * rng.randf_range(0.9, 1.0)) if plant else Color.WHITE)
+			var col := Color.WHITE
+			if plant:
+				var v := rng.randf_range(0.82, 1.12)
+				col = Color(v * rng.randf_range(0.95, 1.05), v, v * rng.randf_range(0.9, 1.0))
+			elif tint_cars:
+				col = TrafficSystem.PAINT[rng.randi() % TrafficSystem.PAINT.size()]
+			(cells[key][1] as Array).append(col)
 		# LOD chain: textured (props, up close) → near → far.
 		var lods: Array = []
 		var near_end: float = info.near
@@ -1138,7 +1150,7 @@ func _build_vegetation() -> void:
 				var xs: Array[Transform3D] = []
 				xs.assign(cells[key][0])
 				var cs: Array[Color] = []
-				if plant:
+				if plant or tint_cars:
 					cs.assign(cells[key][1])
 				var mmi := _multimesh("%s_%s_%d_%d" % [asset, lod[0], key.x, key.y], mesh, xs, mat, lod[3] and asset != "bush", cs, root)
 				mmi.visibility_range_begin = lod[1]
@@ -1174,6 +1186,34 @@ func _build_colliders() -> void:
 		cs2.shape = bs
 		cs2.transform = Transform3D(Basis(Vector3.UP, float(b[6])), Vector3(float(b[0]), float(b[1]), float(b[2])))
 		body.add_child(cs2)
+
+
+func _build_nitro_pads() -> void:
+	var pads: Array = meta.get("nitro", [])
+	if pads.is_empty():
+		return
+	var mesh := PlaneMesh.new()
+	mesh.size = Vector2(3.4, 6.0)
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://shaders/nitro.gdshader")
+	for p in pads:
+		var pos := Vector3(float(p[0]), float(p[1]) + 0.04, float(p[2]))
+		_nitro_xforms.append(Transform3D(Basis(Vector3.UP, float(p[3])), pos))
+		nitro_pads.append(pos)
+	var mmi := _multimesh("NitroPads", mesh, _nitro_xforms, mat, false)
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_nitro_mm = mmi.multimesh
+
+
+## Hides pad `i` (just used) or brings it back once its cooldown ends.
+func nitro_hide(i: int) -> void:
+	if _nitro_mm:
+		_nitro_mm.set_instance_transform(i, Transform3D(Basis.IDENTITY.scaled(Vector3.ZERO), Vector3(0.0, -500.0, 0.0)))
+
+
+func nitro_show(i: int) -> void:
+	if _nitro_mm and i < _nitro_xforms.size():
+		_nitro_mm.set_instance_transform(i, _nitro_xforms[i])
 
 
 func _build_ramps() -> void:

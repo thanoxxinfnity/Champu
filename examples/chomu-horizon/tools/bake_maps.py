@@ -539,19 +539,20 @@ def bake(map_id):
     for a, k in queued:
         placer.scatter(*a, **k)
 
-    # Stunt ramps in the left lane on straights, with a coin arc over each.
-    ramps, coins = [], []
+    # Stunt ramps on straights, alternating sides, with a coin arc over each.
+    ramps, coins, nitro = [], [], []
     if True:
         cand = [i for i in range(0, n, 7) if np.abs(main_k[max(i - 20, 0):i + 40]).max() < 0.003 and far[i]
                 and not (city and max(abs(main["xz"][i][0]), abs(main["xz"][i][1])) < CITY + 60)]
         rng.shuffle(cand)
         for i in cand:
-            if len(ramps) >= 6:
+            if len(ramps) >= 10:
                 break
-            if any(min(abs(i - r), n - abs(i - r)) < 250 for r in [q[5] for q in ramps]) or abs(i - trap_i) < 80:
+            if any(min(abs(i - r), n - abs(i - r)) < 200 for r in [q[5] for q in ramps]) or abs(i - trap_i) < 80:
                 continue
             t = main_t[i]
-            left = np.array([-t[1], t[0]])
+            side = -1.0 if len(ramps) % 2 == 0 else 1.0
+            left = np.array([-t[1], t[0]]) * side
             p = main["xz"][i] + left * 3.6
             y = float(main["y"][i])
             ramps.append([round(float(p[0]), 2), round(y, 2), round(float(p[1]), 2), round(math.atan2(t[0], t[1]), 3), round(float(main["y"][(i + 4) % n] - main["y"][i]) / 8.0, 4), i])
@@ -560,6 +561,22 @@ def bake(map_id):
                 q = main["xz"][j] + left * 3.6
                 arc = 3.2 + 5.5 * math.sin(math.pi * (k + 1) / 10)
                 coins.append([round(float(q[0]), 2), round(float(main["y"][j]) + arc, 2), round(float(q[1]), 2)])
+
+    # Nitro pads: a full refill, spaced out along every road with a ribbon,
+    # clear of the ramps, the speed trap and each other.
+    for r in roads:
+        if city and r.get("overlay"):
+            continue
+        m = len(r["xz"])
+        rt = tangents(r["xz"], r["closed"])
+        is_main = r is roads[0]
+        step = 340 if is_main else 260
+        start = 120
+        for i in range(start, m - (0 if r["closed"] else 60), step):
+            if is_main and (any(abs(i - rp[5]) < 60 for rp in ramps) or abs(i - trap_i) < 60):
+                continue
+            yaw = math.atan2(rt[i][0], rt[i][1])
+            nitro.append([round(float(r["xz"][i][0]), 2), round(float(r["y"][i]) + 0.05, 2), round(float(r["xz"][i][1]), 2), round(yaw, 3)])
 
     # Coin lines along every road with a ribbon, every ~160 m.
     for r in roads:
@@ -644,7 +661,7 @@ def bake(map_id):
         "plaza": plaza, "portals": portals,
         "instances": placer.instances, "colliders": placer.colliders, "boxes": placer.boxes,
         "buildings": buildings, "blocks": blocks, "parks": parks,
-        "ramps": [r[:5] for r in ramps], "coins": coins, "lamps": lamps,
+        "ramps": [r[:5] for r in ramps], "coins": coins, "nitro": nitro, "lamps": lamps,
         "city": {"extent": CITY, "pitch": PITCH, "street_half": STREET_HALF} if city else None,
     }
     with open(os.path.join(out_dir, "meta.json"), "w") as f:
@@ -653,7 +670,7 @@ def bake(map_id):
     counts = {k: len(v) for k, v in placer.instances.items()}
     total_len = sum(len(r["xz"]) * STEP for r in roads)
     print(f"{map_id}: roads {len(roads)} ({total_len / 1000:.1f} km, main {n * STEP / 1000:.1f} km), "
-          f"h {h.min():.0f}..{h.max():.0f}, coins {len(coins)}, ramps {len(ramps)}, buildings {len(buildings)}, {counts}")
+          f"h {h.min():.0f}..{h.max():.0f}, coins {len(coins)}, ramps {len(ramps)}, nitro {len(nitro)}, buildings {len(buildings)}, {counts}")
 
 
 def city_layout(placer, rng, buildings, blocks, parks, plaza):
