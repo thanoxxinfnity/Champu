@@ -62,6 +62,9 @@ var coins: CoinField
 var nitro_pads: Array[Vector3] = []
 var _nitro_mm: MultiMesh
 var _nitro_xforms: Array[Transform3D] = []
+var stunt_rings: Array[Vector3] = []
+var _ring_mm: MultiMesh
+var _ring_xforms: Array[Transform3D] = []
 var traffic: TrafficSystem
 
 var sun: DirectionalLight3D
@@ -103,6 +106,7 @@ func build() -> void:
 	_build_colliders()
 	_build_ramps()
 	_build_nitro_pads()
+	_build_stunt_rings()
 	_build_plaza_and_portals()
 	_build_start_arch()
 	_build_far_mountains()
@@ -1216,6 +1220,41 @@ func nitro_show(i: int) -> void:
 		_nitro_mm.set_instance_transform(i, _nitro_xforms[i])
 
 
+## A glowing ring you fly a jump through, chained near ramps for a stunt
+## combo (game.gd handles scoring; this just places and shows/hides them).
+func _build_stunt_rings() -> void:
+	var pads: Array = meta.get("rings", [])
+	if pads.is_empty():
+		return
+	var mesh := TorusMesh.new()
+	mesh.inner_radius = 1.85
+	mesh.outer_radius = 2.3
+	mesh.rings = 24
+	mesh.ring_segments = 8
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://shaders/ring.gdshader")
+	var tilt := Basis(Vector3.RIGHT, PI * 0.5)
+	for p in pads:
+		var pos := Vector3(float(p[0]), float(p[1]), float(p[2]))
+		var yaw := float(p[3])
+		_ring_xforms.append(Transform3D(Basis(Vector3.UP, yaw) * tilt, pos))
+		stunt_rings.append(pos)
+	var mmi := _multimesh("StuntRings", mesh, _ring_xforms, mat, false)
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_ring_mm = mmi.multimesh
+
+
+## Hides ring `i` (just flown through) or brings it back after cooldown.
+func ring_hide(i: int) -> void:
+	if _ring_mm:
+		_ring_mm.set_instance_transform(i, Transform3D(Basis.IDENTITY.scaled(Vector3.ZERO), Vector3(0.0, -500.0, 0.0)))
+
+
+func ring_show(i: int) -> void:
+	if _ring_mm and i < _ring_xforms.size():
+		_ring_mm.set_instance_transform(i, _ring_xforms[i])
+
+
 func _build_ramps() -> void:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_texture = _stripe_texture()
@@ -1423,26 +1462,62 @@ func _build_start_arch() -> void:
 		arch.add_child(label)
 
 
+## A jagged, two-stage cone: a closed hand-built mesh, so it never breaks
+## the way a heavily non-uniform-scaled imported asset can. Base at y=0,
+## apex at y=1 — the same convention _build_far_mountains scales into shape.
+func _mountain_mesh() -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 91
+	var sides := 9
+	var base: PackedVector2Array = PackedVector2Array()
+	var mid: PackedVector2Array = PackedVector2Array()
+	for i in sides:
+		var a: float = TAU * float(i) / sides
+		base.append(Vector2(cos(a), sin(a)) * rng.randf_range(0.82, 1.15))
+		mid.append(Vector2(cos(a + 0.18), sin(a + 0.18)) * rng.randf_range(0.32, 0.5))
+	var mid_h := rng.randf_range(0.5, 0.62)
+	var rock_col := Color(0.5, 0.48, 0.46)
+	var mid_col := rock_col.lightened(0.2)
+	var peak_col := Color(0.92, 0.93, 0.95)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var apex := Vector3(0, 1, 0)
+	for i in sides:
+		var j := (i + 1) % sides
+		var b0 := Vector3(base[i].x, 0.0, base[i].y)
+		var b1 := Vector3(base[j].x, 0.0, base[j].y)
+		var m0 := Vector3(mid[i].x, mid_h, mid[i].y)
+		var m1 := Vector3(mid[j].x, mid_h, mid[j].y)
+		var tris: Array[PackedVector3Array] = [PackedVector3Array([b0, b1, m1]), PackedVector3Array([b0, m1, m0])]
+		for tri in tris:
+			var n: Vector3 = (tri[1] - tri[0]).cross(tri[2] - tri[0]).normalized()
+			for v in tri:
+				st.set_normal(n)
+				st.set_color(rock_col.lerp(mid_col, v.y / mid_h))
+				st.add_vertex(v)
+		var n2 := (m1 - m0).cross(apex - m0).normalized()
+		for v in [m0, m1, apex]:
+			st.set_normal(n2)
+			st.set_color(mid_col.lerp(peak_col, (v.y - mid_h) / (1.0 - mid_h)))
+			st.add_vertex(v)
+	return st.commit()
+
+
 func _build_far_mountains() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 3
 	var xforms: Array[Transform3D] = []
 	for i in 40:
-		var a: float = TAU * float(i) / 40.0 + rng.randf_range(-0.04, 0.04)
+		var a: float = TAU * float(i) / 40.0 + rng.randf_range(-0.02, 0.02)
 		var r := rng.randf_range(1900.0, 2600.0)
 		var h := rng.randf_range(260.0, 620.0)
-		var w := rng.randf_range(500.0, 800.0)
+		var w := rng.randf_range(420.0, 620.0)
 		xforms.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(w, h, w)), Vector3(cos(a) * r, -60.0, sin(a) * r)))
-	# The TRELLIS boulder, blown up, gives irregular mountain silhouettes.
-	var rock_mesh := AssetLibrary.mesh("boulder", "far")
 	var rock := StandardMaterial3D.new()
+	rock.vertex_color_use_as_albedo = true
 	rock.albedo_color = BIOMES[biome].mountain
-	rock.albedo_texture = _tex(BIOMES[biome].steep + "_a")
-	rock.uv1_triplanar = true
-	rock.uv1_scale = Vector3(0.01, 0.01, 0.01)
-	rock.uv1_world_triplanar = true
 	rock.roughness = 1.0
-	var mmi := _multimesh("FarMountains", rock_mesh, xforms, rock, false)
+	var mmi := _multimesh("FarMountains", _mountain_mesh(), xforms, rock, false)
 	mmi.extra_cull_margin = 100.0
 	# A ground disc under everything so the horizon never shows a void.
 	var floor_mi := MeshInstance3D.new()

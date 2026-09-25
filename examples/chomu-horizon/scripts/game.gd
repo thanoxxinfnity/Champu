@@ -45,6 +45,9 @@ var _in_zone := false
 var _zone_points := 0
 var _history: Array = []          # [transform, linear_velocity, angular_velocity]
 var _nitro_cd: Array = []
+var _ring_cd: Array = []
+var _stunt_combo := 0
+var _stunt_timer := 0.0
 var _history_clock := 0.0
 var _rewind_cooldown := 0.0
 var _portal_lock := 0.0
@@ -308,6 +311,12 @@ func _spawn_car(xf: Transform3D) -> void:
 	_nitro_cd.fill(0.0)
 	for i in world.nitro_pads.size():
 		world.nitro_show(i)
+	_ring_cd.resize(world.stunt_rings.size())
+	_ring_cd.fill(0.0)
+	for i in world.stunt_rings.size():
+		world.ring_show(i)
+	_stunt_combo = 0
+	_stunt_timer = 0.0
 	_portal_lock = 2.0
 	_apply_quality()
 
@@ -510,6 +519,27 @@ func _physics_process(delta: float) -> void:
 			_nitro_cd[i] = 10.0
 			world.nitro_hide(i)
 			hud.toast("NITRO REFILL", "", Color(0.3, 0.85, 1.0), 1.0)
+
+	# Stunt rings: fly a jump through one for a chained score combo — a
+	# skill-and-exploration loop layered on top of point-to-point racing.
+	_stunt_timer = maxf(_stunt_timer - real_dt, 0.0)
+	if _stunt_timer == 0.0:
+		_stunt_combo = 0
+	for i in _ring_cd.size():
+		if _ring_cd[i] > 0.0:
+			_ring_cd[i] = maxf(_ring_cd[i] - real_dt, 0.0)
+			if _ring_cd[i] == 0.0:
+				world.ring_show(i)
+			continue
+		if pos.distance_to(world.stunt_rings[i]) < 3.0:
+			_stunt_combo += 1
+			_stunt_timer = 5.0
+			var bonus := 40 * _stunt_combo
+			_award(bonus)
+			vehicle.skill_total += bonus * 2
+			hud.toast("STUNT RING  x%d" % _stunt_combo, "+%d COINS" % bonus, Color(1.0, 0.82, 0.15), 1.4)
+			_ring_cd[i] = 6.0
+			world.ring_hide(i)
 
 	# Big air: slow motion while high in the air, coins on landing.
 	var height := pos.y - ground

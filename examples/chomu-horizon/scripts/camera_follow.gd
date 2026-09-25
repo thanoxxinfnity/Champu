@@ -12,7 +12,7 @@ enum Mode { CHASE_FAR, CHASE_NEAR, HOOD, CINEMATIC }
 const MODE_NAMES := ["CHASE FAR", "CHASE NEAR", "HOOD", "CINEMATIC"]
 
 var target: VehicleController
-var mode: Mode = Mode.CHASE_FAR
+var mode: Mode = Mode.CHASE_NEAR
 var base_fov := 66.0
 var offroad := false
 

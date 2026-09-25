@@ -540,7 +540,7 @@ def bake(map_id):
         placer.scatter(*a, **k)
 
     # Stunt ramps on straights, alternating sides, with a coin arc over each.
-    ramps, coins, nitro = [], [], []
+    ramps, coins, nitro, rings = [], [], [], []
     if True:
         cand = [i for i in range(0, n, 7) if np.abs(main_k[max(i - 20, 0):i + 40]).max() < 0.003 and far[i]
                 and not (city and max(abs(main["xz"][i][0]), abs(main["xz"][i][1])) < CITY + 60)]
@@ -556,11 +556,14 @@ def bake(map_id):
             p = main["xz"][i] + left * 3.6
             y = float(main["y"][i])
             ramps.append([round(float(p[0]), 2), round(y, 2), round(float(p[1]), 2), round(math.atan2(t[0], t[1]), 3), round(float(main["y"][(i + 4) % n] - main["y"][i]) / 8.0, 4), i])
+            ramp_yaw = math.atan2(t[0], t[1])
             for k in range(9):
                 j = (i + 8 + k * 3) % n
                 q = main["xz"][j] + left * 3.6
                 arc = 3.2 + 5.5 * math.sin(math.pi * (k + 1) / 10)
                 coins.append([round(float(q[0]), 2), round(float(main["y"][j]) + arc, 2), round(float(q[1]), 2)])
+                if k in (2, 5, 8):
+                    rings.append([round(float(q[0]), 2), round(float(main["y"][j]) + arc, 2), round(float(q[1]), 2), round(ramp_yaw, 3)])
 
     # Nitro pads: a full refill, spaced out along every road with a ribbon,
     # clear of the ramps, the speed trap and each other.
@@ -661,7 +664,7 @@ def bake(map_id):
         "plaza": plaza, "portals": portals,
         "instances": placer.instances, "colliders": placer.colliders, "boxes": placer.boxes,
         "buildings": buildings, "blocks": blocks, "parks": parks,
-        "ramps": [r[:5] for r in ramps], "coins": coins, "nitro": nitro, "lamps": lamps,
+        "ramps": [r[:5] for r in ramps], "coins": coins, "nitro": nitro, "rings": rings, "lamps": lamps,
         "city": {"extent": CITY, "pitch": PITCH, "street_half": STREET_HALF} if city else None,
     }
     with open(os.path.join(out_dir, "meta.json"), "w") as f:
@@ -670,7 +673,7 @@ def bake(map_id):
     counts = {k: len(v) for k, v in placer.instances.items()}
     total_len = sum(len(r["xz"]) * STEP for r in roads)
     print(f"{map_id}: roads {len(roads)} ({total_len / 1000:.1f} km, main {n * STEP / 1000:.1f} km), "
-          f"h {h.min():.0f}..{h.max():.0f}, coins {len(coins)}, ramps {len(ramps)}, nitro {len(nitro)}, buildings {len(buildings)}, {counts}")
+          f"h {h.min():.0f}..{h.max():.0f}, coins {len(coins)}, ramps {len(ramps)}, nitro {len(nitro)}, rings {len(rings)}, buildings {len(buildings)}, {counts}")
 
 
 def city_layout(placer, rng, buildings, blocks, parks, plaza):
