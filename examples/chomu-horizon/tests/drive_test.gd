@@ -2,7 +2,7 @@ extends SceneTree
 ## Physics sanity run: launch, top speed, braking, cornering, handbrake drift,
 ## reverse — for every car. Run with --fixed-fps 60 so a frame is 1/60 s.
 
-var world: WorldBuilder
+var world: Node3D
 var car: VehicleController
 var idx := 0
 var frame := 0
@@ -19,11 +19,12 @@ var held := 0
 
 
 func _initialize() -> void:
-	world = WorldBuilder.new()
+	# Car physics on a flat test pad (the maps are hilly on purpose).
+	world = StaticBody3D.new()
+	var cs := CollisionShape3D.new()
+	cs.shape = WorldBoundaryShape3D.new()
+	world.add_child(cs)
 	root.add_child(world)
-	var t := Time.get_ticks_msec()
-	world.build()
-	print("world built in %d ms, %d samples, %.0f m" % [Time.get_ticks_msec() - t, world.samples.size(), world.total_length])
 	_spawn()
 
 

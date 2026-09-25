@@ -18,6 +18,7 @@ extends RefCounted
 const CARS: Array[Dictionary] = [
 	{
 		"id": "vortex",
+		"price": 15000,
 		"name": "Vortex GT-R",
 		"maker": "Chomu Motors",
 		"class": "SUPERCAR",
@@ -66,6 +67,7 @@ const CARS: Array[Dictionary] = [
 	},
 	{
 		"id": "brute",
+		"price": 6000,
 		"name": "Brute 69 SS",
 		"maker": "Detroit Iron",
 		"class": "MUSCLE",
@@ -112,6 +114,7 @@ const CARS: Array[Dictionary] = [
 	},
 	{
 		"id": "kaze",
+		"price": 0,
 		"name": "Kaze R-Spec",
 		"maker": "Hanabi Works",
 		"class": "JDM",

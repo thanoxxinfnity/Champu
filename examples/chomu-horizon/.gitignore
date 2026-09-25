@@ -1,2 +1,4 @@
 .godot/
 build/
+__pycache__/
+*.pyc

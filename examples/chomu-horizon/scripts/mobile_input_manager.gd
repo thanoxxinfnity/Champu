@@ -13,6 +13,7 @@ extends Control
 signal camera_pressed
 signal reset_pressed
 signal garage_pressed
+signal rewind_pressed
 
 enum Steer { BUTTONS, JOYSTICK }
 
@@ -60,6 +61,7 @@ func _layout() -> void:
 		"garage": {"center": Vector2(58, 52) * s, "radius": 34 * s, "group": "ui", "hold": false},
 		"camera": {"center": Vector2(142, 52) * s, "radius": 34 * s, "group": "ui", "hold": false},
 		"reset": {"center": Vector2(226, 52) * s, "radius": 34 * s, "group": "ui", "hold": false},
+		"rewind": {"center": Vector2(310, 52) * s, "radius": 34 * s, "group": "ui", "hold": false},
 	}
 	_joy_center = Vector2(225 * s, h - 170 * s)
 	_joy_radius = 110.0 * s
@@ -140,6 +142,8 @@ func _on_press(id: String) -> void:
 			reset_pressed.emit()
 		"garage":
 			garage_pressed.emit()
+		"rewind":
+			rewind_pressed.emit()
 
 
 func _buzz() -> void:
@@ -157,6 +161,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			reset_pressed.emit()
 		KEY_ESCAPE:
 			garage_pressed.emit()
+		KEY_T:
+			rewind_pressed.emit()
 
 
 func _process(delta: float) -> void:
@@ -256,6 +262,10 @@ func _icon(id: String, c: Vector2, r: float, on: bool) -> void:
 			draw_arc(c, r * 0.4, -PI * 0.2, PI * 1.45, 24, col, 3.0, true)
 			var tip := c + Vector2(cos(-PI * 0.2), sin(-PI * 0.2)) * r * 0.4
 			draw_colored_polygon(PackedVector2Array([tip + Vector2(-r * 0.2, -r * 0.05), tip + Vector2(r * 0.12, -r * 0.2), tip + Vector2(r * 0.1, r * 0.15)]), col)
+		"rewind":
+			for k in [-1.0, 1.0]:
+				var o := c + Vector2(k * r * 0.2, 0)
+				draw_colored_polygon(PackedVector2Array([o + Vector2(-r * 0.28, 0), o + Vector2(r * 0.12, -r * 0.3), o + Vector2(r * 0.12, r * 0.3)]), col)
 		"garage":
 			draw_colored_polygon(PackedVector2Array([c + Vector2(0, -r * 0.48), c + Vector2(r * 0.48, -r * 0.05), c + Vector2(-r * 0.48, -r * 0.05)]), col)
 			draw_rect(Rect2(c + Vector2(-r * 0.32, -r * 0.05), Vector2(r * 0.64, r * 0.48)), col)

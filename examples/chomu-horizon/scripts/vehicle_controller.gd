@@ -42,12 +42,21 @@ var drift_points := 0.0
 var drift_combo := 1
 var skill_total := 0
 var grounded := false
+## Surface grip multiplier (ice lakes set it low).
+var grip_scale := 1.0
+## Seconds with every wheel off the ground, and the length of the last jump.
+var air_time := 0.0
+var last_air := 0.0
+## Below this height the car counts as lost and resets.
+var fall_limit := -25.0
 
 var _steer := 0.0
 var _drift_time := 0.0
 var _drift_calm := 0.0
 var _upside_down := 0.0
 var _reset_to: Variant = null
+var _reset_lin := Vector3.ZERO
+var _reset_ang := Vector3.ZERO
 var _tail_mat: StandardMaterial3D
 
 
@@ -124,6 +133,12 @@ func _physics_process(delta: float) -> void:
 	for w in wheels.values():
 		if (w as VehicleWheel3D).is_in_contact():
 			grounded = true
+	if grounded:
+		if air_time > 0.0:
+			last_air = air_time
+		air_time = 0.0
+	else:
+		air_time += delta
 
 	_update_slip(v)
 	_update_steering(delta)
@@ -225,6 +240,10 @@ func _update_drift(delta: float) -> void:
 		rear_grip = car.grip_drift
 	elif is_drifting:
 		rear_grip = lerpf(car.grip_drift, car.grip_rear, 0.3 + 0.5 * (1.0 - in_throttle))
+	rear_grip *= grip_scale
+	for wname in ["Wheel_FL", "Wheel_FR"]:
+		var fw: VehicleWheel3D = wheels[wname]
+		fw.wheel_friction_slip = move_toward(fw.wheel_friction_slip, car.grip_front * grip_scale, delta * 12.0)
 	for wname in ["Wheel_RL", "Wheel_RR"]:
 		var w: VehicleWheel3D = wheels[wname]
 		w.wheel_friction_slip = move_toward(w.wheel_friction_slip, rear_grip, delta * 12.0)
@@ -299,22 +318,25 @@ func _update_safety(delta: float) -> void:
 		_upside_down += delta
 	else:
 		_upside_down = 0.0
-	if _upside_down > 2.0 or global_position.y < -25.0:
+	if _upside_down > 2.0 or global_position.y < fall_limit:
 		_upside_down = 0.0
 		reset_requested.emit()
 
 
 ## Teleports the car (applied inside the physics step so it is not fought).
-func reset_to(xform: Transform3D) -> void:
+func reset_to(xform: Transform3D, lin: Vector3 = Vector3.ZERO, ang: Vector3 = Vector3.ZERO) -> void:
 	_reset_to = xform
+	_reset_lin = lin
+	_reset_ang = ang
+	air_time = 0.0
 	_end_drift()
 
 
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	if _reset_to != null:
 		state.transform = _reset_to
-		state.linear_velocity = Vector3.ZERO
-		state.angular_velocity = Vector3.ZERO
+		state.linear_velocity = _reset_lin
+		state.angular_velocity = _reset_ang
 		_reset_to = null
 		_steer = 0.0
 

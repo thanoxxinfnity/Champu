@@ -12,6 +12,9 @@ var mark := {}
 
 
 func _initialize() -> void:
+	# A clean save: the flow must be deterministic regardless of whatever a
+	# previous run (or a real play session) left in the garage file.
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://garage.cfg"))
 	game = (load("res://scenes/main.tscn") as PackedScene).instantiate()
 	root.add_child(game)
 
@@ -52,6 +55,12 @@ func _process(_d: float) -> bool:
 		return false
 	match step:
 		0:
+			# This is a controls/flow smoke test, not the shop: own every car
+			# so DRIVE always drives, whichever car next_car lands on.
+			for c in CarCatalog.CARS:
+				if not (game.garage.owned as Array).has(c.id):
+					(game.garage.owned as Array).append(c.id)
+			game.ui.set_ownership(true, 0, game.garage.coins)
 			after(5)
 		1:
 			check("starts in garage", game.state == 0)
@@ -84,9 +93,9 @@ func _process(_d: float) -> bool:
 			check("in drive", game.state == 1)
 			check("chase camera current", game.cam != null and game.cam.current)
 			check("touch overlay visible", game.input.visible)
-			check("world in tree", game.world.is_inside_tree())
+			check("world in tree", game.world != null and game.world.is_inside_tree())
 			check("showroom out of tree", not game.showroom.is_inside_tree())
-			check("drive car has wheels", game.vehicle.wheels.size() == 4)
+			check("drive car has wheels", game.vehicle != null and game.vehicle.wheels.size() == 4)
 			mark.pos = game.vehicle.global_position
 			touch(0, btn("gas"), true)
 			touch(1, btn("left"), true)

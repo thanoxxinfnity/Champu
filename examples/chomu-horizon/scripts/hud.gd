@@ -17,6 +17,9 @@ var _map_scale := 1.0
 var _toasts: Array = []          # [text, sub, time_left, color]
 var _drift_flash := 0.0
 var _last_banked := 0
+var coins := 0
+var _coin_gain := 0
+var _coin_flash := 0.0
 
 
 func _ready() -> void:
@@ -41,6 +44,13 @@ func bind(v: VehicleController, w: WorldBuilder) -> void:
 	v.drift_failed.connect(func() -> void: toast("CRASHED", "DRIFT CHAIN LOST", Color(1, 0.25, 0.2)))
 
 
+## A coin pickup: bumps the counter and flashes the gain under it.
+func add_coins(value: int, total: int) -> void:
+	coins = total
+	_coin_gain += value
+	_coin_flash = 1.4
+
+
 func toast(text: String, sub: String = "", color: Color = Color.WHITE, time: float = 2.2) -> void:
 	_toasts.append([text, sub, time, color])
 	if _toasts.size() > 3:
@@ -63,6 +73,9 @@ func _process(delta: float) -> void:
 		t[2] -= delta
 	_toasts = _toasts.filter(func(t: Array) -> bool: return t[2] > 0.0)
 	_drift_flash = maxf(_drift_flash - delta, 0.0)
+	_coin_flash = maxf(_coin_flash - delta, 0.0)
+	if _coin_flash == 0.0:
+		_coin_gain = 0
 	queue_redraw()
 
 
@@ -125,36 +138,79 @@ func _draw() -> void:
 			_center_text(font, t[1], Vector2(w * 0.5, ty + 24 * s), int(14 * s), Color(1, 1, 1, 0.7 * alpha))
 		ty += 62 * s
 
-	# ── minimap ──
-	var box := Rect2(Vector2(w - 212 * s, 18 * s), Vector2(194 * s, 194 * s))
-	draw_circle(box.get_center(), box.size.x * 0.5, Color(0.02, 0.025, 0.035, 0.55))
-	draw_arc(box.get_center(), box.size.x * 0.5, 0, TAU, 64, Color(1, 1, 1, 0.2), 1.5, true)
-	if _map_pts.size() > 2:
+	# ── minimap: the baked map image, turning with the car ──
+	var R := 96.0 * s
+	var C := Vector2(w - 24 * s - R, 22 * s + R)
+	var view := 360.0
+	var P := Vector2(vehicle.global_position.x, vehicle.global_position.z)
+	var f := Vector2(vehicle.global_basis.z.x, vehicle.global_basis.z.z).normalized()
+	var rgt := Vector2(-f.y, f.x)
+	draw_circle(C, R + 3 * s, Color(0.02, 0.025, 0.035, 0.7))
+	if world.minimap:
 		var pts := PackedVector2Array()
-		for p in _map_pts:
-			pts.append(_map(p, box, s))
-		pts.append(pts[0])
-		draw_polyline(pts, Color(1, 1, 1, 0.7), 3.0 * s, true)
-		var dz := world.drift_zone
-		var zp := PackedVector2Array()
-		var i := dz.x
-		while true:
-			zp.append(_map(Vector2(world.samples[i].x, world.samples[i].z), box, s))
-			if i == dz.y:
-				break
-			i = (i + 1) % world.samples.size()
-		if zp.size() > 1:
-			draw_polyline(zp, ACCENT, 3.0 * s, true)
-		var st := world.samples[world.speed_trap_index]
-		draw_circle(_map(Vector2(st.x, st.z), box, s), 5 * s, Color(0.3, 0.8, 1.0))
-	var cp := _map(Vector2(vehicle.global_position.x, vehicle.global_position.z), box, s)
-	var fwd := Vector2(vehicle.global_basis.z.x, vehicle.global_basis.z.z).normalized()
-	var side := Vector2(-fwd.y, fwd.x)
-	var k := 8.0 * s
-	draw_colored_polygon(PackedVector2Array([cp + fwd * k * 1.3, cp - fwd * k * 0.8 + side * k * 0.8, cp - fwd * k * 0.8 - side * k * 0.8]), ACCENT)
+		var uvs := PackedVector2Array()
+		var full := world.half_size * 2.0
+		for k in 48:
+			var th := TAU * k / 48.0
+			var o := Vector2(cos(th), sin(th))
+			pts.append(C + o * R)
+			var wp := P + rgt * (o.x * view) + f * (-o.y * view)
+			uvs.append((wp + Vector2(world.half_size, world.half_size)) / full)
+		draw_polygon(pts, PackedColorArray([Color(1, 1, 1, 0.92)]), uvs, world.minimap)
+	var to_map := func(wp: Vector2) -> Vector2:
+		var d := wp - P
+		return C + Vector2(d.dot(rgt), -d.dot(f)) * (R / view)
+	# Drift zone and speed trap on the main road.
+	var dz := world.drift_zone
+	var zp := PackedVector2Array()
+	var i := dz.x
+	var guard := 0
+	while guard < world.main_count:
+		var q: Vector2 = to_map.call(Vector2(world.samples[i].x, world.samples[i].z))
+		if q.distance_to(C) < R - 3 * s:
+			zp.append(q)
+		elif zp.size() > 1:
+			draw_polyline(zp, ACCENT, 4.0 * s, true)
+			zp = PackedVector2Array()
+		else:
+			zp.clear()
+		if i == dz.y:
+			break
+		i = (i + 3) % world.main_count
+		guard += 3
+	if zp.size() > 1:
+		draw_polyline(zp, ACCENT, 4.0 * s, true)
+	var st := world.samples[world.speed_trap_index]
+	var sp: Vector2 = to_map.call(Vector2(st.x, st.z))
+	if sp.distance_to(C) < R - 5 * s:
+		draw_circle(sp, 5 * s, Color(0.3, 0.8, 1.0))
+	for pt in world.portals:
+		var pp: Vector2 = to_map.call(Vector2(pt.pos.x, pt.pos.z))
+		if pp.distance_to(C) > R - 6 * s:
+			pp = C + (pp - C).normalized() * (R - 6 * s)
+		draw_circle(pp, 5 * s, Color(0.85, 0.3, 1.0))
+	draw_arc(C, R, 0, TAU, 64, Color(1, 1, 1, 0.3), 2.0, true)
+	var k2 := 9.0 * s
+	draw_colored_polygon(PackedVector2Array([C + Vector2(0, -k2 * 1.3), C + Vector2(k2 * 0.8, k2 * 0.8), C + Vector2(-k2 * 0.8, k2 * 0.8)]), ACCENT)
+	# North (-Z, the top of the map image) marker on the rim.
+	var north := Vector2(Vector2(0, -1).dot(rgt), -Vector2(0, -1).dot(f))
+	_center_text(font, "N", C + north * (R - 11 * s) + Vector2(0, 5 * s), int(12 * s), Color(1, 1, 1, 0.75))
+
+	# ── coins ──
+	var ct := "COINS  " + _fmt(coins)
+	var cw := font.get_string_size(ct, HORIZONTAL_ALIGNMENT_LEFT, -1, int(20 * s)).x
+	var cy := C.y + R + 30 * s
+	draw_circle(Vector2(C.x - cw * 0.5 - 14 * s, cy - 7 * s), 8 * s, Color(1.0, 0.78, 0.2))
+	draw_string(font, Vector2(C.x - cw * 0.5, cy), ct, HORIZONTAL_ALIGNMENT_LEFT, -1, int(20 * s), Color(1.0, 0.85, 0.35))
+	if _coin_flash > 0.0:
+		_center_text(font, "+%d" % _coin_gain, Vector2(C.x, cy + 24 * s), int(18 * s), Color(1.0, 0.85, 0.35, clampf(_coin_flash, 0.0, 1.0)))
+
+	# ── airtime ──
+	if vehicle.air_time > 0.35:
+		_center_text(font, "AIR  %.1fs" % vehicle.air_time, Vector2(w * 0.5, 110 * s), int(34 * s), Color(0.5, 0.9, 1.0))
 
 	if show_fps:
-		draw_string(font, Vector2(w - 212 * s, 232 * s), "%d FPS" % Engine.get_frames_per_second(), HORIZONTAL_ALIGNMENT_LEFT, -1, int(12 * s), Color(1, 1, 1, 0.45))
+		draw_string(font, Vector2(w - 212 * s, cy + 48 * s), "%d FPS" % Engine.get_frames_per_second(), HORIZONTAL_ALIGNMENT_LEFT, -1, int(12 * s), Color(1, 1, 1, 0.45))
 
 
 func _map(p: Vector2, box: Rect2, s: float) -> Vector2:

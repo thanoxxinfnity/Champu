@@ -11,17 +11,22 @@ signal config_changed(config: Dictionary)
 signal time_changed(mode: String)
 signal quality_changed(level: int)
 signal steer_mode_changed(mode: int)
+signal map_changed(id: String)
 
 const ACCENT := Color(1.0, 0.45, 0.08)
 const TIMES := ["golden", "day", "night"]
 const TIME_NAMES := ["GOLDEN HOUR", "DAY", "NIGHT"]
 const QUALITY_NAMES := ["HIGH", "BALANCED", "BATTERY"]
 const STEER_NAMES := ["STEER: BUTTONS", "STEER: JOYSTICK"]
+const MAP_IDS := ["hills", "metro", "canyon", "frost"]
+const MAP_NAMES := ["HORIZON HILLS", "NEO METRO", "RED CANYON", "FROST PEAK"]
+const GOLD := Color(1.0, 0.78, 0.2)
 
 var config: Dictionary = {}
 var time_index := 0
 var quality := 0
 var steer_mode := 0
+var map_index := 0
 
 var _maker: Label
 var _name: Label
@@ -36,6 +41,10 @@ var _glow_swatches: Array[Button] = []
 var _time_btn: Button
 var _quality_btn: Button
 var _steer_btn: Button
+var _map_btn: Button
+var _coins: Label
+var _go: Button
+var _price: Label
 
 
 class StatBar:
@@ -125,10 +134,13 @@ func _build() -> void:
 	var sub := _label("GARAGE  ·  CAR SHOP", 14, Color(1, 1, 1, 0.55))
 	sub.position = Vector2(30, 58)
 	add_child(sub)
+	_coins = _label("", 22, GOLD)
+	_coins.position = Vector2(290, 22)
+	add_child(_coins)
 
 	var top := HBoxContainer.new()
 	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	top.offset_left = -640
+	top.offset_left = -900
 	top.offset_right = -24
 	top.offset_top = 22
 	top.alignment = BoxContainer.ALIGNMENT_END
@@ -146,7 +158,12 @@ func _build() -> void:
 		steer_mode = (steer_mode + 1) % 2
 		_steer_btn.text = STEER_NAMES[steer_mode]
 		steer_mode_changed.emit(steer_mode))
-	for b in [_time_btn, _quality_btn, _steer_btn]:
+	_map_btn = _pill("MAP: " + MAP_NAMES[0], func() -> void:
+		map_index = (map_index + 1) % MAP_IDS.size()
+		_map_btn.text = "MAP: " + MAP_NAMES[map_index]
+		map_changed.emit(MAP_IDS[map_index]))
+	_map_btn.add_theme_color_override("font_color", GOLD)
+	for b in [_map_btn, _time_btn, _quality_btn, _steer_btn]:
 		top.add_child(b)
 
 	# ── left: identity + stats ──
@@ -220,6 +237,7 @@ func _build() -> void:
 			config.finish = idx2
 			_emit())
 		b.toggle_mode = true
+		b.add_theme_font_size_override("font_size", 12)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		fin.add_child(b)
 		_finish_btns.append(b)
@@ -277,6 +295,7 @@ func _build() -> void:
 
 	# ── drive ──
 	var go := Button.new()
+	_go = go
 	go.text = "DRIVE"
 	go.add_theme_font_size_override("font_size", 26)
 	var gs2 := StyleBoxFlat.new()
@@ -297,6 +316,14 @@ func _build() -> void:
 	go.offset_bottom = -24
 	go.pressed.connect(func() -> void: drive.emit())
 	add_child(go)
+	_price = _label("", 14, Color(1, 1, 1, 0.6))
+	_price.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_price.offset_left = -372
+	_price.offset_right = -28
+	_price.offset_top = -120
+	_price.offset_bottom = -98
+	add_child(_price)
 
 	var hint := _label("Swipe to change car  ·  Drag to orbit  ·  Tap the car to open the doors", 13, Color(1, 1, 1, 0.42))
 	hint.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
@@ -363,6 +390,27 @@ func _refresh_selection() -> void:
 	_glow_btn.text = "ON" if config.underglow else "OFF"
 	for i in _glow_swatches.size():
 		_glow_swatches[i].set_pressed_no_signal(config.underglow and i == config.glow)
+
+
+func set_wallet(coins: int) -> void:
+	_coins.text = "COINS  " + DriveHUD._fmt(coins)
+
+
+func set_map(id: String) -> void:
+	map_index = maxi(MAP_IDS.find(id), 0)
+	_map_btn.text = "MAP: " + MAP_NAMES[map_index]
+
+
+## Owned cars drive; the others show their price and buy on the same button.
+func set_ownership(owned: bool, price: int, coins: int) -> void:
+	if owned:
+		_go.text = "DRIVE"
+		_go.modulate = Color.WHITE
+		_price.text = "OWNED"
+	else:
+		_go.text = "BUY  " + DriveHUD._fmt(price)
+		_go.modulate = Color.WHITE if coins >= price else Color(0.6, 0.6, 0.6)
+		_price.text = "Collect %s more coins" % DriveHUD._fmt(price - coins) if coins < price else "Tap to buy with your coins"
 
 
 func set_car(car: Dictionary, cfg: Dictionary, index: int, total: int) -> void:

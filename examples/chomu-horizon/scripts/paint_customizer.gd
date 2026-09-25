@@ -19,7 +19,8 @@ const PALETTE: Array[Color] = [
 	Color(0.06, 0.09, 0.14),  # Tuxedo black
 	Color(0.96, 0.35, 0.62),  # Sakura
 ]
-const FINISHES: Array[String] = ["METALLIC", "MATTE", "PEARL"]
+const FINISHES: Array[String] = ["METALLIC", "MATTE", "PEARL", "CHAMELEON"]
+const CHAMELEON := 3
 const RIMS: Array[String] = ["CHROME", "BLACK", "GOLD", "GUNMETAL"]
 const GLOW_COLORS: Array[Color] = [
 	Color(0.1, 0.9, 1.0),
@@ -53,6 +54,13 @@ static func set_paint(mat: ShaderMaterial, color: Color, finish: int) -> void:
 			mat.set_shader_parameter("roughness_amount", 0.72)
 			mat.set_shader_parameter("clearcoat_amount", 0.0)
 			mat.set_shader_parameter("flake_amount", 0.0)
+		3:  # Chameleon: a strong two-tone flip; the game also rolls the hue with speed
+			var flip2 := Color.from_hsv(fposmod(color.h + 0.4, 1.0), 0.9, clampf(color.v + 0.15, 0.0, 1.0))
+			mat.set_shader_parameter("flip_color", flip2)
+			mat.set_shader_parameter("metallic_amount", 0.6)
+			mat.set_shader_parameter("roughness_amount", 0.18)
+			mat.set_shader_parameter("clearcoat_amount", 1.0)
+			mat.set_shader_parameter("flake_amount", 0.2)
 		2:  # Pearlescent: colour shifts with the viewing angle
 			var flip := Color.from_hsv(fposmod(color.h + 0.07, 1.0), clampf(color.s * 0.85, 0.0, 1.0), clampf(color.v * 1.1 + 0.05, 0.0, 1.0))
 			mat.set_shader_parameter("flip_color", flip)
@@ -110,12 +118,20 @@ static func set_underglow(model: Node3D, on: bool, color: Color) -> void:
 			(child as OmniLight3D).light_color = color
 
 
+## Coins a new player starts with.
+const START_COINS := 2000
+
+
 static func load_garage() -> Dictionary:
-	var out := {"selected": 0, "cars": {}}
+	var out := {"selected": CarCatalog.index_of("kaze"), "cars": {}, "coins": START_COINS, "owned": ["kaze"], "map": "hills", "best_trap": 0}
 	var cf := ConfigFile.new()
 	if cf.load(SAVE_PATH) != OK:
 		return out
-	out.selected = int(cf.get_value("garage", "selected", 0))
+	out.selected = int(cf.get_value("garage", "selected", out.selected))
+	out.coins = int(cf.get_value("garage", "coins", START_COINS))
+	out.owned = Array(cf.get_value("garage", "owned", ["kaze"]))
+	out.map = str(cf.get_value("garage", "map", "hills"))
+	out.best_trap = int(cf.get_value("garage", "best_trap", 0))
 	for i in CarCatalog.count():
 		var car := CarCatalog.get_car(i)
 		if cf.has_section_key("cars", car.id):
@@ -131,6 +147,10 @@ static func load_garage() -> Dictionary:
 static func save_garage(garage: Dictionary) -> void:
 	var cf := ConfigFile.new()
 	cf.set_value("garage", "selected", garage.selected)
+	cf.set_value("garage", "coins", garage.coins)
+	cf.set_value("garage", "owned", garage.owned)
+	cf.set_value("garage", "map", garage.map)
+	cf.set_value("garage", "best_trap", garage.best_trap)
 	for id in garage.cars.keys():
 		cf.set_value("cars", id, garage.cars[id])
 	cf.save(SAVE_PATH)

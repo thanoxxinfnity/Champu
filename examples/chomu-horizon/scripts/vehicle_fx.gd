@@ -11,6 +11,13 @@ const SKID_CAPACITY := 900
 const SKID_Y := 0.03
 
 var vehicle: VehicleController
+## Base smoke colour (the surface: white smoke, desert dust, snow powder).
+var smoke_tint := Color.WHITE
+## Neon smoke: tyre smoke takes the underglow colour; at a x4+ drift combo
+## it cycles through the rainbow.
+var neon_smoke := false
+var neon_color := Color.WHITE
+var _hue := 0.0
 var _smoke: Array[CPUParticles3D] = []
 var _last_mark: Array = [null, null]
 var _skid_mm: MultiMesh
@@ -175,9 +182,17 @@ func _build_flames() -> void:
 	vehicle.add_child(_flame_light)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if vehicle == null or not is_instance_valid(vehicle):
 		return
+	var col := smoke_tint
+	if neon_smoke:
+		col = neon_color.lerp(Color.WHITE, 0.25)
+	if vehicle.is_drifting and vehicle.drift_combo >= 4:
+		_hue = fposmod(_hue + delta * 0.6, 1.0)
+		col = Color.from_hsv(_hue, 0.75, 1.0)
+	for p in _smoke:
+		p.color = col
 	var slides := vehicle.rear_wheel_slides()
 	for i in 2:
 		var contact: Vector3 = slides[i][0]
