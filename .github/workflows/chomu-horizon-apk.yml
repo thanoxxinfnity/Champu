@@ -16,11 +16,23 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: barichello/godot-ci:4.3
+    # GitHub Actions forces HOME=/github/home inside a `container:` job,
+    # which shadows this image's baked-in export templates and Java SDK
+    # config (both live under /root in the image). Point HOME back at
+    # /root so Godot finds what the image already shipped.
+    env:
+      HOME: /root
     defaults:
       run:
         working-directory: examples/chomu-horizon
     steps:
       - uses: actions/checkout@v4
+
+      - name: Sanity-check the image's export templates
+        run: |
+          echo "HOME=$HOME"
+          find / -maxdepth 6 -iname "android_release.apk" 2>/dev/null || true
+          ls -la /root/.local/share/godot/export_templates/ 2>/dev/null || true
 
       - name: Generate a sideload signing keystore
         run: |
