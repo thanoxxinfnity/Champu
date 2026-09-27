@@ -1471,63 +1471,78 @@ func _build_start_arch() -> void:
 		arch.add_child(label)
 
 
-## A jagged, two-stage cone: a closed hand-built mesh, so it never breaks
-## the way a heavily non-uniform-scaled imported asset can. Base at y=0,
-## apex at y=1 — the same convention _build_far_mountains scales into shape.
-func _mountain_mesh() -> ArrayMesh:
+## A jagged, three-tier cone with smooth per-vertex normals: a closed
+## hand-built mesh, so it never breaks the way a heavily non-uniform-scaled
+## imported asset can. Base at y=0, apex at y=1 — the same convention
+## _build_far_mountains scales into shape. Smoothing (index + generate_normals)
+## is what keeps this reading as a weathered peak instead of a faceted
+## crystal/pyramid at the ridge and apex.
+func _mountain_mesh(seed_val: int) -> ArrayMesh:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 91
-	var sides := 9
-	var base: PackedVector2Array = PackedVector2Array()
-	var mid: PackedVector2Array = PackedVector2Array()
-	for i in sides:
-		var a: float = TAU * float(i) / sides
-		base.append(Vector2(cos(a), sin(a)) * rng.randf_range(0.82, 1.15))
-		mid.append(Vector2(cos(a + 0.18), sin(a + 0.18)) * rng.randf_range(0.32, 0.5))
-	var mid_h := rng.randf_range(0.5, 0.62)
+	rng.seed = seed_val
+	var sides := 11
+	var tier_h: Array[float] = [0.0, 0.3 + rng.randf_range(-0.05, 0.05), 0.62 + rng.randf_range(-0.05, 0.05)]
+	var tier_r := [[0.82, 1.15], [0.5, 0.8], [0.2, 0.42]]
+	var rings: Array[PackedVector3Array] = []
+	for t in 3:
+		var ring := PackedVector3Array()
+		for i in sides:
+			var a: float = TAU * float(i) / sides + rng.randf_range(-0.07, 0.07)
+			var r: float = rng.randf_range(tier_r[t][0], tier_r[t][1])
+			ring.append(Vector3(cos(a) * r, tier_h[t], sin(a) * r))
+		rings.append(ring)
+	var apex := Vector3(rng.randf_range(-0.05, 0.05), 1.0, rng.randf_range(-0.05, 0.05))
 	var rock_col := Color(0.5, 0.48, 0.46)
 	var mid_col := rock_col.lightened(0.2)
 	var peak_col := Color(0.92, 0.93, 0.95)
+	var col_at := func(y: float) -> Color:
+		if y < tier_h[1]:
+			return rock_col.lerp(mid_col, y / tier_h[1])
+		elif y < tier_h[2]:
+			return mid_col.lerp(peak_col, (y - tier_h[1]) / (tier_h[2] - tier_h[1]))
+		return peak_col.lerp(Color(1, 1, 1), (y - tier_h[2]) / (1.0 - tier_h[2]))
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var apex := Vector3(0, 1, 0)
+	var quad := func(lo0: Vector3, lo1: Vector3, hi0: Vector3, hi1: Vector3) -> void:
+		for v in [lo0, lo1, hi1, lo0, hi1, hi0]:
+			st.set_color(col_at.call(v.y))
+			st.add_vertex(v)
 	for i in sides:
 		var j := (i + 1) % sides
-		var b0 := Vector3(base[i].x, 0.0, base[i].y)
-		var b1 := Vector3(base[j].x, 0.0, base[j].y)
-		var m0 := Vector3(mid[i].x, mid_h, mid[i].y)
-		var m1 := Vector3(mid[j].x, mid_h, mid[j].y)
-		var tris: Array[PackedVector3Array] = [PackedVector3Array([b0, b1, m1]), PackedVector3Array([b0, m1, m0])]
-		for tri in tris:
-			var n: Vector3 = (tri[1] - tri[0]).cross(tri[2] - tri[0]).normalized()
-			for v in tri:
-				st.set_normal(n)
-				st.set_color(rock_col.lerp(mid_col, v.y / mid_h))
-				st.add_vertex(v)
-		var n2 := (m1 - m0).cross(apex - m0).normalized()
-		for v in [m0, m1, apex]:
-			st.set_normal(n2)
-			st.set_color(mid_col.lerp(peak_col, (v.y - mid_h) / (1.0 - mid_h)))
+		quad.call(rings[0][i], rings[0][j], rings[1][i], rings[1][j])
+		quad.call(rings[1][i], rings[1][j], rings[2][i], rings[2][j])
+		for v in [rings[2][i], rings[2][j], apex]:
+			st.set_color(col_at.call(v.y))
 			st.add_vertex(v)
+	st.index()
+	st.generate_normals()
 	return st.commit()
 
 
 func _build_far_mountains() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 3
-	var xforms: Array[Transform3D] = []
+	var variant_count := 4
+	var variants: Array[ArrayMesh] = []
+	for v in variant_count:
+		variants.append(_mountain_mesh(91 + v * 37))
+	var groups: Array = []
+	for v in variant_count:
+		groups.append([] as Array[Transform3D])
 	for i in 40:
 		var a: float = TAU * float(i) / 40.0 + rng.randf_range(-0.02, 0.02)
 		var r := rng.randf_range(1900.0, 2600.0)
 		var h := rng.randf_range(260.0, 620.0)
 		var w := rng.randf_range(420.0, 620.0)
-		xforms.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(w, h, w)), Vector3(cos(a) * r, -60.0, sin(a) * r)))
+		var xf := Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(w, h, w)), Vector3(cos(a) * r, -60.0, sin(a) * r))
+		(groups[rng.randi() % variant_count] as Array).append(xf)
 	var rock := StandardMaterial3D.new()
 	rock.vertex_color_use_as_albedo = true
 	rock.albedo_color = BIOMES[biome].mountain
 	rock.roughness = 1.0
-	var mmi := _multimesh("FarMountains", _mountain_mesh(), xforms, rock, false)
-	mmi.extra_cull_margin = 100.0
+	for v in variant_count:
+		var mmi := _multimesh("FarMountains%d" % v, variants[v], groups[v], rock, false)
+		mmi.extra_cull_margin = 100.0
 	# A ground disc under everything so the horizon never shows a void.
 	var floor_mi := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
