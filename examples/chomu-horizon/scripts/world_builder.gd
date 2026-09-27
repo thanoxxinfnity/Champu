@@ -28,6 +28,9 @@ const BIOMES := {
 	"snow": {"flat": "snow", "steep": "rock", "patch": "rock", "peak": "snow", "peak_start": 9999.0,
 		"flat_tint": Color(1.0, 1.0, 1.0), "steep_tint": Color(0.85, 0.87, 0.9), "patch_tint": Color(0.9, 0.9, 0.95),
 		"steep_start": 0.45, "patch_amt": 0.12, "fog": 0.0006, "mountain": Color(0.75, 0.8, 0.88)},
+	"jungle": {"flat": "mud", "steep": "rock", "patch": "grass", "peak": "snow", "peak_start": 240.0,
+		"flat_tint": Color(1.0, 1.0, 1.0), "steep_tint": Color(0.9, 0.92, 0.88), "patch_tint": Color(0.85, 1.0, 0.8),
+		"steep_start": 0.26, "patch_amt": 0.45, "fog": 0.0007, "mountain": Color(0.28, 0.26, 0.2)},
 }
 
 var map_id := "hills"
@@ -410,6 +413,8 @@ func set_time_of_day(mode: String) -> void:
 		env.tonemap_exposure = 0.82
 	else:
 		env.tonemap_exposure = 1.0
+	if biome == "jungle" and not night:
+		fog_col = fog_col.lerp(Color(0.55, 0.65, 0.45), 0.35)
 	sky_mat.set_shader_parameter("top_color", top)
 	sky_mat.set_shader_parameter("horizon_color", horizon)
 	sky_mat.set_shader_parameter("ground_color", fog_col.darkened(0.5))
@@ -1344,7 +1349,7 @@ func _build_plaza_and_portals() -> void:
 		body.transform = Transform3D(Basis(Vector3.UP, yaw), c + Vector3.UP * (0.035 - 0.5))
 		hub.add_child(body)
 	var noise := _noise_tex(0.02, 3, false, 256, 3)
-	var colors := {"hills": Color(0.3, 1.0, 0.4), "metro": Color(0.9, 0.2, 1.0), "canyon": Color(1.0, 0.45, 0.1), "frost": Color(0.3, 0.8, 1.0)}
+	var colors := {"hills": Color(0.3, 1.0, 0.4), "metro": Color(0.9, 0.2, 1.0), "canyon": Color(1.0, 0.45, 0.1), "frost": Color(0.3, 0.8, 1.0), "trail": Color(0.65, 0.5, 0.15)}
 	for p in (meta.portals as Array):
 		var pos := Vector3(p.pos[0], p.pos[1], p.pos[2])
 		var nrm := Vector3(pz.normal[0], 0.0, pz.normal[1])

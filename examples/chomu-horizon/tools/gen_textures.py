@@ -153,6 +153,24 @@ def main():
     alb *= (0.88 + 0.22 * unit(grit))[..., None]
     save(out, "asphalt", alb, agg * 0.5 + stones * 0.8, 2.8)
 
+    # Mud: wet ruts and tyre tracks, dark chocolate with glossy puddles.
+    rng_m = np.random.default_rng(30)
+    ruts = np.zeros((N, N))
+    yy, xx = np.mgrid[0:N, 0:N]
+    for _ in range(3):
+        cy = rng_m.uniform(0, N)
+        wobble = np.sin((xx / N + rng_m.uniform(0, 6)) * 2 * np.pi * rng_m.uniform(1.5, 2.5)) * (N * 0.03)
+        dist = np.abs(((yy - cy - wobble + N / 2) % N) - N / 2)
+        ruts = np.maximum(ruts, np.clip(1 - dist / (N * 0.02), 0, 1))
+    squelch = unit(fbm(2.0, 31))
+    clumps = unit(fbm(2.6, 32))
+    puddle = (fbm(0.3, 33, lo=50) > 2.1).astype(float)
+    t = np.clip(squelch * 0.55 + clumps * 0.25 - ruts * 0.4 + puddle * 0.5, 0, 1)
+    alb = ramp(t, [(0, (0.05, 0.035, 0.02)), (0.45, (0.11, 0.075, 0.045)), (0.75, (0.19, 0.13, 0.08)), (1, (0.08, 0.11, 0.13))])
+    grit = fbm(0.22, 109, lo=180)
+    alb *= (0.85 + 0.26 * unit(grit))[..., None]
+    save(out, "mud", alb, -ruts * 3 + squelch * 1.2 - puddle * 2, 2.2)
+
     # City pavement tiles.
     yy, xx = np.mgrid[0:N, 0:N]
     tile = ((xx % 128 < 4) | (yy % 128 < 4)).astype(float)

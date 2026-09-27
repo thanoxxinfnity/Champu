@@ -329,6 +329,27 @@ def frost():
     return dict(h=h, water=-24.0, roads=[dict(xz=catmull_loop(ctrl), closed=True, half=7.0, kind="highway"), branch_road(branch, dead_end=True)])
 
 
+def trail():
+    """A muddy off-road loop: jungle lowlands climbing through a rocky
+    canyon pass into a snow ridge, so one lap covers every off-road surface
+    in the reference photos instead of picking just one."""
+    climb = smoothstep(-520, 780, (GX + GZ) * 0.7071)  # 0 at the SW jungle floor, 1 at the NE ridge
+    rough = fbm_grid(51, 220, 6) * 22 + fbm_grid(52, 70, 4) * 7
+    ridge = fbm_grid(53, 320, 5, ridged=True) * 170
+    h = rough + climb * (55 + ridge * (0.4 + 0.6 * climb))
+    h -= np.percentile(h, 3)
+    # A muddy river winding through the jungle floor, forded by the trail.
+    bog = np.exp(-(((GX + 300) / 260) ** 2 + ((GZ + 260) / 320) ** 2)) * (1 - climb) ** 1.5
+    h = h * (1 - bog * 0.92) - bog * 20
+    h = edge_mountains(h, 210, 720)
+    ctrl = [(-830, -760), (-380, -840), (120, -760), (600, -830), (850, -520), (760, -180), (850, 200),
+            (760, 580), (420, 800), (60, 700), (-260, 840), (-560, 720), (-830, 560), (-870, 200),
+            (-620, -20), (-790, -320), (-870, -560)]
+    branch = [(120, -760), (60, -430), (-40, -180), (-10, 120), (150, 380), (60, 700)]
+    return dict(h=h, water=-9.0, roads=[dict(xz=catmull_loop(ctrl), closed=True, half=6.0, kind="highway"),
+                                        branch_road(branch, dead_end=True)])
+
+
 CITY = 560.0      # city streets from -CITY to CITY
 PITCH = 112.0     # street spacing
 STREET_HALF = 8.0
@@ -368,8 +389,9 @@ MAPS = {
     "metro": dict(name="Neo Metro", biome="city", time="night", fn=metro, seed=202),
     "canyon": dict(name="Red Canyon", biome="desert", time="golden", fn=canyon, seed=303),
     "frost": dict(name="Frost Peak", biome="snow", time="day", fn=frost, seed=404),
+    "trail": dict(name="Wild Trail", biome="jungle", time="day", fn=trail, seed=505),
 }
-ORDER = ["hills", "metro", "canyon", "frost"]
+ORDER = ["hills", "metro", "canyon", "frost", "trail"]
 
 
 # ─────────────────────────────── bake ──────────────────────────────────────
@@ -499,6 +521,15 @@ def bake(map_id):
         placer.scatter("boulder", 420, lambda x, z, y: 0.7, (1.5, 5), slope_max=1.4, collide=(0.5, 1.0), avoid=4, sink=0.2)
         placer.scatter("deadtree", 160, lambda x, z, y: 0.5, (5, 8), collide=(0.3, 3), avoid=4)
         props = [("cabin", 10, (8, 10), (0.5, 0.7))]
+    elif biome == "jungle":
+        placer.scatter("oak", 3200, lambda x, z, y: 1.0 if y < 90 else 0.25, (8, 16), collide=(0.45, 6), avoid=2.6)
+        placer.scatter("palm", 1400, lambda x, z, y: 0.8 if y < 40 else 0.1, (9, 15), collide=(0.4, 6), avoid=2.8)
+        placer.scatter("birch", 900, lambda x, z, y: 0.5 if y < 100 else 0.15, (7, 11), collide=(0.35, 5), avoid=2.6)
+        placer.scatter("bush", 5200, lambda x, z, y: 0.9 if y < 120 else 0.3, (1.2, 2.6), road_min=8, avoid=1.3)
+        placer.scatter("boulder", 380, lambda x, z, y: 0.75, (1.5, 5.0), slope_max=1.3, collide=(0.5, 1.0), avoid=4, sink=0.2)
+        placer.scatter("deadtree", 260, lambda x, z, y: 0.4 if y > 130 else 0.1, (5, 9), collide=(0.3, 3), avoid=4)
+        placer.scatter("snowpine", 2000, lambda x, z, y: 1.0 if y > 200 else 0.0, (9, 17), slope_max=0.8, collide=(0.4, 6), avoid=2.8)
+        props = [("cabin", 6, (7, 9), (0.5, 0.7))]
     else:  # city outskirts
         out = lambda x, z, m: max(abs(x), abs(z)) > CITY + m
         placer.scatter("palm", 900, lambda x, z, y: 1.0 if out(x, z, 40) else 0.0, (9, 14), collide=(0.35, 5), avoid=4)
@@ -626,7 +657,7 @@ def bake(map_id):
         portals.append({"to": other, "name": MAPS[other]["name"], "pos": [round(float(p[0]), 2), float(pc[1]), round(float(p[1]), 2)], "yaw": yaw})
 
     lamps = []
-    if biome in ("city", "hills", "snow", "desert"):
+    if biome in ("city", "hills", "snow", "desert", "jungle"):
         stride = 24
         for i in range(0, n, stride):
             if city and max(abs(main["xz"][i][0]), abs(main["xz"][i][1])) < CITY + 20:
@@ -752,7 +783,8 @@ def minimap(h, water, roads, biome, buildings, path):
     hh = map_coordinates(h, np.meshgrid(idx, idx, indexing="ij"), order=1)
     gy, gx = np.gradient(hh, SIZE / size)
     shade = np.clip(0.75 + (-gx * 0.7 - gy * 0.7) * 1.2, 0.35, 1.25)
-    base = {"hills": (0.24, 0.36, 0.16), "desert": (0.62, 0.42, 0.26), "snow": (0.78, 0.82, 0.88), "city": (0.26, 0.34, 0.2)}[biome]
+    base = {"hills": (0.24, 0.36, 0.16), "desert": (0.62, 0.42, 0.26), "snow": (0.78, 0.82, 0.88),
+            "city": (0.26, 0.34, 0.2), "jungle": (0.16, 0.26, 0.12)}[biome]
     img = np.ones((size, size, 3)) * np.array(base)
     hn = (hh - hh.min()) / (hh.max() - hh.min() + 1e-6)
     img *= (0.8 + 0.4 * hn)[..., None]

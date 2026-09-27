@@ -65,7 +65,10 @@ func setup(c: Dictionary, m: Node3D) -> void:
 	model = m
 	mass = c.mass
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
-	center_of_mass = Vector3(0.0, 0.24, 0.06)
+	# A narrow vehicle (bike, cycle, horse) carries its mass low on purpose:
+	# with a track this close together, a car-height centre of mass gives
+	# tyre-slip roll torque nothing to resist and it tips in a hard corner.
+	center_of_mass = Vector3(0.0, c.get("com_y", 0.24), 0.06)
 	can_sleep = false
 	# Replace, not combine: the project default damping would otherwise eat
 	# ~10% of the speed every second and cap every car near 190 km/h.
@@ -80,7 +83,9 @@ func setup(c: Dictionary, m: Node3D) -> void:
 	var col := CollisionShape3D.new()
 	col.name = "Chassis"
 	var box := BoxShape3D.new()
-	var mid_w: float = c.body[c.body.size() / 2][1]
+	# Vehicles without a lofted body (bike, cycle, horse) have no station
+	# array to sample; their frame/torso hugs the wheel track instead.
+	var mid_w: float = c.body[c.body.size() / 2][1] if c.has("body") else c.track + 0.2
 	box.size = Vector3(mid_w * 2.0 - 0.08, 0.5, c.length - 0.3)
 	col.shape = box
 	col.position = Vector3(0.0, 0.62, 0.0)

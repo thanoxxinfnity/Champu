@@ -10,7 +10,7 @@ var fails := 0
 func _init() -> void:
 	var ids := OS.get_cmdline_user_args()
 	if ids.is_empty():
-		ids = PackedStringArray(["hills", "metro", "canyon", "frost"])
+		ids = PackedStringArray(["hills", "metro", "canyon", "frost", "trail"])
 	for id in ids:
 		await _check(id)
 	print("WORLD TEST: ", "PASS" if fails == 0 else "%d FAILURES" % fails)
@@ -60,7 +60,7 @@ func _check(id: String) -> void:
 	_ok(road_err < 0.25, "road surface on the centreline (worst %.3f m)" % road_err)
 	var sp := w.spawn_transform()
 	_ok(not _ray(space, sp.origin.x, sp.origin.z).is_empty(), "spawn has ground")
-	_ok(w.portals.size() == 3, "three portals")
+	_ok(w.portals.size() == 4, "four portals")
 	#w.free()
 	w.queue_free()
 	await process_frame

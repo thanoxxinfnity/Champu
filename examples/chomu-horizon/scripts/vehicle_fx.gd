@@ -136,7 +136,7 @@ func _add_mark(a: Vector3, b: Vector3, width: float) -> void:
 
 
 func _build_flames() -> void:
-	var zmin: float = vehicle.car.body[0][0]
+	var zmin: float = vehicle.car.body[0][0] if vehicle.car.has("body") else -vehicle.car.length * 0.5
 	var ramp := Gradient.new()
 	ramp.set_color(0, Color(0.5, 0.75, 1.0, 1.0))
 	ramp.add_point(0.35, Color(1.0, 0.55, 0.15, 0.9))

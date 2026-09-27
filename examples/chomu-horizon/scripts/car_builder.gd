@@ -48,6 +48,11 @@ static func wheel_positions(car: Dictionary) -> Dictionary:
 
 
 static func build(car: Dictionary) -> Node3D:
+	match car.get("vtype", "car"):
+		"bike", "cycle":
+			return _build_cycle(car)
+		"horse":
+			return _build_horse(car)
 	var root := Node3D.new()
 	root.name = car.id
 	var mats := _materials(car)
@@ -170,10 +175,13 @@ static func load_glb_car(path: String, car: Dictionary) -> Node3D:
 			var wheel := _wheel(wname, car.wheel_radius, car.wheel_width, side, mats)
 			wheel.position = positions[wname]
 			root.add_child(wheel)
-	var prof := Profile.new(car)
-	_add_underglow(root, prof, car, mats)
-	_add_contact_shadow(root, prof, car)
-	_add_logo_decals(root, car)
+	if car.has("body"):
+		var prof := Profile.new(car)
+		_add_underglow(root, prof, car, mats)
+		_add_contact_shadow(root, prof, car)
+		_add_logo_decals(root, car)
+	else:
+		_add_contact_shadow_simple(root, car, car.track * 2.6 + 0.4)
 	return root
 
 
@@ -242,6 +250,137 @@ static func set_doors(model: Node3D, amount: float, style: String) -> void:
 		var gap := model.get_node_or_null("DoorGap_L" if side > 0 else "DoorGap_R") as Node3D
 		if gap:
 			gap.visible = amount > 0.02
+
+
+## Builds a motorbike (vtype "bike") or bicycle (vtype "cycle") from boxes and
+## cylinders rather than the lofted car body: a single-track frame does not
+## fit the car cross-section profile at all. Both wheels of each axle sit at
+## a near-zero track (see CarCatalog), so the ordinary 4-wheel raycast
+## vehicle reads as a single front and rear wheel without any new physics.
+static func _build_cycle(car: Dictionary) -> Node3D:
+	var root := Node3D.new()
+	root.name = car.id
+	var mats := _materials(car)
+	for k in mats.keys():
+		root.set_meta(k, mats[k])
+	var is_bike: bool = car.vtype == "bike"
+	var half_wb: float = car.wheelbase * 0.5
+	var r: float = car.wheel_radius
+	var seat_y := r * (2.05 if is_bike else 1.95)
+	var head_y := r * 1.85
+
+	var paint := _new_tool()
+	var trim := _new_tool()
+	var chrome := _new_tool()
+
+	# Frame: three tubes forming the classic diamond between the axles.
+	_cyl(trim, Vector3(0, r * 1.15, half_wb * 0.55), 0.028, half_wb * 1.15, Vector3(deg_to_rad(58.0), 0, 0), 8)
+	_cyl(trim, Vector3(0, seat_y - 0.05, -half_wb * 0.25), 0.03, 0.55, Vector3(deg_to_rad(20.0), 0, 0), 8)
+	_cyl(trim, Vector3(0, r * 1.1, -half_wb * 0.35), 0.026, half_wb * 0.9, Vector3(deg_to_rad(-40.0), 0, 0), 8)
+	_box(paint, Vector3(0, seat_y, -half_wb * 0.55), Vector3(0.16, 0.06, 0.34))
+	_box(trim, Vector3(0, head_y, half_wb * 0.85), Vector3(0.34, 0.06, 0.05))
+	for side in [1.0, -1.0]:
+		_cyl(chrome, Vector3(side * 0.19, head_y, half_wb * 0.85), 0.014, 0.14, Vector3(0, 0, PI * 0.5), 8)
+	if is_bike:
+		_box(paint, Vector3(0, r * 1.55, half_wb * 0.25), Vector3(0.22, 0.24, 0.42))
+		_box(trim, Vector3(0, r * 0.75, 0.0), Vector3(0.16, 0.22, 0.55))
+		_cyl(chrome, Vector3(0, r * 0.4, half_wb * 0.15), 0.09, 0.5, Vector3(PI * 0.5, 0, 0), 12)
+		var head := _new_tool()
+		_box(head, Vector3(0, head_y - 0.05, half_wb + 0.1), Vector3(0.16, 0.12, 0.08))
+		var hm := MeshInstance3D.new()
+		hm.name = "HeadLights"
+		var hmesh := ArrayMesh.new()
+		_commit(hmesh, head, mats.head_material)
+		hm.mesh = hmesh
+		root.add_child(hm)
+		var tail := _new_tool()
+		_box(tail, Vector3(0, seat_y + 0.02, -half_wb - 0.08), Vector3(0.1, 0.06, 0.04))
+		var tm := MeshInstance3D.new()
+		tm.name = "TailLights"
+		var tmesh := ArrayMesh.new()
+		_commit(tmesh, tail, mats.tail_material)
+		tm.mesh = tmesh
+		root.add_child(tm)
+	else:
+		# A pedal crank and chain guard loop stand in for the engine block.
+		_cyl(chrome, Vector3(0, r * 0.55, half_wb * 0.05), 0.05, 0.10, Vector3(0, 0, PI * 0.5), 10)
+		for a in [0.0, PI]:
+			_box(chrome, Vector3(sin(a) * 0.16, r * 0.55 - cos(a) * 0.16, half_wb * 0.05), Vector3(0.03, 0.2, 0.02), Vector3(0, 0, a))
+
+	var body := MeshInstance3D.new()
+	body.name = "Body"
+	var mesh := ArrayMesh.new()
+	_commit(mesh, paint, mats.paint_material)
+	_commit(mesh, trim, mats.trim_material)
+	_commit(mesh, chrome, mats.chrome_material)
+	body.mesh = mesh
+	root.add_child(body)
+
+	var positions := wheel_positions(car)
+	for wname in WHEEL_NAMES:
+		var rear: bool = wname.ends_with("RL") or wname.ends_with("RR")
+		var width: float = car.wheel_width_rear if rear else car.wheel_width
+		var side := 1.0 if (positions[wname] as Vector3).x > 0.0 else -1.0
+		var wheel := _wheel(wname, car.wheel_radius, width, side, mats)
+		wheel.position = positions[wname]
+		root.add_child(wheel)
+
+	_add_contact_shadow_simple(root, car, r * 2.6)
+	return root
+
+
+## Builds a mount (vtype "horse"): a stylised low-poly animal instead of a
+## vehicle body. The four "wheels" are thin legs so the same raycast
+## suspension the car uses still gives it real ground contact and jumps —
+## it gallops in spirit (bob and lean from speed), not with a real gait.
+static func _build_horse(car: Dictionary) -> Node3D:
+	var root := Node3D.new()
+	root.name = car.id
+	var mats := _materials(car)
+	for k in mats.keys():
+		root.set_meta(k, mats[k])
+	var half_wb: float = car.wheelbase * 0.5
+	var r: float = car.wheel_radius
+	var body_y := r * 2.3
+
+	var paint := _new_tool()
+	var trim := _new_tool()
+	_sphere(paint, Vector3(0, body_y, -half_wb * 0.5), 0.42, Vector3(1.0, 0.92, 1.15))
+	_sphere(paint, Vector3(0, body_y, half_wb * 0.3), 0.4, Vector3(1.0, 0.9, 1.1))
+	_box(paint, Vector3(0, body_y, -half_wb * 0.1), Vector3(0.62, 0.66, half_wb * 1.1))
+	_cyl(paint, Vector3(0, body_y + 0.32, half_wb * 0.85), 0.22, 0.62, Vector3(deg_to_rad(-55.0), 0, 0), 10)
+	_sphere(paint, Vector3(0, body_y + 0.62, half_wb * 1.15), 0.24, Vector3(1.0, 0.85, 1.5))
+	for side in [1.0, -1.0]:
+		_cyl(trim, Vector3(side * 0.08, body_y + 0.84, half_wb * 1.22), 0.035, 0.14, Vector3(deg_to_rad(-20.0), 0, side * 0.2), 6)
+	_cyl(trim, Vector3(0, body_y - 0.05, -half_wb * 0.95), 0.1, 0.55, Vector3(deg_to_rad(35.0), 0, 0), 8)
+	_box(trim, Vector3(0, body_y + 0.5, half_wb * 0.95), Vector3(0.08, 0.22, 0.4), Vector3(deg_to_rad(-55.0), 0, 0))
+
+	var body := MeshInstance3D.new()
+	body.name = "Body"
+	var mesh := ArrayMesh.new()
+	_commit(mesh, paint, mats.paint_material)
+	_commit(mesh, trim, mats.under_material)
+	body.mesh = mesh
+	root.add_child(body)
+
+	var positions := wheel_positions(car)
+	for wname in WHEEL_NAMES:
+		var leg := Node3D.new()
+		leg.name = wname
+		var lm := MeshInstance3D.new()
+		lm.name = "Tire"
+		var lc := _new_tool()
+		_cyl(lc, Vector3.ZERO, r * 0.32, r * 1.7, Vector3.ZERO, 8)
+		_sphere(lc, Vector3(0, -r * 0.75, 0), r * 0.36)
+		var lmesh := ArrayMesh.new()
+		_commit(lmesh, lc, mats.under_material)
+		lm.mesh = lmesh
+		leg.add_child(lm)
+		leg.position = positions[wname]
+		root.add_child(leg)
+
+	_add_contact_shadow_simple(root, car, r * 3.4)
+	return root
 
 
 # ─────────────────────────────── profile ───────────────────────────────────
@@ -912,7 +1051,7 @@ static func _add_underglow(root: Node3D, prof: Profile, car: Dictionary, mats: D
 static var _shadow_tex: GradientTexture2D
 
 
-static func _add_contact_shadow(root: Node3D, prof: Profile, car: Dictionary) -> void:
+static func _shadow_texture() -> GradientTexture2D:
 	if _shadow_tex == null:
 		var grad := Gradient.new()
 		grad.set_color(0, Color(0, 0, 0, 0.82))
@@ -925,21 +1064,35 @@ static func _add_contact_shadow(root: Node3D, prof: Profile, car: Dictionary) ->
 		_shadow_tex.fill_to = Vector2(1.0, 0.5)
 		_shadow_tex.width = 64
 		_shadow_tex.height = 64
+	return _shadow_tex
+
+
+static func _shadow_plane(width: float, depth: float) -> MeshInstance3D:
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.albedo_texture = _shadow_tex
+	mat.albedo_texture = _shadow_texture()
 	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
 	var mi := MeshInstance3D.new()
 	mi.name = "ContactShadow"
 	var pm := PlaneMesh.new()
-	var mid := prof.at(0.0)
-	pm.size = Vector2(mid[0] * 2.6, car.length * 1.12)
+	pm.size = Vector2(width, depth)
 	mi.mesh = pm
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.position = Vector3(0, 0.02, 0)
-	root.add_child(mi)
+	return mi
+
+
+static func _add_contact_shadow(root: Node3D, prof: Profile, car: Dictionary) -> void:
+	var mid := prof.at(0.0)
+	root.add_child(_shadow_plane(mid[0] * 2.6, car.length * 1.12))
+
+
+## Same idea for vtypes with no lofted body profile (bike, cycle, horse):
+## a plain ellipse sized from the vehicle's overall length and track.
+static func _add_contact_shadow_simple(root: Node3D, car: Dictionary, width: float) -> void:
+	root.add_child(_shadow_plane(width, car.length * 1.1))
 
 
 # ─────────────────────────────── glb helpers ───────────────────────────────
