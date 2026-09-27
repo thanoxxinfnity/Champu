@@ -240,7 +240,7 @@ func _all(n: Node) -> Array[Node]:
 ## left (previous), 0 swaps instantly.
 func show_car(car: Dictionary, config: Dictionary, direction: int = 0) -> void:
 	current_car = car
-	var model := CarBuilder.build(car)
+	var model := CarBuilder.spawn(car)
 	PaintCustomizer.apply(model, config)
 	var mirror := _mirror_of(model)
 	var holder := Node3D.new()

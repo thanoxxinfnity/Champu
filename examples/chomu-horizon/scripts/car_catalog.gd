@@ -164,6 +164,7 @@ const CARS: Array[Dictionary] = [
 		"price": 9000,
 		"name": "Ranger Overland",
 		"maker": "Chomu Off-Road",
+		"model_path": "res://assets/tripo/offroad_truck.glb",
 		"class": "OFFROAD",
 		"drivetrain": "AWD",
 		"front_torque_share": 0.4,

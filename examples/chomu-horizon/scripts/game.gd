@@ -261,7 +261,7 @@ func _start_drive() -> void:
 func _spawn_car(xf: Transform3D) -> void:
 	var car := CarCatalog.get_car(index)
 	var cfg := _config_for(car)
-	var model := CarBuilder.build(car)
+	var model := CarBuilder.spawn(car)
 	PaintCustomizer.apply(model, cfg)
 	_paint_hue = (cfg.color as Color).h
 	vehicle = VehicleController.new()

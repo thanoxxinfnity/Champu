@@ -85,8 +85,13 @@ func _process(_d: float) -> bool:
 			game.showroom.toggle_doors()
 			after(50)
 		4:
-			var door: Node3D = game.showroom.current.get_node("Door_L")
-			check("doors open on tap", door.rotation.length() > 0.5, str(door.rotation))
+			# A real single-mesh asset (e.g. a Tripo/TRELLIS import used as a
+			# car's model) has no separate Door_L/Door_R to animate.
+			var door: Node3D = game.showroom.current.get_node_or_null("Door_L")
+			if door:
+				check("doors open on tap", door.rotation.length() > 0.5, str(door.rotation))
+			else:
+				check("doors open on tap (no doors on this model, skipped)", true)
 			game.ui.drive.emit()
 			after(40)
 		5:

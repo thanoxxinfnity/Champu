@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://yo35vodit23n"
-path="res://.godot/imported/ranger.glb-476d9d83c76c967cf2ca89584916475a.scn"
+uid="uid://mhft06xs68wd"
+path="res://.godot/imported/offroad_truck.glb-56af5ee2291199563eb14c580c1836b1.scn"
 
 [deps]
 
-source_file="res://models/ranger.glb"
-dest_files=["res://.godot/imported/ranger.glb-476d9d83c76c967cf2ca89584916475a.scn"]
+source_file="res://assets/tripo/offroad_truck.glb"
+dest_files=["res://.godot/imported/offroad_truck.glb-56af5ee2291199563eb14c580c1836b1.scn"]
 
 [params]
 

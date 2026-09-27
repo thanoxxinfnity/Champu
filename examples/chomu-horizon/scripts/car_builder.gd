@@ -47,6 +47,15 @@ static func wheel_positions(car: Dictionary) -> Dictionary:
 	}
 
 
+## Builds the catalog's procedural car, unless it names a real asset to use
+## instead (a hand-picked or AI-generated .glb, auto-fitted to its stats) —
+## the one place gameplay code should ask for a car's model.
+static func spawn(car: Dictionary) -> Node3D:
+	if car.has("model_path") and ResourceLoader.exists(car.model_path):
+		return load_glb_car(car.model_path, car)
+	return build(car)
+
+
 static func build(car: Dictionary) -> Node3D:
 	match car.get("vtype", "car"):
 		"bike", "cycle":
@@ -133,13 +142,17 @@ static func load_glb_car(path: String, car: Dictionary) -> Node3D:
 			if lname.begins_with(part) and not found.has(part):
 				found[part] = node
 	# A single-mesh model (e.g. straight out of an image-to-3D generator)
-	# has no named parts: the whole thing becomes the Body.
+	# has no named parts: the whole thing becomes the Body. These generators
+	# normalise their output to their own arbitrary unit scale, not metres,
+	# so it also needs fitting to the car's real dimensions before it means
+	# anything next to metre-scale wheels.
 	if not found.has("body"):
 		var wrapper := Node3D.new()
 		wrapper.name = "Body"
 		scene.name = "Mesh"
 		wrapper.add_child(scene)
 		root.add_child(wrapper)
+		_fit_single_mesh(wrapper, scene, car)
 		scene = Node3D.new()
 	var xfs := {}
 	for part in found.keys():
@@ -1093,6 +1106,31 @@ static func _add_contact_shadow(root: Node3D, prof: Profile, car: Dictionary) ->
 ## a plain ellipse sized from the vehicle's overall length and track.
 static func _add_contact_shadow_simple(root: Node3D, car: Dictionary, width: float) -> void:
 	root.add_child(_shadow_plane(width, car.length * 1.1))
+
+
+## Rescales and recentres a freshly-imported single-mesh body so its longest
+## horizontal axis matches the car's real length, its footprint is centred
+## at the origin, and it rests on y=0 — the frame the rest of the builder
+## (wheel positions, camera, physics collider) all assume.
+static func _fit_single_mesh(wrapper: Node3D, mesh_root: Node3D, car: Dictionary) -> void:
+	var aabb := AABB()
+	var first := true
+	for n in _walk(mesh_root):
+		if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
+			var mi := n as MeshInstance3D
+			var xf := _global_of(mi, mesh_root)
+			var world_aabb: AABB = xf * mi.mesh.get_aabb()
+			aabb = world_aabb if first else aabb.merge(world_aabb)
+			first = false
+	if first:
+		return
+	var horiz: float = maxf(aabb.size.z, aabb.size.x)
+	if horiz < 0.001:
+		return
+	var center := aabb.get_center()
+	mesh_root.position = Vector3(-center.x, -aabb.position.y, -center.z)
+	var scale: float = float(car.get("length", 4.5)) / horiz
+	wrapper.scale = Vector3.ONE * scale
 
 
 # ─────────────────────────────── glb helpers ───────────────────────────────
