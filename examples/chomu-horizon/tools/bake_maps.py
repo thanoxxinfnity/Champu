@@ -335,7 +335,7 @@ def trail():
     in the reference photos instead of picking just one."""
     climb = smoothstep(-520, 780, (GX + GZ) * 0.7071)  # 0 at the SW jungle floor, 1 at the NE ridge
     rough = fbm_grid(51, 220, 6) * 22 + fbm_grid(52, 70, 4) * 7
-    ridge = fbm_grid(53, 320, 5, ridged=True) * 170
+    ridge = fbm_grid(53, 420, 4, ridged=True) * 105
     h = rough + climb * (55 + ridge * (0.4 + 0.6 * climb))
     h -= np.percentile(h, 3)
     # A muddy river winding through the jungle floor, forded by the trail.

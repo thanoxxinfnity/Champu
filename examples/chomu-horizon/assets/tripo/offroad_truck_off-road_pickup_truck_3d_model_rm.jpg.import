@@ -2,23 +2,22 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ppfbyqa2dhth"
-path="res://.godot/imported/offroad_truck_off-road_pickup_truck_3d_model_rm.jpg-95c3c96c0b308792f2a9ae7195bfd415.ctex"
+uid="uid://8f570051v6lp"
+path.s3tc="res://.godot/imported/offroad_truck_off-road_pickup_truck_3d_model_rm.jpg-95c3c96c0b308792f2a9ae7195bfd415.s3tc.ctex"
+path.etc2="res://.godot/imported/offroad_truck_off-road_pickup_truck_3d_model_rm.jpg-95c3c96c0b308792f2a9ae7195bfd415.etc2.ctex"
 metadata={
-"vram_texture": false
-}
-generator_parameters={
-"md5": "5e68431122d1e6561374b060eb3f9a17"
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/tripo/offroad_truck_off-road_pickup_truck_3d_model_rm.jpg"
-dest_files=["res://.godot/imported/offroad_truck_off-road_pickup_truck_3d_model_rm.jpg-95c3c96c0b308792f2a9ae7195bfd415.ctex"]
+dest_files=["res://.godot/imported/offroad_truck_off-road_pickup_truck_3d_model_rm.jpg-95c3c96c0b308792f2a9ae7195bfd415.s3tc.ctex", "res://.godot/imported/offroad_truck_off-road_pickup_truck_3d_model_rm.jpg-95c3c96c0b308792f2a9ae7195bfd415.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

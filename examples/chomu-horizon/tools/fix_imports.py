@@ -10,7 +10,8 @@ import os
 import re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PATTERNS = ["textures/ground/*.jpg.import", "assets/trellis/*.jpg.import", "assets/trellis/*.png.import"]
+PATTERNS = ["textures/ground/*.jpg.import", "assets/trellis/*.jpg.import", "assets/trellis/*.png.import",
+            "assets/tripo/*.jpg.import", "assets/tripo/*.png.import"]
 
 changed = 0
 for pat in PATTERNS:

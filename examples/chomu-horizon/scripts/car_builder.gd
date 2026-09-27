@@ -146,7 +146,8 @@ static func load_glb_car(path: String, car: Dictionary) -> Node3D:
 	# normalise their output to their own arbitrary unit scale, not metres,
 	# so it also needs fitting to the car's real dimensions before it means
 	# anything next to metre-scale wheels.
-	if not found.has("body"):
+	var single_mesh := not found.has("body")
+	if single_mesh:
 		var wrapper := Node3D.new()
 		wrapper.name = "Body"
 		scene.name = "Mesh"
@@ -181,11 +182,21 @@ static func load_glb_car(path: String, car: Dictionary) -> Node3D:
 				if sm != null and sm.resource_name.to_lower().contains("paint"):
 					(mi as MeshInstance3D).set_surface_override_material(s, mats.paint_material)
 
+	# A single mesh already sculpts its own wheels into the body; a
+	# procedural tyre+rim dropped at the same spot would just double up as a
+	# second, wrongly-sized wheel sitting next to the real one. It still
+	# needs a node there for VehicleWheel3D to grab, just not a visible one —
+	# the trade-off is that this car's wheels won't visibly spin.
 	var positions := wheel_positions(car)
 	for wname in WHEEL_NAMES:
 		if root.get_node_or_null(wname) == null:
-			var side := 1.0 if (positions[wname] as Vector3).x > 0.0 else -1.0
-			var wheel := _wheel(wname, car.wheel_radius, car.wheel_width, side, mats)
+			var wheel: Node3D
+			if single_mesh:
+				wheel = Node3D.new()
+				wheel.name = wname
+			else:
+				var side := 1.0 if (positions[wname] as Vector3).x > 0.0 else -1.0
+				wheel = _wheel(wname, car.wheel_radius, car.wheel_width, side, mats)
 			wheel.position = positions[wname]
 			root.add_child(wheel)
 	if car.has("body"):
