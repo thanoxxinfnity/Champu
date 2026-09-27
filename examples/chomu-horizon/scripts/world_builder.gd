@@ -1353,7 +1353,7 @@ func _build_plaza_and_portals() -> void:
 		body.transform = Transform3D(Basis(Vector3.UP, yaw), c + Vector3.UP * (0.035 - 0.5))
 		hub.add_child(body)
 	var noise := _noise_tex(0.02, 3, false, 256, 3)
-	var colors := {"hills": Color(0.3, 1.0, 0.4), "metro": Color(0.9, 0.2, 1.0), "canyon": Color(1.0, 0.45, 0.1), "frost": Color(0.3, 0.8, 1.0), "trail": Color(0.65, 0.5, 0.15)}
+	var colors := {"hills": Color(0.3, 1.0, 0.4), "metro": Color(1.0, 0.8, 0.15), "canyon": Color(1.0, 0.45, 0.1), "frost": Color(0.3, 0.8, 1.0), "trail": Color(0.65, 0.5, 0.15)}
 	for p in (meta.portals as Array):
 		var pos := Vector3(p.pos[0], p.pos[1], p.pos[2])
 		var nrm := Vector3(pz.normal[0], 0.0, pz.normal[1])

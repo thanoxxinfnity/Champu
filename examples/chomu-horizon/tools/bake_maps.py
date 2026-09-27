@@ -350,9 +350,10 @@ def trail():
                                         branch_road(branch, dead_end=True)])
 
 
-CITY = 560.0      # city streets from -CITY to CITY
+CITY = 672.0      # city streets from -CITY to CITY (a bigger Mumbai-scale grid)
 PITCH = 112.0     # street spacing
 STREET_HALF = 8.0
+CITY_BLOCKS = int(CITY / PITCH) * 2   # blocks across the full grid (12)
 
 
 def metro():
@@ -371,7 +372,7 @@ def metro():
           (-640, 840), (-850, 500), (-870, 0), (-850, -500)]
     roads.append(dict(xz=catmull_loop(hw), closed=True, half=7.0, kind="highway", skip_city=True))
     roads.append(dict(xz=rounded_rect(-CITY, -CITY, CITY, CITY, 14), closed=True, half=STREET_HALF, kind="street"))
-    for k in range(1, 10):
+    for k in range(1, CITY_BLOCKS):
         c = -CITY + k * PITCH
         roads.append(dict(xz=polyline([(c, -CITY), (c, CITY)]), closed=False, half=STREET_HALF, kind="street"))
         roads.append(dict(xz=polyline([(-CITY, c), (CITY, c)]), closed=False, half=STREET_HALF, kind="street"))
@@ -386,7 +387,7 @@ def metro():
 
 MAPS = {
     "hills": dict(name="Horizon Hills", biome="hills", time="golden", fn=hills, seed=101),
-    "metro": dict(name="Neo Metro", biome="city", time="night", fn=metro, seed=202),
+    "metro": dict(name="Mumbai Bay", biome="city", time="night", fn=metro, seed=202),
     "canyon": dict(name="Red Canyon", biome="desert", time="golden", fn=canyon, seed=303),
     "frost": dict(name="Frost Peak", biome="snow", time="day", fn=frost, seed=404),
     "trail": dict(name="Wild Trail", biome="jungle", time="day", fn=trail, seed=505),
@@ -713,8 +714,8 @@ def bake(map_id):
 
 def city_layout(placer, rng, buildings, blocks, parks, plaza):
     """Blocks between the streets: towers, parks and car parks."""
-    for bi in range(10):
-        for bj in range(10):
+    for bi in range(CITY_BLOCKS):
+        for bj in range(CITY_BLOCKS):
             x0 = -CITY + bi * PITCH + STREET_HALF
             z0 = -CITY + bj * PITCH + STREET_HALF
             x1 = x0 + PITCH - 2 * STREET_HALF
@@ -737,9 +738,16 @@ def city_layout(placer, rng, buildings, blocks, parks, plaza):
                     lots = [(a, b, (a + c) / 2 - 2, d) for a, b, c, d in lots] + [((a + c) / 2 + 2, b, c, d) for a, b, c, d in lots]
                 for (a, b, c, d) in lots:
                     w, dd = c - a, d - b
-                    hgt = float(12 + rng.gamma(2.0, 1.0) * 16 * (0.4 + centre * 1.6))
-                    hgt = min(hgt, 240)
-                    style = int(rng.integers(0, 4))
+                    # style 4 is the colourful low-rise "chawl" block that gives
+                    # a Mumbai-style skyline its dense, painted street-level mix
+                    # alongside the glass/concrete/brick/cream towers.
+                    style = int(rng.choice([0, 1, 2, 3, 4], p=[0.27, 0.21, 0.18, 0.22, 0.12]))
+                    if style == 4:
+                        hgt = float(10 + rng.gamma(2.0, 1.0) * 5 * (0.5 + centre * 0.6))
+                        hgt = min(hgt, 42)
+                    else:
+                        hgt = float(14 + rng.gamma(2.2, 1.0) * 19 * (0.35 + centre * 1.85))
+                        hgt = min(hgt, 260)
                     buildings.append([round((a + c) / 2, 2), round((b + d) / 2, 2), round(w, 2), round(dd, 2), round(hgt, 1), style, int(rng.integers(0, 99999))])
                     placer.keep_out((a + c) / 2, (b + d) / 2, max(w, dd) * 0.72)
             elif kind in ("park", "plaza"):

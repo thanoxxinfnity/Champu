@@ -21,7 +21,7 @@ const TIME_NAMES := ["GOLDEN HOUR", "DAY", "NIGHT"]
 const QUALITY_NAMES := ["LOW", "HIGH", "EXTRA HIGH", "EXTREME"]
 const STEER_NAMES := ["STEER: BUTTONS", "STEER: JOYSTICK"]
 const MAP_IDS := ["hills", "metro", "canyon", "frost", "trail"]
-const MAP_NAMES := ["HORIZON HILLS", "NEO METRO", "RED CANYON", "FROST PEAK", "WILD TRAIL"]
+const MAP_NAMES := ["HORIZON HILLS", "MUMBAI BAY", "RED CANYON", "FROST PEAK", "WILD TRAIL"]
 const GOLD := Color(1.0, 0.78, 0.2)
 
 var config: Dictionary = {}
