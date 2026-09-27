@@ -20,15 +20,10 @@ enum Steer { BUTTONS, JOYSTICK }
 const ACCENT := Color(1.0, 0.45, 0.08)
 const GLASS := Color(1.0, 1.0, 1.0, 0.1)
 const GLASS_EDGE := Color(1.0, 1.0, 1.0, 0.38)
-## Each button reads as its own coloured control, not a generic grey disc —
-## the palette a mobile racer's HUD is expected to use.
-const TINTS := {
-	"gas": Color(0.22, 0.95, 0.4), "brake": Color(1.0, 0.22, 0.24),
-	"handbrake": Color(0.72, 0.35, 1.0), "nitro": Color(0.15, 0.78, 1.0),
-	"left": ACCENT, "right": ACCENT,
-	"camera": Color(0.25, 0.85, 0.85), "reset": Color(1.0, 0.7, 0.15),
-	"garage": Color(1.0, 0.82, 0.2), "rewind": Color(1.0, 0.4, 0.75),
-}
+## One accent colour for the whole HUD (matches the garage UI), not a
+## different colour per button — dark glass at rest, the same orange glow
+## on press everywhere.
+const NEUTRAL := Color(0.08, 0.085, 0.1)
 
 var vehicle: VehicleController
 var steer_mode: Steer = Steer.BUTTONS
@@ -216,7 +211,7 @@ func _draw() -> void:
 		if steer_mode == Steer.JOYSTICK and b.group == "steer":
 			continue
 		var on := is_pressed(id)
-		_glass(b.center, b.radius, on, TINTS.get(id, Color.WHITE))
+		_glass(b.center, b.radius, on)
 		_icon(id, b.center, b.radius, on)
 	if steer_mode == Steer.JOYSTICK:
 		draw_circle(_joy_center, _joy_radius, Color(1, 1, 1, 0.07))
@@ -226,17 +221,17 @@ func _draw() -> void:
 		draw_arc(knob, _joy_radius * 0.42, 0, TAU, 48, Color(1, 1, 1, 0.6), 2.0, true)
 
 
-func _glass(c: Vector2, r: float, on: bool, tint: Color) -> void:
-	# Drop shadow, then a coloured base that brightens on press, then a
-	# lighter cap on the upper half so the disc reads as glossy plastic
-	# rather than a flat tinted circle.
+func _glass(c: Vector2, r: float, on: bool) -> void:
+	# Drop shadow, a dark glass base that warms with the game's one accent
+	# colour on press, then a lighter cap on the upper half so the disc
+	# reads as glossy plastic rather than a flat tinted circle.
 	draw_circle(c + Vector2(0, r * 0.07), r, Color(0, 0, 0, 0.32))
-	draw_circle(c, r, tint.darkened(0.35 if on else 0.62).lightened(0.1 if on else 0.0))
-	draw_circle(c, r * 0.94, tint.darkened(0.15 if on else 0.45) * Color(1, 1, 1, 0.9))
-	draw_arc(c, r * 0.72, PI * 1.08, PI * 1.92, 28, Color(1, 1, 1, 0.32 if on else 0.2), r * 0.34, true)
-	draw_arc(c, r, 0, TAU, 64, tint.lightened(0.5) if on else Color(1, 1, 1, 0.55), 3.0 if on else 1.8, true)
+	draw_circle(c, r, NEUTRAL.lerp(ACCENT.darkened(0.2), 0.55) if on else NEUTRAL)
+	draw_circle(c, r * 0.94, (NEUTRAL.lerp(ACCENT, 0.25) if on else NEUTRAL.lightened(0.12)) * Color(1, 1, 1, 0.9))
+	draw_arc(c, r * 0.72, PI * 1.08, PI * 1.92, 28, Color(1, 1, 1, 0.3 if on else 0.16), r * 0.34, true)
+	draw_arc(c, r, 0, TAU, 64, ACCENT.lightened(0.3) if on else GLASS_EDGE, 3.0 if on else 1.8, true)
 	if on:
-		draw_arc(c, r * 1.08, 0, TAU, 64, Color(tint, 0.45), r * 0.16, true)
+		draw_arc(c, r * 1.08, 0, TAU, 64, Color(ACCENT, 0.45), r * 0.16, true)
 
 
 func _icon(id: String, c: Vector2, r: float, on: bool) -> void:

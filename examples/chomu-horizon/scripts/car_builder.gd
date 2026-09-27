@@ -1135,11 +1135,18 @@ static func _fit_single_mesh(wrapper: Node3D, mesh_root: Node3D, car: Dictionary
 			first = false
 	if first:
 		return
+	# Not every generator lays its output out nose-along-Z the way TRELLIS's
+	# car exports happen to: if the long axis came out along X instead, spin
+	# it onto Z before anything else, so wheel_positions() (always +Z-nose)
+	# lines up with the actual length of the mesh rather than its width.
+	if aabb.size.x > aabb.size.z:
+		mesh_root.rotate_y(PI * 0.5)
+		aabb = Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3.ZERO) * aabb
 	var horiz: float = maxf(aabb.size.z, aabb.size.x)
 	if horiz < 0.001:
 		return
 	var center := aabb.get_center()
-	mesh_root.position = Vector3(-center.x, -aabb.position.y, -center.z)
+	mesh_root.position += Vector3(-center.x, -aabb.position.y, -center.z)
 	var scale: float = float(car.get("length", 4.5)) / horiz
 	wrapper.scale = Vector3.ONE * scale
 
