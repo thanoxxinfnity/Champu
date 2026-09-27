@@ -38,6 +38,13 @@ const INFO := {
 	"sedan": {"kind": "prop", "near": 90.0, "far": 450.0},
 	"suv": {"kind": "prop", "near": 90.0, "far": 450.0},
 	"truck": {"kind": "prop", "near": 90.0, "far": 450.0},
+	# Rare hero landmarks (a handful per map): keep their real baked texture
+	# out to the full "near" distance instead of handing off to a vertex-
+	# coloured LOD at 55 m — at building scale that handoff loses the window
+	# grid and reads as a blank faceted block.
+	"tower_glass": {"kind": "prop", "near": 280.0, "far": 2200.0, "full_tex": true},
+	"chawl_building": {"kind": "prop", "near": 240.0, "far": 1600.0, "full_tex": true},
+	"mountain_rock": {"kind": "rock", "near": 3500.0, "far": 0.0},
 }
 
 

@@ -1142,7 +1142,9 @@ func _build_vegetation() -> void:
 		# LOD chain: textured (props, up close) → near → far.
 		var lods: Array = []
 		var near_end: float = info.near
-		if info.kind == "prop" and AssetLibrary.has(asset, "tex"):
+		if info.kind == "prop" and AssetLibrary.has(asset, "tex") and info.get("full_tex", false):
+			lods.append(["tex", 0.0, near_end, true])
+		elif info.kind == "prop" and AssetLibrary.has(asset, "tex"):
 			var tex_end := minf(55.0, near_end * 0.5)
 			lods.append(["tex", 0.0, tex_end, true])
 			lods.append(["near", tex_end, near_end, true])
@@ -1522,10 +1524,16 @@ func _mountain_mesh(seed_val: int) -> ArrayMesh:
 func _build_far_mountains() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 3
-	var variant_count := 4
-	var variants: Array[ArrayMesh] = []
-	for v in variant_count:
+	var proc_count := 4
+	var variants: Array[Mesh] = []
+	for v in proc_count:
 		variants.append(_mountain_mesh(91 + v * 37))
+	# A real TRELLIS-generated rock formation mixed in with the hand-built
+	# cones, for a genuinely irregular silhouette among the ring.
+	var trellis_mesh := AssetLibrary.mesh("mountain_rock", "near")
+	if trellis_mesh:
+		variants.append(trellis_mesh)
+	var variant_count := variants.size()
 	var groups: Array = []
 	for v in variant_count:
 		groups.append([] as Array[Transform3D])
@@ -1540,8 +1548,12 @@ func _build_far_mountains() -> void:
 	rock.vertex_color_use_as_albedo = true
 	rock.albedo_color = BIOMES[biome].mountain
 	rock.roughness = 1.0
+	var trellis_mat := AssetLibrary.material("mountain_rock", "near")
 	for v in variant_count:
-		var mmi := _multimesh("FarMountains%d" % v, variants[v], groups[v], rock, false)
+		if (groups[v] as Array).is_empty():
+			continue
+		var mat := trellis_mat if (trellis_mesh and v == variant_count - 1) else rock
+		var mmi := _multimesh("FarMountains%d" % v, variants[v], groups[v], mat, false)
 		mmi.extra_cull_margin = 100.0
 	# A ground disc under everything so the horizon never shows a void.
 	var floor_mi := MeshInstance3D.new()

@@ -31,7 +31,7 @@ from PIL import Image
 NEAR_TRIS = 3200
 FAR_TRIS = 420
 TEXTURED = {"barn", "busstop", "kiosk", "fountain", "billboard", "bench", "sedan", "suv", "truck",
-            "cabin", "windmill", "gasstation"}
+            "cabin", "windmill", "gasstation", "tower_glass", "chawl_building"}
 TEXTURED_TRIS = 9000
 # Standing plants: TRELLIS often stands these on a round ground plate.
 PLANTS = {"oak", "pine", "birch", "palm", "deadtree", "cactus", "snowpine"}

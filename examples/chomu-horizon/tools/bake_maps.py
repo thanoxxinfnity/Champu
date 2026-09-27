@@ -788,6 +788,27 @@ def city_layout(placer, rng, buildings, blocks, parks, plaza):
                     fp = {"busstop": (1.76, 0.9), "kiosk": (1.0, 1.26), "bench": (1.73, 0.85), "billboard": (0.37, 0.37)}[prop]
                     placer.put(prop, x, z, yaw + math.pi, sc, y=0.18, box=(fp[0] * sc, sc * 0.9, fp[1] * sc) if prop != "bench" else None)
 
+    # A handful of unique, real-model landmark buildings (TRELLIS-generated),
+    # dropped onto free ground away from the plaza and each other through the
+    # same collision system as every other prop (footprint ~= AssetLibrary's
+    # normalised width/depth at this height, from tools/prep_trellis.py).
+    for kind, radius, height, footprint in [("tower_glass", 26.0, 130.0, (0.876, 0.878)),
+                                             ("tower_glass", 24.0, 105.0, (0.876, 0.878)),
+                                             ("chawl_building", 16.0, 34.0, (0.703, 0.767)),
+                                             ("chawl_building", 15.0, 30.0, (0.703, 0.767)),
+                                             ("chawl_building", 15.0, 32.0, (0.703, 0.767))]:
+        for _t in range(300):
+            x = rng.uniform(-CITY + 80, CITY - 80)
+            z = rng.uniform(-CITY + 80, CITY - 80)
+            if math.hypot(x - plaza["center"][0], z - plaza["center"][2]) < 90:
+                continue
+            if not placer.free(x, z, radius):
+                continue
+            yaw = rng.uniform(0, 2 * math.pi)
+            placer.put(kind, x, z, yaw, height, y=0.0, box=(footprint[0] * height, height, footprint[1] * height))
+            placer.keep_out(x, z, radius * 1.1)
+            break
+
 
 def minimap(h, water, roads, biome, buildings, path):
     size = 512
