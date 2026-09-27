@@ -1,0 +1,54 @@
+name: Chomu Horizon APK
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - claude/chomugiri-workspace-design-09sxwa
+    paths:
+      - "examples/chomu-horizon/**"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3
+    defaults:
+      run:
+        working-directory: examples/chomu-horizon
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate a sideload signing keystore
+        run: |
+          keytool -genkeypair -v -keystore /tmp/release.keystore -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Chomu Horizon,O=Chomu Giri,C=IN"
+
+      - name: Export Android APK
+        env:
+          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: /tmp/release.keystore
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: androiddebugkey
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: android
+        run: |
+          mkdir -pv build
+          godot --headless --export-release "Android" build/ChomuHorizon.apk
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChomuHorizon-apk
+          path: examples/chomu-horizon/build/ChomuHorizon.apk
+          retention-days: 60
+
+      - name: Publish a download release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-apk
+          name: Chomu Horizon (latest build)
+          body: Auto-built from ${{ github.sha }}. Sideload APK — enable "install from unknown sources" to install.
+          files: examples/chomu-horizon/build/ChomuHorizon.apk
