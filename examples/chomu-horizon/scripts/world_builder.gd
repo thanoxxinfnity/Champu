@@ -373,12 +373,12 @@ func set_time_of_day(mode: String) -> void:
 		"day":
 			sun.rotation_degrees = Vector3(-52.0, 38.0, 0.0)
 			sun.light_color = Color(1.0, 0.97, 0.92)
-			sun.light_energy = 1.3
+			sun.light_energy = 1.15
 			top = Color(0.14, 0.34, 0.72)
 			horizon = Color(0.6, 0.74, 0.9)
 			fog_col = Color(0.64, 0.75, 0.88)
 			sun_tint = Color(1.0, 0.95, 0.85)
-			env.ambient_light_energy = 1.0
+			env.ambient_light_energy = 0.85
 			sky_mat.set_shader_parameter("cloud_light", Color(1.0, 1.0, 1.0))
 			sky_mat.set_shader_parameter("cloud_shadow", Color(0.55, 0.6, 0.7))
 			sky_mat.set_shader_parameter("cloud_cover", 0.42)
@@ -409,10 +409,14 @@ func set_time_of_day(mode: String) -> void:
 	if biome == "desert" and not night:
 		horizon = horizon.lerp(Color(0.95, 0.72, 0.5), 0.4)
 		fog_col = fog_col.lerp(Color(0.9, 0.7, 0.5), 0.5)
-	if biome == "snow" and not night:
+	# Wild Trail (biome "jungle") climbs into as much bare snow and rock as
+	# Frost Peak does, so it needs the same highlight rolloff or that upper
+	# stretch blows out to flat white in daylight the same way Frost Peak
+	# used to before it got one.
+	if (biome == "snow" or biome == "jungle") and not night:
 		env.tonemap_exposure = 0.82
 	else:
-		env.tonemap_exposure = 1.0
+		env.tonemap_exposure = 0.92
 	if biome == "jungle" and not night:
 		fog_col = fog_col.lerp(Color(0.55, 0.65, 0.45), 0.35)
 	sky_mat.set_shader_parameter("top_color", top)
