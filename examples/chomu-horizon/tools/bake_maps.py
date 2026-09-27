@@ -525,9 +525,13 @@ def bake(map_id):
         placer.scatter("oak", 3200, lambda x, z, y: 1.0 if y < 90 else 0.25, (8, 16), collide=(0.45, 6), avoid=2.6)
         placer.scatter("palm", 1400, lambda x, z, y: 0.8 if y < 40 else 0.1, (9, 15), collide=(0.4, 6), avoid=2.8)
         placer.scatter("birch", 900, lambda x, z, y: 0.5 if y < 100 else 0.15, (7, 11), collide=(0.35, 5), avoid=2.6)
-        placer.scatter("bush", 5200, lambda x, z, y: 0.9 if y < 120 else 0.3, (1.2, 2.6), road_min=8, avoid=1.3)
+        placer.scatter("bush", 5200, lambda x, z, y: 0.9 if y < 120 else 0.4, (1.2, 2.6), road_min=8, avoid=1.3)
         placer.scatter("boulder", 380, lambda x, z, y: 0.75, (1.5, 5.0), slope_max=1.3, collide=(0.5, 1.0), avoid=4, sink=0.2)
         placer.scatter("deadtree", 260, lambda x, z, y: 0.4 if y > 130 else 0.1, (5, 9), collide=(0.3, 3), avoid=4)
+        # A mid-mountain conifer belt between the jungle floor and the
+        # snowline — the elevation band real mountains forest and this map
+        # skipped straight over, leaving the slopes looking bare rock.
+        placer.scatter("pine", 2800, lambda x, z, y: 0.95 if 90 < y < 210 else (0.2 if y <= 90 else 0.1), (9, 16), slope_max=0.75, collide=(0.4, 6), avoid=2.8)
         placer.scatter("snowpine", 2000, lambda x, z, y: 1.0 if y > 200 else 0.0, (9, 17), slope_max=0.8, collide=(0.4, 6), avoid=2.8)
         props = [("cabin", 6, (7, 9), (0.5, 0.7))]
     else:  # city outskirts
