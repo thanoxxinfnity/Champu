@@ -120,6 +120,13 @@ void fragment() {
 	}
 	if (shore > 0.01) {
 		vec3 sc = texture(shore_albedo, uv * 0.9).rgb * mix(0.88, 1.12, macro2);
+		// Darken and cool the sand right at the waterline into "wet sand",
+		// concentrated near shore==1 (the water's edge) and fading back to
+		// plain dry sand by the outer edge of the band. Without this a
+		// desert map's shore is invisible — its dry ground is already sand
+		// coloured, so blending sand into sand shows no beach at all.
+		vec3 wet = sc * vec3(0.32, 0.38, 0.46);
+		sc = mix(sc, wet, pow(shore, 1.3));
 		col = mix(col, sc, shore);
 		nm = mix(nm, texture(shore_normal, uv * 0.9).rgb, shore * 0.6);
 	}
