@@ -11,6 +11,7 @@ signal config_changed(config: Dictionary)
 signal time_changed(mode: String)
 signal quality_changed(level: int)
 signal steer_mode_changed(mode: int)
+signal sens_changed(value: float)
 signal map_changed(id: String)
 signal logo_requested
 signal logo_removed
@@ -20,6 +21,8 @@ const TIMES := ["golden", "day", "night"]
 const TIME_NAMES := ["GOLDEN HOUR", "DAY", "NIGHT"]
 const QUALITY_NAMES := ["LOW", "HIGH", "EXTRA HIGH", "EXTREME"]
 const STEER_NAMES := ["STEER: BUTTONS", "STEER: JOYSTICK"]
+const SENS_NAMES := ["LOOK: LOW", "LOOK: MED", "LOOK: HIGH", "LOOK: MAX"]
+const SENS_VALUES := [0.6, 1.0, 1.5, 2.2]
 const MAP_IDS := ["hills", "metro", "canyon", "frost", "trail"]
 const MAP_NAMES := ["HORIZON HILLS", "MUMBAI BAY", "RED CANYON", "FROST PEAK", "WILD TRAIL"]
 const GOLD := Color(1.0, 0.78, 0.2)
@@ -28,7 +31,11 @@ var config: Dictionary = {}
 var time_index := 0
 var quality := 0
 var steer_mode := 0
+var sens_index := 1
 var map_index := 0
+
+var look_sensitivity: float:
+	get: return SENS_VALUES[sens_index]
 
 var _maker: Label
 var _name: Label
@@ -43,6 +50,7 @@ var _glow_swatches: Array[Button] = []
 var _time_btn: Button
 var _quality_btn: Button
 var _steer_btn: Button
+var _sens_btn: Button
 var _map_btn: Button
 var _coins: Label
 var _go: Button
@@ -142,7 +150,7 @@ func _build() -> void:
 
 	var top := HBoxContainer.new()
 	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	top.offset_left = -900
+	top.offset_left = -1080
 	top.offset_right = -24
 	top.offset_top = 22
 	top.alignment = BoxContainer.ALIGNMENT_END
@@ -160,12 +168,16 @@ func _build() -> void:
 		steer_mode = (steer_mode + 1) % 2
 		_steer_btn.text = STEER_NAMES[steer_mode]
 		steer_mode_changed.emit(steer_mode))
+	_sens_btn = _pill(SENS_NAMES[sens_index], func() -> void:
+		sens_index = (sens_index + 1) % SENS_NAMES.size()
+		_sens_btn.text = SENS_NAMES[sens_index]
+		sens_changed.emit(SENS_VALUES[sens_index]))
 	_map_btn = _pill("MAP: " + MAP_NAMES[0], func() -> void:
 		map_index = (map_index + 1) % MAP_IDS.size()
 		_map_btn.text = "MAP: " + MAP_NAMES[map_index]
 		map_changed.emit(MAP_IDS[map_index]))
 	_map_btn.add_theme_color_override("font_color", GOLD)
-	for b in [_map_btn, _time_btn, _quality_btn, _steer_btn]:
+	for b in [_map_btn, _time_btn, _quality_btn, _steer_btn, _sens_btn]:
 		top.add_child(b)
 
 	# ── left: identity + stats ──

@@ -235,12 +235,17 @@ class Placer:
                 continue
             if self.rng.random() > density_fn(x, z, y):
                 continue
+            s = self.rng.uniform(*scale)
             d, _ = self.road_tree.query([x, z])
-            if d < road_min:
+            # road_min is measured from this point to the road centreline,
+            # but every asset is 1 unit tall/wide at scale 1, so a big
+            # instance (redrock ranges up to scale 18) can reach past a
+            # flat clearance and visually sit on the road on a tight curve.
+            # Grow the required clearance with the instance's own size.
+            if d < road_min + s * 0.7:
                 continue
             if avoid > 0 and not self.free(x, z, avoid):
                 continue
-            s = self.rng.uniform(*scale)
             yaw = self.rng.uniform(0, 2 * math.pi)
             placed.append([round(x, 2), round(y - sink * s, 2), round(z, 2), round(yaw, 3), round(s, 3)])
             if avoid > 0:

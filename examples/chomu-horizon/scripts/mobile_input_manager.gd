@@ -36,6 +36,13 @@ var brake := 0.0
 var handbrake := false
 var nitro := false
 
+# A finger placed anywhere that isn't a button or the joystick becomes a
+# "look" finger: CameraFollow reads and drains this every frame to swing the
+# view around freely (yaw + pitch), then the camera eases back to centre once
+# the finger lifts. Kept here rather than in CameraFollow because this is the
+# one place already tracking which finger owns what.
+var look_delta := Vector2.ZERO
+
 var _buttons := {}           # id -> {center, radius, group, hold}
 var _fingers := {}           # touch index -> button id (or "joy")
 var _joy_center := Vector2.ZERO
@@ -112,6 +119,9 @@ func _input(event: InputEvent) -> void:
 				if id != "":
 					_fingers[t.index] = id
 					_on_press(id)
+				else:
+					# Empty space: a free-look finger, not tied to any button.
+					_fingers[t.index] = "look"
 		else:
 			if _fingers.get(t.index, "") == "joy":
 				_joy_offset = Vector2.ZERO
@@ -125,6 +135,8 @@ func _input(event: InputEvent) -> void:
 		var cur: String = _fingers[d.index]
 		if cur == "joy":
 			_joy_offset = (d.position - _joy_center).limit_length(_joy_radius)
+		elif cur == "look":
+			look_delta += d.relative
 		else:
 			# Slide between buttons of the same group without lifting.
 			var group: String = _buttons[cur].group
@@ -135,6 +147,10 @@ func _input(event: InputEvent) -> void:
 					_buzz()
 		queue_redraw()
 		get_viewport().set_input_as_handled()
+	elif event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+		# Desktop parity: right-drag looks around the same way a spare
+		# finger does on a phone, so this is testable off-device too.
+		look_delta += (event as InputEventMouseMotion).relative
 
 
 func _on_press(id: String) -> void:

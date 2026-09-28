@@ -19,6 +19,8 @@ uniform sampler2D steep_albedo : source_color, filter_linear_mipmap_anisotropic,
 uniform sampler2D steep_normal : filter_linear_mipmap, repeat_enable;
 uniform sampler2D patch_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D peak_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D shore_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D shore_normal : filter_linear_mipmap, repeat_enable;
 uniform sampler2D macro_noise : filter_linear_mipmap, repeat_enable;
 
 uniform vec4 flat_tint : source_color = vec4(1.0);
@@ -90,8 +92,16 @@ void fragment() {
 	float slope = 1.0 - n.y;
 	float steep = smoothstep(steep_start, steep_end, slope + (macro2 - 0.5) * 0.12);
 	float patch = smoothstep(0.62 - patch_amount * 0.3, 0.72 - patch_amount * 0.3, macro2 * 0.7 + macro * 0.3) * patch_amount * 2.0;
-	float shore = 1.0 - smoothstep(shore_level, shore_level + 2.5, world_pos.y + (macro2 - 0.5) * 2.0);
-	patch = clamp(max(patch, shore), 0.0, 1.0) * (1.0 - steep);
+	patch = clamp(patch, 0.0, 1.0) * (1.0 - steep);
+	// A real sand band at the waterline, kept separate from the "patch"
+	// layer (dirt in most biomes) so every coastline gets a beach instead
+	// of a muddy fringe. Narrow on purpose: a flat city pad like Neo
+	// Metro's sits at a near-constant height for kilometres inland, so a
+	// wide falloff here painted the whole city as "beach" instead of a
+	// band at the actual shoreline. This width only spans the real
+	// land-to-water slope near the coast.
+	float shore = 1.0 - smoothstep(shore_level, shore_level + 2.0, world_pos.y + (macro2 - 0.5) * 2.0);
+	shore = clamp(shore, 0.0, 1.0) * (1.0 - steep);
 	float peak = smoothstep(peak_start, peak_start + peak_blend, world_pos.y + (macro - 0.5) * 60.0) * (1.0 - steep * 0.75);
 
 	vec3 col = flat_c;
@@ -107,6 +117,11 @@ void fragment() {
 	}
 	if (peak > 0.01) {
 		col = mix(col, texture(peak_albedo, uv * 0.6).rgb * peak_tint.rgb, peak);
+	}
+	if (shore > 0.01) {
+		vec3 sc = texture(shore_albedo, uv * 0.9).rgb * mix(0.88, 1.12, macro2);
+		col = mix(col, sc, shore);
+		nm = mix(nm, texture(shore_normal, uv * 0.9).rgb, shore * 0.6);
 	}
 	if (world_pos.y < water_level) {
 		float d = clamp((water_level - world_pos.y) / 6.0, 0.0, 1.0);

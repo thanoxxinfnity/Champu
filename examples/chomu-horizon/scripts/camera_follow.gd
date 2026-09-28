@@ -11,10 +11,21 @@ extends Camera3D
 enum Mode { CHASE_FAR, CHASE_NEAR, HOOD, CINEMATIC }
 const MODE_NAMES := ["CHASE FAR", "CHASE NEAR", "HOOD", "CINEMATIC"]
 
+# Free-look: a full 360° swing around the drive heading, up and down included.
+# A drag finger (see MobileInputManager.look_delta) drives yaw/pitch directly;
+# the moment nothing is dragging, both ease back to centre so letting go
+# always hands the view back to the road instead of leaving you staring
+# sideways mid-corner.
+const LOOK_PITCH_MIN := -1.22   # ~-70°: near-vertical down, short of the car's own roof
+const LOOK_PITCH_MAX := 1.31    # ~75°: near-vertical up
+const LOOK_RETURN_SPEED := 2.6  # rad/s eased back once the finger lifts
+
 var target: VehicleController
 var mode: Mode = Mode.CHASE_NEAR
 var base_fov := 66.0
 var offroad := false
+var input_mgr: MobileInputManager
+var look_sensitivity := 1.0
 
 var _dir := Vector3.BACK
 var _pos := Vector3.ZERO
@@ -22,6 +33,8 @@ var _fov := 66.0
 var _t := 0.0
 var _noise := FastNoiseLite.new()
 var _orbit := 0.0
+var _look_yaw := 0.0
+var _look_pitch := 0.0
 
 
 func _ready() -> void:
@@ -62,10 +75,39 @@ func _desired(speed_f: float) -> Vector3:
 			return car_pos - _dir * (6.4 + speed_f * 1.6) + Vector3.UP * (2.15 + speed_f * 0.25)
 
 
+## Drains MobileInputManager's look finger into yaw/pitch for this frame, or
+## eases them back to centre when nothing is being dragged.
+func _update_look(delta: float) -> void:
+	var d := Vector2.ZERO
+	if input_mgr:
+		d = input_mgr.look_delta
+		input_mgr.look_delta = Vector2.ZERO
+	if d.length_squared() > 0.0:
+		var s := 0.0028 * look_sensitivity
+		_look_yaw = wrapf(_look_yaw - d.x * s, -PI, PI)
+		_look_pitch = clampf(_look_pitch - d.y * s, LOOK_PITCH_MIN, LOOK_PITCH_MAX)
+	else:
+		_look_yaw = move_toward(_look_yaw, 0.0, LOOK_RETURN_SPEED * delta)
+		_look_pitch = move_toward(_look_pitch, 0.0, LOOK_RETURN_SPEED * delta)
+
+
+## The base flat heading (`_dir`), rotated by the free-look yaw/pitch. Used to
+## aim the camera in any of the 360° of directions instead of only ahead.
+func _look_direction(base: Vector3) -> Vector3:
+	if _look_yaw == 0.0 and _look_pitch == 0.0:
+		return base
+	var dir := base.rotated(Vector3.UP, _look_yaw)
+	var right := dir.cross(Vector3.UP)
+	if right.length_squared() > 1e-6:
+		dir = dir.rotated(right.normalized(), _look_pitch)
+	return dir
+
+
 func _process(delta: float) -> void:
 	if target == null or not is_instance_valid(target):
 		return
 	_t += delta
+	_update_look(delta)
 	var speed_f := clampf(target.speed_kmh / 300.0, 0.0, 1.0)
 
 	# Heading: nose direction, leaning into the travel direction when sliding.
@@ -82,7 +124,8 @@ func _process(delta: float) -> void:
 	if mode == Mode.HOOD:
 		var xf := target.global_transform
 		global_position = xf * Vector3(0.0, 1.12, 0.35)
-		look_at(xf * Vector3(0.0, 1.0, 12.0), xf.basis.y)
+		var hood_fwd := _look_direction(xf.basis.z)
+		look_at(global_position + hood_fwd * 12.0, xf.basis.y)
 		_fov = lerpf(_fov, base_fov + 8.0 + speed_f * 10.0, 1.0 - exp(-delta * 4.0))
 		fov = _fov
 		return
@@ -101,7 +144,8 @@ func _process(delta: float) -> void:
 	var s := Vector3(_noise.get_noise_2d(_t * 40.0, 0.0), _noise.get_noise_2d(0.0, _t * 40.0), 0.0) * shake
 	global_position = _pos + global_basis * s
 
-	var look := target.global_position + Vector3.UP * 0.95 + _dir * (2.5 if mode != Mode.CINEMATIC else 0.0)
+	var look_dir := _look_direction(_dir) if mode != Mode.CINEMATIC else _dir
+	var look := target.global_position + Vector3.UP * 0.95 + look_dir * (2.5 if mode != Mode.CINEMATIC else 0.0)
 	look_at(look, Vector3.UP)
 
 	var fov_goal := base_fov + speed_f * 16.0 + (9.0 if target.nitro_active else 0.0)

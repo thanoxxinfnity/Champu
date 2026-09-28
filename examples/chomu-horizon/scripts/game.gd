@@ -89,6 +89,9 @@ func _ready() -> void:
 		quality = q
 		_apply_quality())
 	ui.steer_mode_changed.connect(func(m: int) -> void: input.steer_mode = m as MobileInputManager.Steer)
+	ui.sens_changed.connect(func(v: float) -> void:
+		if cam:
+			cam.look_sensitivity = v)
 	ui.map_changed.connect(func(id: String) -> void:
 		garage.map = id
 		PaintCustomizer.save_garage(garage))
@@ -293,6 +296,8 @@ func _spawn_car(xf: Transform3D) -> void:
 	cam = CameraFollow.new()
 	cam.name = "ChaseCamera"
 	cam.target = vehicle
+	cam.input_mgr = input
+	cam.look_sensitivity = ui.look_sensitivity
 	cam.far = 3000.0
 	add_child(cam)
 	cam.make_current()

@@ -517,6 +517,7 @@ func _build_terrain() -> void:
 		"flat_albedo": _tex(b.flat + "_a"), "flat_normal": _tex(b.flat + "_n"),
 		"steep_albedo": _tex(b.steep + "_a"), "steep_normal": _tex(b.steep + "_n"),
 		"patch_albedo": _tex(b.patch + "_a"), "peak_albedo": _tex(b.peak + "_a"),
+		"shore_albedo": _tex("sand_a"), "shore_normal": _tex("sand_n"),
 		"macro_noise": _noise_tex(0.004, 9, false, 256, 4),
 		"flat_tint": b.flat_tint, "steep_tint": b.steep_tint, "patch_tint": b.patch_tint,
 		"steep_start": b.steep_start, "steep_end": b.steep_start + 0.22, "patch_amount": b.patch_amt,
