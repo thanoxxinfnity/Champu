@@ -20,7 +20,7 @@ import sys
 
 import numpy as np
 from PIL import Image
-from scipy.ndimage import gaussian_filter, map_coordinates
+from scipy.ndimage import gaussian_filter, map_coordinates, median_filter
 from scipy.spatial import cKDTree
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -397,10 +397,36 @@ ORDER = ["hills", "metro", "canyon", "frost", "trail"]
 
 # ─────────────────────────────── bake ──────────────────────────────────────
 
+def despike(h, thresh=6.0, size=7):
+    """Flatten isolated single- or few-pixel height spikes (FFT-noise
+    wraparound and ridged-noise outliers) down to their local neighbourhood.
+
+    The rendered terrain mesh is a coarse grid that samples the heightmap
+    with a nearest-neighbour fetch at its own vertex spacing, so a single
+    bad texel often never shows up in the ground itself — but prop
+    placement bilinear-samples height at the prop's exact (x, z), and a
+    windmill or rock seeded right on top of a spike (or right at the lip of
+    a pit) renders floating over ground that never actually rises to meet
+    it, or hovering over a hole that should not be there.
+    """
+    out = h.copy()
+    # Repeated passes mop up a small cluster of a few adjacent bad texels
+    # that a single pass' local median does not fully outvote; each pass is
+    # a no-op on terrain that is already clean (a genuinely smooth surface's
+    # median filter output does not move again), so this never erodes real
+    # ridges or canyon walls, only texels that disagree sharply with every
+    # neighbour around them.
+    for _ in range(3):
+        med = median_filter(out, size=size)
+        spike = np.abs(out - med) > thresh
+        out[spike] = med[spike]
+    return out
+
+
 def bake(map_id):
     spec = MAPS[map_id]
     data = spec["fn"]()
-    h = data["h"].astype(np.float64)
+    h = despike(data["h"].astype(np.float64))
     water = data["water"]
     roads = data["roads"]
     city = data.get("city", False)
@@ -512,7 +538,11 @@ def bake(map_id):
     elif biome == "desert":
         placer.scatter("cactus", 2200, lambda x, z, y: 0.8, (3.5, 7.5), slope_max=0.35, collide=(0.25, 3), avoid=3)
         placer.scatter("deadtree", 500, lambda x, z, y: 0.7, (5, 9), slope_max=0.4, collide=(0.3, 3), avoid=4)
-        placer.scatter("redrock", 420, lambda x, z, y: 0.8, (4, 18), slope_max=0.9, collide=(0.55, 1.0), avoid=10, sink=0.15)
+        # slope_max used to be 0.9 — steep enough to seed this rock right
+        # against a canyon wall, where a flat heightmap cannot actually
+        # support the overhang the model implies, and it read as a chunk of
+        # rock hanging in mid-air over a hole in the cliff face.
+        placer.scatter("redrock", 420, lambda x, z, y: 0.8, (4, 18), slope_max=0.45, collide=(0.55, 1.0), avoid=10, sink=0.15)
         placer.scatter("bush", 1800, lambda x, z, y: 0.5, (0.8, 1.6), avoid=1.5)
         placer.scatter("boulder", 200, lambda x, z, y: 0.6, (1.5, 3.5), slope_max=1.2, collide=(0.5, 1.0), avoid=4, sink=0.2)
         props = [("gasstation", 3, (16, 18), (0.72, 0.72)), ("windmill", 6, (40, 50), (0.08, 0.08)), ("barn", 2, (12, 14), (0.7, 0.62))]

@@ -1542,7 +1542,14 @@ func _build_far_mountains() -> void:
 		var r := rng.randf_range(1900.0, 2600.0)
 		var h := rng.randf_range(260.0, 620.0)
 		var w := rng.randf_range(420.0, 620.0)
-		var xf := Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(w, h, w)), Vector3(cos(a) * r, -60.0, sin(a) * r))
+		# Anchor to the real terrain's height at the edge of the playable map
+		# in this direction, not a fixed world Y. Wild Trail's rim climbs to a
+		# snow ridge well above sea level, and a flat placement height left
+		# these decorative peaks poking out of empty sky well above the real
+		# ridge line instead of reading as it continuing into the distance.
+		var edge_y := height_at(cos(a) * half_size, sin(a) * half_size)
+		var base_y := edge_y - h * 0.3
+		var xf := Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(w, h, w)), Vector3(cos(a) * r, base_y, sin(a) * r))
 		(groups[rng.randi() % variant_count] as Array).append(xf)
 	var rock := StandardMaterial3D.new()
 	rock.vertex_color_use_as_albedo = true
