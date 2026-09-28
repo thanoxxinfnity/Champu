@@ -9,7 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
@@ -30,12 +32,37 @@ import androidx.core.app.NotificationManagerCompat
  */
 class RunService : Service() {
 
+    private val watchdog = Handler(Looper.getMainLooper())
+    private val giveUp = Runnable {
+        // The page tells us a run ended by calling back in; if that call never
+        // arrives — a hung step upstream with no timeout of its own, a dropped
+        // loopback request — this notification would otherwise sit here forever,
+        // "ongoing" and unswipeable, until the user found and force-stopped the
+        // app. Eventually Android itself starts warning about a background app
+        // that has held a foreground service this long. A generous ceiling here
+        // is what actually bounds that: better to wrongly clear a genuinely
+        // still-running (and almost certainly stuck) task than to leave a dead
+        // notification parked indefinitely.
+        stopSelf()
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         val topic = intent?.getStringExtra(EXTRA_TOPIC).orEmpty().ifEmpty { "a run" }
         ensureChannels(this)
 
+        val stopAction = PendingIntent.getService(
+            this,
+            0,
+            Intent(this, RunService::class.java).setAction(ACTION_STOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
         val notification = NotificationCompat.Builder(this, CHANNEL_RUNNING)
             .setContentTitle("Chomugiri is working")
             .setContentText(topic)
@@ -46,6 +73,9 @@ class RunService : Service() {
             // alert. It never makes a sound and never takes over the screen.
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(openApp(this))
+            // A manual way out if a run ever does get stuck, rather than making
+            // the user go hunting through Android's app-info screen to force-stop.
+            .addAction(0, "Stop", stopAction)
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -54,10 +84,22 @@ class RunService : Service() {
             startForeground(NOTIFICATION_RUNNING, notification)
         }
 
+        // Every call (the initial one and each progress update) pushes the
+        // watchdog back out, so a run that is genuinely still narrating steps
+        // never gets cut off — only one that has gone silent for the whole
+        // window does.
+        watchdog.removeCallbacks(giveUp)
+        watchdog.postDelayed(giveUp, WATCHDOG_MS)
+
         // If the process is killed mid-run the work is gone with it, so there is
         // nothing useful to restart into — a re-delivered intent would only put
         // back a notification for a run that no longer exists.
         return START_NOT_STICKY
+    }
+
+    override fun onDestroy() {
+        watchdog.removeCallbacks(giveUp)
+        super.onDestroy()
     }
 
     companion object {
@@ -65,6 +107,11 @@ class RunService : Service() {
         private const val CHANNEL_DONE = "chomugiri.results"
         private const val NOTIFICATION_RUNNING = 4711
         private const val EXTRA_TOPIC = "topic"
+        private const val ACTION_STOP = "com.chomugiri.workspace.STOP_RUN"
+        // Generous enough that a real multi-step build (a Kaggle GPU job, a
+        // slow model download) is never cut off mid-flight, but short enough
+        // that a stuck run does not sit there for hours.
+        private const val WATCHDOG_MS = 25 * 60 * 1000L
         private var doneId = 4800
 
         private fun openApp(context: Context): PendingIntent =

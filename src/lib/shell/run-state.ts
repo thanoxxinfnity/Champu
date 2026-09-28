@@ -17,20 +17,33 @@ import { isShellHosted } from '@/lib/keys';
  */
 
 async function tell(payload: Record<string, unknown>): Promise<void> {
-  try {
-    if (!(await isShellHosted())) return;
-    await fetch('/api/shell/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      // A failure here must never take a run down with it.
-      keepalive: true,
-      // Fire-and-forget already, but an unbounded hung request is still a
-      // leaked connection nothing ever cleans up.
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch {
-    // The shell is a convenience; the run continues without it.
+  if (!(await isShellHosted())) return;
+  // This is a loopback call to the shell's own embedded server, so a failure
+  // here is a transient hiccup, not a real network problem — but for
+  // `active: false` it is the ONLY thing that clears the ongoing "still
+  // working" notification. Losing that one call silently used to leave the
+  // notification stuck until the user found and force-stopped the app, so a
+  // few quick retries before giving up actually matters here, unlike the
+  // `active: true` calls where a missed update just gets superseded by the
+  // next one.
+  const attempts = payload.active === false ? 3 : 1;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await fetch('/api/shell/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        // A failure here must never take a run down with it.
+        keepalive: true,
+        // Fire-and-forget already, but an unbounded hung request is still a
+        // leaked connection nothing ever cleans up.
+        signal: AbortSignal.timeout(10_000),
+      });
+      return;
+    } catch {
+      if (attempt === attempts) return; // The shell is a convenience; the run continues without it.
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
   }
 }
 
