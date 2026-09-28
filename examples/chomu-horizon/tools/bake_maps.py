@@ -312,12 +312,17 @@ def canyon():
     mesa = smoothstep(0.08, 0.2, m) * 60 + smoothstep(0.35, 0.45, m) * 45
     mesa = np.floor(mesa / 9) * 9 + smoothstep(0, 1, (mesa / 9) % 1) * 9  # terraces
     h = base + dunes + mesa
+    # A river pool at the canyon floor, tucked against the mesa terraces so
+    # the drop from a terrace edge into it reads as a real desert waterfall
+    # rather than just another dry wash.
+    river = np.exp(-(((GX - 60) / 250) ** 2 + ((GZ - 560) / 190) ** 2))
+    h = h * (1 - river * 0.93) - river * 26
     h = edge_mountains(h, 180, 700)
     ctrl = [(-820, -820), (-300, -760), (200, -850), (700, -760), (830, -420), (500, -250), (150, -380),
             (-150, -150), (0, 150), (400, 100), (780, 250), (800, 650), (450, 830), (0, 700), (-400, 820),
             (-800, 650), (-650, 300), (-850, 0), (-700, -400)]
     branch = [(-300, -760), (-420, -350), (-300, 0), (-430, 400), (-400, 820)]
-    return dict(h=h, water=None, roads=[dict(xz=catmull_loop(ctrl), closed=True, half=7.0, kind="highway"), branch_road(branch)])
+    return dict(h=h, water=-15.0, roads=[dict(xz=catmull_loop(ctrl), closed=True, half=7.0, kind="highway"), branch_road(branch)])
 
 
 def frost():
@@ -426,6 +431,52 @@ def despike(h, thresh=6.0, size=7):
         spike = np.abs(out - med) > thresh
         out[spike] = med[spike]
     return out
+
+
+def find_waterfalls(h, water, road_tree, count=3, min_drop=22.0, max_drop=46.0, min_spacing=140.0):
+    """Cliff-into-water spots on the final baked terrain: shoreline cells
+    where the ground a short distance inland climbs steeply, a natural
+    place for a cascade. Computed from height data alone (same source
+    height_at() reads in Godot) so the fall is always anchored flush with
+    the real terrain instead of needing a hand-placed, easily-misaligned
+    cliff face.
+    """
+    gy, gx = np.gradient(h, SPACING)
+    shore = (h > water + 0.3) & (h < water + 3.0)
+    ys, xs = np.nonzero(shore)
+    if len(xs) == 0:
+        return []
+    step_m = 18.0
+    candidates = []
+    for j, i in zip(ys.tolist(), xs.tolist()):
+        gxv, gyv = float(gx[j, i]), float(gy[j, i])
+        g = math.hypot(gxv, gyv)
+        if g < 1e-4:
+            continue
+        x = i * SPACING - HALF
+        z = j * SPACING - HALF
+        # Gradient points uphill; step inland along it to see how tall the
+        # rise behind this shore cell really is.
+        ux, uy = gxv / g, gyv / g
+        h_in = float(sample_h(h, x + ux * step_m, z + uy * step_m))
+        drop = h_in - float(h[j, i])
+        if drop < min_drop:
+            continue
+        d_road, _ = road_tree.query([x, z])
+        if d_road < 14.0:
+            continue
+        candidates.append((drop, x, float(h[j, i]), z, ux, uy))
+    candidates.sort(key=lambda c: -c[0])
+    picked = []
+    for drop, x, y, z, ux, uy in candidates:
+        if any((x - px) ** 2 + (z - pz) ** 2 < min_spacing ** 2 for px, _, pz, *_ in picked):
+            continue
+        # Faces downhill: outward from the cliff, down toward the water.
+        yaw = math.atan2(-ux, -uy)
+        picked.append((x, y, z, min(drop, max_drop), yaw))
+        if len(picked) >= count:
+            break
+    return [[round(px, 2), round(py, 2), round(pz, 2), round(pd, 2), round(pyaw, 3)] for px, py, pz, pd, pyaw in picked]
 
 
 def bake(map_id):
@@ -736,6 +787,7 @@ def bake(map_id):
         "instances": placer.instances, "colliders": placer.colliders, "boxes": placer.boxes,
         "buildings": buildings, "blocks": blocks, "parks": parks,
         "ramps": [r[:5] for r in ramps], "coins": coins, "nitro": nitro, "rings": rings, "lamps": lamps,
+        "waterfalls": find_waterfalls(h, water, road_tree) if water is not None else [],
         "city": {"extent": CITY, "pitch": PITCH, "street_half": STREET_HALF} if city else None,
     }
     with open(os.path.join(out_dir, "meta.json"), "w") as f:

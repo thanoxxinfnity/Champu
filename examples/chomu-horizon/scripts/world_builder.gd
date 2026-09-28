@@ -99,6 +99,7 @@ func build() -> void:
 	_build_environment()
 	_build_terrain()
 	_build_water()
+	_build_waterfalls()
 	_build_roads()
 	_build_markings()
 	_build_rails()
@@ -601,6 +602,101 @@ func _build_water() -> void:
 		body.add_child(cs)
 		body.position = Vector3(0, water_level, 0)
 		add_child(body)
+
+
+## Cascades at the cliff-into-water spots bake_maps.py's find_waterfalls()
+## found on the real terrain (height data only, so each fall's base sits
+## flush with the actual ground/water instead of needing a hand-placed cliff
+## that can drift out of alignment). Skipped on frozen lakes — flowing water
+## next to solid ice would read as a bug, not a feature.
+func _build_waterfalls() -> void:
+	var falls: Array = meta.get("waterfalls", [])
+	if falls.is_empty() or biome == "snow":
+		return
+	var root := Node3D.new()
+	root.name = "Waterfalls"
+	add_child(root)
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://shaders/waterfall.gdshader")
+	for f in falls:
+		var x := float(f[0])
+		var y := float(f[1])
+		var z := float(f[2])
+		var drop := float(f[3])
+		var yaw := float(f[4])
+		var width := clampf(drop * 0.28, 6.0, 13.0)
+		var pm := PlaneMesh.new()
+		pm.size = Vector2(width, drop)
+		pm.orientation = PlaneMesh.FACE_Z
+		var mi := MeshInstance3D.new()
+		mi.mesh = pm
+		mi.material_override = mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var xf := Transform3D(Basis(Vector3.UP, yaw), Vector3(x, y + drop * 0.5, z))
+		# Nudge inland a touch so the sheet sits against the slope instead of
+		# hanging in open air just past the cliff edge.
+		xf = xf.translated_local(Vector3(0, 0, -width * 0.15))
+		mi.transform = xf
+		root.add_child(mi)
+		var mist := _waterfall_mist()
+		mist.position = Vector3(x, y + 0.3, z)
+		root.add_child(mist)
+
+
+func _waterfall_mist() -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	p.amount = 22
+	p.lifetime = 1.1
+	p.emitting = true
+	p.local_coords = false
+	p.direction = Vector3(0, 1, 0)
+	p.spread = 65.0
+	p.initial_velocity_min = 0.5
+	p.initial_velocity_max = 1.7
+	p.gravity = Vector3(0, 0.35, 0)
+	p.damping_min = 1.0
+	p.damping_max = 1.9
+	var scale_curve := Curve.new()
+	scale_curve.add_point(Vector2(0, 0.4))
+	scale_curve.add_point(Vector2(1, 1.0))
+	p.scale_amount_min = 1.2
+	p.scale_amount_max = 2.0
+	p.scale_amount_curve = scale_curve
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(1, 1, 1, 0.55))
+	ramp.set_color(1, Color(1, 1, 1, 0.0))
+	p.color_ramp = ramp
+	var quad := QuadMesh.new()
+	quad.size = Vector2(1.3, 1.3)
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.vertex_color_use_as_albedo = true
+	mat.albedo_texture = _mist_tex()
+	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	quad.material = mat
+	p.mesh = quad
+	return p
+
+
+static var _mist_texture: Texture2D
+
+
+func _mist_tex() -> Texture2D:
+	if _mist_texture == null:
+		var g := Gradient.new()
+		g.set_color(0, Color(1, 1, 1, 1))
+		g.set_color(1, Color(1, 1, 1, 0))
+		var t := GradientTexture2D.new()
+		t.gradient = g
+		t.fill = GradientTexture2D.FILL_RADIAL
+		t.fill_from = Vector2(0.5, 0.5)
+		t.fill_to = Vector2(1.0, 0.5)
+		t.width = 32
+		t.height = 32
+		_mist_texture = t
+	return _mist_texture
 
 
 # ─────────────────────────────── roads ─────────────────────────────────────
