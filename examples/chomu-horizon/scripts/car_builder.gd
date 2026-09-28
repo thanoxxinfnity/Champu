@@ -182,20 +182,28 @@ static func load_glb_car(path: String, car: Dictionary) -> Node3D:
 				if sm != null and sm.resource_name.to_lower().contains("paint"):
 					(mi as MeshInstance3D).set_surface_override_material(s, mats.paint_material)
 
-	# A single mesh already sculpts its own wheels into the body; a
-	# procedural tyre+rim dropped at the same spot would just double up as a
-	# second, wrongly-sized wheel sitting next to the real one. It still
-	# needs a node there for VehicleWheel3D to grab, just not a visible one —
-	# the trade-off is that this car's wheels won't visibly spin.
+	# A single mesh already sculpts its own wheels into the body, so a
+	# same-sized procedural tyre+rim dropped at the same spot used to look
+	# like a second, wrongly-sized wheel next to the real one — the old fix
+	# just hid the procedural wheel entirely, at the cost of it never
+	# visibly spinning. Building it a little oversized instead makes it the
+	# thing that's actually visible (it occludes the model's own static
+	# wheel from any normal viewing angle), so it drives home the one cue
+	# that matters here: the tyre turning. A horse's "wheels" are its legs,
+	# not tyres, so it keeps the invisible marker — a spinning tyre under a
+	# hoof would look worse than no motion at all.
+	var single_mesh_wheels: bool = single_mesh and car.get("vtype", "car") != "horse"
 	var positions := wheel_positions(car)
 	for wname in WHEEL_NAMES:
 		if root.get_node_or_null(wname) == null:
 			var wheel: Node3D
-			if single_mesh:
+			var side := 1.0 if (positions[wname] as Vector3).x > 0.0 else -1.0
+			if single_mesh_wheels:
+				wheel = _wheel(wname, car.wheel_radius * 1.08, car.wheel_width * 1.15, side, mats)
+			elif single_mesh:
 				wheel = Node3D.new()
 				wheel.name = wname
 			else:
-				var side := 1.0 if (positions[wname] as Vector3).x > 0.0 else -1.0
 				wheel = _wheel(wname, car.wheel_radius, car.wheel_width, side, mats)
 			wheel.position = positions[wname]
 			root.add_child(wheel)

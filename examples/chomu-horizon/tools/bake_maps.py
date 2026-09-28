@@ -712,8 +712,17 @@ def bake(map_id):
           f"h {h.min():.0f}..{h.max():.0f}, coins {len(coins)}, ramps {len(ramps)}, nitro {len(nitro)}, rings {len(rings)}, buildings {len(buildings)}, {counts}")
 
 
+## TRELLIS-generated hero buildings: (asset name, (width, depth) footprint
+## ratio at height=1, from tools/prep_trellis.py's meta.json). One of these
+## fills an entire city block instead of splitting into lots, so its real
+## footprint (which includes the asset's own baked-in plaza/ground) is
+## guaranteed to stay inside the block's street-bounded inner rect rather
+## than overlapping neighbouring buildings or streets.
+LANDMARK_KINDS = [("tower_glass", (0.876, 0.878)), ("chawl_building", (0.703, 0.767))]
+
+
 def city_layout(placer, rng, buildings, blocks, parks, plaza):
-    """Blocks between the streets: towers, parks and car parks."""
+    """Blocks between the streets: towers, parks, car parks and landmarks."""
     for bi in range(CITY_BLOCKS):
         for bj in range(CITY_BLOCKS):
             x0 = -CITY + bi * PITCH + STREET_HALF
@@ -724,10 +733,24 @@ def city_layout(placer, rng, buildings, blocks, parks, plaza):
             is_plaza = abs(cx - plaza["center"][0]) < 1 and abs(cz - plaza["center"][2]) < 1
             centre = 1 - min(math.hypot(cx, cz) / (CITY * 1.1), 1)
             roll = rng.random()
-            kind = "plaza" if is_plaza else ("park" if roll < 0.12 else ("lot" if roll < 0.2 else "towers"))
+            kind = ("plaza" if is_plaza else
+                    "landmark" if roll < 0.035 else
+                    "park" if roll < 0.155 else
+                    "lot" if roll < 0.235 else "towers")
             blocks.append([round(x0, 1), round(z0, 1), round(x1, 1), round(z1, 1), kind])
             inner = (x0 + 6, z0 + 6, x1 - 6, z1 - 6)
-            if kind == "towers":
+            if kind == "landmark":
+                # Scale to fit inside the inner rect (with a margin) rather
+                # than a fixed height, so it can never poke into the street.
+                name, (fw, fd) = LANDMARK_KINDS[int(rng.integers(0, len(LANDMARK_KINDS)))]
+                avail_w, avail_d = (inner[2] - inner[0]) * 0.88, (inner[3] - inner[1]) * 0.88
+                height = min(avail_w / fw, avail_d / fd)
+                lo, hi = (55.0, 150.0) if name == "tower_glass" else (22.0, 40.0)
+                height = float(np.clip(height, lo, hi))
+                yaw = float(rng.uniform(0, 2 * math.pi))
+                placer.put(name, cx, cz, yaw, height, y=0.0, box=(fw * height, height, fd * height))
+                placer.keep_out(cx, cz, 0.5 * math.hypot(fw * height, fd * height) + 4.0)
+            elif kind == "towers":
                 # Split the block into 1-4 lots.
                 splits = rng.choice([1, 2, 2, 4])
                 lots = [inner]
@@ -775,7 +798,7 @@ def city_layout(placer, rng, buildings, blocks, parks, plaza):
                         yaw = 0.0 if row % 2 == 0 else math.pi
                         placer.put(car, x, z, yaw + rng.uniform(-0.05, 0.05), sc, y=0.05, box=(fp[0] * sc, sc * 0.95, fp[1] * sc))
             # Street furniture along the block edge.
-            if kind != "plaza":
+            if kind not in ("plaza", "landmark"):
                 for side in range(4):
                     if rng.random() < 0.45:
                         continue
@@ -787,27 +810,6 @@ def city_layout(placer, rng, buildings, blocks, parks, plaza):
                     sc = {"busstop": 3.2, "kiosk": 3.4, "bench": 1.8, "billboard": 9.0}[prop]
                     fp = {"busstop": (1.76, 0.9), "kiosk": (1.0, 1.26), "bench": (1.73, 0.85), "billboard": (0.37, 0.37)}[prop]
                     placer.put(prop, x, z, yaw + math.pi, sc, y=0.18, box=(fp[0] * sc, sc * 0.9, fp[1] * sc) if prop != "bench" else None)
-
-    # A handful of unique, real-model landmark buildings (TRELLIS-generated),
-    # dropped onto free ground away from the plaza and each other through the
-    # same collision system as every other prop (footprint ~= AssetLibrary's
-    # normalised width/depth at this height, from tools/prep_trellis.py).
-    for kind, radius, height, footprint in [("tower_glass", 26.0, 130.0, (0.876, 0.878)),
-                                             ("tower_glass", 24.0, 105.0, (0.876, 0.878)),
-                                             ("chawl_building", 16.0, 34.0, (0.703, 0.767)),
-                                             ("chawl_building", 15.0, 30.0, (0.703, 0.767)),
-                                             ("chawl_building", 15.0, 32.0, (0.703, 0.767))]:
-        for _t in range(300):
-            x = rng.uniform(-CITY + 80, CITY - 80)
-            z = rng.uniform(-CITY + 80, CITY - 80)
-            if math.hypot(x - plaza["center"][0], z - plaza["center"][2]) < 90:
-                continue
-            if not placer.free(x, z, radius):
-                continue
-            yaw = rng.uniform(0, 2 * math.pi)
-            placer.put(kind, x, z, yaw, height, y=0.0, box=(footprint[0] * height, height, footprint[1] * height))
-            placer.keep_out(x, z, radius * 1.1)
-            break
 
 
 def minimap(h, water, roads, biome, buildings, path):
