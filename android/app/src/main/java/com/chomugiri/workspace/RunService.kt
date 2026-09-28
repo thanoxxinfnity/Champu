@@ -14,6 +14,7 @@ import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 
 /**
  * Keeps a run alive while the app is in the background.
@@ -66,7 +67,8 @@ class RunService : Service() {
         val notification = NotificationCompat.Builder(this, CHANNEL_RUNNING)
             .setContentTitle("Chomugiri is working")
             .setContentText(topic)
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setColor(ContextCompat.getColor(this, R.color.ic_launcher_accent))
             .setOngoing(true)
             .setProgress(0, 0, true)
             // Quiet by design: this is a receipt that work is continuing, not an
@@ -163,7 +165,8 @@ class RunService : Service() {
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-                .setSmallIcon(android.R.drawable.stat_notify_chat)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setColor(ContextCompat.getColor(context, R.color.ic_launcher_accent))
                 .setAutoCancel(true)
                 .setContentIntent(openApp(context))
                 .build()
