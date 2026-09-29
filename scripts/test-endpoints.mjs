@@ -152,3 +152,47 @@ test('music, audio and animation jobs are filtered out too', () => {
   ];
   assert.deepEqual(chatModelsOnly(kie), ['gpt-5-2', 'gemini-2.5-pro']);
 });
+
+// ── Per-model visibility in the switcher ────────────────────────────────────
+
+import { endpointModels } from '../src/lib/providers/endpoint-models.ts';
+
+function makeEndpoint(models) {
+  return {
+    id: 'ep1',
+    label: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    capabilities: ['chat'],
+    models,
+    routes: [],
+    enabled: 1,
+    createdAt: 0,
+  };
+}
+
+test('a model explicitly hidden does not reach the switcher', () => {
+  const ep = makeEndpoint([
+    { id: 'a', label: 'A', capabilities: ['chat'], enabled: true },
+    { id: 'b', label: 'B', capabilities: ['chat'], enabled: false },
+  ]);
+  assert.deepEqual(endpointModels([ep]).map((m) => m.id), ['a']);
+});
+
+test('a model with no `enabled` field at all still shows — old records default to visible', () => {
+  const ep = makeEndpoint([{ id: 'legacy', label: 'Legacy', capabilities: ['chat'] }]);
+  assert.deepEqual(endpointModels([ep]).map((m) => m.id), ['legacy']);
+});
+
+test('hiding every model on an endpoint empties the switcher for it, not the whole endpoint', () => {
+  const hidden = makeEndpoint([{ id: 'a', label: 'A', capabilities: ['chat'], enabled: false }]);
+  const other = makeEndpoint([{ id: 'b', label: 'B', capabilities: ['chat'], enabled: true }]);
+  other.id = 'ep2';
+  other.label = 'Other';
+  assert.deepEqual(endpointModels([hidden, other]).map((m) => m.id), ['b']);
+});
+
+test('a disabled endpoint contributes no models regardless of per-model flags', () => {
+  const ep = makeEndpoint([{ id: 'a', label: 'A', capabilities: ['chat'], enabled: true }]);
+  ep.enabled = 0;
+  assert.deepEqual(endpointModels([ep]), []);
+});

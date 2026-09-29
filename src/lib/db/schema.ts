@@ -154,7 +154,15 @@ export interface EndpointRecord {
   /** Default temperature, used when the run does not ask for one. */
   temperature?: number;
   capabilities: string[];
-  models: Array<{ id: string; label: string; capabilities: string[] }>;
+  /**
+   * `enabled` (absent means true, for records saved before this field existed)
+   * decides whether a model shows up in the switcher at all — separate from
+   * `capabilities`, which describes what it can do. An endpoint like
+   * OpenRouter can publish hundreds of models; without a way to hide the ones
+   * nobody picks, every one of them piles into the switcher and finding the
+   * two or three actually in use means scrolling past all the rest, every time.
+   */
+  models: Array<{ id: string; label: string; capabilities: string[]; enabled?: boolean }>;
   routes: string[];
   lastProbedAt?: number;
   probeOk?: 0 | 1;

@@ -234,6 +234,31 @@ function EndpointsTab() {
   const endpoints = useWorkspace((s) => s.endpoints);
   const setEndpoints = useWorkspace((s) => s.setEndpoints);
 
+  // Which endpoint's model list is open for curating, and the search filter
+  // within it — an endpoint like OpenRouter publishes hundreds of models, and
+  // scrolling past all of them to find the two or three actually wanted is
+  // the exact pain this list exists to fix.
+  const [openModelsFor, setOpenModelsFor] = useState<string | null>(null);
+  const [modelFilter, setModelFilter] = useState('');
+
+  const toggleModel = async (endpointId: string, modelId: string, next: boolean) => {
+    const endpoint = endpoints.find((e) => e.id === endpointId);
+    if (!endpoint) return;
+    const models = endpoint.models.map((m) => (m.id === modelId ? { ...m, enabled: next } : m));
+    await db().endpoints.put({ ...endpoint, models });
+    const rows = await db().endpoints.toArray();
+    setEndpoints(rows);
+  };
+
+  const setAllModels = async (endpointId: string, next: boolean) => {
+    const endpoint = endpoints.find((e) => e.id === endpointId);
+    if (!endpoint) return;
+    const models = endpoint.models.map((m) => ({ ...m, enabled: next }));
+    await db().endpoints.put({ ...endpoint, models });
+    const rows = await db().endpoints.toArray();
+    setEndpoints(rows);
+  };
+
   const [step, setStep] = useState<WizardStep>(1);
 
   // Step 1
@@ -780,43 +805,137 @@ function EndpointsTab() {
               configured
             </p>
             <div className="space-y-1.5">
-              {endpoints.map((ep) => (
-                <div
-                  key={ep.id}
-                  className="flex items-center gap-2 rounded-lg border px-2.5 py-2"
-                  style={{ borderColor: 'var(--line)' }}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-1.5 truncate text-[12px]" style={{ color: 'var(--ink)' }}>
-                      {ep.label}
-                      {!ep.probeOk && (
-                        <span
-                          className="mono shrink-0 rounded px-1 py-px text-[8.5px]"
-                          style={{ background: 'color-mix(in oklab, var(--color-amber) 16%, transparent)', color: 'var(--color-amber)' }}
-                          title="Saved without a successful test message"
+              {endpoints.map((ep) => {
+                const shownCount = ep.models.filter((m) => m.enabled !== false).length;
+                const isOpen = openModelsFor === ep.id;
+                const filtered = ep.models.filter((m) => {
+                  const q = modelFilter.trim().toLowerCase();
+                  if (!q) return true;
+                  return m.id.toLowerCase().includes(q) || (m.label ?? '').toLowerCase().includes(q);
+                });
+                return (
+                  <div key={ep.id} className="rounded-lg border px-2.5 py-2" style={{ borderColor: 'var(--line)' }}>
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="flex items-center gap-1.5 truncate text-[12px]" style={{ color: 'var(--ink)' }}>
+                          {ep.label}
+                          {!ep.probeOk && (
+                            <span
+                              className="mono shrink-0 rounded px-1 py-px text-[8.5px]"
+                              style={{ background: 'color-mix(in oklab, var(--color-amber) 16%, transparent)', color: 'var(--color-amber)' }}
+                              title="Saved without a successful test message"
+                            >
+                              unverified
+                            </span>
+                          )}
+                        </p>
+                        <p className="mono truncate text-[9.5px]" style={{ color: 'var(--ink-faint)' }}>
+                          {ep.baseUrl} · {shownCount}/{ep.models.length} model{ep.models.length === 1 ? '' : 's'} shown
+                          {ep.dialect ? ` · ${ep.dialect}` : ''}
+                        </p>
+                      </div>
+                      {ep.models.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModelFilter('');
+                            setOpenModelsFor(isOpen ? null : ep.id);
+                          }}
+                          className="press mono shrink-0 rounded-lg border px-2 py-1 text-[10px]"
+                          style={{
+                            borderColor: isOpen ? 'var(--accent)' : 'var(--line)',
+                            color: isOpen ? 'var(--accent)' : 'var(--ink-dim)',
+                          }}
                         >
-                          unverified
-                        </span>
+                          {isOpen ? 'close' : 'models'}
+                        </button>
                       )}
-                    </p>
-                    <p className="mono truncate text-[9.5px]" style={{ color: 'var(--ink-faint)' }}>
-                      {ep.baseUrl} · {ep.models.length} model{ep.models.length === 1 ? '' : 's'}
-                      {ep.dialect ? ` · ${ep.dialect}` : ''}
-                    </p>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await db().endpoints.delete(ep.id);
+                          if (openModelsFor === ep.id) setOpenModelsFor(null);
+                          await reload();
+                        }}
+                        className="mono shrink-0 text-[10px]"
+                        style={{ color: 'var(--color-rose)' }}
+                      >
+                        remove
+                      </button>
+                    </div>
+
+                    {/* Curate which of this endpoint's models reach the switcher.
+                        Everything starts ticked — nothing disappears on its own,
+                        only what is untucked here. */}
+                    {isOpen && (
+                      <div className="mt-2 border-t pt-2" style={{ borderColor: 'var(--line)' }}>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            value={modelFilter}
+                            onChange={(e) => setModelFilter(e.target.value)}
+                            placeholder="search this endpoint's models…"
+                            className={`${inputClass} flex-1`}
+                            style={inputStyle}
+                            spellCheck={false}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void setAllModels(ep.id, true)}
+                            className="mono shrink-0 rounded-lg border px-2 py-1.5 text-[10px]"
+                            style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
+                          >
+                            all
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void setAllModels(ep.id, false)}
+                            className="mono shrink-0 rounded-lg border px-2 py-1.5 text-[10px]"
+                            style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
+                          >
+                            none
+                          </button>
+                        </div>
+
+                        <div className="mt-1.5 max-h-56 space-y-1 overflow-y-auto pr-0.5">
+                          {filtered.length === 0 && (
+                            <p className="mono px-1 py-2 text-center text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>
+                              nothing matches &ldquo;{modelFilter}&rdquo;
+                            </p>
+                          )}
+                          {filtered.map((m) => {
+                            const on = m.enabled !== false;
+                            return (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => void toggleModel(ep.id, m.id, !on)}
+                                className="press mono flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-[10.5px]"
+                                style={{
+                                  borderColor: on ? 'color-mix(in oklab, var(--accent) 40%, var(--line))' : 'var(--line)',
+                                  color: on ? 'var(--ink)' : 'var(--ink-faint)',
+                                  background: on ? 'color-mix(in oklab, var(--accent) 8%, transparent)' : 'transparent',
+                                }}
+                              >
+                                <span
+                                  className="flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded border text-[9px]"
+                                  style={{
+                                    borderColor: on ? 'var(--accent)' : 'var(--ink-faint)',
+                                    background: on ? 'var(--accent)' : 'transparent',
+                                    color: 'var(--panel)',
+                                  }}
+                                >
+                                  {on ? '✓' : ''}
+                                </span>
+                                <span className="min-w-0 flex-1 truncate">{m.label || m.id}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await db().endpoints.delete(ep.id);
-                      await reload();
-                    }}
-                    className="mono shrink-0 text-[10px]"
-                    style={{ color: 'var(--color-rose)' }}
-                  >
-                    remove
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </>

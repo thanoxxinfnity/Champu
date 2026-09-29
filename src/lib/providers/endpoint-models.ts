@@ -18,6 +18,10 @@ export function endpointModels(endpoints: EndpointRecord[]): ModelDescriptor[] {
     if (!endpoint.enabled) continue;
 
     for (const model of endpoint.models) {
+      // Explicitly hidden — absent means true, for models saved before this
+      // flag existed, so an existing setup keeps showing everything it always
+      // did until the user actually hides something.
+      if (model.enabled === false) continue;
       out.push({
         id: model.id,
         provider: 'custom',
