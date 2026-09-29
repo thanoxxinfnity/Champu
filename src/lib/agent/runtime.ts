@@ -1526,6 +1526,31 @@ export async function send(opts: SendOptions): Promise<void> {
     if (lane === 'B') {
       const commands = commandsOf(artifacts).filter((c) => c.complete && c.command);
 
+      // A build request that comes back with no files and no terminal
+      // commands did not fail loudly — it just chatted, leaving "why didn't
+      // this build anything?" with no answer. This is the model not
+      // following the ```bash path=@terminal / file-block convention the
+      // system prompt asks for, which weaker or generic custom-endpoint
+      // models are the most likely to do — say so plainly instead of ending
+      // the run in silence.
+      if (!files.length && !commands.length) {
+        const isCustom = selection.provider === 'custom';
+        const body = [
+          "This model's reply didn't include any files or terminal commands, so nothing was built.",
+          isCustom
+            ? `${selection.model} (custom endpoint) may not reliably follow the file/terminal block format this app builds with — that's a model capability limit, not a sign the bridge or terminal is missing. Try asking again, or switch to one of the built-in models (Settings → Models) for build tasks.`
+            : `${selection.model} answered conversationally instead of emitting buildable output. Try rephrasing as a direct build request, or try again.`,
+        ].join('\n\n');
+        const note = {
+          id: uid('msg'),
+          role: 'system' as const,
+          content: body,
+          createdAt: Date.now(),
+        };
+        emit(note);
+        void appendMessage({ ...note, sessionId, suite });
+      }
+
       if (commands.length) {
         setRightPaneTab('terminal');
 
