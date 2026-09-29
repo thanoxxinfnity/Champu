@@ -6,7 +6,7 @@ import { getKeys, withKeys } from '@/lib/keys';
 import { buildSystemPrompt } from './system-prompt';
 import { heuristicPlan, parsePlan, PLANNER_PROMPT, planProgress, parkBridgeTasks, requiresBridge, type Plan } from './planner';
 import { extractArtifacts, filesOf, commandsOf, mergeFiles, type FileArtifact } from './artifacts';
-import { describeFileWork, renderWorkLog } from './worklog';
+import { describeFileWork, renderWorkLog, renderCommandLog, type CommandOutcome } from './worklog';
 import { noticeTopic, shouldNotify } from './notify';
 import { runFinished, runStarted } from '@/lib/shell/run-state';
 import { advancePlan, NO_EVIDENCE, settleRemaining, type RunEvidence } from './progress';
@@ -1573,13 +1573,24 @@ export async function send(opts: SendOptions): Promise<void> {
           }
         }
 
+        const commandResults: CommandOutcome[] = [];
         for (const command of commands) {
           if (controller.signal.aborted) break;
+          const startedAt = Date.now();
           const outcome = await executeCommand(command.command, {
             cwd: command.cwd,
             sessionId,
             suite,
             signal: controller.signal,
+          });
+          commandResults.push({
+            command: command.command,
+            cwd: command.cwd,
+            ok: outcome.ok,
+            exitCode: outcome.exitCode,
+            durationMs: Date.now() - startedAt,
+            skipped: outcome.skipped,
+            errorExcerpt: outcome.ok ? undefined : (outcome.stderr || outcome.stdout || outcome.message || ''),
           });
           // A command parked because the bridge is offline did not run, so it
           // is neither a success nor a failure to report.
@@ -1590,6 +1601,17 @@ export async function send(opts: SendOptions): Promise<void> {
           // A ban or a hard failure stops the sequence; continuing would run
           // dependent commands against a broken state.
           if (!outcome.ok && outcome.skipped !== 'offline') break;
+        }
+
+        // The chat transcript otherwise ends looking clean even when the last
+        // command failed — that only ever showed up in the separate Terminal
+        // tab. Post the real per-command result, with the actual error text
+        // for anything that failed, right where the rest of the run is read.
+        const commandSummary = renderCommandLog(commandResults);
+        if (commandSummary) {
+          const note = { id: uid('msg'), role: 'system' as const, content: commandSummary, createdAt: Date.now() };
+          emit(note);
+          void appendMessage({ ...note, sessionId, suite });
         }
 
         // A built artifact buried in terminal scrollback may as well not exist.

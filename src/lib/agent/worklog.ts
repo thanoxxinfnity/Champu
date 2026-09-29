@@ -181,3 +181,51 @@ export function renderWorkLog(changes: FileChange[], commands: CommandArtifact[]
 
   return lines.join('\n');
 }
+
+/** What actually happened when a queued command ran — not just that it was queued. */
+export interface CommandOutcome {
+  command: string;
+  cwd?: string;
+  ok: boolean;
+  exitCode: number | null;
+  durationMs?: number;
+  skipped?: 'offline' | 'banned';
+  /** Tail of stderr (or stdout, if stderr was empty) — only kept on failure. */
+  errorExcerpt?: string;
+}
+
+const MAX_ERROR_CHARS = 1200;
+
+/**
+ * The result of each command, in the chat itself.
+ *
+ * `renderWorkLog` fires before anything on the bridge has actually run, so it
+ * can only say what was queued. A command that then fails only ever showed up
+ * in the separate Terminal tab — easy to miss, and the chat transcript ended
+ * looking like the run succeeded even when the last step blew up. This is the
+ * follow-up report: one line per command with its real exit status, and the
+ * actual error text inline for anything that failed, the same way a person
+ * reviewing their own terminal would report back.
+ */
+export function renderCommandLog(results: CommandOutcome[]): string {
+  if (!results.length) return '';
+
+  const ran = results.filter((r) => r.skipped !== 'offline');
+  if (!ran.length) return '';
+
+  const failed = ran.filter((r) => !r.ok).length;
+  const lines: string[] = [];
+  lines.push(`**Commands run** — ${ran.length}${failed ? ` (${failed} failed)` : ' — all passed'}`, '');
+
+  for (const r of ran) {
+    const where = r.cwd ? ` in \`${r.cwd}\`` : '';
+    const time = r.durationMs != null ? ` · ${(r.durationMs / 1000).toFixed(1)}s` : '';
+    const status = r.skipped === 'banned' ? '⛔ blocked' : r.ok ? `✔ exit ${r.exitCode ?? 0}` : `✘ exit ${r.exitCode ?? 'null'}`;
+    lines.push(`- ${status} — \`${r.command}\`${where}${time}`);
+    if (!r.ok && r.errorExcerpt) {
+      lines.push('  ```', ...r.errorExcerpt.trim().slice(-MAX_ERROR_CHARS).split('\n').map((l) => `  ${l}`), '  ```');
+    }
+  }
+
+  return lines.join('\n');
+}
