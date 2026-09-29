@@ -129,7 +129,12 @@ def main():
     ripple = np.sin((x * 28 + y * 6 + fbm(2.6, 14) * 0.12) * 2 * np.pi)
     grain = fbm(0.4, 15, lo=60)
     t = unit(fbm(2.4, 16)) * 0.85 + 0.15 * (ripple * 0.5 + 0.5)
-    alb = ramp(t, [(0, (0.46, 0.3, 0.17)), (1, (0.66, 0.47, 0.3))])
+    # Kept well under 1.0 even lit by direct sun with the terrain shader's own
+    # brightness variance on top (up to 1.22x) — the original ramp's albedo
+    # was bright enough to blow straight to flat white under ACES tonemap +
+    # contrast, losing all ripple/grain detail and reading as a washed-out
+    # blob rather than sand.
+    alb = ramp(t, [(0, (0.36, 0.24, 0.14)), (1, (0.52, 0.37, 0.24))])
     alb *= (0.93 + 0.14 * unit(grain))[..., None]
     grit = fbm(0.22, 105, lo=180)
     alb *= (0.88 + 0.22 * unit(grit))[..., None]
@@ -138,7 +143,9 @@ def main():
     # Snow: bright, blue in the hollows, sparkle.
     drift = unit(fbm(2.6, 17))
     sparkle = (fbm(0.2, 18, lo=100) > 2.6).astype(float)
-    alb = ramp(drift, [(0, (0.6, 0.66, 0.75)), (1, (0.86, 0.88, 0.92))]) + sparkle[..., None] * 0.08
+    # Same headroom fix as sand: this was bright enough to clip to flat
+    # white under direct sun, erasing the drift/sparkle detail entirely.
+    alb = ramp(drift, [(0, (0.5, 0.56, 0.65)), (1, (0.72, 0.75, 0.8))]) + sparkle[..., None] * 0.06
     grit = fbm(0.22, 106, lo=180)
     alb *= (0.88 + 0.22 * unit(grit))[..., None]
     save(out, "snow", alb, drift * 3 + fbm(1.2, 19, lo=20) * 0.2, 1.9)

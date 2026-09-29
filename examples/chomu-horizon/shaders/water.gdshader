@@ -33,9 +33,15 @@ void fragment() {
 		vec3 n2 = texture(waves, p / (wave_scale * 0.43) - vec2(t * 0.009, t * 0.016)).rgb;
 		NORMAL_MAP = normalize(mix(n1, n2, 0.5) * 2.0 - 1.0) * 0.5 + 0.5;
 		NORMAL_MAP_DEPTH = 0.7;
-		float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);
+		// A near-mirror surface viewed at a shallow grazing angle (looking
+		// across a lake toward the far shore) pushed fres close to 1 and,
+		// combined with SPECULAR 0.8, blew the sun's reflection out to a
+		// flat white band cutting across the whole shoreline instead of a
+		// contained glint. Softer power curve and lower specular keep the
+		// sparkle without it swallowing the shore behind it.
+		float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 6.0);
 		ALBEDO = mix(deep_color.rgb, sky_color.rgb * 0.6, fres);
-		ROUGHNESS = 0.04;
-		SPECULAR = 0.8;
+		ROUGHNESS = 0.06;
+		SPECULAR = 0.55;
 	}
 }
