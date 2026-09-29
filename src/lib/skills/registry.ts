@@ -204,17 +204,29 @@ Order by severity. If the code is sound, say so — do not manufacture findings 
   },
   {
     command: 'research',
-    name: 'Research',
-    description: 'Autonomous search-augmented research run with cited sources.',
+    name: 'Deep research',
+    description: 'Rigorous, cited, multi-angle research pass — no fabrication, gaps stated plainly.',
     suite: 'workdrive',
     lane: 'B',
     icon: '🔬',
     argHint: '<research question>',
-    template: `Run a research pass on: {{input}}
+    template: `Run a deep research pass on: {{input}}
 
-Retrieve sources, rank them, and synthesise findings with inline [n] citations mapping to the source list.
+Break the question into its key sub-questions first. For each one:
+1. Search with short, varied queries (under 5 words) — never repeat the same query verbatim.
+2. Prefer the primary source over an aggregator quoting it.
+3. Before using a claim, check: is it confirmed fact or speculation ("could", "may", "is expected to")? Does it come from a named, checkable source rather than an anonymous or "reportedly" one? If a source looks unreliable, say so rather than quietly using it anyway.
+4. When sources conflict, report both sides and the conflict itself — never average them into a false consensus.
 
-Separate what the sources establish from what you are inferring. Where sources conflict, say so rather than averaging them into a bland consensus.`,
+Structure the answer per sub-question, in exactly this shape:
+
+### {Sub-question}
+**Takeaway:** 1-2 sentence answer.
+**Cited findings:** each fact/stat/claim with an inline [Source](URL). A claim with no source does not belong here.
+**Inferences:** conclusions you drew from the findings above, clearly marked as inference, not fact.
+**Gaps:** what you could not confirm, and why — this is a useful, honest answer, not a failure.
+
+Never invent a statistic, quote, or source. If you cannot find one, it goes in Gaps.`,
   },
   {
     command: 'zip',

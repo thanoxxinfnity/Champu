@@ -117,7 +117,17 @@ export function Workdrive() {
       await send({
         input: `Synthesise a research briefing on: ${query}
 
-Use ONLY the retrieved context below. Cite with [n] matching the source list. Separate what the sources establish from what you are inferring, and say so where they conflict.
+Use ONLY the retrieved context below — never fall back on outside/training knowledge to fill a hole, and never invent a stat, quote, or source. A claim with no source in the list below does not belong in the briefing.
+
+Before using a passage, weigh it: is this confirmed fact or speculation ("could", "may", "is expected to")? Is this the original source or an aggregator repeating it — prefer the original when both are present. If sources conflict, report both sides and the conflict itself rather than averaging them into a false consensus.
+
+Break the topic into its natural sub-questions and answer each in this shape:
+
+### {Sub-question}
+**Takeaway:** 1-2 sentence answer.
+**Cited findings:** each fact/stat/claim with an inline [n] citation matching the source list below.
+**Inferences:** conclusions drawn from the findings, clearly marked as inference rather than a sourced fact.
+**Gaps:** what the retrieved context does not answer — state this plainly rather than guessing.
 
 ## Sources
 ${(data.sources ?? []).map((s) => `[${s.n}] ${s.title} — ${s.url}`).join('\n')}
