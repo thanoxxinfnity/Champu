@@ -101,21 +101,21 @@ const RULES: Rule[] = [
     label: 'NVIDIA NIM API key',
     pattern: /\bnvapi-[A-Za-z0-9_-]{40,}/g,
     confidence: 'certain',
-    advice: 'Chomugiri already stores your NIM key in Settings — it never needs to appear in a prompt.',
+    advice: 'Chomugiri activates this automatically — it is saved and its models are already in the switcher.',
   },
   {
     kind: 'anthropic',
     label: 'Anthropic API key',
     pattern: /\bsk-ant-[A-Za-z0-9_-]{20,}/g,
     confidence: 'certain',
-    advice: 'Put it in the Secrets vault and reference it by name.',
+    advice: 'Chomugiri activates this automatically as a Custom Endpoint — no settings screen needed.',
   },
   {
     kind: 'openai',
     label: 'OpenAI-style API key',
     pattern: /\bsk-(?!ant-)[A-Za-z0-9_-]{20,}/g,
     confidence: 'certain',
-    advice: 'Put it in the Secrets vault, or in Settings → Custom Endpoints if it is for an endpoint.',
+    advice: 'Chomugiri activates this automatically as a Custom Endpoint — no settings screen needed.',
   },
   {
     kind: 'github',
@@ -143,7 +143,7 @@ const RULES: Rule[] = [
     label: 'Google API key',
     pattern: /\bAIza[A-Za-z0-9_-]{35}\b/g,
     confidence: 'certain',
-    advice: 'Restrict or rotate it in the Google Cloud console.',
+    advice: 'Chomugiri tries this automatically as a Gemini Custom Endpoint. If it is for a different Google API, restrict or rotate it in the Google Cloud console.',
   },
   {
     kind: 'aws',
@@ -157,7 +157,7 @@ const RULES: Rule[] = [
     label: 'Hugging Face token',
     pattern: /\bhf_[A-Za-z0-9]{30,}/g,
     confidence: 'certain',
-    advice: 'Store it in the Secrets vault.',
+    advice: 'Chomugiri activates this automatically for the suites that use it.',
   },
   {
     kind: 'stripe',
@@ -187,7 +187,7 @@ const RULES: Rule[] = [
     // that says what they are — matching the shape alone is all false positives.
     pattern: /\bVERCEL_(?:TOKEN|ACCESS_TOKEN)\s*[:=]\s*["']?([A-Za-z0-9]{24,})["']?/g,
     confidence: 'certain',
-    advice: 'Add it under Settings → Deployment; it is sent only to Vercel and never enters a prompt.',
+    advice: 'Chomugiri activates this automatically; deploys use it without a trip to Settings.',
   },
   {
     kind: 'generic',

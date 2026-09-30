@@ -7,6 +7,7 @@ import { BUILTIN_SKILLS, expandSkill, parseSlash, searchSkills, type SkillDefini
 import { classifyLocal } from '@/lib/agent/router';
 import { formatBytes } from '@/lib/zip';
 import { hasBlockingSecret, maskSecret, redact, scanForSecrets, suggestEnvName, validateSecretName, type SecretMatch } from '@/lib/security/secrets';
+import { activateKey, isActivatable } from '@/lib/security/activate-key';
 import type { VaultRecord } from '@/lib/db/schema';
 import type { SkillRecord } from '@/lib/db/schema';
 import { db, isBrowser } from '@/lib/db/schema';
@@ -56,11 +57,15 @@ async function readAttachment(file: File): Promise<ChatAttachment> {
  */
 function SecretGuard({
   matches,
+  activatingValues,
+  failedActivations,
   onRedact,
   onVault,
   onDismiss,
 }: {
   matches: SecretMatch[];
+  activatingValues: Set<string>;
+  failedActivations: Set<string>;
   onRedact: () => void;
   onVault: (match: SecretMatch) => void;
   onDismiss: () => void;
@@ -95,27 +100,40 @@ function SecretGuard({
           </p>
 
           <ul className="mt-1.5 space-y-1">
-            {matches.map((match, i) => (
-              <li key={`${match.start}-${i}`} className="flex flex-wrap items-center gap-1.5">
-                <span className="mono text-[10.5px]" style={{ color: 'var(--ink)' }}>
-                  {match.label}
-                </span>
-                <code
-                  className="mono rounded px-1.5 py-0.5 text-[10px]"
-                  style={{ background: 'var(--surface)', color: 'var(--ink-faint)' }}
-                >
-                  {maskSecret(match.value)}
-                </code>
-                <button
-                  type="button"
-                  onClick={() => onVault(match)}
-                  className="press mono rounded px-1.5 py-0.5 text-[10px]"
-                  style={{ background: 'color-mix(in oklab, var(--accent) 15%, transparent)', color: 'var(--accent)' }}
-                >
-                  → Secrets
-                </button>
-              </li>
-            ))}
+            {matches.map((match, i) => {
+              const activatable = isActivatable(match.kind) && !failedActivations.has(match.value);
+              const activating = activatingValues.has(match.value);
+              return (
+                <li key={`${match.start}-${i}`} className="flex flex-wrap items-center gap-1.5">
+                  <span className="mono text-[10.5px]" style={{ color: 'var(--ink)' }}>
+                    {match.label}
+                  </span>
+                  <code
+                    className="mono rounded px-1.5 py-0.5 text-[10px]"
+                    style={{ background: 'var(--surface)', color: 'var(--ink-faint)' }}
+                  >
+                    {maskSecret(match.value)}
+                  </code>
+                  {activatable ? (
+                    <span
+                      className="mono rounded px-1.5 py-0.5 text-[10px]"
+                      style={{ background: 'color-mix(in oklab, var(--color-emerald, var(--accent)) 15%, transparent)', color: 'var(--accent)' }}
+                    >
+                      {activating ? 'activating…' : 'activated automatically'}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onVault(match)}
+                      className="press mono rounded px-1.5 py-0.5 text-[10px]"
+                      style={{ background: 'color-mix(in oklab, var(--accent) 15%, transparent)', color: 'var(--accent)' }}
+                    >
+                      → Secrets
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
 
           <p className="mt-1.5 text-[10.5px] leading-[1.45]" style={{ color: 'var(--ink-faint)' }}>
@@ -429,9 +447,14 @@ export function CommandDock() {
   const [dragOver, setDragOver] = useState(false);
   const [laneOverride, setLaneOverride] = useState<'A' | 'B' | null>(null);
   const [guardDismissed, setGuardDismissed] = useState(false);
+  const [activatingValues, setActivatingValues] = useState<Set<string>>(new Set());
+  const [failedActivations, setFailedActivations] = useState<Set<string>>(new Set());
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Values already handed to activateKey, so a re-render mid-probe (or the
+  // text it lived in getting redacted) never fires it a second time.
+  const activatedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!isBrowser()) return;
@@ -468,6 +491,56 @@ export function CommandDock() {
   useEffect(() => {
     if (secretMatches.length === 0) setGuardDismissed(false);
   }, [secretMatches.length]);
+
+  // A key Chomugiri recognises (NVIDIA, Hugging Face, Vercel, or a
+  // provider it already knows how to call) is wired in the moment it is
+  // detected — no click, no settings screen, no name to type. Anything else
+  // still goes through the manual "→ Secrets" vaulting below, since the app
+  // has nowhere of its own to put a Slack token or a Stripe key.
+  useEffect(() => {
+    const toActivate = secretMatches.filter(
+      (m) => isActivatable(m.kind) && !activatedRef.current.has(m.value),
+    );
+    if (!toActivate.length) return;
+    for (const m of toActivate) activatedRef.current.add(m.value);
+    setActivatingValues((prev) => new Set([...prev, ...toActivate.map((m) => m.value)]));
+
+    void (async () => {
+      for (const m of toActivate) {
+        const result = await activateKey(m).catch((err) => ({ ok: false, summary: (err as Error).message }));
+
+        setActivatingValues((prev) => {
+          const next = new Set(prev);
+          next.delete(m.value);
+          return next;
+        });
+
+        if (result.ok) {
+          setValue((v) => redact(v, scanForSecrets(v).filter((x) => x.value === m.value)));
+          setAttachments((prev) =>
+            prev.map((a) =>
+              a.text ? { ...a, text: redact(a.text, scanForSecrets(a.text).filter((x) => x.value === m.value)) } : a,
+            ),
+          );
+        } else {
+          // Failed to activate (offline, a wrong key, a dead probe) — drop back
+          // to the manual "→ Secrets" path instead of leaving the card stuck
+          // claiming an activation that never happened.
+          activatedRef.current.delete(m.value);
+          setFailedActivations((prev) => new Set([...prev, m.value]));
+        }
+
+        const state = useWorkspace.getState();
+        state.pushNotice({
+          sessionId: state.sessionId ?? 'unbound',
+          suite: state.activeSuite,
+          topic: `${m.label} detected`,
+          status: result.ok ? 'done' : 'failed',
+          detail: result.summary || 'Could not activate the detected key.',
+        });
+      }
+    })();
+  }, [secretMatches]);
 
   const vaultSecret = useCallback(async (match: SecretMatch) => {
     if (!isBrowser()) return;
@@ -616,6 +689,8 @@ export function CommandDock() {
         {secretMatches.length > 0 && !guardDismissed && (
           <SecretGuard
             matches={secretMatches}
+            activatingValues={activatingValues}
+            failedActivations={failedActivations}
             onRedact={() => {
               setValue((v) => redact(v, scanForSecrets(v)));
               setAttachments((prev) => prev.map((a) => (a.text ? { ...a, text: redact(a.text, scanForSecrets(a.text)) } : a)));
