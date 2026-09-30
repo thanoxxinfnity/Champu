@@ -1,6 +1,7 @@
 'use client';
 
-import { saveKeys, saveVercel } from '@/lib/keys';
+import { saveKeys } from '@/lib/keys';
+import { useWorkspace } from '@/lib/store';
 import { db, isBrowser, type EndpointRecord } from '@/lib/db/schema';
 import type { Dialect } from '@/lib/providers/dialects';
 import type { SecretKind, SecretMatch } from './secrets';
@@ -35,6 +36,8 @@ export function isActivatable(kind: SecretKind): boolean {
 export interface ActivationResult {
   ok: boolean;
   summary: string;
+  /** False when the key was saved but the provider never confirmed it works. */
+  verified?: boolean;
 }
 
 /**
@@ -61,9 +64,15 @@ async function probeModels(preset: ProviderPreset, apiKey: string): Promise<Endp
 
 /** Activates a detected credential. Only ever called on a kind `isActivatable` accepted. */
 export async function activateKey(match: SecretMatch): Promise<ActivationResult> {
+  // Saving to storage is not enough: the screens read the in-memory store, and
+  // a token that only reaches IndexedDB looks unset until the next reload —
+  // the Launch panel kept saying "No Vercel token yet" right after it was saved.
+  const state = useWorkspace.getState();
+
   if (match.kind === 'nvidia') {
     await saveKeys({ nim: match.value });
-    return { ok: true, summary: 'NVIDIA NIM key detected — saved and ready. Its models are already in the switcher.' };
+    await state.loadModels(true);
+    return { ok: true, summary: 'NVIDIA NIM key detected — saved and ready. Its models are in the switcher now.' };
   }
 
   if (match.kind === 'huggingface') {
@@ -72,7 +81,8 @@ export async function activateKey(match: SecretMatch): Promise<ActivationResult>
   }
 
   if (match.kind === 'vercel') {
-    await saveVercel(match.value, '');
+    // Keeps the team id the user already set; a new token must not wipe it.
+    state.setVercelCredentials(match.value, state.vercelTeamId);
     return { ok: true, summary: 'Vercel token detected — saved. Deploys will use it automatically.' };
   }
 
@@ -105,9 +115,12 @@ export async function activateKey(match: SecretMatch): Promise<ActivationResult>
     createdAt: existing?.createdAt ?? Date.now(),
   };
   await db().endpoints.put(record);
+  // The model switcher reads the store, not the table.
+  state.setEndpoints(await db().endpoints.toArray());
 
   return {
     ok: true,
+    verified: models.length > 0,
     summary: models.length
       ? `${preset.label} key detected — activated, ${models.length} model${models.length === 1 ? '' : 's'} ready in the switcher.`
       : `${preset.label} key detected and saved, but it didn't answer a model list — check it's the right key if nothing shows up.`,

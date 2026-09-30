@@ -123,6 +123,32 @@ export function extractArtifacts(text: string): Artifact[] {
   return out.filter(Boolean);
 }
 
+/**
+ * Where a reply was cut off mid-block.
+ *
+ * `complete` is everything before the unfinished fence (so it parses to
+ * nothing but finished blocks), and `openPath` names the file that was being
+ * written. Null when the text ends outside any block — a reply that ran out of
+ * tokens in prose has nothing to recover.
+ */
+export function splitAtOpenBlock(text: string): { complete: string; openPath?: string } | null {
+  const lines = text.split('\n');
+  let open: { fence: string; startLine: number; path?: string } | null = null;
+
+  lines.forEach((line, i) => {
+    const match = FENCE.exec(line);
+    if (open) {
+      if (match && match[2][0] === open.fence[0] && match[2].length >= open.fence.length && !match[3].trim()) open = null;
+      return;
+    }
+    if (match) open = { fence: match[2], startLine: i, path: parseInfoString(match[3]).path };
+  });
+
+  if (!open) return null;
+  const { startLine, path } = open as { startLine: number; path?: string };
+  return { complete: lines.slice(0, startLine).join('\n').trimEnd(), openPath: path };
+}
+
 function finish(
   open: { meta: Meta; body: string[] },
   complete: boolean,

@@ -5,7 +5,9 @@ import { liveSearchContext, needsLiveSearch, type LiveSearchResult } from './liv
 import { getKeys, withKeys } from '@/lib/keys';
 import { buildSystemPrompt } from './system-prompt';
 import { heuristicPlan, parsePlan, PLANNER_PROMPT, planProgress, parkBridgeTasks, requiresBridge, type Plan } from './planner';
-import { extractArtifacts, filesOf, commandsOf, mergeFiles, type FileArtifact } from './artifacts';
+import { extractArtifacts, filesOf, commandsOf, languageForPath, mergeFiles, splitAtOpenBlock, type FileArtifact } from './artifacts';
+import { repairResources } from '@/lib/suites/android/resources';
+import { isTruncated, MAX_CONTINUATIONS, planContinuation } from './continuation';
 import { describeFileWork, renderWorkLog, renderCommandLog, type CommandOutcome } from './worklog';
 import { noticeTopic, shouldNotify } from './notify';
 import { runFinished, runStarted } from '@/lib/shell/run-state';
@@ -82,11 +84,12 @@ async function streamCompletion(
   },
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
-): Promise<{ content: string; reasoning: string; usage?: StreamFrame & { type: 'usage' }; error?: string }> {
+): Promise<{ content: string; reasoning: string; usage?: StreamFrame & { type: 'usage' }; error?: string; finishReason?: string }> {
   let content = '';
   let reasoning = '';
   let usage: (StreamFrame & { type: 'usage' }) | undefined;
   let error: string | undefined;
+  let finishReason: string | undefined;
 
   let res: Response;
   try {
@@ -169,6 +172,10 @@ async function streamCompletion(
               error = frame.message;
               callbacks.onError?.(frame.message);
               break;
+            case 'done':
+              // Kept: "length" is the provider saying the reply was cut off.
+              if (frame.finishReason) finishReason = frame.finishReason;
+              break;
             default:
               break;
           }
@@ -184,7 +191,7 @@ async function streamCompletion(
     reader.releaseLock();
   }
 
-  return { content, reasoning, usage, error };
+  return { content, reasoning, usage, error, finishReason };
 }
 
 /** Single-shot completion for internal steps (planning, classification). */
@@ -844,9 +851,38 @@ export async function send(opts: SendOptions): Promise<void> {
       { role: 'user', content: userContent },
     ];
 
+    // Taken before anything streams: files are saved into the workspace as they
+    // finish mid-stream, so a snapshot taken afterwards calls every one of them
+    // "updated" and the hand-over note says nothing was created.
+    const filesBefore = new Map(useWorkspace.getState().files);
+
     let seenFiles = new Map<string, FileArtifact>();
 
-    const result = await streamCompletion(
+    // `prefix` is what earlier passes already produced, so a continuation
+    // streams into the same bubble instead of replacing it.
+    const callbacksFor = (prefix: string): StreamCallbacks => ({
+      onDelta: (_delta, part) => {
+        const full = prefix + part;
+        patch(assistantId, { content: full });
+
+        // Extract artifacts live so the file manager fills in mid-stream.
+        if (lane === 'B' && full.includes('```')) {
+          const artifacts = extractArtifacts(full);
+          const files = filesOf(artifacts).filter((f) => f.complete);
+          if (files.length) {
+            const merged = mergeFiles(seenFiles, files);
+            for (const [path, file] of merged) {
+              if (seenFiles.get(path)?.content !== file.content) upsertFile(file);
+            }
+            seenFiles = merged;
+          }
+        }
+      },
+      onReasoning: (_delta, full) => patch(assistantId, { reasoning: full }),
+      onError: (message) => patch(assistantId, { error: message }),
+    });
+
+    let result = await streamCompletion(
       {
         provider: selection.provider,
         model: selection.model,
@@ -855,28 +891,64 @@ export async function send(opts: SendOptions): Promise<void> {
         maxTokens: 8192,
         custom,
       },
-      {
-        onDelta: (_delta, full) => {
-          patch(assistantId, { content: full });
-
-          // Extract artifacts live so the file manager fills in mid-stream.
-          if (lane === 'B' && full.includes('```')) {
-            const artifacts = extractArtifacts(full);
-            const files = filesOf(artifacts).filter((f) => f.complete);
-            if (files.length) {
-              const merged = mergeFiles(seenFiles, files);
-              for (const [path, file] of merged) {
-                if (seenFiles.get(path)?.content !== file.content) upsertFile(file);
-              }
-              seenFiles = merged;
-            }
-          }
-        },
-        onReasoning: (_delta, full) => patch(assistantId, { reasoning: full }),
-        onError: (message) => patch(assistantId, { error: message }),
-      },
+      callbacksFor(''),
       controller.signal,
     );
+
+    // A build bigger than one reply is allowed to be: the provider reports
+    // "length", and the last file is cut off mid-line. Pick up from the last
+    // finished file rather than handing over a half-written project.
+    let continuations = 0;
+    while (
+      lane === 'B' &&
+      !result.error &&
+      isTruncated(result.finishReason) &&
+      continuations < MAX_CONTINUATIONS &&
+      !controller.signal.aborted
+    ) {
+      const next = planContinuation(result.content);
+      if (!next) break;
+      continuations += 1;
+
+      const prefix = `${next.kept}\n\n`;
+      const more = await streamCompletion(
+        {
+          provider: selection.provider,
+          model: selection.model,
+          messages: [...messages, { role: 'assistant', content: next.kept }, { role: 'user', content: next.prompt }],
+          temperature: 0.25,
+          maxTokens: 8192,
+          custom,
+        },
+        callbacksFor(prefix),
+        controller.signal,
+      );
+
+      result = {
+        ...more,
+        content: prefix + more.content,
+        reasoning: [result.reasoning, more.reasoning].filter(Boolean).join('\n\n'),
+        usage: more.usage ?? result.usage,
+      };
+    }
+
+    // Still cut off after every pass, or nothing had finished to continue
+    // from. Say so: the alternative is a project that silently lacks its
+    // last file.
+    const stillTruncated = lane === 'B' && !result.error && isTruncated(result.finishReason);
+    if (stillTruncated) {
+      const cut = splitAtOpenBlock(result.content);
+      const note = {
+        id: uid('msg'),
+        role: 'system' as const,
+        content: cut
+          ? `The reply hit the model's output limit${continuations ? ` even after ${continuations} continuation${continuations === 1 ? '' : 's'}` : ''}, so ${cut.openPath ? `\`${cut.openPath}\`` : 'the last file'} was cut off and has been left out rather than saved half-written. Ask for that file on its own, or pick a model with a larger output limit.`
+          : `The reply hit the model's output limit before it finished${result.content.trim() ? '' : ' — it produced no answer text at all, which usually means a reasoning model spent its whole budget thinking'}. Try again, ask for fewer files at a time, or pick a model with a larger output limit.`,
+        createdAt: Date.now(),
+      };
+      emit(note);
+      void appendMessage({ ...note, sessionId, suite });
+    }
 
     patch(assistantId, {
       content: result.content,
@@ -915,10 +987,10 @@ export async function send(opts: SendOptions): Promise<void> {
 
     // ── Post-stream artifact persistence ────────────────────────────────────
     const artifacts = extractArtifacts(result.content);
-    const files = filesOf(artifacts);
-
-    // Snapshot before writing, so "created" and "updated" mean what they say.
-    const filesBefore = new Map(useWorkspace.getState().files);
+    // A block left open because the reply was cut off is half a file; one left
+    // open because a weaker model forgot the closing fence is still the whole
+    // file. Only the first kind is dropped.
+    const files = filesOf(artifacts).filter((f) => f.complete || !stillTruncated);
 
     for (const file of files) {
       upsertFile(file);
@@ -930,6 +1002,58 @@ export async function send(opts: SendOptions): Promise<void> {
         content: file.content,
         bytes: file.bytes,
       });
+    }
+
+    // ── Android: make every icon and drawable the project names exist ───────
+    //
+    // A model writing an app reliably names `@mipmap/ic_launcher` in the
+    // manifest and never draws it, and resource linking then refuses to build
+    // anything. The missing ones are added here, and said so plainly — a
+    // placeholder icon is honest, a build that fails on an icon is not.
+    if (files.some((f) => /(^|\/)AndroidManifest\.xml$/.test(f.path))) {
+      const repair = repairResources(
+        [...useWorkspace.getState().files.values(), ...files].map((f) => ({ path: f.path, content: f.content })),
+        input.slice(0, 40),
+      );
+
+      for (const added of repair.files) {
+        const artifact = {
+          kind: 'file' as const,
+          path: added.path,
+          language: languageForPath(added.path),
+          content: added.content,
+          complete: true,
+          bytes: new TextEncoder().encode(added.content).length,
+        };
+        files.push(artifact);
+        upsertFile(artifact);
+        void upsertArtifact({
+          sessionId,
+          suite,
+          path: artifact.path,
+          language: artifact.language,
+          content: artifact.content,
+          bytes: artifact.bytes,
+        });
+      }
+
+      if (repair.files.length) {
+        const parts: string[] = [];
+        if (repair.launcherIcons.length) {
+          parts.push(`the launcher icon (${repair.launcherIcons.map((n) => `\`@${n}\``).join(', ')})`);
+        }
+        if (repair.placeholders.length) {
+          parts.push(`${repair.placeholders.length} drawable${repair.placeholders.length === 1 ? '' : 's'} (${repair.placeholders.map((n) => `\`@${n}\``).join(', ')})`);
+        }
+        const note = {
+          id: uid('msg'),
+          role: 'system' as const,
+          content: `The project used ${parts.join(' and ')} but nothing defined ${repair.launcherIcons.length + repair.placeholders.length === 1 ? 'it' : 'them'}, which fails resource linking before anything compiles. I added ${repair.files.length} resource file${repair.files.length === 1 ? '' : 's'} so it builds. ${repair.launcherIcons.length ? 'The launcher icon is a coloured placeholder — replace it with your real logo. ' : ''}${repair.placeholders.length ? 'The placeholder drawables are plain outlines — swap in real art.' : ''}`.trim(),
+          createdAt: Date.now(),
+        };
+        emit(note);
+        void appendMessage({ ...note, sessionId, suite });
+      }
     }
 
     if (files.length) setRightPaneTab('files');
@@ -1533,7 +1657,7 @@ export async function send(opts: SendOptions): Promise<void> {
       // system prompt asks for, which weaker or generic custom-endpoint
       // models are the most likely to do — say so plainly instead of ending
       // the run in silence.
-      if (!files.length && !commands.length) {
+      if (!files.length && !commands.length && !stillTruncated) {
         const isCustom = selection.provider === 'custom';
         const body = [
           "This model's reply didn't include any files or terminal commands, so nothing was built.",

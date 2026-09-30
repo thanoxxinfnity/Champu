@@ -88,7 +88,7 @@ export function RunNotices() {
               style={{ color: failed ? 'var(--color-danger)' : 'var(--accent)' }}
             >
               <span aria-hidden>{failed ? '✕' : '✔'}</span>
-              {failed ? 'run failed' : 'run finished'}
+              {notice.title ?? (failed ? 'run failed' : 'run finished')}
               <span style={{ color: 'var(--ink-faint)' }}>· {SUITE_LABEL[notice.suite] ?? notice.suite}</span>
             </span>
 
@@ -96,7 +96,7 @@ export function RunNotices() {
               {notice.topic}
             </span>
 
-            <span className="mono mt-0.5 block truncate text-[10px]" style={{ color: 'var(--ink-faint)' }}>
+            <span className={`mono mt-0.5 block text-[10px] ${notice.title ? 'leading-[1.4]' : 'truncate'}`} style={{ color: 'var(--ink-faint)' }}>
               {notice.detail ?? 'double-click to open'}
             </span>
           </div>

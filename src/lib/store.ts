@@ -135,6 +135,8 @@ export interface RunNotice {
   topic: string;
   status: 'done' | 'failed';
   detail?: string;
+  /** Replaces "run finished" / "run failed" for notices that are not about a run. */
+  title?: string;
   at: number;
 }
 

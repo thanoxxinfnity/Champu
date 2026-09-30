@@ -172,7 +172,9 @@ export function renderWorkLog(changes: FileChange[], commands: CommandArtifact[]
   }
 
   if (commands.length) {
-    lines.push('', `**Commands run** — ${commands.length}`, '');
+    // Queued, not run: this note posts before anything has executed, and the
+    // results follow in their own "Commands run" note.
+    lines.push('', `**Commands queued** — ${commands.length}`, '');
     for (const cmd of commands) {
       const where = cmd.cwd ? ` in \`${cmd.cwd}\`` : '';
       lines.push(`- \`${cmd.command}\`${where}`);

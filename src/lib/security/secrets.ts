@@ -183,8 +183,19 @@ const RULES: Rule[] = [
   {
     kind: 'vercel',
     label: 'Vercel access token',
-    // Vercel tokens are bare alphanumerics, so only flag them next to a name
-    // that says what they are — matching the shape alone is all false positives.
+    // Current Vercel tokens carry a prefix (vcp_ personal, vci_ integration,
+    // vca_ app, vcr_ refresh, vck_ API key), so they are recognisable on their
+    // own — no `VERCEL_TOKEN=` label needed.
+    pattern: /\bvc[piark]_[A-Za-z0-9]{24,}/g,
+    confidence: 'certain',
+    advice: 'Chomugiri activates this automatically; deploys use it without a trip to Settings.',
+  },
+  {
+    kind: 'vercel',
+    label: 'Vercel access token',
+    // Older Vercel tokens are bare alphanumerics, so only flag them next to a
+    // name that says what they are — matching the shape alone is all false
+    // positives.
     pattern: /\bVERCEL_(?:TOKEN|ACCESS_TOKEN)\s*[:=]\s*["']?([A-Za-z0-9]{24,})["']?/g,
     confidence: 'certain',
     advice: 'Chomugiri activates this automatically; deploys use it without a trip to Settings.',

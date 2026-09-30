@@ -1,7 +1,7 @@
 /** node --experimental-strip-types --test scripts/test-worklog.mjs */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { countLines, describeContents, describeFileWork, renderWorkLog } from '../src/lib/agent/worklog.ts';
+import { countLines, describeContents, describeFileWork, renderCommandLog, renderWorkLog } from '../src/lib/agent/worklog.ts';
 
 const file = (path, language, content) => ({ kind: 'file', path, language, content, complete: true, bytes: content.length });
 
@@ -62,4 +62,56 @@ test('nothing to report produces nothing, not an empty heading', () => {
 test('malformed JSON is described without throwing', () => {
   assert.equal(describeContents('d.json', 'json', '{not json'), 'JSON data');
   assert.equal(describeContents('d.json', 'json', '{"a":1,"b":2}'), 'keys a and b');
+});
+
+// ── What each command actually did ──────────────────────────────────────────
+
+test('a run where every command passed says so in one line', () => {
+  const out = renderCommandLog([
+    { command: 'npm install', ok: true, exitCode: 0, durationMs: 12_300 },
+    { command: 'npm run build', ok: true, exitCode: 0, durationMs: 8_100 },
+  ]);
+  assert.match(out, /Commands run\*\* — 2 — all passed/);
+  assert.match(out, /✔ exit 0 — `npm install` · 12\.3s/);
+  assert.ok(!out.includes('```'), 'no error block when nothing failed');
+});
+
+test('a failed command shows its exit code and the real error text', () => {
+  const out = renderCommandLog([
+    { command: 'gradle assembleRelease', ok: false, exitCode: 1, durationMs: 4_000, errorExcerpt: "error: resource mipmap/ic_launcher not found\nBUILD FAILED" },
+  ]);
+  assert.match(out, /1 failed/);
+  assert.match(out, /✘ exit 1 — `gradle assembleRelease`/);
+  assert.match(out, /resource mipmap\/ic_launcher not found/);
+  assert.match(out, /BUILD FAILED/);
+});
+
+test('only the tail of a huge error is kept — the cause is at the end', () => {
+  const noise = 'x'.repeat(5000);
+  const out = renderCommandLog([
+    { command: 'build', ok: false, exitCode: 2, errorExcerpt: `${noise}\nTHE REAL ERROR` },
+  ]);
+  assert.match(out, /THE REAL ERROR/);
+  assert.ok(out.length < 2000);
+});
+
+test('a command parked because the bridge is offline is not reported as run', () => {
+  assert.equal(
+    renderCommandLog([{ command: 'npm test', ok: false, exitCode: null, skipped: 'offline' }]),
+    '',
+  );
+  const mixed = renderCommandLog([
+    { command: 'npm test', ok: false, exitCode: null, skipped: 'offline' },
+    { command: 'ls', ok: true, exitCode: 0 },
+  ]);
+  assert.match(mixed, /Commands run\*\* — 1 — all passed/);
+});
+
+test('a banned command reads as blocked, not as a failure with an exit code', () => {
+  const out = renderCommandLog([{ command: 'rm -rf /', ok: false, exitCode: null, skipped: 'banned' }]);
+  assert.match(out, /⛔ blocked — `rm -rf \/`/);
+});
+
+test('nothing run produces nothing', () => {
+  assert.equal(renderCommandLog([]), '');
 });

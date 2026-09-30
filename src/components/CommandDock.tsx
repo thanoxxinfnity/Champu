@@ -7,7 +7,7 @@ import { BUILTIN_SKILLS, expandSkill, parseSlash, searchSkills, type SkillDefini
 import { classifyLocal } from '@/lib/agent/router';
 import { formatBytes } from '@/lib/zip';
 import { hasBlockingSecret, maskSecret, redact, scanForSecrets, suggestEnvName, validateSecretName, type SecretMatch } from '@/lib/security/secrets';
-import { activateKey, isActivatable } from '@/lib/security/activate-key';
+import { activateKey, isActivatable, type ActivationResult } from '@/lib/security/activate-key';
 import type { VaultRecord } from '@/lib/db/schema';
 import type { SkillRecord } from '@/lib/db/schema';
 import { db, isBrowser } from '@/lib/db/schema';
@@ -507,7 +507,7 @@ export function CommandDock() {
 
     void (async () => {
       for (const m of toActivate) {
-        const result = await activateKey(m).catch((err) => ({ ok: false, summary: (err as Error).message }));
+        const result: ActivationResult = await activateKey(m).catch((err) => ({ ok: false, summary: (err as Error).message }));
 
         setActivatingValues((prev) => {
           const next = new Set(prev);
@@ -535,6 +535,7 @@ export function CommandDock() {
           sessionId: state.sessionId ?? 'unbound',
           suite: state.activeSuite,
           topic: `${m.label} detected`,
+          title: !result.ok ? 'key not activated' : result.verified === false ? 'key saved · unverified' : 'key activated',
           status: result.ok ? 'done' : 'failed',
           detail: result.summary || 'Could not activate the detected key.',
         });
