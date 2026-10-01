@@ -1,0 +1,66 @@
+name: Chomu Dead APK
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - claude/chomugiri-workspace-design-09sxwa
+    paths:
+      - "examples/chomu-dead/**"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3
+    # GitHub Actions forces HOME=/github/home inside a `container:` job,
+    # which shadows this image's baked-in export templates and Java SDK
+    # config (both live under /root in the image). Point HOME back at
+    # /root so Godot finds what the image already shipped.
+    env:
+      HOME: /root
+    defaults:
+      run:
+        working-directory: examples/chomu-dead
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sanity-check the image's export templates
+        run: |
+          echo "HOME=$HOME"
+          find / -maxdepth 6 -iname "android_release.apk" 2>/dev/null || true
+          ls -la /root/.local/share/godot/export_templates/ 2>/dev/null || true
+
+      - name: Generate a sideload signing keystore
+        run: |
+          keytool -genkeypair -v -keystore /tmp/release.keystore -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Chomu Dead,O=Chomu Giri,C=IN"
+
+      - name: Export Android APK
+        env:
+          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: /tmp/release.keystore
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: androiddebugkey
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: android
+        run: |
+          mkdir -pv build
+          godot --headless --export-release "Android" build/ChomuDead.apk
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChomuDead-apk
+          path: examples/chomu-dead/build/ChomuDead.apk
+          retention-days: 60
+
+      - name: Publish a download release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: chomu-dead-apk
+          name: Chomu Dead (latest build)
+          body: Auto-built from ${{ github.sha }}. Sideload APK — enable "install from unknown sources" to install.
+          files: examples/chomu-dead/build/ChomuDead.apk
