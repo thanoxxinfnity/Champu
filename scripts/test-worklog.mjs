@@ -115,3 +115,11 @@ test('a banned command reads as blocked, not as a failure with an exit code', ()
 test('nothing run produces nothing', () => {
   assert.equal(renderCommandLog([]), '');
 });
+
+test('a command that passed on retry says so; one that failed twice says that', () => {
+  const ok = renderCommandLog([{ command: 'gradle assembleDebug', ok: true, exitCode: 0, retried: true }]);
+  assert.match(ok, /✔ exit 0 — `gradle assembleDebug` · passed on retry after a network hiccup/);
+  assert.match(ok, /all passed/);
+  const bad = renderCommandLog([{ command: 'npm i', ok: false, exitCode: 1, retried: true, errorExcerpt: 'ECONNRESET' }]);
+  assert.match(bad, /failed again on retry/);
+});

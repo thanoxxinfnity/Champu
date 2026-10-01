@@ -7,7 +7,9 @@ import { buildSystemPrompt } from './system-prompt';
 import { heuristicPlan, parsePlan, PLANNER_PROMPT, planProgress, parkBridgeTasks, requiresBridge, type Plan } from './planner';
 import { extractArtifacts, filesOf, commandsOf, languageForPath, mergeFiles, splitAtOpenBlock, type FileArtifact } from './artifacts';
 import { repairResources } from '@/lib/suites/android/resources';
-import { isTruncated, MAX_CONTINUATIONS, planContinuation } from './continuation';
+import { repairSite } from '@/lib/suites/site/lint';
+import { isTruncated, MAX_CONTINUATIONS, MAX_NUDGES, planContinuation, planNudge } from './continuation';
+import { looksTransient } from './transient';
 import { describeFileWork, renderWorkLog, renderCommandLog, type CommandOutcome } from './worklog';
 import { noticeTopic, shouldNotify } from './notify';
 import { runFinished, runStarted } from '@/lib/shell/run-state';
@@ -628,7 +630,7 @@ export async function send(opts: SendOptions): Promise<void> {
     setPlan, setTaskStatus, upsertFile, setAbortController, setRightPaneTab,
   } = state;
 
-  const suite = opts.suite ?? activeSuite;
+  const baseSuite = opts.suite ?? activeSuite;
   const attachments = opts.attachments ?? [];
 
   // Resolved here rather than at every call site: nothing that calls send()
@@ -657,6 +659,8 @@ export async function send(opts: SendOptions): Promise<void> {
     });
     return;
   }
+
+  const suite = baseSuite;
 
   // Session bootstrap.
   let sessionId = state.sessionId;
@@ -801,7 +805,7 @@ export async function send(opts: SendOptions): Promise<void> {
             : heartbeat.status === 'unknown' || heartbeat.status === 'connecting' ? 'unknown'
               : 'offline',
       bridgeDetail: heartbeat.health
-        ? `Host: ${heartbeat.health.platform}/${heartbeat.health.arch}, workspace ${heartbeat.health.workspace}. Toolchain — java: ${heartbeat.health.toolchains.java ?? 'absent'}, gradle: ${heartbeat.health.toolchains.gradle ?? 'absent'}, android sdk: ${heartbeat.health.toolchains.androidSdk ?? 'absent'}, node: ${heartbeat.health.toolchains.node ?? 'absent'}, python: ${heartbeat.health.toolchains.python ?? 'absent'}.`
+        ? `Host: ${heartbeat.health.platform}/${heartbeat.health.arch}, workspace root ${heartbeat.health.workspace} (commands and cwd are relative to it — use cwd=. or a subfolder, not this absolute path). Toolchain — java: ${heartbeat.health.toolchains.java ?? 'absent'}, gradle: ${heartbeat.health.toolchains.gradle ?? 'absent'}, android sdk: ${heartbeat.health.toolchains.androidSdk ?? 'absent'}, node: ${heartbeat.health.toolchains.node ?? 'absent'}, python: ${heartbeat.health.toolchains.python ?? 'absent'}.`
         : heartbeat.lastError ?? undefined,
       todos: plan?.tasks.map((t) => ({ id: t.id, title: t.title, status: t.status })),
       failedApproaches: guard.bannedApproaches(),
@@ -895,20 +899,31 @@ export async function send(opts: SendOptions): Promise<void> {
       controller.signal,
     );
 
-    // A build bigger than one reply is allowed to be: the provider reports
-    // "length", and the last file is cut off mid-line. Pick up from the last
-    // finished file rather than handing over a half-written project.
+    // Two ways a build reply ends before its files do. It can run out of
+    // output ("length"): pick up from the last finished file instead of handing
+    // over a half-written project. Or it can announce a file and stop on a
+    // clean "stop" — the model narrating and treating the file as a next turn
+    // that never comes — in which case it is told to write what it named.
     let continuations = 0;
+    let nudges = 0;
+    // The provider said "length", or the connection dropped mid-reply (the
+    // 300 s limit on a slow reasoning model lands exactly like this). Either
+    // way the reply stops partway through a file.
+    const wasCut = (r: typeof result) => isTruncated(r.finishReason) || Boolean(r.error && r.content.trim());
     while (
       lane === 'B' &&
-      !result.error &&
-      isTruncated(result.finishReason) &&
-      continuations < MAX_CONTINUATIONS &&
+      (!result.error || wasCut(result)) &&
+      continuations + nudges < MAX_CONTINUATIONS + MAX_NUDGES &&
       !controller.signal.aborted
     ) {
-      const next = planContinuation(result.content);
+      const truncated = wasCut(result);
+      if (!truncated && nudges >= MAX_NUDGES) break;
+      if (truncated && continuations >= MAX_CONTINUATIONS) break;
+
+      const next = truncated ? planContinuation(result.content) : planNudge(result.content);
       if (!next) break;
-      continuations += 1;
+      if (truncated) continuations += 1;
+      else nudges += 1;
 
       const prefix = `${next.kept}\n\n`;
       const more = await streamCompletion(
@@ -935,15 +950,24 @@ export async function send(opts: SendOptions): Promise<void> {
     // Still cut off after every pass, or nothing had finished to continue
     // from. Say so: the alternative is a project that silently lacks its
     // last file.
-    const stillTruncated = lane === 'B' && !result.error && isTruncated(result.finishReason);
+    const stillTruncated = lane === 'B' && wasCut(result);
     if (stillTruncated) {
       const cut = splitAtOpenBlock(result.content);
+      // A dropped connection and a hit output limit leave the same hole, but
+      // the advice differs, so say which one it was.
+      const dropped = Boolean(result.error) && !isTruncated(result.finishReason);
+      const why = dropped
+        ? `The connection to the model dropped mid-reply${continuations ? ` and kept dropping after ${continuations} retr${continuations === 1 ? 'y' : 'ies'}` : ''} (${result.error})`
+        : `The reply hit the model's output limit${continuations ? ` even after ${continuations} continuation${continuations === 1 ? '' : 's'}` : ''}`;
+      const advice = dropped
+        ? 'Try again, or pick a faster model.'
+        : 'Ask for that file on its own, or pick a model with a larger output limit.';
       const note = {
         id: uid('msg'),
         role: 'system' as const,
         content: cut
-          ? `The reply hit the model's output limit${continuations ? ` even after ${continuations} continuation${continuations === 1 ? '' : 's'}` : ''}, so ${cut.openPath ? `\`${cut.openPath}\`` : 'the last file'} was cut off and has been left out rather than saved half-written. Ask for that file on its own, or pick a model with a larger output limit.`
-          : `The reply hit the model's output limit before it finished${result.content.trim() ? '' : ' — it produced no answer text at all, which usually means a reasoning model spent its whole budget thinking'}. Try again, ask for fewer files at a time, or pick a model with a larger output limit.`,
+          ? `${why}, so ${cut.openPath ? `\`${cut.openPath}\`` : 'the last file'} was cut off and has been left out rather than saved half-written. ${advice}`
+          : `${why} before it finished${result.content.trim() ? '' : ' — it produced no answer text at all, which usually means a reasoning model spent its whole budget thinking'}. ${dropped ? advice : 'Try again, ask for fewer files at a time, or pick a model with a larger output limit.'}`,
         createdAt: Date.now(),
       };
       emit(note);
@@ -1049,6 +1073,49 @@ export async function send(opts: SendOptions): Promise<void> {
           id: uid('msg'),
           role: 'system' as const,
           content: `The project used ${parts.join(' and ')} but nothing defined ${repair.launcherIcons.length + repair.placeholders.length === 1 ? 'it' : 'them'}, which fails resource linking before anything compiles. I added ${repair.files.length} resource file${repair.files.length === 1 ? '' : 's'} so it builds. ${repair.launcherIcons.length ? 'The launcher icon is a coloured placeholder — replace it with your real logo. ' : ''}${repair.placeholders.length ? 'The placeholder drawables are plain outlines — swap in real art.' : ''}`.trim(),
+          createdAt: Date.now(),
+        };
+        emit(note);
+        void appendMessage({ ...note, sessionId, suite });
+      }
+    }
+
+    // ── Website: mistakes that look like the page failed to load ────────────
+    //
+    // The one found in practice: a "no WebGL" card hidden with the `hidden`
+    // attribute and styled with `display: flex`, which defeats `hidden` and
+    // leaves the card opaque over the whole scene on every device.
+    if (files.some((f) => /\.html?$/i.test(f.path))) {
+      const fixes = repairSite(
+        [...useWorkspace.getState().files.values(), ...files].map((f) => ({ path: f.path, content: f.content })),
+      );
+
+      for (const fix of fixes) {
+        const artifact = {
+          kind: 'file' as const,
+          path: fix.path,
+          language: languageForPath(fix.path),
+          content: fix.content,
+          complete: true,
+          bytes: new TextEncoder().encode(fix.content).length,
+        };
+        const at = files.findIndex((f) => f.path === fix.path);
+        if (at >= 0) files[at] = artifact;
+        else files.push(artifact);
+        upsertFile(artifact);
+        void upsertArtifact({
+          sessionId,
+          suite,
+          path: artifact.path,
+          language: artifact.language,
+          content: artifact.content,
+          bytes: artifact.bytes,
+        });
+
+        const note = {
+          id: uid('msg'),
+          role: 'system' as const,
+          content: `Fixed \`${fix.path}\`: ${fix.reason}`,
           createdAt: Date.now(),
         };
         emit(note);
@@ -1680,14 +1747,35 @@ export async function send(opts: SendOptions): Promise<void> {
 
         // Push generated files to the bridge workspace first — commands almost
         // always operate on them.
-        if (files.length && (heartbeat.status === 'online' || heartbeat.status === 'degraded')) {
+        //
+        // The whole workspace, not just this run's files: a follow-up like
+        // "turn that site into an APK" runs `cp index.html …` against files an
+        // earlier run wrote, and those have to be on the bridge too.
+        const workspace = new Map(useWorkspace.getState().files);
+        for (const f of files) workspace.set(f.path, f);
+        // Files the user attached are text the model has already read; making
+        // them available on the bridge too is what lets a command `cp` them
+        // instead of the model writing them all out again.
+        for (const a of attachments) {
+          if (a.text && !workspace.has(a.name)) {
+            workspace.set(a.name, {
+              kind: 'file',
+              path: a.name,
+              language: languageForPath(a.name),
+              content: a.text,
+              complete: true,
+              bytes: a.bytes,
+            });
+          }
+        }
+        if (workspace.size && (heartbeat.status === 'online' || heartbeat.status === 'degraded')) {
           try {
             await useWorkspace.getState().bridge.writeFiles(
-              files.map((f) => ({ path: f.path, content: f.content })),
+              [...workspace.values()].map((f) => ({ path: f.path, content: f.content })),
             );
             useWorkspace.getState().appendTerminal({
               stream: 'system',
-              text: `⇪ synced ${files.length} file${files.length === 1 ? '' : 's'} to the bridge workspace`,
+              text: `⇪ synced ${workspace.size} file${workspace.size === 1 ? '' : 's'} to the bridge workspace`,
             });
           } catch (err) {
             useWorkspace.getState().appendTerminal({
@@ -1701,12 +1789,33 @@ export async function send(opts: SendOptions): Promise<void> {
         for (const command of commands) {
           if (controller.signal.aborted) break;
           const startedAt = Date.now();
-          const outcome = await executeCommand(command.command, {
-            cwd: command.cwd,
-            sessionId,
-            suite,
-            signal: controller.signal,
-          });
+          const runOnce = () =>
+            executeCommand(command.command, {
+              cwd: command.cwd,
+              sessionId,
+              suite,
+              signal: controller.signal,
+            });
+          let outcome = await runOnce();
+
+          // A download that did not finish is not a verdict on the project: one
+          // more attempt, said out loud. A second identical failure still goes
+          // through the anti-loop guard like any other.
+          let retried = false;
+          if (
+            !outcome.ok &&
+            !outcome.skipped &&
+            !controller.signal.aborted &&
+            looksTransient(`${outcome.stderr}\n${outcome.stdout.slice(-4000)}`)
+          ) {
+            retried = true;
+            useWorkspace.getState().appendTerminal({
+              stream: 'system',
+              text: '↻ that failure looks like a network hiccup (a download that did not finish) — trying once more',
+            });
+            outcome = await runOnce();
+          }
+
           commandResults.push({
             command: command.command,
             cwd: command.cwd,
@@ -1714,6 +1823,7 @@ export async function send(opts: SendOptions): Promise<void> {
             exitCode: outcome.exitCode,
             durationMs: Date.now() - startedAt,
             skipped: outcome.skipped,
+            retried,
             errorExcerpt: outcome.ok ? undefined : (outcome.stderr || outcome.stdout || outcome.message || ''),
           });
           // A command parked because the bridge is offline did not run, so it

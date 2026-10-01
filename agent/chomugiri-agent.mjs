@@ -69,7 +69,14 @@ setInterval(() => {
 // ── Path jail ───────────────────────────────────────────────────────────────
 
 function resolveInWorkspace(relative) {
-  const rel = String(relative ?? '').replace(/\\/g, '/').replace(/^\/+/, '');
+  const given = String(relative ?? '').replace(/\\/g, '/');
+  // The prompt tells the model where the workspace is, and models pass that
+  // absolute path straight back as `cwd`. An absolute path that already points
+  // inside the workspace is that path — stripping its slash and resolving it
+  // again would look for <workspace>/<workspace>/... and fail. Anything outside
+  // still falls through to the jail check below.
+  const inside = path.isAbsolute(given) && (path.resolve(given) === WORKSPACE || path.resolve(given).startsWith(WORKSPACE + path.sep));
+  const rel = inside ? path.relative(WORKSPACE, path.resolve(given)) : given.replace(/^\/+/, '');
   const abs = path.resolve(WORKSPACE, rel);
   const root = WORKSPACE.endsWith(path.sep) ? WORKSPACE : WORKSPACE + path.sep;
   if (abs !== WORKSPACE && !abs.startsWith(root)) {

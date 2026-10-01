@@ -192,6 +192,8 @@ export interface CommandOutcome {
   exitCode: number | null;
   durationMs?: number;
   skipped?: 'offline' | 'banned';
+  /** Failed on a network hiccup and was run a second time. */
+  retried?: boolean;
   /** Tail of stderr (or stdout, if stderr was empty) — only kept on failure. */
   errorExcerpt?: string;
 }
@@ -223,7 +225,8 @@ export function renderCommandLog(results: CommandOutcome[]): string {
     const where = r.cwd ? ` in \`${r.cwd}\`` : '';
     const time = r.durationMs != null ? ` · ${(r.durationMs / 1000).toFixed(1)}s` : '';
     const status = r.skipped === 'banned' ? '⛔ blocked' : r.ok ? `✔ exit ${r.exitCode ?? 0}` : `✘ exit ${r.exitCode ?? 'null'}`;
-    lines.push(`- ${status} — \`${r.command}\`${where}${time}`);
+    const again = r.retried ? (r.ok ? ' · passed on retry after a network hiccup' : ' · failed again on retry') : '';
+    lines.push(`- ${status} — \`${r.command}\`${where}${time}${again}`);
     if (!r.ok && r.errorExcerpt) {
       lines.push('  ```', ...r.errorExcerpt.trim().slice(-MAX_ERROR_CHARS).split('\n').map((l) => `  ${l}`), '  ```');
     }

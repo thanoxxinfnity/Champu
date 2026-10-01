@@ -1,4 +1,4 @@
-import { splitAtOpenBlock } from './artifacts.ts';
+import { extractArtifacts, splitAtOpenBlock } from './artifacts.ts';
 
 /**
  * Finishing a build that ran out of output tokens.
@@ -43,5 +43,38 @@ export function planContinuation(content: string): ContinuationPlan | null {
     kept: split.complete,
     openPath: split.openPath,
     prompt: `${restart} Do not repeat files that were already completed. Keep the same path-tagged block format, and keep each file small enough to finish.`,
+  };
+}
+
+export const MAX_NUDGES = 2;
+
+/**
+ * A reply that announces a file and then simply ends.
+ *
+ * Kimi K3 narrates ("Creating `index.html` — the page shell…") and stops with a
+ * clean "stop" finish reason, as if the file would follow in a later turn. In
+ * this app there is no later turn, so the build was reported as "nothing was
+ * built" even though the model had a complete plan. The reply never ran out of
+ * tokens, so continuing is the wrong tool; it has to be told to write the
+ * files it just named.
+ *
+ * Returns null when the reply already contains a block (nothing to nudge), or
+ * when it ends on a question — that is the model asking the user something,
+ * and answering it for them would be worse than the silence.
+ */
+export function planNudge(content: string): ContinuationPlan | null {
+  if (extractArtifacts(content).length > 0) return null;
+
+  const text = content.trim();
+  const lastLine = text.split('\n').filter((l) => l.trim()).pop() ?? '';
+  if (/[?？]\s*$/.test(lastLine)) return null;
+
+  const named = [...text.matchAll(/`([^`\s]+\.[A-Za-z0-9]{1,8})`/g)].map((m) => m[1]);
+  const first = named[0];
+
+  return {
+    kept: text,
+    openPath: first,
+    prompt: `${first ? `You named \`${first}\` but never wrote it` : 'You described what you will build but never wrote a file'}. Nothing has been built yet, and this is the only reply you get. Write every file now, each as a path-tagged fenced block (\`\`\`lang path=<file>), starting with the first block immediately and with no further narration before it. Keep each file complete.`,
   };
 }

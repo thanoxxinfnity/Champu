@@ -86,6 +86,41 @@ export function wantsSite(text: string): boolean {
   return SITE_NOUN.test(text) && SITE_VERB.test(text);
 }
 
+/** An APK, a Gradle project or an Android app is named outright as the thing wanted. */
+const ANDROID_DELIVERABLE = /\b(apk|aab|gradle)\b|\bandroid\s+(app|application|project)\b/i;
+/** Words that only mean the Bedrock suite — "forge", "fabric" and "voxel" mean other things too. */
+const MINECRAFT_EXPLICIT = /\b(minecraft|bedrock|mcpack|mcaddon|blockbench)\b/i;
+/** "runner" alone is a test runner or a task runner; a game has to say so. */
+const GAME_EXPLICIT = /\b(games?|godot|gdscript)\b/i;
+
+/**
+ * The suite a run belongs to.
+ *
+ * A prompt typed straight into chat — "make me an Android app", "build a
+ * zombie shooter game" — was classified as belonging to a suite and then run as
+ * plain chat anyway: the suite's contract (toolchain versions, icon rules, the
+ * Godot rules) is attached by suite, and the detected one was never used. Only
+ * a slash command or switching tabs applied it, so the same request built
+ * properly from one place and not from the other.
+ *
+ * Call this with what the user typed, never with a skill's expanded template:
+ * a template is full of words ("runner", "pack") that mean something else.
+ *
+ * Only the default chat view adopts a detected suite, and only for a build —
+ * a question that mentions Android stays a question. A website wins over
+ * "Minecraft" or a game genre ("a Minecraft-themed website" is not a Bedrock
+ * add-on), but an explicit APK/Android-app request wins over a website.
+ */
+export function resolveSuite(base: string, input: string, lane: Lane): string {
+  if (base !== 'chat' || lane !== 'B') return base;
+  if (ANDROID_DELIVERABLE.test(input)) return 'android';
+  if (wantsSite(input)) return base;
+  const detected = detectSuite(input);
+  if (detected === 'minecraft' && MINECRAFT_EXPLICIT.test(input)) return 'minecraft';
+  if (detected === 'godot' && GAME_EXPLICIT.test(input)) return 'godot';
+  return base;
+}
+
 export function detectSuite(text: string): string | undefined {
   for (const [match, suite] of SUITE_HINTS) {
     if (typeof match === 'function' ? match(text) : match.test(text)) return suite;

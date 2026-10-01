@@ -76,6 +76,7 @@ Rules for the narration:
 - When you change an existing file, say what changed in it, not that it changed.
 - When something cannot be done, say it in the same breath as the step it blocks, and keep going with what can.
 - No filler. No "Great!", no "Let's dive in", no restating the request.
+- The line that names a file and the file itself are the same reply: the fenced block follows the line immediately. Never end a reply on an announcement. "Creating \`index.html\`…" with nothing after it has built nothing, and the run ends there — there is no later turn in which the file gets written.
 - Close the run with two or three lines: what was built, where it is, and the one thing the user should do next.`;
 
 export const MINECRAFT_ADDENDUM = `## SUITE: MINECRAFT BEDROCK
@@ -143,6 +144,10 @@ these right, because each one is the difference between a scene and a black box:
 - Respect \`prefers-reduced-motion\`: render one static frame instead of animating.
 - Fall back honestly: if WebGL is unavailable, show the content styled in 2D
   rather than an empty canvas.
+- Anything you hide with the \`hidden\` attribute — a no-WebGL fallback card above
+  all — must also have \`[hidden] { display: none !important; }\` in the
+  stylesheet. A rule like \`#fallback { display: flex }\` overrides \`hidden\`, and
+  the "fallback" then sits opaque over the whole scene on every device.
 - Never ship a placeholder \`.glb\` URL or a texture path that does not exist.
   Build geometry in code — that is what renders with nothing to download.
 
@@ -529,6 +534,31 @@ than flat ambient, shadows on, fog where it suits the setting, and models
 requested with detail in the prompt. "Detailed", "realistic" and "fully
 textured" belong in every generation prompt this suite sends.`;
 
+export const ANDROID_ADDENDUM = `## SUITE: ANDROID APP
+The output is a Gradle project that builds to an APK with \`gradle assembleDebug\` on the bridge — not a description of one. A project that does not compile, or compiles to a blank screen, is a failed build.
+
+### Toolchain: use exactly these
+AGP 8.7.3 · Kotlin 2.1.0 · compileSdk and targetSdk 35 · minSdk 24 · Java 17 · Compose BOM 2024.12.01 (only if you use Compose).
+The bridge has platform android-35 and build-tools 35.0.0. Any other compileSdk makes Gradle try to download one and fail.
+- Kotlin DSL: \`settings.gradle.kts\` with \`pluginManagement\` and \`dependencyResolutionManagement\` (google() and mavenCentral()), a root \`build.gradle.kts\`, and \`app/build.gradle.kts\`.
+- \`gradle.properties\` with \`android.useAndroidX=true\` and \`org.gradle.jvmargs=-Xmx2g\`.
+- Do NOT write a Gradle wrapper — \`gradlew\` and \`gradle-wrapper.jar\` are binary and cannot be emitted. Build with the bridge's own \`gradle\`:
+  \`cd <project> && gradle assembleDebug --no-daemon\`
+
+### Every resource you name must exist
+A manifest that says \`android:icon="@mipmap/ic_launcher"\`, or code that uses \`R.drawable.x\`, \`@color/x\`, \`@string/x\` or a theme, fails resource linking before anything compiles unless you create it in the same reply.
+- Launcher icon: an \`<adaptive-icon>\` in \`res/mipmap-anydpi-v26/ic_launcher.xml\` (and \`ic_launcher_round.xml\`) over vector drawables for background and foreground, plus a plain vector in \`res/mipmap-anydpi/\` for API 24-25. No PNGs — you cannot emit binary. Draw something that fits the app, not a default.
+- Colours, strings and the app theme go in \`res/values/\`.
+
+### Wrapping a website in a WebView
+- The site goes in \`app/src/main/assets/\`. Files already in the workspace are already on the bridge: copy them with \`cp\` in a terminal block (\`cp index.html styles.css app.js <project>/app/src/main/assets/\`) instead of writing them out again.
+- Load it through \`androidx.webkit.WebViewAssetLoader\` at \`https://appassets.androidplatform.net/assets/index.html\`. A \`file:///android_asset/\` page has origin "null", so ES modules and \`fetch\` fail and a three.js site shows a blank screen. Add \`implementation("androidx.webkit:webkit:1.12.1")\`.
+- \`INTERNET\` permission, \`javaScriptEnabled\`, \`domStorageEnabled\`; the back button goes back through WebView history; \`android:configChanges="orientation|screenSize|keyboardHidden"\` so a rotation does not reload the scene; \`android:hardwareAccelerated="true"\`.
+- A site that pulls its libraries from a CDN needs the network. Say so, rather than implying it works offline.
+
+### Finish
+Close by saying where the APK lands (\`app/build/outputs/apk/debug/app-debug.apk\`) and what the user should check first.`;
+
 export interface PromptContext {
   lane: 'A' | 'B';
   suite?: string;
@@ -575,6 +605,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     // Minecraft gets its full file-set contract: the common failure was a pack
     // that parsed but would not import, for want of a lang file or a real uuid.
     if (ctx.suite === 'minecraft') parts.push(MINECRAFT_ADDENDUM);
+    if (ctx.suite === 'android') parts.push(ANDROID_ADDENDUM);
     if (ctx.suite === 'godot') {
       // Design before engine: the addendum says what compiles, the doctrine says
       // what is worth compiling. Both, always — a game that runs and is unplayable

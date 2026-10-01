@@ -254,7 +254,7 @@ export function hasBlockingSecret(matches: SecretMatch[]): boolean {
   return matches.some((m) => m.confidence === 'certain');
 }
 
-/** `nvapi-9nbX…aP-n` — enough to recognise, not enough to use. */
+/** `nvapi-AbCd••••••x1Yz` — enough to recognise, not enough to use. */
 export function maskSecret(value: string): string {
   if (value.length <= 12) return '•'.repeat(value.length);
   const prefixMatch = /^([A-Za-z]+[-_])/.exec(value);

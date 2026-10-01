@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useWorkspace, type ChatAttachment } from '@/lib/store';
 import { send } from '@/lib/agent/runtime';
 import { BUILTIN_SKILLS, expandSkill, parseSlash, searchSkills, type SkillDefinition } from '@/lib/skills/registry';
-import { classifyLocal } from '@/lib/agent/router';
+import { classifyLocal, resolveSuite } from '@/lib/agent/router';
 import { formatBytes } from '@/lib/zip';
 import { hasBlockingSecret, maskSecret, redact, scanForSecrets, suggestEnvName, validateSecretName, type SecretMatch } from '@/lib/security/secrets';
 import { activateKey, isActivatable, type ActivationResult } from '@/lib/security/activate-key';
@@ -618,6 +618,15 @@ export function CommandDock() {
       }
       // Unknown slash command falls through as literal text — the model can
       // still act on it, which beats swallowing the turn with an error toast.
+    }
+    // What the user typed themselves decides the suite — never a skill's
+    // expanded template, whose wording would misroute it.
+    if (!command || !allSkills.some((sk) => sk.command === command.command)) {
+      suite = resolveSuite(
+        activeSuite,
+        raw,
+        lane ?? classifyLocal(raw, { hasAttachments: attachments.length > 0 }).lane,
+      ) as typeof activeSuite;
     }
 
     setValue('');

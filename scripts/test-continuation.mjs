@@ -1,7 +1,7 @@
 /** node --experimental-strip-types --test scripts/test-continuation.mjs */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isTruncated, planContinuation } from '../src/lib/agent/continuation.ts';
+import { isTruncated, planContinuation, planNudge } from '../src/lib/agent/continuation.ts';
 import { extractArtifacts, filesOf, splitAtOpenBlock } from '../src/lib/agent/artifacts.ts';
 
 test('every provider spelling of "hit the output limit" counts as truncated', () => {
@@ -60,4 +60,38 @@ test('the continuation names the cut-off file and forbids repeating finished one
 test('no continuation when not one block finished — another pass would only start over', () => {
   assert.equal(planContinuation('```gdscript path=a.gd\nextends Node\nfunc _rea'), null);
   assert.equal(planContinuation(''), null);
+});
+
+// ── A reply that announces a file and stops ─────────────────────────────────
+
+const announcedOnly = [
+  'Building a scroll-driven Minecraft world in three.js: voxel terrain, a blocky player with a walk cycle.',
+  '',
+  'Creating `index.html` — the page shell, import map for three.js, and the HUD overlay.',
+].join('\n');
+
+test('a reply that names a file and then ends is nudged to write it', () => {
+  const plan = planNudge(announcedOnly);
+  assert.ok(plan);
+  assert.equal(plan.openPath, 'index.html');
+  assert.match(plan.prompt, /named `index\.html` but never wrote it/);
+  assert.match(plan.prompt, /only reply you get/);
+  assert.equal(plan.kept, announcedOnly);
+});
+
+test('a reply that already contains a block is not nudged', () => {
+  assert.equal(planNudge('Creating `a.txt`.\n\n```text path=a.txt\nhi\n```'), null);
+  // An unfinished block still counts: that is a continuation, not a nudge.
+  assert.equal(planNudge('Creating `a.txt`.\n\n```text path=a.txt\nhi'), null);
+});
+
+test('a reply that ends on a question to the user is left alone', () => {
+  assert.equal(planNudge('Which engine do you want for `game.js`, Phaser or plain canvas?'), null);
+});
+
+test('with no file named it still asks for the files, without inventing a name', () => {
+  const plan = planNudge('I will build the whole thing as a single page with animation.');
+  assert.ok(plan);
+  assert.equal(plan.openPath, undefined);
+  assert.match(plan.prompt, /never wrote a file/);
 });
