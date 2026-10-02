@@ -1121,3 +1121,100 @@ select {
   white-space: nowrap;
   max-width: 34ch;
 }
+
+
+/* ── Code blocks: label, Copy, Expand ──────────────────────────────────────
+   Markup comes from renderMarkdown; behaviour from components/codeActions.ts. */
+.code-block {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px 6px 14px;
+  background: color-mix(in oklab, var(--ink) 6%, var(--surface));
+  border-bottom: 1px solid var(--line);
+}
+.code-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.code-label:not(.is-path) {
+  text-transform: capitalize;
+}
+.code-actions {
+  display: inline-flex;
+  gap: 2px;
+  flex: none;
+}
+.code-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+.code-btn:hover,
+.code-btn:focus-visible {
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  color: var(--accent);
+  outline: none;
+}
+.code-btn .ic-done,
+.code-btn .ic-close {
+  display: none;
+}
+.code-btn.is-done {
+  color: var(--color-emerald, #16a34a);
+}
+.code-btn.is-failed {
+  color: var(--color-rose, #e11d48);
+}
+.code-btn.is-done .ic-copy {
+  display: none;
+}
+.code-btn.is-done .ic-done {
+  display: inline-grid;
+}
+.code-block.is-expanded .ic-expand {
+  display: none;
+}
+.code-block.is-expanded .ic-close {
+  display: inline-grid;
+}
+.code-block pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+/* Expanded: the block fills the screen and scrolls on its own. */
+.code-block.is-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  border: 0;
+}
+.code-block.is-expanded pre {
+  flex: 1;
+  overflow: auto;
+  padding-bottom: 40px;
+}
+body.code-expanded {
+  overflow: hidden;
+}

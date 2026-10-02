@@ -1,5 +1,6 @@
 'use client';
 
+import './codeActions';
 import { useMemo, useState } from 'react';
 import { useWorkspace } from '@/lib/store';
 import { renderMarkdown } from './markdown';

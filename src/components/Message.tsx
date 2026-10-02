@@ -7,6 +7,7 @@ import { buildGodotExport } from '@/lib/suites/godot/export';
 import { useMemo, useState } from 'react';
 import { renderMarkdown } from './markdown';
 import { TextWithSites } from './SiteChip';
+import './codeActions';
 import type { ChatMessageView } from '@/lib/store';
 import { GamePlayer } from '@/components/GamePlayer';
 

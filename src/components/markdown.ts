@@ -1,6 +1,6 @@
 import { Marked } from 'marked';
 import hljs from 'highlight.js/lib/common';
-import { chipifyHtml } from '@/lib/sites/domains';
+import { chipifyHtml } from '../lib/sites/domains.ts';
 
 /**
  * Markdown → HTML for chat bubbles.
@@ -62,17 +62,29 @@ marked.use({
         highlighted = escapeHtml(text);
       }
 
-      // The path= info string is how Lane B tags artifacts; surface it as a header.
+      // The path= info string is how Lane B tags artifacts; it becomes the label.
       const pathMatch = /(?:path|file|filename)=("[^"]+"|'[^']+'|\S+)/.exec(lang ?? '');
       const path = pathMatch?.[1]?.replace(/^["']|["']$/g, '');
+      const label = path ?? (language ? language : 'Code');
 
-      const header = path
-        ? `<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--line);font-family:var(--font-mono);font-size:11px;color:var(--ink-dim)"><span style="color:var(--accent)">▸</span>${escapeHtml(path)}</div>`
-        : language
-          ? `<div style="padding:6px 12px;border-bottom:1px solid var(--line);font-family:var(--font-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:0.09em;color:var(--ink-faint)">${escapeHtml(language)}</div>`
-          : '';
+      // Every block carries Copy and Expand. They are plain buttons with a data
+      // attribute; one delegated click handler (codeActions.ts) does the work, so
+      // no script ever travels inside model output.
+      const icon = (d: string) =>
+        `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+      const copyIcon = icon('<rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/>');
+      const doneIcon = icon('<path d="M5 12.5l4.5 4.5L19 7.5"/>');
+      const expandIcon = icon('<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/>');
+      const closeIcon = icon('<path d="M6 6l12 12M18 6L6 18"/>');
 
-      return `<div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden">${header}<pre style="border:none;border-radius:0;margin:0"><code class="hljs language-${escapeHtml(language)}">${highlighted}</code></pre></div>`;
+      const header =
+        `<div class="code-head"><span class="code-label${path ? ' is-path' : ''}">${path ? '<span style="color:var(--accent)">▸</span> ' : ''}${escapeHtml(label)}</span>` +
+        `<span class="code-actions">` +
+        `<button type="button" class="code-btn" data-code-action="copy" aria-label="Copy code" title="Copy"><span class="ic-copy">${copyIcon}</span><span class="ic-done">${doneIcon}</span></button>` +
+        `<button type="button" class="code-btn" data-code-action="expand" aria-label="Expand code" title="Expand"><span class="ic-expand">${expandIcon}</span><span class="ic-close">${closeIcon}</span></button>` +
+        `</span></div>`;
+
+      return `<div class="code-block">${header}<pre><code class="hljs language-${escapeHtml(language)}">${highlighted}</code></pre></div>`;
     },
   },
 });
