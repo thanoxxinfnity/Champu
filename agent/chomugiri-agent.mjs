@@ -114,6 +114,9 @@ function toolchains() {
     androidSdk: process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT ?? null,
     adb: probe(`adb version 2>${nul}`),
     docker: probe(`docker --version 2>${nul}`),
+    // The engine version is a fact about THIS machine that no training data
+    // holds (Godot 4.7.2 was newer than the model knew), so it is read, not guessed.
+    godot: probe(`godot --version 2>${nul}`) ?? probe(`godot4 --version 2>${nul}`),
     zip: probe(`zip -v 2>${nul}`),
   };
   toolchainAt = Date.now();
@@ -496,6 +499,7 @@ ${line('gradle', tools.gradle)}
 ${line('android sdk', tools.androidSdk)}
 ${line('python', tools.python)}
 ${line('git', tools.git)}
+${line('godot', tools.godot)}
 
   \x1b[2mExpose it:\x1b[0m
     ngrok http ${PORT}

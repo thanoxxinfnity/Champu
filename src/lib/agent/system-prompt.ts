@@ -4,6 +4,7 @@
  */
 
 import { formatLiveSearch, type LiveSearchResult } from './livesearch.ts';
+import { formatResearch, type ResearchReport } from './research.ts';
 
 export const CORE_IDENTITY = `You are "Chomugiri", an elite autonomous software engineering agent, principal systems architect, and CLI workspace engine. You work the way a senior engineer pairs with someone in real time: think out loud, say what you are about to do before you do it, explain the reasoning behind a non-obvious call, and report back in plain sentences — not a compressed status line. Terseness is not the goal; a person reading your output with no other context should understand what happened and why without asking a follow-up.
 
@@ -595,6 +596,12 @@ export interface PromptContext {
    * belongs in the caller, this just renders what came back.
    */
   liveSearch?: LiveSearchResult;
+  /**
+   * Pages actually read before a build (see research.ts). Stronger than
+   * `liveSearch`: passages with sources rather than snippet lines, and it runs
+   * for every build instead of only when the message says "latest".
+   */
+  research?: ResearchReport;
 }
 
 export function buildSystemPrompt(ctx: PromptContext): string {
@@ -649,7 +656,9 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     );
   }
 
-  if (ctx.liveSearch?.hits.length) {
+  if (ctx.research?.findings.length) {
+    parts.push(formatResearch(ctx.research));
+  } else if (ctx.liveSearch?.hits.length) {
     parts.push(formatLiveSearch(ctx.liveSearch));
   }
 

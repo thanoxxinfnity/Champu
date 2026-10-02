@@ -2,6 +2,7 @@
 
 import { classifyLocal, wantsSite, type Classification } from './router';
 import { liveSearchContext, needsLiveSearch, type LiveSearchResult } from './livesearch';
+import { needsResearch, planResearch, runResearch, summarizeResearch, type ResearchReport } from './research';
 import { getKeys, withKeys } from '@/lib/keys';
 import { buildSystemPrompt } from './system-prompt';
 import { heuristicPlan, parsePlan, PLANNER_PROMPT, planProgress, parkBridgeTasks, requiresBridge, type Plan } from './planner';
@@ -794,18 +795,47 @@ export async function send(opts: SendOptions): Promise<void> {
       }
     }
 
+    // ── Research before building ────────────────────────────────────────────
+    // The model's training data stops at a date and the tools it builds with do
+    // not. For a build, look up what it is most likely stale about and read the
+    // real pages — see research.ts. Fails soft: no result means "build from
+    // what you know", the same as before this existed.
+    let research: ResearchReport | null = null;
+    if (needsResearch(input, suite, lane)) {
+      const queries = planResearch(input, suite);
+      if (queries.length) {
+        useWorkspace.getState().setThinking(true, 'Researching the live web before building…');
+        research = await runResearch(queries, async (body) => {
+          const res = await fetch('/api/research', withKeys({
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            signal: AbortSignal.any([controller.signal, AbortSignal.timeout(35_000)]),
+          }));
+          return res.ok ? await res.json() : null;
+        });
+        const line = summarizeResearch(research);
+        if (line) {
+          const note = { id: uid('msg'), role: 'system' as const, content: line, createdAt: Date.now() };
+          emit(note);
+          void appendMessage({ ...note, sessionId, suite });
+        }
+      }
+    }
+
     // ── Stream the answer ───────────────────────────────────────────────────
     const systemPrompt = buildSystemPrompt({
       lane,
       suite,
       ...(liveSearch ? { liveSearch } : {}),
+      ...(research?.findings.length ? { research } : {}),
       bridgeStatus:
         heartbeat.status === 'online' ? 'online'
           : heartbeat.status === 'degraded' ? 'degraded'
             : heartbeat.status === 'unknown' || heartbeat.status === 'connecting' ? 'unknown'
               : 'offline',
       bridgeDetail: heartbeat.health
-        ? `Host: ${heartbeat.health.platform}/${heartbeat.health.arch}, workspace root ${heartbeat.health.workspace} (commands and cwd are relative to it — use cwd=. or a subfolder, not this absolute path). Toolchain — java: ${heartbeat.health.toolchains.java ?? 'absent'}, gradle: ${heartbeat.health.toolchains.gradle ?? 'absent'}, android sdk: ${heartbeat.health.toolchains.androidSdk ?? 'absent'}, node: ${heartbeat.health.toolchains.node ?? 'absent'}, python: ${heartbeat.health.toolchains.python ?? 'absent'}.`
+        ? `Host: ${heartbeat.health.platform}/${heartbeat.health.arch}, workspace root ${heartbeat.health.workspace} (commands and cwd are relative to it — use cwd=. or a subfolder, not this absolute path). Toolchain — java: ${heartbeat.health.toolchains.java ?? 'absent'}, gradle: ${heartbeat.health.toolchains.gradle ?? 'absent'}, android sdk: ${heartbeat.health.toolchains.androidSdk ?? 'absent'}, node: ${heartbeat.health.toolchains.node ?? 'absent'}, python: ${heartbeat.health.toolchains.python ?? 'absent'}, godot: ${heartbeat.health.toolchains.godot ?? 'absent'}. These are READ from this machine — trust them over what you remember (a version newer than you know is normal; write for it).`
         : heartbeat.lastError ?? undefined,
       todos: plan?.tasks.map((t) => ({ id: t.id, title: t.title, status: t.status })),
       failedApproaches: guard.bannedApproaches(),

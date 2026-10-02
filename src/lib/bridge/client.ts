@@ -22,6 +22,8 @@ export interface Toolchains {
   adb: string | null;
   docker: string | null;
   zip: string | null;
+  /** `godot --version` on the bridge host; null when the engine is not installed. */
+  godot?: string | null;
 }
 
 export interface BridgeHealth {
