@@ -151,3 +151,12 @@ test('deploy.sh ships every directory the page needs', () => {
   }
   assert.ok(/api/.test(sh) && /public\/voice/.test(sh));
 });
+
+test('the version on the download button is the version in the Android project', () => {
+  const gradle = readFileSync(join(ROOT, 'android/app/build.gradle.kts'), 'utf8');
+  const version = /versionName\s*=\s*"([^"]+)"/.exec(gradle)[1];
+  const info = JSON.parse(read('data/release.json'));
+  assert.equal(info.chomugiri.version, version, 'site/data/release.json is stale — run node scripts/release-info.mjs');
+  assert.ok(info.chomugiri.mb > 5 && info.horizon.mb > 20);
+  assert.match(read('deploy.sh'), /release-info\.mjs/);
+});

@@ -181,3 +181,5 @@ whenVisible($('#space'), () => import('./space.js').then((m) => m.start()).catch
   const l = $('#space-loading'); if (l) l.textContent = 'This device could not start 3D — the NASA data below still works.';
 }), { once: true, margin: '0px 0px 600px 0px' });
 import('./nasa-cards.js').then((m) => m.start());
+
+import('./fx.js').then((m) => m.start());

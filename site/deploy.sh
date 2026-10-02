@@ -11,6 +11,9 @@ root="$(dirname "$here")"
 
 : "${VERCEL_TOKEN:?set VERCEL_TOKEN (Settings → API Keys, or your Vercel account)}"
 
+# Which build the buttons hand out (version, size), read from the project files, not from GitHub at page-load.
+node "$root/scripts/release-info.mjs" >/dev/null
+
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 

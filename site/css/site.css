@@ -314,3 +314,69 @@ footer nav { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap;
 @media (min-width: 900px) { .apod { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
 
 .wavlink { margin: 10px 0 0; font: 13px/1.4 var(--font-mono); }
+
+/* ================= extra motion ================= */
+
+/* hero: paper-cut icons burst out of the mark, then float */
+.logo-stage { position: relative; width: 112px; height: 112px; display: grid; place-items: center; }
+.fly { position: absolute; left: 50%; top: 50%; width: 38px; height: 38px; margin: -19px 0 0 -19px; opacity: 0; color: var(--accent-3); pointer-events: none;
+  animation: burst 1.1s cubic-bezier(.2, .9, .3, 1.2) var(--bd, .5s) forwards, hover 5s ease-in-out calc(var(--bd, .5s) + 1.1s) infinite alternate; }
+.fly svg { width: 100%; height: 100%; fill: color-mix(in oklab, var(--peach) 80%, transparent); stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.f1 { --tx: -120px; --ty: -70px; --rot: -14deg; --bd: .5s; } .f2 { --tx: 118px; --ty: -78px; --rot: 12deg; --bd: .62s; }
+.f3 { --tx: -142px; --ty: 28px; --rot: 9deg; --bd: .74s; } .f4 { --tx: 140px; --ty: 34px; --rot: -10deg; --bd: .86s; }
+.f5 { --tx: -84px; --ty: 74px; --rot: -6deg; --bd: .98s; } .f6 { --tx: 74px; --ty: -118px; --rot: 18deg; --bd: 1.1s; }
+@keyframes burst { 0% { opacity: 0; transform: translate(0, 0) scale(.2) rotate(0); } 60% { opacity: 1; } 100% { opacity: 1; transform: translate(var(--tx), var(--ty)) scale(1) rotate(var(--rot)); } }
+@keyframes hover { to { transform: translate(calc(var(--tx) + 6px), calc(var(--ty) - 10px)) scale(1) rotate(calc(var(--rot) * -1)); } }
+.hero::before { transform: translateY(var(--py, 0)); } .hero::after { transform: translateY(var(--py2, 0)); }
+.hero-inner { transform: translateY(calc(var(--py, 0) * -.3)); }
+
+/* slash commands scroll past forever */
+.marquee { width: min(100%, 720px); overflow: hidden; -webkit-mask: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); mask: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+.marquee-track { display: flex; gap: 8px; width: max-content; animation: scroll-x 28s linear infinite; padding: 4px 0; }
+.marquee:hover .marquee-track { animation-play-state: paused; }
+@keyframes scroll-x { to { transform: translateX(-50%); } }
+
+/* ink underline draws itself under the orange words */
+.head h2 span { background: linear-gradient(currentColor, currentColor) 0 100% / 0% 4px no-repeat; padding-bottom: 2px; transition: background-size 1s cubic-bezier(.2, .8, .2, 1) .5s; }
+.head.in h2 span { background-size: 100% 4px; }
+.space .head h2 span { background-image: linear-gradient(#ff9a52, #ff9a52); }
+
+/* a shine sweeps across the main buttons */
+.btn.solid { position: relative; overflow: hidden; }
+.btn.solid::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; left: -60%; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .38), transparent); transform: skewX(-18deg); animation: shine 3.6s ease-in-out 1.2s infinite; }
+@keyframes shine { 0%, 55% { left: -60%; } 100% { left: 130%; } }
+.btn.big { animation: nudge-up 2.8s ease-in-out infinite; }
+@keyframes nudge-up { 50% { transform: translateY(-3px); } }
+.btn.big:hover { animation-play-state: paused; }
+.dl-card h4::before { content: '⬇'; display: inline-block; margin-right: 10px; color: var(--accent); animation: down 1.4s ease-in-out infinite; }
+@keyframes down { 50% { transform: translateY(5px); } }
+
+/* paper bits when a download is tapped */
+.bit { position: fixed; z-index: 90; width: 8px; height: 12px; border-radius: 2px; pointer-events: none; animation: bit .85s cubic-bezier(.2, .8, .3, 1) forwards; }
+@keyframes bit { to { transform: translate(var(--dx), var(--dy)) rotate(var(--r)); opacity: 0; } }
+
+/* cards light up where the pointer is */
+.glow { position: relative; overflow: hidden; }
+.glow::before { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .3s;
+  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), color-mix(in oklab, var(--accent) 18%, transparent), transparent 70%); }
+.glow:hover::before { opacity: 1; }
+.ncard.glow::before { background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgba(122, 183, 255, .14), transparent 70%); }
+.fact, .maps div { transition: transform .3s cubic-bezier(.2, .8, .2, 1), border-color .3s; }
+.fact:hover, .maps div:hover { transform: translateY(-4px) rotate(-.6deg); border-color: var(--accent); }
+
+/* horizon: streaks rush past the photos */
+.horizon-hero .speed { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: .5; mix-blend-mode: screen;
+  background: repeating-linear-gradient(90deg, transparent 0 22px, rgba(255, 255, 255, .5) 22px 23px, transparent 23px 61px, rgba(255, 220, 160, .45) 61px 62px, transparent 62px 97px);
+  -webkit-mask: linear-gradient(transparent 55%, #000 100%); mask: linear-gradient(transparent 55%, #000 100%); animation: rush .9s linear infinite; }
+@keyframes rush { from { background-position: 0 0; } to { background-position: -97px 0; } }
+
+/* the phone in the chomugiri section floats a little */
+.phone { animation: float-phone 7s ease-in-out infinite; }
+@keyframes float-phone { 50% { transform: translateY(-8px) rotate(.4deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .fly { opacity: 1; transform: translate(var(--tx), var(--ty)) rotate(var(--rot)); animation: none; }
+  .marquee-track, .btn.solid::after, .btn.big, .dl-card h4::before, .horizon-hero .speed, .phone { animation: none; }
+  .head h2 span { background-size: 100% 4px; transition: none; }
+}
+@media (max-width: 480px) { .f3, .f4 { --tx: -108px; } .f4 { --tx: 108px; } .f1 { --tx: -96px; } .f2 { --tx: 96px; } .fly { width: 32px; height: 32px; margin: -16px 0 0 -16px; } }
