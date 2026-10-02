@@ -130,3 +130,19 @@ test('the upload route cannot be used by whoever finds it', () => {
   // The secret itself is never in the repository.
   assert.ok(!/UPLOAD_SECRET\s*=\s*['"][A-Za-z0-9_-]{10}/.test(route));
 });
+
+test('the logos shown next to website names are a disclosed lookup', () => {
+  // Every website name in a message is looked up at Google to draw its icon.
+  // That is a request a reader would not guess, so it is on the page.
+  const sites = readFileSync(new URL('../src/lib/sites/domains.ts', import.meta.url), 'utf8');
+  const hosts = [...sites.matchAll(/https:\/\/([a-z0-9.-]+\.[a-z]{2,})\//g)].map((m) => m[1]);
+  assert.ok(hosts.includes('www.google.com'), 'the logo lookup moved and this test does not know where to');
+  assert.ok(POLICY.includes('google.com/s2/favicons'), 'logos are fetched from Google and the policy does not say so');
+});
+
+test('building searches the web by itself, and the page says so', () => {
+  // research.ts runs before every build. A policy that only mentioned searching
+  // "when you ask it to look something up" would have been wrong the day it shipped.
+  assert.ok(/Start a build/.test(POLICY), 'the automatic pre-build research is not on the page');
+  assert.ok(/automatically before every build/.test(POLICY));
+});

@@ -1,5 +1,6 @@
 import { Marked } from 'marked';
 import hljs from 'highlight.js/lib/common';
+import { chipifyHtml } from '@/lib/sites/domains';
 
 /**
  * Markdown → HTML for chat bubbles.
@@ -78,7 +79,9 @@ marked.use({
 
 export function renderMarkdown(source: string): string {
   try {
-    return marked.parse(source, { async: false });
+    // Website names get their logo after rendering, so code blocks are already
+    // closed off and nothing untrusted is ever handed to the chip builder raw.
+    return chipifyHtml(marked.parse(source, { async: false }));
   } catch {
     return `<p>${escapeHtml(source)}</p>`;
   }

@@ -16,6 +16,19 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(out)
 	game = (load("res://scenes/main.tscn") as PackedScene).instantiate()
 	root.add_child(game)
+	if args.size() > 1 and args[1] == "worlds":
+		plan = [
+			[40, func() -> void: pass, ""],
+			[5, func() -> void: game.ui.drive.emit(), ""],
+			[60, func() -> void: _hold(1.0, 0.0, false), ""],
+			[5, func() -> void: game._travel("metro"), ""],
+			[150, func() -> void: _hold(1.0, 0.0, false), ""],
+			[90, func() -> void: pass, "h_city"],
+			[5, func() -> void: game._travel("canyon"), ""],
+			[150, func() -> void: _hold(1.0, 0.0, false), ""],
+			[90, func() -> void: pass, "h_canyon"],
+		]
+		return
 	plan = [
 		[40, func() -> void: pass, "h_garage"],
 		[5, func() -> void: game.ui.drive.emit(), ""],

@@ -101,6 +101,8 @@
     <tr><td>Generate a 3D model</td><td>The prompt</td><td>NVIDIA NIM (TRELLIS), Meshy or Tripo — whichever key you supplied</td></tr>
     <tr><td>Build a game that needs props</td><td>Search terms like "barrel"</td><td>Poly Haven, and Sketchfab if you gave it a token</td></tr>
     <tr><td>Ask it to look something up</td><td><strong>Your search query</strong></td><td>Whichever engine answers: Brave, Tavily, Serper, Wikipedia, DuckDuckGo or Bing</td></tr>
+    <tr><td>Start a build</td><td><strong>Search terms taken from your request</strong> — the tool's version, the names you mentioned — and then the pages that come back are opened</td><td>The same engines as above, and the websites those pages belong to (for example GitHub or a project's own site). This happens automatically before every build so the model is not working from out-of-date memory</td></tr>
+    <tr><td>Mention a website by name</td><td>The domain name, to fetch its logo — for example <em>claude.com</em></td><td>Google's favicon service (google.com/s2/favicons), from your device. Nothing else about the message goes with it</td></tr>
     <tr><td>Deploy a site</td><td>The files being deployed, and your Vercel token</td><td>Vercel</td></tr>
     <tr><td>Download a build from this site</td><td>Nothing of yours — the file is fetched from where it is stored</td><td>Vercel Blob, which hosts the APKs because they are larger than a page</td></tr>
     <tr><td>Use the terminal bridge</td><td>The command you asked for</td><td>The machine you pointed it at, and nowhere else</td></tr>

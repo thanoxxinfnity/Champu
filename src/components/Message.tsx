@@ -6,6 +6,7 @@ import { buildPackExport, detectPacks } from '@/lib/suites/minecraft/pack';
 import { buildGodotExport } from '@/lib/suites/godot/export';
 import { useMemo, useState } from 'react';
 import { renderMarkdown } from './markdown';
+import { TextWithSites } from './SiteChip';
 import type { ChatMessageView } from '@/lib/store';
 import { GamePlayer } from '@/components/GamePlayer';
 
@@ -165,7 +166,7 @@ export function Message({ message }: { message: ChatMessageView }) {
 
         {isUser ? (
           <p className="whitespace-pre-wrap text-[14px] leading-[1.6]" style={{ color: 'var(--ink)' }}>
-            {message.content}
+            <TextWithSites text={message.content} />
           </p>
         ) : (
           <div

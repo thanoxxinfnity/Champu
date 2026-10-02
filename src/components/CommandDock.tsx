@@ -1,5 +1,6 @@
 'use client';
 
+import { SiteChipRow } from './SiteChip';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useWorkspace, type ChatAttachment } from '@/lib/store';
 import { send } from '@/lib/agent/runtime';
@@ -750,6 +751,8 @@ export function CommandDock() {
               ))}
             </div>
           )}
+
+          <SiteChipRow text={value} />
 
           <textarea
             ref={textareaRef}
