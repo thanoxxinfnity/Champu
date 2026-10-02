@@ -19,6 +19,9 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(out)
 	game = (load("res://scenes/main.tscn") as PackedScene).instantiate()
 	root.add_child(game)
+	if args.size() > 1 and args[1] == "video":
+		plan = _video_plan()
+		return
 	if args.size() > 1 and args[1] == "action":
 		plan = _action_plan()
 		return
@@ -66,6 +69,54 @@ func _initialize() -> void:
 		[100, func() -> void: pass, "boss_arena"],
 		[2, func() -> void: game.hud.show_touch = true; game.hud.set_playing(true), ""],
 		[30, func() -> void: pass, "touch_hud"],
+	]
+
+
+## Clean frames, no HUD, to be used as the first frame of a generated video.
+func _video_plan() -> Array:
+	return [
+		[5, func() -> void: game.begin(), ""],
+		[5, func() -> void:
+			game.hud.visible = false
+			game.player.give_weapon("pistol")
+			game.player.give_weapon("rifle")
+			game.player.equip("rifle")
+			for z in get_nodes_in_group("enemies"):
+				(z as Node).queue_free()
+			_at(Vector3(0, 0, 14), 0.0)
+			var kinds := ["walker", "runner", "cop", "nurse", "walker", "bloater"]
+			for i in range(kinds.size()):
+				var z: Zombie = game.spawn_enemy(kinds[i], Vector3(-7.0 + 2.8 * i, 0, -4.0 - 3.0 * (i % 3)))
+				z.alerted = true, ""],
+		[80, func() -> void: pass, "v5_street_horde"],
+		[2, func() -> void: _fire_at_nearest(), ""],
+		[2, func() -> void: pass, "v5_muzzle"],
+		[5, func() -> void:
+			for z in get_nodes_in_group("enemies"):
+				(z as Node).queue_free()
+			_at(Vector3(5, 0, -78), PI * 0.5)
+			var z1: Zombie = game.spawn_enemy("nurse", Vector3(-1, 0, -77))
+			z1.alerted = true
+			var z2: Zombie = game.spawn_enemy("walker", Vector3(-4, 0, -75))
+			z2.alerted = true, ""],
+		[60, func() -> void: pass, "v5_clinic"],
+		[5, func() -> void:
+			for z in get_nodes_in_group("enemies"):
+				(z as Node).queue_free()
+			_at(Vector3(0, 0, 96), PI)
+			var b: Zombie = game.spawn_enemy("warden", Vector3(1, 0, 112))
+			b.alerted = true, ""],
+		[50, func() -> void: pass, "v6_warden"],
+		[5, func() -> void:
+			for z in get_nodes_in_group("enemies"):
+				(z as Node).queue_free()
+			_at(Vector3(-6, 0, 100), PI * 0.8)
+			game.player.pitch = 0.05, ""],
+		[40, func() -> void: pass, "v6_helicopter"],
+		[5, func() -> void: _at(Vector3(40, 0, 30), -PI * 0.5), ""],
+		[40, func() -> void: pass, "v5_church_yard"],
+		[5, func() -> void: _at(Vector3(54, 0, 44), PI * 0.35), ""],
+		[40, func() -> void: pass, "v5_graveyard"],
 	]
 
 

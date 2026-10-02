@@ -6,7 +6,7 @@ extends SceneTree
 var frame := 0
 var out := "user://view"
 var cam: Camera3D
-var shots := [["back", 0.0], ["side", 90.0], ["side_other", 270.0]]
+var shots := [["front", 180.0], ["three_quarter", 150.0]]
 var step := 0
 var dist := 15.0
 var walk := false
@@ -23,7 +23,7 @@ func _initialize() -> void:
 		guns_only = true
 	elif args.size() > 1:
 		names = (args[1] as String).split(",")
-		dist = 6.0 + 2.0 * names.size()
+		dist = 6.0 + 2.0 * names.size() if names.size() > 3 else 3.4 + 1.1 * names.size()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color(0.25, 0.27, 0.3)
@@ -38,7 +38,8 @@ func _initialize() -> void:
 	if guns_only:
 		names = []
 		dist = 3.2
-	var x := -1.5 * float(names.size() - 1)
+	var gap := 3.0 if names.size() > 3 else 1.25
+	var x := -0.5 * gap * float(names.size() - 1)
 	for n in names:
 		var h: float = Data.MODELS[n].h
 		var m := Assets.make(n, h, false, true)
@@ -50,10 +51,10 @@ func _initialize() -> void:
 			sm.set_shader_parameter("speed", 0.8 if "walk" in OS.get_cmdline_user_args() else 0.0)
 			sm.set_shader_parameter("phase", 1.2)
 			sm.set_shader_parameter("lean", 0.4)
-		x += 3.0
+		x += gap
 		if names.size() < 3:
 			pass
-	for g in ["gun_pistol", "gun_shotgun", "gun_smg", "gun_rifle"]:
+	for g in ([] if names.size() < 4 and not guns_only else ["gun_pistol", "gun_shotgun", "gun_smg", "gun_rifle"]):
 		var m := Assets.make(g, Data.MODELS[g].len, true)
 		var gi := float(["gun_pistol", "gun_shotgun", "gun_smg", "gun_rifle"].find(g))
 		m.position = Vector3(-4.5 + gi * 3.0, 3.2, 0)
