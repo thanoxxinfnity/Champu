@@ -105,7 +105,8 @@ test('the download is described at the size it actually is', () => {
   assert.ok(!/39 MB/.test(SITE));
   assert.ok(!/tap to fire/.test(SITE));
   assert.ok(!/signed with a debug key/.test(SITE), 'it is signed with the release key now');
-  assert.match(SITE, /FIRE<\/strong>/);
+  // The site no longer describes the old Chomu City / Chomu Game builds, so nothing on it may link to them.
+  assert.ok(!/ChomuCity|ChomuGame/.test(SITE), 'the landing page links to a build that is not offered any more');
 });
 
 test('the privacy page names Blob, now that builds go there', () => {

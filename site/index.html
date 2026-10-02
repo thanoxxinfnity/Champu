@@ -1,186 +1,399 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chomugiri — the autonomous developer workspace</title>
-<meta name="description" content="Chomugiri turns a sentence into a shipped artifact: an APK, a Minecraft add-on, a Godot game, a deck, a site. Runs on your device, with your keys.">
-<style>
-  :root {
-    --paper: #fdfaf4; --ink: #2b2521; --dim: #6b6058; --faint: #9a8f85;
-    --line: #e6ddd0; --accent: #e8722a; --card: #fffdf8;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --paper: #17130f; --ink: #f0e8dd; --dim: #b3a595; --faint: #7d7266;
-            --line: #2e2721; --accent: #f2884a; --card: #1e1813; }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--paper); color: var(--ink);
-         font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-         -webkit-font-smoothing: antialiased; }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 60px 20px 90px; }
-  a { color: var(--accent); }
-  h1 { font-size: clamp(34px, 8vw, 54px); line-height: 1.08; margin: 0 0 14px; letter-spacing: -0.03em; }
-  h2 { font-size: 20px; margin: 52px 0 12px; letter-spacing: -0.01em; }
-  h3 { font-size: 15px; margin: 0 0 2px; letter-spacing: -0.01em; }
-  p, li { color: var(--dim); }
-  strong { color: var(--ink); font-weight: 600; }
-  .lede { font-size: clamp(17px, 3.6vw, 20px); line-height: 1.55; margin: 0 0 30px; }
-  .rule { height: 2px; border: 0; margin: 0 0 34px;
-          background: repeating-linear-gradient(90deg, var(--accent) 0 14px, transparent 14px 22px);
-          opacity: .55; }
-  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin: 18px 0 0; }
-  .card { border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; background: var(--card); }
-  .card p { margin: 4px 0 0; font-size: 14.5px; }
-  .kicker { color: var(--faint); font-size: 12px; text-transform: uppercase; letter-spacing: .09em; margin: 0 0 4px; }
-
-  .voice { border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 12px 0; background: var(--card); }
-  .voice .row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-  .voice .meta { flex: 1 1 180px; min-width: 0; }
-  .voice p { margin: 2px 0 0; font-size: 14px; color: var(--faint); }
-  .voice audio { width: 100%; margin-top: 12px; }
-  button.play { flex: 0 0 auto; border: 1px solid var(--line); background: var(--paper); color: var(--ink);
-                border-radius: 999px; width: 44px; height: 44px; font-size: 15px; cursor: pointer; line-height: 1; }
-  button.play:hover { border-color: var(--accent); color: var(--accent); }
-
-  .cta { display: inline-block; border: 1px solid var(--accent); color: var(--accent);
-         border-radius: 999px; padding: 11px 22px; text-decoration: none; font-weight: 600; font-size: 15px;
-         margin: 8px 10px 0 0; }
-  .cta.solid { background: var(--accent); color: var(--paper); }
-  ul { padding-left: 20px; } li { margin: 6px 0; }
-  footer { margin-top: 66px; padding-top: 22px; border-top: 1px solid var(--line);
-           color: var(--faint); font-size: 13.5px; display: flex; gap: 18px; flex-wrap: wrap; }
-  footer a { color: var(--faint); }
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chomugiri — say it, get the app</title>
+<meta name="description" content="Chomugiri is an AI that builds real things on your phone — apps, games, add-ons, decks, sites — and researches the live web first. Plus Chomu Horizon, an open-world racing game, and a real-data solar system powered by NASA.">
+<meta name="theme-color" content="#fff7ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#17110c" media="(prefers-color-scheme: dark)">
+<meta property="og:title" content="Chomugiri — say it, get the app">
+<meta property="og:description" content="An AI workspace for your phone, a racing game, and a live solar system.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23fde0c6' stroke='%23fb923c' stroke-width='3'/%3E%3Cpath d='M10 11l6 5-6 5M17 21h6' fill='none' stroke='%232c2018' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preload" href="/fonts/nunito-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/caveat-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/site.css">
+<script>
+  document.documentElement.classList.remove('no-js');
+  try { var t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<script type="importmap">
+{ "imports": { "three": "/vendor/three/three.module.min.js" } }
+</script>
 </head>
 <body>
-<div class="wrap">
+<div class="progress" id="progress"></div>
 
-  <p class="kicker">Chomugiri</p>
-  <h1>Say what you want built.<br>Get the file.</h1>
-  <hr class="rule">
-
-  <p class="lede">Chomugiri is an autonomous developer workspace. You describe a thing — an Android
-  app, a Minecraft add-on, a Godot game, a deck, a website — and it plans it, builds it, compiles it,
-  and hands you the artifact. Not a snippet. The actual signed APK, the actual <code>.mcaddon</code>,
-  the actual playable build.</p>
-
-  <!--APK-->
-  <a class="cta solid" href="https://pit1lmdix4emrgm9.public.blob.vercel-storage.com/builds/ChomuCity.apk?download=1">Download Chomu City (APK)</a>
-  <!--/APK-->
-  <a class="cta" href="#voices">Hear it</a>
-  <a class="cta" href="/privacy">Privacy</a>
-
-  <!--APK-->
-  <h2 id="game">Two games, both built by the pipeline</h2>
-  <p>Neither of these was written by hand. Both came out of Chomugiri's own
-  planner, scene builder and exporter, from one sentence each — which is the
-  only way to know the thing works.</p>
-
-  <div class="card">
-    <p><strong><a href="https://pit1lmdix4emrgm9.public.blob.vercel-storage.com/builds/ChomuCity.apk?download=1">ChomuCity.apk</a></strong>
-    — 33 MB. An open-world block: walk it in third person with the camera
-    orbiting behind you, get into one of three parked cars and drive it, and run
-    four jobs around the map. There is no gun, deliberately — a third-person
-    shooting rig is a different problem, and half of one is worse than none.</p>
-    <p>Landscape. Left half of the screen is the movement stick, right half
-    turns the camera, <strong>USE</strong> gets you in and out of a car.</p>
+<nav class="top">
+  <a class="brand" href="#top" aria-label="Chomugiri home"><span class="mark">&gt;_</span>Chomugiri</a>
+  <div class="links" id="links">
+    <a href="#chomugiri">Chomugiri</a>
+    <a href="#research">Research</a>
+    <a href="#horizon">Chomu Horizon</a>
+    <a href="#godot">Voices</a>
+    <a href="#space">Solar system</a>
   </div>
+  <button class="icon-btn theme" id="theme" aria-label="Switch light / dark" title="Light / dark">☀</button>
+  <button class="icon-btn menu-btn" id="menu" aria-label="Menu" aria-expanded="false">☰</button>
+</nav>
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Menu">
+  <a href="#chomugiri">Chomugiri</a>
+  <a href="#research">Research</a>
+  <a href="#horizon">Chomu Horizon</a>
+  <a href="#godot">Voices</a>
+  <a href="#space">Solar system</a>
+  <a href="/privacy">Privacy</a>
+</aside>
 
-  <div class="card">
-    <p><strong><a href="https://pit1lmdix4emrgm9.public.blob.vercel-storage.com/builds/ChomuGame.apk?download=1">ChomuGame.apk</a></strong>
-    — 33 MB. A first-person zombie survival shooter over the same city block.
-    Five missions, each unlocking the next: clear the yard, hold out ninety
-    seconds, run for supplies, defend the generator, last stand. Waves that grow,
-    a hitscan rifle with ammo and reloads, health that comes back when you break
-    off. The horde paths round the buildings rather than through them.</p>
-    <p><strong>FIRE</strong>, <strong>RELOAD</strong> and <strong>JUMP</strong>
-    sit under your right thumb; shove the stick to its edge to sprint.</p>
-  </div>
+<main id="top">
 
-  <p>Both are signed, but not by the Play Store, so Android will warn that they
-  came from an unknown source; allow the install from your browser and they run.
-  The crates and barrels are real models from Poly Haven, CC0. Exported with
-  Godot 4.7.2.</p>
-  <!--/APK-->
-
-  <h2>What it makes</h2>
-  <div class="grid">
-    <div class="card"><h3>Android apps</h3><p>Real Gradle project, real signed APK, straight to your phone.</p></div>
-    <div class="card"><h3>Games</h3><p>Godot 4 projects — levels, music, rigged models, exported and packaged.</p></div>
-    <div class="card"><h3>Minecraft add-ons</h3><p>Behaviour and resource packs, Blockbench geometry, packed as <code>.mcaddon</code>.</p></div>
-    <div class="card"><h3>3D models</h3><p>Meshy, Tripo or Microsoft TRELLIS on NVIDIA NIM — with a code-built rigged fallback that never fails.</p></div>
-    <div class="card"><h3>Decks &amp; documents</h3><p>Slides, PDFs, spreadsheets, laid out rather than dumped.</p></div>
-    <div class="card"><h3>Sites</h3><p>Pages like this one, written and deployed.</p></div>
-  </div>
-
-  <h2>How it runs</h2>
-  <ul>
-    <li><strong>On your device.</strong> The workspace is a Next.js app, and the Android build
-      carries the whole API surface natively — it serves itself on the phone's loopback interface,
-      so requests go from your phone to the provider with no server of ours in between. The web
-      version cannot do that, because a browser is not allowed to call NVIDIA directly; there,
-      requests pass through a gateway that forwards and stores nothing.</li>
-    <li><strong>With your keys.</strong> You paste them in Settings, they stay in the app's own
-      private storage on the phone, and they go only to the provider they belong to. The
-      <a href="/privacy">privacy policy</a> says exactly which file and exactly how well protected
-      — no rounder than that.</li>
-    <li><strong>Nothing collected.</strong> No accounts, no analytics, no database of ours. See the
-      <a href="/privacy">privacy policy</a> for exactly what leaves the device and where it goes.</li>
-  </ul>
-
-  <h2 id="voices">The voices</h2>
-  <p>Chomugiri can speak. These are the workspace voices — the same recordings that ship in the app
-  under <strong>Settings → Voice</strong>. They belong to the app and to this page. They are not
-  baked into anything Chomugiri generates for you: a game it builds ships silent of these, so the
-  thing you make is yours to license as you like.</p>
-
-  <div class="voice">
-    <div class="row">
-      <button class="play" data-for="v1" aria-label="Play narration">▶</button>
-      <div class="meta"><h3>Narration</h3><p>The long-form workspace voice.</p></div>
+<!-- ================= HERO ================= -->
+<section class="hero" style="border:0">
+  <div class="wrap hero-inner">
+    <div class="logo-big rv pop" aria-hidden="true">&gt;_</div>
+    <div class="rv" style="--d:.1s">
+      <h1>Chomugiri</h1>
     </div>
-    <audio id="v1" preload="none" controls src="/voice/narration.wav"></audio>
-  </div>
-
-  <div class="voice">
-    <div class="row">
-      <button class="play" data-for="v2" aria-label="Play voice A">▶</button>
-      <div class="meta"><h3>Voice A</h3><p>Warmer read, for prompts and confirmations.</p></div>
+    <div class="type-line rv" style="--d:.2s" aria-live="polite"><span id="hero-type" class="typed"></span><span class="caret"></span></div>
+    <p class="lede rv" style="--d:.3s">An AI that lives on your phone and builds real things — an Android app, a game, a Minecraft add-on, a deck, a website — then hands you the actual file. It even reads the live web first, so it does not build from stale memory.</p>
+    <div class="pills rv" style="--d:.4s"><span class="pill">/make-apk</span><span class="pill">/build-game</span><span class="pill">/build-mcpack</span><span class="pill">/make-deck</span><span class="pill">/research</span><span class="pill">/deploy</span></div>
+    <div class="row rv" style="--d:.5s; justify-content:center">
+      <a class="btn solid" href="#chomugiri">Meet Chomugiri</a>
+      <a class="btn" href="#horizon">Chomu Horizon</a>
+      <a class="btn" href="#space">Solar system</a>
     </div>
-    <audio id="v2" preload="none" controls src="/voice/voice_a.wav"></audio>
   </div>
+  <div class="scroll-hint" aria-hidden="true">scroll ↓</div>
+</section>
 
-  <div class="voice">
-    <div class="row">
-      <button class="play" data-for="v3" aria-label="Play voice B">▶</button>
-      <div class="meta"><h3>Voice B</h3><p>The alternate read, selectable in Settings.</p></div>
+<!-- ================= CHOMUGIRI ================= -->
+<section id="chomugiri">
+  <div class="wrap">
+    <div class="head rv">
+      <span class="kicker">01 · The app</span>
+      <h2>Say what you want. <span>Get the file.</span></h2>
+      <p>Chomugiri is a developer workspace in your pocket. You talk to it like a person. It answers questions straight, and when you ask it to <em>make</em> something, it plans the work, writes the files, builds them for real, and gives you the finished result — not a snippet to copy and fix.</p>
     </div>
-    <audio id="v3" preload="none" controls src="/voice/voice_b.wav"></audio>
+
+    <div class="product">
+      <div class="prose">
+        <h3 class="rv">Two lanes, one box</h3>
+        <p class="rv">Everything starts in the same box at the bottom of the screen. Chomugiri reads what you typed and picks a lane by itself.</p>
+        <ul class="rv">
+          <li><span class="tag">LANE A</span><strong>Questions.</strong> “How does a Kotlin coroutine cancel?” You get a direct answer. No “Great question!”, no padding, no five paragraphs of warm-up. If it needs code, the code comes in a proper block you can copy.</li>
+          <li><span class="tag">LANE B</span><strong>Builds.</strong> “Make me a racing game.” It breaks the job into a checklist of small steps, shows them to you, and ticks them off live as it writes each file and runs each command.</li>
+        </ul>
+        <p class="rv">You never have to choose. If a message is truly in between, it asks a model to decide — otherwise a fast rule-based router does it instantly and for free.</p>
+
+        <h3 class="rv">It plans before it builds</h3>
+        <p class="rv">A big request is turned into an <strong>atomic checklist</strong> — small steps that each do one thing and can each be checked. You watch the list fill in. Before it starts, it tells you what it <em>guessed</em> (“Camera is third-person. Built in 3D. Named it ‘Racing Forza’ from your prompt.”) so you can say “no, make it 2D” in one line instead of finding out at the end.</p>
+        <p class="rv">Files land in a built-in file manager, grouped by what they are, and each step reports what it did — “1 file created · 12 lines” — the way a good teammate would write a status update.</p>
+
+        <h3 class="rv">It builds for real</h3>
+        <p class="rv">A phone browser cannot run the Android SDK. So Chomugiri can connect to a small helper on <em>your own computer</em> — the terminal bridge — and run real commands there: <code>gradlew assembleDebug</code>, a Godot export, a zip. The helper only works inside one folder you pick, refuses paths that try to escape it, and you can stop it any time. When a step needs the bridge and you have not connected one, that step is marked <strong>blocked</strong> instead of pretending it worked.</p>
+        <p class="rv">If the same command fails the same way twice, the <strong>anti-loop guard</strong> stops it for good, works out what kind of failure it is — missing tool, bad credentials, broken generated code — and changes approach instead of retrying forever.</p>
+
+        <h3 class="rv" id="what-it-makes">What it can make</h3>
+        <ul class="rv">
+          <li><strong>Android apps</strong> — a real Gradle project, a compiled APK, and a zip of the source.</li>
+          <li><strong>Games</strong> — Godot 4 projects with levels, sound, and rigged 3D models, exported and packaged. Chomu Horizon, below, came out of this lane.</li>
+          <li><strong>Minecraft add-ons</strong> — behaviour and resource packs with real geometry and textures, packed as a <code>.mcaddon</code> you can double-tap to install. It can also convert a Java mod and tell you honestly what did not carry over.</li>
+          <li><strong>Studio</strong> — animated slide decks, print-ready documents, spreadsheets, and pictures from several image providers.</li>
+          <li><strong>3D models</strong> — NVIDIA TRELLIS, Tripo, Meshy, or a free model on Kaggle’s GPUs, with a code-built fallback so a build never stops on a missing model.</li>
+          <li><strong>Websites</strong> — including real 3D ones — written and deployed to Vercel in one tap, after a check that it will actually build.</li>
+        </ul>
+
+        <h3 class="rv">Your models, your keys</h3>
+        <p class="rv">Chomugiri does not lock you to one AI. It talks to the NVIDIA NIM catalogue (dozens of models — Kimi, DeepSeek, Nemotron, GPT-OSS and more), to Pollinations with <strong>no key at all</strong> so it works the moment you install it, and to <em>any</em> OpenAI-compatible address you paste in — including Anthropic- and Gemini-style endpoints. When a model thinks out loud, that reasoning is tucked into a drawer you can open.</p>
+        <p class="rv">Your keys go in <strong>Settings → API Keys</strong>, are kept in the phone’s own secret store, and are sent only to the company they belong to. No account. No analytics. The Android app runs its whole backend <em>on the phone</em>, so your message goes from your phone straight to the model provider — no server of ours in the middle.</p>
+
+        <h3 class="rv">Small things you will notice</h3>
+        <ul class="rv">
+          <li><strong>Code blocks</strong> have a one-tap <em>copy</em> button that turns into a green tick, and an <em>expand</em> button for reading long code full-screen.</li>
+          <li><strong>Website names wear their logo.</strong> Type or read <code>github.com</code> anywhere and it becomes a small pill with that site’s own logo — in the box you type in, in your message, in the answer.</li>
+          <li><strong>Light, dark, or auto</strong> — a hand-drawn paper look in both, with fonts built into the app so it looks the same offline.</li>
+          <li><strong>Drafts</strong>, a <strong>/</strong> command palette, your own custom skills, and image or file attachments.</li>
+          <li><strong>Runs in the background</strong> — put the app away and a long build keeps going.</li>
+        </ul>
+
+        <div class="dl-card rv" id="dl-chomugiri">
+          <h4>Download Chomugiri</h4>
+          <a class="btn solid big" id="dl-chomugiri-btn" href="https://github.com/thanoxxinfnity/Champu/releases/download/chomugiri-latest/Chomugiri.apk" rel="noopener">
+            <span class="lbl">Download Chomugiri (APK)<small>Android · about 16 MB · latest version</small></span>
+          </a>
+          <p>This link always points at the newest build. <a href="https://github.com/thanoxxinfnity/Champu/releases/tag/chomugiri-latest" rel="noopener">See the release page</a> for the version number and notes.</p>
+          <ol>
+            <li>Tap the button; your phone downloads <code>Chomugiri.apk</code>.</li>
+            <li>Open it. If Android warns about “unknown sources”, allow installs from your browser — this app is not on the Play Store.</li>
+            <li>Open Chomugiri and start typing. No sign-up. Add your own key later if you want more models.</li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- the phone: built from HTML, replays the real app -->
+      <div class="stage rv right">
+        <div class="phone" id="phone" aria-label="An animated copy of the Chomugiri app screen">
+          <div class="notch"></div>
+          <div class="app-bar"><span class="hb">☰</span><span class="nm">chat</span><span class="tg"><i>☀</i><i class="on" id="d-mode">◐</i><i>☾</i></span><span class="ln">▲ launch</span></div>
+          <div class="app-body">
+            <div class="screen home on" id="s-home">
+              <div class="logo-sm">&gt;_</div>
+              <h4>Chomugiri</h4>
+              <p>Ask a technical question and it routes to <b>Lane A</b> — direct answers, no filler.<br>Describe something to build and it routes to <b>Lane B</b> — an atomic plan, generated files, and real builds.</p>
+              <div class="cmds">/make-apk · /build-mcpack · /build-game<br>/make-deck · /research · /audit-code · /deploy</div>
+            </div>
+            <div class="screen chat" id="s-chat" style="justify-content:flex-end"></div>
+          </div>
+          <div class="status" id="d-status"><i>✦</i><span id="d-status-t">Researching the live web…</span></div>
+          <div class="dock">
+            <div class="tabs"><span>plan</span><span>files</span><span>terminal</span></div>
+            <div class="box"><span id="d-typed"></span><span class="caret" id="d-caret"></span><span class="ph" id="d-ph">Ask, or describe what to build.  /  for commands.</span><span class="run" id="d-run">run</span></div>
+            <div class="foot">Chomugiri · thinks out loud, builds for real</div>
+          </div>
+        </div>
+        <div class="demo-steps" id="demo-steps" role="tablist" aria-label="Demo scenes">
+          <button data-s="0" class="on">build</button><button data-s="1">research</button><button data-s="2">code</button>
+        </div>
+        <div class="cap">built in HTML — this is not a video</div>
+      </div>
+    </div>
+
+    <div class="gallery" aria-label="Real screenshots of the Chomugiri app">
+      <figure class="rv"><img src="/img/shots/app-home.jpg" alt="Chomugiri home screen in light mode" width="560" height="1214" loading="lazy"><figcaption>home</figcaption></figure>
+      <figure class="rv" style="--d:.05s"><img src="/img/shots/app-dark.jpg" alt="Chomugiri in dark mode" width="560" height="1214" loading="lazy"><figcaption>dark mode</figcaption></figure>
+      <figure class="rv" style="--d:.1s"><img src="/img/shots/app-menu.jpg" alt="The Chomugiri menu open" width="560" height="1214" loading="lazy"><figcaption>menu</figcaption></figure>
+      <figure class="rv" style="--d:.15s"><img src="/img/shots/app-prompt.jpg" alt="A build request typed into the box" width="560" height="1214" loading="lazy"><figcaption>one sentence</figcaption></figure>
+      <figure class="rv" style="--d:.2s"><img src="/img/shots/app-research.jpg" alt="Chomugiri reporting what it researched, with website logos" width="560" height="1214" loading="lazy"><figcaption>research first</figcaption></figure>
+      <figure class="rv" style="--d:.25s"><img src="/img/shots/app-logos.jpg" alt="Website names shown as logo pills in a message" width="560" height="1214" loading="lazy"><figcaption>logo pills</figcaption></figure>
+      <figure class="rv" style="--d:.3s"><img src="/img/shots/app-code.jpg" alt="A code block with copy and expand buttons" width="560" height="1214" loading="lazy"><figcaption>copy &amp; expand</figcaption></figure>
+    </div>
   </div>
+</section>
 
-  <footer>
-    <a href="/privacy">Privacy</a>
-    <span>No accounts. No analytics. No server of ours.</span>
-  </footer>
+<!-- ================= RESEARCH ================= -->
+<section id="research" style="background:var(--paper-2)">
+  <div class="wrap">
+    <div class="head rv">
+      <span class="kicker">02 · It checks before it builds</span>
+      <h2>It reads the web, <span>then shows you where.</span></h2>
+      <p>Every AI model learned from a snapshot of the internet, and the snapshot goes stale. Ask one about the newest Godot and it may confidently name a version that is two releases old. So before a build, Chomugiri goes and looks.</p>
+    </div>
+    <div class="product flip">
+      <div class="stage rv left">
+        <div class="typebox" aria-label="Website names being typed, becoming logo pills">
+          <span id="logo-type" class="typed"></span><span class="caret"></span>
+          <div class="logo-cloud" id="logo-cloud"></div>
+        </div>
+        <div class="cap">type a site name → it gets its logo</div>
+      </div>
+      <div class="prose">
+        <h3 class="rv">What “researching” means here</h3>
+        <ul class="rv">
+          <li>It works out <em>what it might be wrong about</em> — current version numbers, what changed recently, what the thing you named actually is.</li>
+          <li>It searches the live web and <strong>reads the pages</strong>, not just the search snippets — release notes, documentation, an encyclopedia entry.</li>
+          <li>It keeps only the facts that matter and builds with them in front of it.</li>
+          <li>Then it tells you what it did: <em>“Researched before building — current Godot version; what changed in Godot 4.x. Read 9 live pages.”</em></li>
+        </ul>
+        <p class="rv">A real example: asked for a Godot game, it first found that the current Godot is <strong>4.7.2</strong> — something its own memory did not know — and wrote the project for that version.</p>
+        <h3 class="rv">Every source has a face</h3>
+        <p class="rv">The pages it read are listed as pills, each with <strong>the site’s own logo</strong> in front of the name. They look identical everywhere — in the box while you type, in your sent message, in the reply, and in the list of sources — so you can see at a glance whether an answer came from a code host, the docs, or an encyclopedia.</p>
+        <p class="rv">You can watch it work, too: while it researches, a small status pill at the bottom of the screen says so, with a running timer, and a <em>stop</em> button is always there.</p>
+        <p class="rv" style="font-size:14px;color:var(--faint)">Logos are fetched once, when the app is built, and shipped inside it — opening this page or the app does not ask any logo company who you are.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
-</div>
-<script>
-  // One at a time: three overlapping voices is noise, and the pause is what
-  // people reach for when they started the wrong one.
-  var players = Array.prototype.slice.call(document.querySelectorAll('audio'));
-  players.forEach(function (a) {
-    a.addEventListener('play', function () {
-      players.forEach(function (other) { if (other !== a) other.pause(); });
-    });
-  });
-  document.querySelectorAll('button.play').forEach(function (b) {
-    var audio = document.getElementById(b.dataset.for);
-    b.addEventListener('click', function () { audio.paused ? audio.play() : audio.pause(); });
-    audio.addEventListener('play', function () { b.textContent = '❚❚'; });
-    audio.addEventListener('pause', function () { b.textContent = '▶'; });
-    audio.addEventListener('ended', function () { b.textContent = '▶'; });
-  });
-</script>
+<!-- ================= HORIZON ================= -->
+<section id="horizon">
+  <div class="wrap">
+    <div class="head rv">
+      <span class="kicker">03 · The game</span>
+      <h2>Chomu <span>Horizon</span></h2>
+      <p>An open-world racing game for Android phones, in the spirit of Forza Horizon. Five big maps, nine things to ride, real drifting, nitro, and a garage where you make every one of them yours. It was built with Chomugiri’s own pipeline — which is the only honest way to know that pipeline works.</p>
+    </div>
+
+    <div class="horizon-hero rv pop" id="hz-hero" aria-label="Chomu Horizon screenshots">
+      <img src="/img/shots/horizon-road.jpg" alt="A car on a winding road at golden hour" class="on" width="560" height="996">
+      <img src="/img/shots/horizon-drift.jpg" alt="A car drifting around a bend with tyre smoke" loading="lazy" width="560" height="996">
+      <img src="/img/shots/horizon-low.jpg" alt="Low camera behind the car" loading="lazy" width="560" height="996">
+      <img src="/img/shots/horizon-garage.jpg" alt="The garage showroom" loading="lazy" width="560" height="996">
+      <div class="lab"><span id="hz-type" class="typed"></span><span class="caret"></span></div>
+    </div>
+
+    <div class="product flip">
+      <div class="stage rv left">
+        <div class="facts" style="grid-template-columns:repeat(2,1fr);width:100%">
+          <div class="fact"><b>5</b><span>big open-world maps, linked by portals</span></div>
+          <div class="fact"><b>9</b><span>rides — from a supercar to a bicycle and a horse</span></div>
+          <div class="fact"><b>3 s</b><span>rewind when you crash</span></div>
+          <div class="fact"><b>0</b><span>accounts, ads or sign-ups</span></div>
+        </div>
+      </div>
+      <div class="prose">
+        <h3 class="rv">A world to wander</h3>
+        <p class="rv">There is no race you must enter. You drop onto a map and drive. Roads are carved into real terrain, with forests, rock fields, ramps and coins scattered where a person would put them.</p>
+        <div class="maps rv">
+          <div><b>Horizon Hills</b><span>Rolling green countryside with a lake and long, flowing roads.</span></div>
+          <div><b>Neo Metro</b><span>A big, dense Mumbai-styled city. Towers that light up at night, neon shopfronts, traffic.</span></div>
+          <div><b>Red Canyon</b><span>A desert mesa run, best at golden hour, all dust and long shadows.</span></div>
+          <div><b>Frost Peak</b><span>A snowbound mountain pass with a frozen lake you can drift across.</span></div>
+          <div style="grid-column:1/-1"><b>Wild Trail</b><span>An off-road map made for the trucks and the wilder rides.</span></div>
+        </div>
+        <p class="rv">Three glowing portal rings stand on each map’s plaza. Drive through one and you arrive on another map with the same car, the same save, and the same speed.</p>
+
+        <h3 class="rv">Nine ways to ride</h3>
+        <ul class="rv">
+          <li><strong>Supercar</strong> (Vortex GT-R), <strong>muscle</strong> (Brute 69 SS), <strong>JDM tuner</strong> (Kaze R-Spec — yours free), <strong>classic</strong> (Relic Custom).</li>
+          <li><strong>Off-road</strong> (Ranger Overland) and a <strong>monster truck</strong> (Titan Crusher) for the Wild Trail.</li>
+          <li>A <strong>motorbike</strong> (Raptor RR), a <strong>bicycle</strong> (Pedal One — also free), and a <strong>horse</strong> (Wild Steed).</li>
+        </ul>
+        <p class="rv">Coins you pick up on the road, in treasure rings and off big jumps buy the pricier ones.</p>
+
+        <h3 class="rv">How it drives</h3>
+        <ul class="rv">
+          <li><strong>Real suspension.</strong> Every wheel is a ray cast down at the ground, so cars lean, bounce and land like cars.</li>
+          <li><strong>Drift.</strong> Hold the handbrake and the rear wheels let go. Chain drifts for a combo; at ×4 the tyre smoke turns rainbow.</li>
+          <li><strong>Nitro.</strong> The ring around the flame button is the tank, and drifting refills it.</li>
+          <li><strong>Big air</strong> slows time for a moment; <strong>rewind</strong> takes you back three seconds.</li>
+          <li><strong>Four camera views</strong> you can cycle through, plus free look with an adjustable sensitivity, and a field of view that widens with speed.</li>
+        </ul>
+
+        <h3 class="rv">The garage</h3>
+        <p class="rv">A glossy showroom with the car on a turntable. Swipe to spin it, open the doors (swing or scissor), and change the paint — metallic flake, matte, pearlescent, or a <strong>chameleon</strong> finish that shifts colour as you move. Pick the rims, switch on underglow, and read the stats before you pay.</p>
+
+        <h3 class="rv">Touch controls</h3>
+        <ul class="rv">
+          <li><strong>Left thumb:</strong> steer — ◀ ▶ buttons or an analog stick (choose in the garage).</li>
+          <li><strong>Right thumb:</strong> GAS and BRAKE (brake, then reverse once stopped), DRIFT, and the nitro ring.</li>
+          <li><strong>Top left:</strong> garage, camera, and “put me back on the road”.</li>
+          <li>Every finger is tracked on its own, so you can steer, accelerate and fire nitro at once, and slide a thumb from GAS to BRAKE without lifting.</li>
+        </ul>
+
+        <h3 class="rv">How it was made</h3>
+        <p class="rv">Each map’s terrain, road network and object placement is baked offline in Python and shipped as compact data. The trees, rocks, buildings and roadside props were <strong>generated by NVIDIA TRELLIS</strong> from text descriptions, then trimmed into phone-sized versions with near, far and billboard levels of detail. Custom shaders paint the ground by slope and height, sway the grass, light the city windows at night, ripple the water, crack the ice, and add a final vignette and sharpen pass. The game itself is made with the Godot Engine.</p>
+
+        <div class="dl-card rv" id="dl-horizon">
+          <h4>Download Chomu Horizon</h4>
+          <a class="btn solid big" id="dl-horizon-btn" href="https://github.com/thanoxxinfnity/Champu/releases/download/latest-apk/ChomuHorizon.apk" rel="noopener">
+            <span class="lbl">Download Chomu Horizon (APK)<small>Android · about 110 MB · landscape</small></span>
+          </a>
+          <p>It is a big world, so the file is big — use Wi-Fi. <a href="https://github.com/thanoxxinfnity/Champu/releases/tag/latest-apk" rel="noopener">Release page</a>.</p>
+          <ol>
+            <li>Tap the button and let it finish downloading.</li>
+            <li>Open <code>ChomuHorizon.apk</code>; allow installs from your browser if Android asks.</li>
+            <li>Turn the phone sideways and pick your first car. The Kaze R-Spec is free.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <div class="gallery" aria-label="Chomu Horizon screenshots">
+      <figure class="rv"><img src="/img/shots/horizon-road.jpg" alt="Chomu Horizon: the open road" width="560" height="996" loading="lazy"><figcaption>the open road</figcaption></figure>
+      <figure class="rv" style="--d:.05s"><img src="/img/shots/horizon-drift.jpg" alt="Chomu Horizon: drifting" width="560" height="996" loading="lazy"><figcaption>drift</figcaption></figure>
+      <figure class="rv" style="--d:.1s"><img src="/img/shots/horizon-low.jpg" alt="Chomu Horizon: low camera" width="560" height="996" loading="lazy"><figcaption>low camera</figcaption></figure>
+      <figure class="rv" style="--d:.15s"><img src="/img/shots/horizon-start.jpg" alt="Chomu Horizon: the start line" width="560" height="996" loading="lazy"><figcaption>start line</figcaption></figure>
+      <figure class="rv" style="--d:.2s"><img src="/img/shots/horizon-garage.jpg" alt="Chomu Horizon: the garage" width="560" height="996" loading="lazy"><figcaption>garage</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<!-- ================= GODOT + VOICES ================= -->
+<section id="godot" class="godot">
+  <div class="narrow">
+    <div class="head rv">
+      <span class="kicker">04 · Built with Godot</span>
+      <h2>Made with <span>Godot Engine</span></h2>
+      <p>Chomu Horizon, and every game Chomugiri builds, runs on the <a href="https://godotengine.org" rel="noopener">Godot Engine</a> — a free, open-source game engine. Godot asks everyone who ships a game with it to show its licence notice. So here it is, three times, read aloud.</p>
+    </div>
+    <p class="note rv">These are the three Chomugiri workspace voices — the same recordings as in the app under <strong>Settings → Voice</strong>. Press play and the words below type themselves in time with the voice.</p>
+
+    <div id="voices"></div>
+    <p class="note rv" id="tx-about" style="font-size:13px"></p>
+  </div>
+</section>
+
+<!-- ================= SPACE ================= -->
+<section id="space" class="space">
+  <div class="wrap">
+    <div class="head rv">
+      <span class="kicker">05 · Real space, real data</span>
+      <h2>The solar system, <span style="color:#ff9a52">right now.</span></h2>
+      <p>Every planet below is where it really is today. The positions come from the orbit tables that NASA’s Jet Propulsion Laboratory publishes, and you can check them against JPL’s own Horizons system with one tap. Drag to look around, pinch to zoom, tap a planet to fly to it, and spin time forward or back.</p>
+    </div>
+
+    <div class="space-stage" id="space-stage">
+      <canvas id="space-canvas" aria-label="Interactive 3D solar system"></canvas>
+      <div class="space-ui" id="space-ui"></div>
+      <div id="space-labels"></div>
+      <div class="space-info" id="space-info"></div>
+      <div class="space-loading" id="space-loading">warming up the telescope…</div>
+    </div>
+
+    <div class="timebar">
+      <div class="r">
+        <input type="date" id="sp-date" aria-label="Date">
+        <button class="chipbtn" id="sp-now">Now</button>
+        <span class="readout" id="sp-readout"></span>
+      </div>
+      <div class="r" id="sp-speed" aria-label="Time speed">
+        <button class="chipbtn" data-v="-365">◀ 1 yr/s</button>
+        <button class="chipbtn" data-v="-10">◀ 10 d/s</button>
+        <button class="chipbtn on" data-v="0">live</button>
+        <button class="chipbtn" data-v="10">10 d/s ▶</button>
+        <button class="chipbtn" data-v="365">1 yr/s ▶</button>
+      </div>
+    </div>
+
+    <div class="nasa-grid">
+      <article class="ncard wide" id="c-check">
+        <h3>Check it against NASA</h3>
+        <span class="src">Source: NASA / JPL Horizons system — ssd.jpl.nasa.gov</span>
+        <p style="font-size:14.5px">Our planets are placed with JPL’s published approximate orbit formulas, so the page works offline and on a slow phone. Press the button and the page asks JPL Horizons for each planet’s exact position on the date above, and shows how far off we are.</p>
+        <button class="chipbtn on" id="check-run">Compare with JPL Horizons</button>
+        <div class="check" id="check-out"></div>
+      </article>
+
+      <article class="ncard" id="c-neo">
+        <h3>Asteroids passing Earth</h3>
+        <span class="src">Source: NASA NeoWs (Near Earth Object Web Service) — next 7 days</span>
+        <div id="neo-out"><div class="skel"></div><div class="skel"></div><div class="skel" style="width:70%"></div></div>
+      </article>
+
+      <article class="ncard" id="c-epic">
+        <h3>Earth, from a million miles</h3>
+        <span class="src">Source: NASA EPIC camera on the DSCOVR satellite — newest photos</span>
+        <div id="epic-out"><div class="skel" style="height:140px"></div></div>
+      </article>
+
+      <article class="ncard wide" id="c-apod">
+        <h3>Picture of the day</h3>
+        <span class="src">Source: NASA Astronomy Picture of the Day</span>
+        <div id="apod-out"><div class="skel"></div><div class="skel" style="width:60%"></div></div>
+      </article>
+    </div>
+
+    <div class="credits">
+      <p><strong>Where each thing comes from.</strong> Orbits: E. M. Standish, <em>Keplerian Elements for Approximate Positions of the Major Planets</em>, NASA JPL (valid 1800–2050). The Moon: the main terms of lunar theory (Meeus), good to a fraction of a degree. Live data: NASA open APIs, fetched by our server so the key stays private — you never see it and neither does this page.</p>
+      <p><strong>Pictures.</strong> Planet maps: <a href="https://www.solarsystemscope.com/textures/" rel="noopener">Solar System Scope</a> (CC BY 4.0) — Mercury, Venus, Earth, Mars, Jupiter, Uranus, the Sun and the star sky. The Moon: NASA LRO / LROC. Saturn’s and Neptune’s surface colours here are <strong>drawn by us to look right</strong>, not photographs. Planet sizes are enlarged so you can see them; distances and directions are real.</p>
+      <p>This page is not made or endorsed by NASA. Data and images from NASA are used under NASA’s media guidelines.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span class="hand">Chomugiri</span>
+    No accounts. No analytics. No database of ours.
+    <nav><a href="#chomugiri">Chomugiri</a><a href="#horizon">Chomu Horizon</a><a href="/privacy">Privacy</a><a href="https://github.com/thanoxxinfnity/Champu" rel="noopener">Source on GitHub</a></nav>
+  </div>
+</footer>
+
+<script type="module" src="/js/main.js"></script>
 </body>
 </html>

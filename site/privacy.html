@@ -40,7 +40,7 @@
 <div class="wrap">
   <h1>Privacy</h1>
   <p class="sub">Chomugiri — the autonomous developer workspace.</p>
-  <p class="stamp">Last updated 16 September 2026</p>
+  <p class="stamp">Last updated 2 October 2026</p>
 
   <div class="card">
     <p><strong>The short version.</strong> There are no accounts, no analytics, and no database of
@@ -72,6 +72,7 @@
     <li><strong>Chats and generated files</strong> — in your browser's IndexedDB, or in the Android
       app's own private storage. Clearing the app's data deletes them, and nothing keeps a copy.</li>
     <li><strong>Settings</strong> — theme, model choice, custom endpoints.</li>
+    <li><strong>On this website</strong> — one thing: whether you picked light or dark, in your browser's local storage, so the page remembers it. It is never sent anywhere.</li>
   </ul>
 
   <h2>Where your API keys are kept, precisely</h2>
@@ -104,7 +105,9 @@
     <tr><td>Start a build</td><td><strong>Search terms taken from your request</strong> — the tool's version, the names you mentioned — and then the pages that come back are opened</td><td>The same engines as above, and the websites those pages belong to (for example GitHub or a project's own site). This happens automatically before every build so the model is not working from out-of-date memory</td></tr>
     <tr><td>Mention a website by name</td><td>The domain name, to fetch its logo — for example <em>claude.com</em></td><td>Google's favicon service (google.com/s2/favicons), from your device. Nothing else about the message goes with it</td></tr>
     <tr><td>Deploy a site</td><td>The files being deployed, and your Vercel token</td><td>Vercel</td></tr>
-    <tr><td>Download a build from this site</td><td>Nothing of yours — the file is fetched from where it is stored</td><td>Vercel Blob, which hosts the APKs because they are larger than a page</td></tr>
+    <tr><td>Download an APK from this site</td><td>Nothing of yours beyond what any download shows — your address and browser type</td><td>GitHub (release downloads), where the builds are published because they are far larger than a page. Older builds were kept on Vercel Blob</td></tr>
+    <tr><td>Open this website</td><td>The page, its pictures, fonts, the 3D library and the voice recordings all come from this site itself — nothing is loaded from an advertising, analytics or font company. Like any host, Vercel sees your address and browser type in its request logs</td><td>Vercel</td></tr>
+    <tr><td>Scroll to the solar system on this website</td><td>Your browser asks our server (<code>/api/nasa</code>) for public NASA data; the server then asks NASA (<code>api.nasa.gov</code>, <code>ssd.jpl.nasa.gov</code>) using an API key that lives only on the server and is never sent to you. Your browser then loads the Earth photos from <code>epic.gsfc.nasa.gov</code> and, when NASA's picture of the day has one, that picture from the host NASA lists for it. The date you pick on the page goes to NASA only if you press “Compare with JPL Horizons”</td><td>Vercel (our server), NASA, and NASA's image servers</td></tr>
     <tr><td>Use the terminal bridge</td><td>The command you asked for</td><td>The machine you pointed it at, and nowhere else</td></tr>
     <tr><td>Open a generated 3D web page</td><td>Nothing of yours — the page fetches the three.js library</td><td>jsDelivr, in the browser of whoever opens that page</td></tr>
   </table>
@@ -148,7 +151,7 @@
   browser's downloads, which needs no permission at all.</p>
 
   <h2>Voice recordings</h2>
-  <p>The recordings in the app and on this site are ours, and they play from the app. They are
+  <p>The recordings in the app and on this site are ours, and they play from the app. On this site they read out the Godot Engine's licence notice, and the typed text that follows them is that same notice (the line timings were measured from the recordings). They are
   deliberately not built into anything Chomugiri generates — a game you export carries none of
   them, so what you publish is yours.</p>
 
