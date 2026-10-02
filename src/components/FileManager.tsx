@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useWorkspace } from '@/lib/store';
+import { useWorkspace, visibleFiles } from '@/lib/store';
 import { downloadZip, downloadText, formatBytes } from '@/lib/zip';
 
 interface TreeNode {
@@ -102,7 +102,7 @@ function TreeRow({
 
 /** Generated-artifact browser with viewer, bridge sync and archive export. */
 export function FileManager() {
-  const files = useWorkspace((s) => s.files);
+  const files = useWorkspace(visibleFiles);
   const activeFile = useWorkspace((s) => s.activeFile);
   const setActiveFile = useWorkspace((s) => s.setActiveFile);
   const removeFile = useWorkspace((s) => s.removeFile);

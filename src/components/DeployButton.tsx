@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { db, isBrowser, type VaultRecord } from '@/lib/db/schema';
 import { secretsToEnvObject } from '@/lib/security/secrets';
-import { useWorkspace } from '@/lib/store';
+import { useWorkspace, visibleFiles } from '@/lib/store';
 import { deployMode, hasEntryPoint, liveSite, preflight, recordAfter, targetProject } from '@/lib/deploy/state';
 
 /**
@@ -20,7 +20,7 @@ import { deployMode, hasEntryPoint, liveSite, preflight, recordAfter, targetProj
  * all caught here rather than after a 40MB POST.
  */
 export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void } = {}) {
-  const files = useWorkspace((s) => s.files);
+  const files = useWorkspace(visibleFiles);
   const vercelToken = useWorkspace((s) => s.vercelToken);
   const vercelTeamId = useWorkspace((s) => s.vercelTeamId);
   const setLastDeploy = useWorkspace((s) => s.setLastDeploy);
@@ -33,6 +33,21 @@ export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void }
   const [projectName, setProjectName] = useState('chomugiri-app');
   const [renaming, setRenaming] = useState(false);
   const [vault, setVault] = useState<VaultRecord[]>([]);
+
+  // A deploy takes a while and gives back nothing until it is done. Without a moving signal the
+  // button just says "building…" and looks stuck, so: a stage that follows the real order of
+  // things (upload, then Vercel builds) and a running clock.
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!busy) {
+      setElapsed(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 500);
+    return () => clearInterval(id);
+  }, [busy]);
+  const stage = elapsed < 4 ? 'Uploading your files' : elapsed < 40 ? 'Vercel is building the site' : 'Still building — big sites take a minute';
 
   // A site that has been launched owns its name — an update must go to the same
   // project or it silently becomes a different website. The decision lives in
@@ -148,7 +163,18 @@ export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void }
         }}
         title={live ? `Update ${live.project}` : 'Launch the generated site on Vercel'}
       >
-        {live ? '↻ update' : '▲ launch'}
+        {busy ? (
+          <>
+            <span className="deploy-spin" aria-hidden />
+            <span className="thinking-phrase" role="status">
+              deploying… {elapsed}s
+            </span>
+          </>
+        ) : live ? (
+          '↻ update'
+        ) : (
+          '▲ launch'
+        )}
       </button>
 
       {open && (
@@ -248,8 +274,15 @@ export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void }
             className="press mono mt-2 w-full rounded-lg px-3 py-2 text-[11px] font-semibold disabled:opacity-35"
             style={{ background: 'var(--accent)', color: 'var(--panel)' }}
           >
-            {busy ? (mode === 'update' ? 'updating…' : 'building…') : mode === 'update' ? '↻ update site' : '▲ launch site'}
+            {busy ? (mode === 'update' ? 'updating…' : 'deploying…') : mode === 'update' ? '↻ update site' : '▲ launch site'}
           </button>
+
+          {busy && (
+            <div className="enter-fade mt-2" role="status" aria-live="polite">
+              <div className="deploy-bar" aria-hidden />
+              <p className="thinking-phrase mt-1.5 !text-[11px]">{stage}… {elapsed}s</p>
+            </div>
+          )}
 
           {live?.url && (
             <div className="mt-2 flex gap-1.5">

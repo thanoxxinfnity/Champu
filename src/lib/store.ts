@@ -32,6 +32,18 @@ export interface ChatAttachment {
   text?: string;
 }
 
+/** A message sent while a run was already going. It waits its turn instead of being refused. */
+export interface QueuedMessage {
+  id: string;
+  /** The session the user was in when they sent it (always set: a new chat is created on the spot). */
+  sessionId: string;
+  suite: SuiteId;
+  input: string;
+  attachments: ChatAttachment[];
+  forceLane?: 'A' | 'B';
+  at: number;
+}
+
 export interface ChatMessageView {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -272,12 +284,35 @@ interface WorkspaceState {
   setDraftsEnabled: (enabled: boolean) => void;
 
   // ── Run control ───────────────────────────────────────────────────────────
+  /**
+   * Which session the run in flight belongs to. "Running" is a fact about that
+   * session only: every other session is idle and must look it. null = no run.
+   */
+  runSessionId: string | null;
+  /** The placeholder assistant message of that run, so coming back to the session mid-run can show it filling in. */
+  runAssistantId: string | null;
+  setRun: (sessionId: string | null, assistantId?: string | null) => void;
+  queue: QueuedMessage[];
+  enqueue: (item: QueuedMessage) => void;
+  dequeue: () => QueuedMessage | undefined;
+  removeQueued: (id: string) => void;
   abortController: AbortController | null;
   setAbortController: (controller: AbortController | null) => void;
   cancelRun: () => void;
 
   hydrate: () => Promise<void>;
 }
+
+/** True while the run in flight belongs to this very session. */
+export const isRunningHere = (s: Pick<WorkspaceState, 'runSessionId' | 'sessionId'>) => s.runSessionId !== null && s.runSessionId === s.sessionId;
+
+const NO_FILES = new Map<string, FileArtifact>();
+/**
+ * The plan and files are one live slot shared by the whole app, written by whichever run is going.
+ * While a run belongs to a different session they are not this session's, so they are not shown.
+ */
+export const visiblePlan = (s: WorkspaceState) => (s.runSessionId && s.runSessionId !== s.sessionId ? null : s.plan);
+export const visibleFiles = (s: WorkspaceState) => (s.runSessionId && s.runSessionId !== s.sessionId ? NO_FILES : s.files);
 
 const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
@@ -554,6 +589,17 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     void setSetting('draftsEnabled', enabled);
   },
 
+  runSessionId: null,
+  runAssistantId: null,
+  setRun: (sessionId, assistantId = null) => set({ runSessionId: sessionId, runAssistantId: sessionId ? assistantId : null }),
+  queue: [],
+  enqueue: (item) => set((s) => ({ queue: [...s.queue, item] })),
+  dequeue: () => {
+    const [first, ...rest] = get().queue;
+    if (first) set({ queue: rest });
+    return first;
+  },
+  removeQueued: (id) => set((s) => ({ queue: s.queue.filter((q) => q.id !== id) })),
   abortController: null,
   setAbortController: (controller) => set({ abortController: controller }),
   cancelRun: () => {
@@ -601,73 +647,3 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     await get().loadModels();
   },
 }));
-
-/** Cyclical status phrases for the thinking bubble. */
-export const THINKING_PHRASES = [
-  'Analyzing architecture...',
-  'Verifying terminal heartbeat...',
-  'Synthesizing logic...',
-  'Auditing code graph...',
-  'Resolving dependency graph...',
-  'Fingerprinting failure modes...',
-  'Mapping execution lanes...',
-  'Validating output schema...',
-  'Reading between your lines...',
-  'Checking what could go wrong first...',
-  'Sketching the shape of an answer...',
-  'Weighing two approaches...',
-  'Discarding the clever one...',
-  'Looking for the boring, correct path...',
-  'Tracing the edge cases...',
-  'Asking whether this is really the question...',
-  'Counting the moving parts...',
-  'Pinning down the exact requirement...',
-  'Rehearsing the failure first...',
-  'Reaching for the smallest thing that works...',
-  'Separating what matters from what is loud...',
-  'Testing the premise before the code...',
-  'Following the data, not the guess...',
-  'Naming the thing properly...',
-  'Cutting the scope to what was asked...',
-  'Checking the assumption nobody stated...',
-  'Working out what you already know...',
-  'Deciding what not to build...',
-  'Finding where this has broken before...',
-  'Preferring evidence over confidence...',
-]
-
-export const LANE_B_PHRASES = [
-  'Decomposing into atomic steps...',
-  'Checking toolchain availability...',
-  'Emitting project files...',
-  'Compiling artifacts...',
-  'Packaging outputs...',
-  'Laying out the file tree...',
-  'Writing the manifest first...',
-  'Wiring the pieces together...',
-  'Making the first version run...',
-  'Removing what was not needed...',
-  'Checking the build would survive a rerun...',
-  'Naming files the way you would...',
-  'Leaving nothing half-written...',
-  'Closing the loop on every step...',
-]
-
-/**
- * The phrases for one run, in an order that is not last run's order.
- *
- * The bubble used to walk the same list from the top every time, so the first
- * three phrases were the same three forever and the app felt like it was
- * replaying a recording. Shuffled per run, and the pool is large enough that
- * two runs rarely open the same way.
- */
-export function phrasesForRun(lane: 'A' | 'B'): string[] {
-  const pool = lane === 'B' ? [...LANE_B_PHRASES, ...THINKING_PHRASES] : [...THINKING_PHRASES];
-
-  // Fisher-Yates: every order equally likely, which a sort-by-random is not.
-  for (let i = pool.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-  return pool;
-}

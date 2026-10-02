@@ -2,7 +2,7 @@
 
 import { SiteChipRow } from './SiteChip';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useWorkspace, type ChatAttachment } from '@/lib/store';
+import { isRunningHere, useWorkspace, type ChatAttachment } from '@/lib/store';
 import { send } from '@/lib/agent/runtime';
 import { BUILTIN_SKILLS, expandSkill, parseSlash, searchSkills, type SkillDefinition } from '@/lib/skills/registry';
 import { classifyLocal, resolveSuite } from '@/lib/agent/router';
@@ -435,7 +435,15 @@ Open Settings → API Keys to add
  * and the model switcher.
  */
 export function CommandDock() {
-  const thinking = useWorkspace((s) => s.thinking);
+  // Running is a fact about one session. Here: is it *this* one, or another one that is busy?
+  const runningHere = useWorkspace(isRunningHere);
+  const runSessionId = useWorkspace((s) => s.runSessionId);
+  const runningElsewhere = runSessionId !== null && !runningHere;
+  const currentSessionId = useWorkspace((s) => s.sessionId);
+  const queue = useWorkspace((s) => s.queue);
+  const removeQueued = useWorkspace((s) => s.removeQueued);
+  const queuedHere = queue.filter((q) => q.sessionId === currentSessionId);
+  const anyRun = runSessionId !== null;
   const activeSuite = useWorkspace((s) => s.activeSuite);
   const heartbeat = useWorkspace((s) => s.heartbeat);
   const draftsEnabled = useWorkspace((s) => s.draftsEnabled);
@@ -595,7 +603,6 @@ export function CommandDock() {
   );
 
   const submit = useCallback(async () => {
-    if (thinking.active) return;
     // Belt and braces — the button is disabled, but Enter must not bypass it.
     if (hasBlockingSecret(scanForSecrets(value))) return;
     const raw = value.trim();
@@ -635,7 +642,7 @@ export function CommandDock() {
     setLaneOverride(null);
 
     await send({ input, attachments, suite, forceLane: lane });
-  }, [value, attachments, thinking.active, laneOverride, activeSuite, allSkills]);
+  }, [value, attachments, laneOverride, activeSuite, allSkills]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showPalette && matches.length) {
@@ -752,6 +759,28 @@ export function CommandDock() {
             </div>
           )}
 
+          {queuedHere.length > 0 && (
+            <div className="flex flex-col gap-1 border-b px-3 py-2" style={{ borderColor: 'var(--line)' }} aria-label="Queued messages">
+              {queuedHere.map((q, i) => (
+                <div key={q.id} className="enter-pop flex items-center gap-2 text-[11.5px]" style={{ color: 'var(--ink-dim)' }}>
+                  <span className="mono shrink-0 rounded-md px-1.5 py-0.5 text-[9.5px]" style={{ background: 'var(--surface)', color: 'var(--accent)' }}>
+                    queued {i + 1}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{q.input}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeQueued(q.id)}
+                    className="shrink-0 px-1"
+                    style={{ color: 'var(--ink-faint)' }}
+                    aria-label="Remove from queue"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <SiteChipRow text={value} />
 
           <textarea
@@ -771,12 +800,13 @@ export function CommandDock() {
             }}
             rows={1}
             placeholder={
-              thinking.active
-                ? 'running…'
-                : 'Ask, or describe what to build.  /  for commands.  Shift+Enter for a newline.'
+              runningHere
+                ? 'running… type your next message — it will wait its turn'
+                : runningElsewhere
+                  ? 'another session is running — send yours and it starts right after'
+                  : 'Ask, or describe what to build.  /  for commands.  Shift+Enter for a newline.'
             }
-            disabled={thinking.active}
-            className="w-full resize-none bg-transparent px-4 py-3 text-[14px] leading-[1.55] outline-none placeholder:opacity-45 disabled:opacity-50"
+            className="w-full resize-none bg-transparent px-4 py-3 text-[14px] leading-[1.55] outline-none placeholder:opacity-45"
             style={{ color: 'var(--ink)' }}
             aria-label="Prompt"
           />
@@ -864,7 +894,7 @@ export function CommandDock() {
               <button
                 type="button"
                 onClick={() => void submit()}
-                disabled={thinking.active || blocked || (!value.trim() && !attachments.length)}
+                disabled={blocked || (!value.trim() && !attachments.length)}
                 className="press mono shrink-0 rounded-lg px-3.5 py-1.5 text-[11.5px] font-semibold disabled:opacity-30"
                 style={{
                   background: 'linear-gradient(135deg, var(--accent), color-mix(in oklab, var(--accent) 62%, var(--accent-alt)))',
@@ -874,7 +904,7 @@ export function CommandDock() {
                   boxShadow: '0 4px 16px -6px color-mix(in oklab, var(--accent) 70%, transparent)',
                 }}
               >
-                {thinking.active ? '…' : blocked ? '🔒' : 'run'}
+                {blocked ? '🔒' : anyRun ? 'queue' : 'run'}
               </button>
             </div>
           </div>

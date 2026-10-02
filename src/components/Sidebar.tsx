@@ -103,6 +103,8 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const activeSuite = useWorkspace((s) => s.activeSuite);
   const setSuite = useWorkspace((s) => s.setSuite);
   const sessionId = useWorkspace((s) => s.sessionId);
+  const runSessionId = useWorkspace((s) => s.runSessionId);
+  const queuedIds = useWorkspace((s) => s.queue);
   const setSessionId = useWorkspace((s) => s.setSessionId);
   const capabilityTabs = useWorkspace((s) => s.capabilityTabs);
   const clearMessages = useWorkspace((s) => s.clearMessages);
@@ -132,8 +134,10 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
     setSuite(suite);
     setSessionId(null);
     clearMessages();
-    setPlan(null);
-    setFiles(new Map());
+    if (!useWorkspace.getState().runSessionId) {
+      setPlan(null);
+      setFiles(new Map());
+    }
   };
 
   const suites: SuiteEntry[] = [
@@ -228,6 +232,14 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
                         >
                           {session.title}
                         </button>
+                        {runSessionId === session.id && (
+                          <span className="thinking-dot shrink-0" role="status" aria-label="Running in this session" title="Running" />
+                        )}
+                        {queuedIds.some((q) => q.sessionId === session.id) && (
+                          <span className="mono shrink-0 text-[9px]" style={{ color: 'var(--ink-faint)' }} title="Messages waiting">
+                            +{queuedIds.filter((q) => q.sessionId === session.id).length}
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={async () => {

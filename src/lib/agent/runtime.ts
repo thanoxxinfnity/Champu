@@ -40,7 +40,8 @@ import {
 import { plannedTextures, texturePrompt, textureArtifact, toPixelArt } from '@/lib/suites/minecraft/texture';
 import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types';
 import type { CustomEndpointConfig } from '@/lib/providers/types';
-import { useWorkspace, phrasesForRun, type ChatAttachment } from '@/lib/store';
+import { useWorkspace, type ChatAttachment } from '@/lib/store';
+import { describeCommand, openingPhrase, streamingPhrase } from './narrate.ts';
 import { PLANNER_NIM_MODEL } from '@/lib/providers/registry';
 import { endpointConfigFor } from '@/lib/providers/endpoint-models';
 import { draftSystemSuffix, pickAngles } from './drafts';
@@ -311,35 +312,17 @@ async function referenceImage(prompt: string): Promise<Uint8Array | null> {
 
 // ── Thinking bubble ─────────────────────────────────────────────────────────
 
-function startPhraseCycle(lane: 'A' | 'B'): () => void {
-  // A fresh order every run: the same three phrases in the same order every
-  // time made the app look like it was replaying a recording rather than
-  // working.
-  const phrases = phrasesForRun(lane);
-  const { setThinking } = useWorkspace.getState();
+function startNarration(lane: 'A' | 'B'): () => void {
+  // One honest opening line; real stages (planning, researching, writing a named file, running a
+  // command) replace it as they happen. No rotating filler: see narrate.ts.
+  useWorkspace.getState().setThinking(true, openingPhrase(lane));
+  return () => useWorkspace.getState().setThinking(false);
+}
 
-  let index = 0;
-  let lastWritten = phrases[0];
-  setThinking(true, lastWritten);
-
-  // Real progress ("Compiling the APK on the bridge…") calls the same
-  // setThinking() this cycle does, and used to lose every 2.6 seconds to the
-  // next random flavour phrase — a multi-minute compile spent nearly all of
-  // it showing "Verifying terminal heartbeat..." with nothing to do with what
-  // was actually happening. Real narration wins: a tick only advances the
-  // cycle when the bubble still shows what the cycle itself last wrote: once
-  // something else has claimed it, the cycle waits rather than stomping on it.
-  const timer = setInterval(() => {
-    if (useWorkspace.getState().thinking.phrase !== lastWritten) return;
-    index = (index + 1) % phrases.length;
-    lastWritten = phrases[index];
-    setThinking(true, lastWritten);
-  }, 2600);
-
-  return () => {
-    clearInterval(timer);
-    setThinking(false);
-  };
+/** Says what stage the run is in — only when it changed, so the bubble does not flicker. */
+function narrate(phrase: string): void {
+  const s = useWorkspace.getState();
+  if (s.runSessionId && s.thinking.phrase !== phrase) s.setThinking(true, phrase);
 }
 
 // ── Message assembly ────────────────────────────────────────────────────────
@@ -413,6 +396,7 @@ export async function executeCommand(
   }
 
   appendTerminal({ stream: 'command', text: `$ ${command}` });
+  narrate(describeCommand(command));
 
   const startedAt = Date.now();
   try {
@@ -437,6 +421,7 @@ export async function executeCommand(
     );
 
     setRunningExecId(null);
+    narrate('Reading the result…');
 
     const ok = outcome.exitCode === 0;
     appendTerminal({
@@ -624,7 +609,66 @@ async function runDrafts(opts: {
 
 // ── Main entry point ────────────────────────────────────────────────────────
 
+/**
+ * One run at a time, many messages. The plan, files, terminal and abort handle are a single
+ * live slot, so two runs cannot share it. A message sent while a run is going is therefore
+ * queued — against the session it was typed in — and starts, in order, the moment the run
+ * ahead of it ends. "Running" is only ever shown in the session that owns the run.
+ */
+let busy = false;
+
 export async function send(opts: SendOptions): Promise<void> {
+  const st = useWorkspace.getState();
+  const input = opts.input.trim();
+  const attachments = opts.attachments ?? [];
+  if (!input && !attachments.length) return;
+
+  if (busy) {
+    const suite = opts.suite ?? st.activeSuite;
+    let sessionId = st.sessionId;
+    if (!sessionId) {
+      // A brand-new chat: give it its session now, so everything typed into it while it waits belongs together.
+      const session = await createSession(suite, input.slice(0, 80) || 'Untitled run', { provider: st.selection.provider, model: st.selection.model });
+      sessionId = session.id;
+      useWorkspace.getState().setSessionId(sessionId);
+    }
+    useWorkspace.getState().enqueue({ id: uid('q'), sessionId, suite, input, attachments, forceLane: opts.forceLane, at: Date.now() });
+    return;
+  }
+
+  busy = true;
+  try {
+    await execute(opts);
+  } finally {
+    busy = false;
+    useWorkspace.getState().setRun(null);
+  }
+  await drainQueue();
+}
+
+/** Starts queued messages one after another, taking the view to the session each belongs to. */
+async function drainQueue(): Promise<void> {
+  while (!busy) {
+    const next = useWorkspace.getState().dequeue();
+    if (!next) return;
+    busy = true;
+    try {
+      const now = useWorkspace.getState();
+      if (now.sessionId !== next.sessionId) {
+        const { openSessionById } = await import('@/lib/session/open');
+        if (!(await openSessionById(next.sessionId))) continue; // the session was deleted while it waited
+      }
+      await execute({ input: next.input, attachments: next.attachments, suite: next.suite, forceLane: next.forceLane });
+    } catch {
+      // a failed queued run must not strand the ones behind it
+    } finally {
+      busy = false;
+      useWorkspace.getState().setRun(null);
+    }
+  }
+}
+
+async function execute(opts: SendOptions): Promise<void> {
   const state = useWorkspace.getState();
   const {
     selection, activeSuite, guard, heartbeat, pushMessage, patchMessage,
@@ -673,6 +717,7 @@ export async function send(opts: SendOptions): Promise<void> {
     sessionId = session.id;
     useWorkspace.getState().setSessionId(sessionId);
   }
+  useWorkspace.getState().setRun(sessionId);
 
   const controller = new AbortController();
   setAbortController(controller);
@@ -725,13 +770,14 @@ export async function send(opts: SendOptions): Promise<void> {
     createdAt: Date.now(),
     streaming: true,
   });
+  useWorkspace.getState().setRun(sessionId, assistantId);
 
   // Android freezes a backgrounded process unless something says work is
   // happening. Saying it here, rather than at the transport, means the whole
   // run is covered — planning, streaming, terminal steps and all.
   void runStarted(noticeTopic(input));
 
-  const stopPhrases = startPhraseCycle(lane);
+  const stopPhrases = startNarration(lane);
   const startedAt = Date.now();
 
   try {
@@ -898,6 +944,7 @@ export async function send(opts: SendOptions): Promise<void> {
       onDelta: (_delta, part) => {
         const full = prefix + part;
         patch(assistantId, { content: full });
+        narrate(streamingPhrase(full, lane));
 
         // Extract artifacts live so the file manager fills in mid-stream.
         if (lane === 'B' && full.includes('```')) {
@@ -912,7 +959,10 @@ export async function send(opts: SendOptions): Promise<void> {
           }
         }
       },
-      onReasoning: (_delta, full) => patch(assistantId, { reasoning: full }),
+      onReasoning: (_delta, full) => {
+        patch(assistantId, { reasoning: full });
+        narrate('Reasoning…');
+      },
       onError: (message) => patch(assistantId, { error: message }),
     });
 
@@ -1975,6 +2025,13 @@ export async function send(opts: SendOptions): Promise<void> {
     });
 
     const finished = after.messages.find((m) => m.id === assistantId);
+
+    // The plan and files are the run's, not whichever session the user wandered into. If they are
+    // not looking at this session now, they must not be left on screen in another one.
+    if (!isCurrent()) {
+      after.setPlan(null);
+      after.setFiles(new Map());
+    }
 
     if (announce) {
       after.pushNotice({

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { bundleSite, previewCaveats, siteEntry, usesThree, type SiteFile } from '@/lib/suites/web/site';
-import { useWorkspace } from '@/lib/store';
+import { useWorkspace, visibleFiles } from '@/lib/store';
 
 /**
  * The generated website, actually running.
@@ -20,7 +20,7 @@ const WIDTHS = [
 ] as const;
 
 export function SitePreview() {
-  const files = useWorkspace((s) => s.files);
+  const files = useWorkspace(visibleFiles);
   const [size, setSize] = useState<(typeof WIDTHS)[number]['id']>('full');
   // Remounts the iframe, which is the only way to restart an animation loop or
   // a scene that has already initialised.

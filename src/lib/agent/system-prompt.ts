@@ -78,6 +78,7 @@ Rules for the narration:
 - When something cannot be done, say it in the same breath as the step it blocks, and keep going with what can.
 - No filler. No "Great!", no "Let's dive in", no restating the request.
 - The line that names a file and the file itself are the same reply: the fenced block follows the line immediately. Never end a reply on an announcement. "Creating \`index.html\`…" with nothing after it has built nothing, and the run ends there — there is no later turn in which the file gets written.
+- Never narrate waiting. No "Deploying… check back in 30s", no "give me a minute", no promised ETAs: the app shows live progress itself, and a line like that is a claim about the future you cannot keep. Say what was done and what the result is, once you know it.
 - Close the run with two or three lines: what was built, where it is, and the one thing the user should do next.`;
 
 export const MINECRAFT_ADDENDUM = `## SUITE: MINECRAFT BEDROCK

@@ -1,6 +1,6 @@
 'use client';
 
-import { useWorkspace } from '@/lib/store';
+import { useWorkspace, visibleFiles } from '@/lib/store';
 import { dataUrlToBytes, downloadBlob, downloadZip } from '@/lib/zip';
 import { buildPackExport, detectPacks } from '@/lib/suites/minecraft/pack';
 import { buildGodotExport } from '@/lib/suites/godot/export';
@@ -213,7 +213,7 @@ export function Message({ message }: { message: ChatMessageView }) {
  * edit to a file would leave the download stale.
  */
 function OfferDownload({ offer }: { offer: NonNullable<ChatMessageView['offer']> }) {
-  const files = useWorkspace((s) => s.files);
+  const files = useWorkspace(visibleFiles);
   const [error, setError] = useState<string | null>(null);
 
   // Not a download at all: the game itself, in the message that built it.

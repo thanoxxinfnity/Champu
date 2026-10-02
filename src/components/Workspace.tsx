@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useWorkspace } from '@/lib/store';
+import { useWorkspace, visibleFiles, visiblePlan } from '@/lib/store';
 import { resumeParkedWork } from '@/lib/agent/runtime';
 import { Sidebar } from './Sidebar';
 import { Message } from './Message';
@@ -101,8 +101,8 @@ export function Workspace() {
   const hydrate = useWorkspace((s) => s.hydrate);
   const setEndpoints = useWorkspace((s) => s.setEndpoints);
   const heartbeat = useWorkspace((s) => s.heartbeat);
-  const files = useWorkspace((s) => s.files);
-  const plan = useWorkspace((s) => s.plan);
+  const files = useWorkspace(visibleFiles);
+  const plan = useWorkspace(visiblePlan);
   const modelWarnings = useWorkspace((s) => s.modelWarnings);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -315,7 +315,7 @@ export function Workspace() {
             <div ref={scrollRef} onScroll={() => {
               const el = scrollRef.current;
               if (el) pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-            }} className="min-h-0 flex-1 overflow-y-auto">
+            }} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
               {messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center p-8">
                   <div className="enter-rise max-w-md text-center">

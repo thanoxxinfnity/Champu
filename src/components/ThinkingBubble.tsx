@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useWorkspace } from '@/lib/store';
+import { isRunningHere, useWorkspace } from '@/lib/store';
 import { CloneAvatar } from './CloneAvatar';
 
 /**
@@ -45,6 +45,8 @@ function Sparkle() {
 export function ThinkingBubble() {
   const thinking = useWorkspace((s) => s.thinking);
   const cancelRun = useWorkspace((s) => s.cancelRun);
+  // "Running" belongs to the one session whose run it is; every other session is idle.
+  const runningHere = useWorkspace(isRunningHere);
 
   const [current, setCurrent] = useState('');
   const [previous, setPrevious] = useState<string | null>(null);
@@ -79,7 +81,7 @@ export function ThinkingBubble() {
 
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
-  if (!thinking.active) return null;
+  if (!thinking.active || !runningHere) return null;
 
   return (
     <div className="enter-pop flex items-center gap-2.5 py-1">

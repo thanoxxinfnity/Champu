@@ -1,6 +1,6 @@
 'use client';
 
-import { useWorkspace } from '@/lib/store';
+import { useWorkspace, visiblePlan } from '@/lib/store';
 import { planProgress, requiresBridge, type Task, type TaskStatus } from '@/lib/agent/planner';
 
 const STATUS_STYLE: Record<TaskStatus, { glyph: string; color: string; label: string }> = {
@@ -105,7 +105,7 @@ function TaskRow({ task, index }: { task: Task; index: number }) {
  * responses from the user.
  */
 export function TodoHud({ compact = false }: { compact?: boolean }) {
-  const plan = useWorkspace((s) => s.plan);
+  const plan = useWorkspace(visiblePlan);
   const setPlan = useWorkspace((s) => s.setPlan);
 
   if (!plan) {

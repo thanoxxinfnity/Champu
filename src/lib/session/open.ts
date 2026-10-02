@@ -18,8 +18,13 @@ export async function openSession(session: SessionRecord): Promise<void> {
   s.setSuite(session.suite);
   s.setSessionId(session.id);
   s.clearMessages();
-  s.setPlan(null);
-  s.setFiles(new Map());
+  // The plan and files are one live slot owned by the run in flight. While a run is going they
+  // are left alone (the views hide them from sessions that do not own the run); otherwise this
+  // session starts clean.
+  if (!s.runSessionId) {
+    s.setPlan(null);
+    s.setFiles(new Map());
+  }
 
   const messages = await listMessages(session.id);
   for (const m of messages) {
@@ -37,6 +42,13 @@ export async function openSession(session: SessionRecord): Promise<void> {
       usage: m.usage,
       durationMs: m.durationMs,
     });
+  }
+
+  // Coming back to the session whose run is still going: put its half-written answer back on
+  // screen, so what streams in next lands somewhere instead of vanishing until the run ends.
+  const now = useWorkspace.getState();
+  if (now.runSessionId === session.id && now.runAssistantId && !now.messages.some((m) => m.id === now.runAssistantId)) {
+    now.pushMessage({ id: now.runAssistantId, role: 'assistant', content: '', streaming: true, createdAt: Date.now() });
   }
 }
 
