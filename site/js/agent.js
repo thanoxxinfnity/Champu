@@ -6,6 +6,7 @@
  * Nothing is stored: the conversation lives in this page and goes when the page does.
  */
 import { loopPhrases, reduced } from './type.js';
+import { answer } from './agent-llm.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (t) => t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -149,26 +150,7 @@ export function start() {
     requestAnimationFrame(drain);
 
     try {
-      const res = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: convo.slice(-8), near, tz: Intl.DateTimeFormat().resolvedOptions().timeZone }) });
-      if (!res.ok) {
-        const j = await res.json().catch(() => null);
-        throw new Error(j?.error || 'The agent is busy right now. Try again in a moment.');
-      }
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let buf = '';
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        let at;
-        while ((at = buf.indexOf('\n\n')) >= 0) {
-          const frame = buf.slice(0, at); buf = buf.slice(at + 2);
-          const m = /^data: (.*)$/m.exec(frame);
-          if (!m || m[1] === '[DONE]') continue;
-          try { queue += JSON.parse(m[1]).t ?? ''; } catch { /* ignore a torn frame */ }
-        }
-      }
+      for await (const t of answer({ messages: convo.slice(-8), near, tz: Intl.DateTimeFormat().resolvedOptions().timeZone })) queue += t;
       convo.push({ role: 'assistant', content: shown + queue });
     } catch (err) {
       queue += `${shown || queue ? '\n\n' : ''}${err.message}`;

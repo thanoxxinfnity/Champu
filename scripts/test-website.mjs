@@ -97,7 +97,8 @@ test('the Content-Security-Policy matches the page’s inline scripts', () => {
   assert.ok(inline.length >= 2);
   for (const h of inline) assert.ok(csp.includes(`'${h}'`), `CSP is missing '${h}' for an inline script — update site/vercel.json`);
   assert.ok(!/unsafe-eval|script-src[^;]*unsafe-inline/.test(csp));
-  assert.match(csp, /connect-src 'self'(;|$)/, 'the page may only talk to itself — NASA goes through /api/nasa');
+  // The page talks to itself — NASA goes through /api/nasa — and, for the helper panel only, to the one text service.
+  assert.match(csp, /connect-src 'self' https:\/\/text\.pollinations\.ai(;|$)/, 'connect-src must be exactly: this site, and the helper\'s text service');
 });
 
 test('the transcripts are the Godot licence, timed in order, for all three voices', () => {
@@ -128,7 +129,7 @@ test('the solar system names its sources and says what is not real', () => {
 });
 
 test('the privacy policy covers what this site does', () => {
-  for (const needle of ['/api/ask', 'Ask Chomu agent', '/api/nasa', 'api.nasa.gov', 'ssd.jpl.nasa.gov', 'epic.gsfc.nasa.gov', 'science.nasa.gov', 'local storage', 'GitHub']) {
+  for (const needle of ['/api/ask', '/api/near', 'Ask Chomu agent', '/api/nasa', 'api.nasa.gov', 'ssd.jpl.nasa.gov', 'epic.gsfc.nasa.gov', 'science.nasa.gov', 'local storage', 'GitHub']) {
     assert.ok(POLICY.includes(needle), `the policy does not mention ${needle}`);
   }
   // And the page really does only store the theme.
@@ -161,12 +162,16 @@ test('the version on the download button is the version in the Android project',
   assert.match(read('deploy.sh'), /release-info\.mjs/);
 });
 
-test('the agent is never described as running on a named service anywhere a visitor reads', () => {
+test('the agent is never described as running on a named service anywhere a visitor reads', async () => {
   // The privacy policy names the processor (it has to, to be true); nothing else on the site may.
-  const visible = [HTML, ...own('js', 'css').map((f) => readFileSync(f, 'utf8')), readFileSync(join(SITE_DIR, 'api/_agent-knowledge.js'), 'utf8')].join('\n');
+  const core = await import('../site/js/agent-core.js');
+  // What a visitor can read: the page, the panel's own text, and everything the agent is told (and so might repeat).
+  const visible = [HTML, readFileSync(join(SITE_DIR, 'js/agent.js'), 'utf8'), core.SYSTEM_PROMPT, core.buildPrompt({ messages: [{ role: 'user', content: 'install Chomugiri' }], place: 'Pune, IN' })].join('\n');
   assert.ok(!/pollinations|gpt-?oss/i.test(visible), 'a page, script or the agent’s own instructions name the service behind it');
   assert.match(HTML, /id="askbar"/);
   assert.match(HTML, /id="fab"/);
-  // and the panel sits behind a same-origin door
-  assert.match(read('vercel.json'), /connect-src 'self'/);
+  // The service's name appears in code in exactly two places — the scrubber that removes it from answers (agent-core.js) and the address
+  // the page calls (agent-llm.js) — and nowhere a visitor reads.
+  const mentions = own('js').filter((f) => /pollinations/i.test(readFileSync(f, 'utf8'))).map((f) => f.split('/').pop());
+  assert.deepEqual(mentions, ['agent-core.js', 'agent-llm.js']);
 });
