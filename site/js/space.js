@@ -394,6 +394,9 @@ export async function start() {
     $('#space-loading').textContent = 'This device could not start 3D. The NASA data below still works.';
     return;
   }
+  // A phone can take the GL context away (low memory, app switch). Say so and recover when it comes back.
+  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); $('#space-loading').textContent = 'The 3D view paused — scroll away and back to wake it.'; $('#space-loading').classList.remove('gone'); });
+  canvas.addEventListener('webglcontextrestored', () => $('#space-loading').classList.add('gone'));
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   scene = new THREE.Scene();

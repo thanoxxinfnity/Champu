@@ -8,8 +8,16 @@ import { PLANET_IDS, centuries, planetPosition } from './ephemeris.js';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+/** AbortSignal.timeout is missing from older phone browsers; this works everywhere. */
+const timeoutSignal = (ms) => {
+  if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms);
+  const c = new AbortController();
+  setTimeout(() => c.abort(), ms);
+  return c.signal;
+};
+
 export async function nasa(kind, params = {}) {
-  const res = await fetch(`/api/nasa?${new URLSearchParams({ kind, ...params })}`, { signal: AbortSignal.timeout(25000) });
+  const res = await fetch(`/api/nasa?${new URLSearchParams({ kind, ...params })}`, { signal: timeoutSignal(25000) });
   const json = await res.json().catch(() => null);
   if (!res.ok || !json) throw new Error(json?.error || `HTTP ${res.status}`);
   return json;

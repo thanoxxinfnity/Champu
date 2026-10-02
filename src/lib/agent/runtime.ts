@@ -642,8 +642,9 @@ export async function send(opts: SendOptions): Promise<void> {
   } finally {
     busy = false;
     useWorkspace.getState().setRun(null);
+    // Even if this run threw, whatever waited behind it still gets its turn.
+    void drainQueue();
   }
-  await drainQueue();
 }
 
 /** Starts queued messages one after another, taking the view to the session each belongs to. */

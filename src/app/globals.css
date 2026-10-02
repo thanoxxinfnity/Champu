@@ -1263,3 +1263,8 @@ body.code-expanded {
 .code-block { max-width: 100%; }
 .prose-chomu th,
 .prose-chomu td { overflow-wrap: break-word; }
+
+/* Nothing in the app slides sideways: not the page, and not the chat when a finger drags across it. */
+html, body { overflow-x: hidden; overscroll-behavior-x: none; max-width: 100vw; }
+.chat-scroll { touch-action: pan-y; overscroll-behavior-x: none; }
+.prose-chomu pre, .prose-chomu .code-block pre { touch-action: pan-x pan-y; }

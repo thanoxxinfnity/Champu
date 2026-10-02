@@ -315,7 +315,7 @@ export function Workspace() {
             <div ref={scrollRef} onScroll={() => {
               const el = scrollRef.current;
               if (el) pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-            }} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+            }} className="chat-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
               {messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center p-8">
                   <div className="enter-rise max-w-md text-center">

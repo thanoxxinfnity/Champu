@@ -800,11 +800,13 @@ export function CommandDock() {
             }}
             rows={1}
             placeholder={
+              // Kept short on purpose: the box is one row tall, and a placeholder that wraps to a second
+              // line is cut in half on a phone.
               runningHere
-                ? 'running… type your next message — it will wait its turn'
+                ? 'Running… next message will queue'
                 : runningElsewhere
-                  ? 'another session is running — send yours and it starts right after'
-                  : 'Ask, or describe what to build.  /  for commands.  Shift+Enter for a newline.'
+                  ? 'Another session runs · yours queues'
+                  : 'Ask, or describe what to build…'
             }
             className="w-full resize-none bg-transparent px-4 py-3 text-[14px] leading-[1.55] outline-none placeholder:opacity-45"
             style={{ color: 'var(--ink)' }}
