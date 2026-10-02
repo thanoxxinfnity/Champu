@@ -143,27 +143,31 @@ test('one visitor cannot hammer it', async () => {
   assert.equal(last.statusCode, 429);
 });
 
-test('a service that accepts the request and then says nothing gets a second request beside it, then a plain error', async () => {
+test('a service that accepts the request and then says nothing is asked again, one request at a time, then a plain error', async () => {
   const saved = { ...timing };
-  timing.hedge = 40; timing.deadline = 400;
+  timing.tries = [50, 50, 50];
   const silent = (signal) => new Promise((_, reject) => signal.addEventListener('abort', () => reject(new Error('aborted'))));
   try {
-    let calls = 0;
-    globalThis.fetch = async (_u, init) => { calls += 1; return calls === 1 ? silent(init.signal) : sse([delta('Second try worked fine for this visitor.')]); };
+    let calls = 0, open = 0, maxOpen = 0, seeds = new Set();
+    globalThis.fetch = async (_u, init) => {
+      calls += 1; seeds.add(JSON.parse(init.body).seed); open += 1; maxOpen = Math.max(maxOpen, open);
+      try { return calls < 3 ? await silent(init.signal) : sse([delta('Third try worked fine for this visitor.')]); } finally { open -= 1; }
+    };
     const ok = await call({ messages: [{ role: 'user', content: 'tell me a joke' }] }, { ip: '198.51.100.60' });
     assert.equal(ok.statusCode, 200);
-    assert.equal(calls, 2);
-    assert.match(answerOf(ok), /Second try worked/);
+    assert.equal(calls, 3);
+    assert.equal(maxOpen, 1, 'never two at once');
+    assert.equal(seeds.size, 3, 'each try has its own seed');
+    assert.match(answerOf(ok), /Third try worked/);
 
     calls = 0;
     globalThis.fetch = async (_u, init) => { calls += 1; return silent(init.signal); };
     const bad = await call({ messages: [{ role: 'user', content: 'tell me another' }] }, { ip: '198.51.100.61' });
     assert.equal(bad.statusCode, 502);
-    assert.equal(calls, 2);
+    assert.equal(calls, 3);
 
-    // a request that fails outright is retried at once, not after the wait
+    // a request that fails outright is retried at once
     calls = 0;
-    timing.hedge = 5000;
     globalThis.fetch = async () => { calls += 1; return calls === 1 ? new Response('x', { status: 500 }) : sse([delta('Fine on the retry, all good here.')]); };
     const quick = await call({ messages: [{ role: 'user', content: 'one more' }] }, { ip: '198.51.100.62' });
     assert.equal(quick.statusCode, 200);

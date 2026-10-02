@@ -35,8 +35,8 @@ export function placeFrom(headers) {
   return parts.join(', ') || null;
 }
 
-/** When a silent first request gets a second one beside it, when to give up, and how long a whole answer may take. Exported so tests do not have to wait it out. */
-export const timing = { hedge: 2_800, deadline: 14_000, total: 25_000 };
+/** How long each try may stay silent before it is dropped and asked again, and how long a whole answer may take. Exported so tests do not have to wait it out. */
+export const timing = { tries: [4_000, 6_000, 6_000], total: 25_000 };
 
 const hits = new Map();
 function throttled(ip) {
@@ -169,38 +169,33 @@ async function* contentDeltas(reader) {
 
 /**
  * Asks the service and waits for the first word of the answer. The free service now and then accepts a
- * request and then says nothing. Rather than leave the visitor staring at dots, a second identical
- * request is sent a moment later if the first is still silent (or has failed), and whichever speaks first
- * wins while the other is dropped. Returns null if neither speaks before the deadline.
+ * request and then says nothing. Rather than leave the visitor staring at dots, a silent request is dropped
+ * after a few seconds and asked again — one at a time (the free tier does not like two at once), each with
+ * its own seed so a stuck cached attempt is not simply replayed. Returns null if no try speaks in time.
  */
 async function openStream(body) {
-  const acs = [new AbortController(), new AbortController()];
-  const once = async (ac) => {
-    const res = await fetch(UPSTREAM, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' }, body: JSON.stringify(body), signal: ac.signal });
-    if (!res.ok || !res.body) throw new Error('no stream');
-    const rest = contentDeltas(res.body.getReader());
-    const first = await rest.next();
-    if (first.done) throw new Error('empty');
-    return { first: first.value, rest, ac };
-  };
-  const p1 = once(acs[0]);
-  const p2 = new Promise((resolve) => {
-    let started = false;
-    const go = () => { if (started) return; started = true; clearTimeout(t); resolve(once(acs[1])); };
-    const t = setTimeout(go, timing.hedge);
-    p1.catch(go);
-  });
-  const deadline = setTimeout(() => acs.forEach((a) => a.abort()), timing.deadline);
-  try {
-    const win = await Promise.any([p1, p2]);
-    for (const a of acs) if (a !== win.ac) a.abort();
-    return { first: win.first, rest: win.rest, cancel: () => win.ac.abort() };
-  } catch {
-    acs.forEach((a) => a.abort());
-    return null;
-  } finally {
-    clearTimeout(deadline);
+  for (const wait of timing.tries) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), wait);
+    try {
+      const res = await fetch(UPSTREAM, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        body: JSON.stringify({ ...body, seed: Math.floor(Math.random() * 1_000_000_000) }),
+        signal: ac.signal,
+      });
+      if (!res.ok || !res.body) throw new Error('no stream');
+      const rest = contentDeltas(res.body.getReader());
+      const first = await rest.next();
+      clearTimeout(timer);
+      if (first.done) throw new Error('empty');
+      return { first: first.value, rest, cancel: () => ac.abort() };
+    } catch {
+      clearTimeout(timer);
+      ac.abort();
+    }
   }
+  return null;
 }
 
 function safeParse(text) {
