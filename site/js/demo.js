@@ -30,6 +30,7 @@ export function start() {
     el.textContent = '';
     for (const ch of text) {
       el.textContent += ch;
+      if (el.parentElement) el.parentElement.scrollTop = el.parentElement.scrollHeight; // a long prompt keeps its newest line in view
       await wait(speed * (0.6 + Math.random() * 0.8) + (/[,.:—]/.test(ch) ? speed * 3 : 0), t);
     }
   };
@@ -40,9 +41,9 @@ export function start() {
     typed.textContent = ''; ph.style.display = ''; caret.style.display = 'none';
     run.classList.remove('go'); status.classList.remove('on');
   };
-  const dockType = async (text) => {
+  const dockType = async (text, speed = 46) => {
     ph.style.display = 'none'; caret.style.display = '';
-    await type(typed, text, 46);
+    await type(typed, text, speed);
     run.classList.add('go');
     await wait(500);
   };
@@ -65,27 +66,36 @@ export function start() {
     return { el, tx: el.querySelector('.tx') };
   };
 
-  /* ---- scene 0: one sentence becomes a plan ---- */
+  /* ---- scene 0: say hi, then give the whole brief, and watch it become a plan ---- */
+  // The brief is the real description of Chomu Horizon, the game that came out of this very flow.
+  const BRIEF = 'Make an open-world racing game for Android phones, like Forza Horizon, in Godot. Five big maps linked by portals: green hills, a Mumbai-style city, a red canyon, a snowy peak and an off-road trail. Nine rides, from a supercar to a bicycle and a horse. Real suspension, drift with the handbrake, nitro, a 3-second rewind. A garage with paints, rims and underglow. Landscape touch controls. Export a signed APK.';
+
   async function build() {
     reset();
-    await wait(1400);
-    await dockType('build me a racing game');
+    await wait(1200);
+    await dockType('Hi', 120);
+    await send();
+    const hi = msg('CHO', 'Chomugiri', true, 'LANE A');
+    await type(hi.tx, 'Hi! Tell me what to make — an app, a game, a site. The more you tell me, the closer it comes out.', 24);
+    await wait(1100);
+    await dockType(BRIEF, 13);
+    await wait(600);
     await send();
     const m = msg('CHO', 'Chomugiri', true, 'LANE B');
-    await type(m.tx, 'On it. Here is the plan:', 30);
+    await type(m.tx, 'Got it. Here is the plan:', 30);
     const ul = document.createElement('ul'); ul.className = 'todo'; m.tx.append(ul);
-    const steps = ['Research the current Godot version', 'Plan the scenes and cars', 'Write project.godot', 'Write the car controller', 'Build the garage screen', 'Export the Android build', 'Check that it runs'];
-    const rows = steps.map((s) => { const li = document.createElement('li'); li.innerHTML = '<i></i><span></span>'; li.lastChild.textContent = s; ul.append(li); return li; });
-    for (const li of rows) { li.classList.add('show'); await wait(260); }
-    await wait(500);
+    const steps = ['Research the current Godot version', 'Plan the five maps and nine rides', 'Bake the maps: terrain, roads, props', 'Write the driving: suspension, drift, nitro', 'Build the garage: paints, rims, underglow', 'Add touch controls and the HUD', 'Export a signed Android APK', 'Check that it runs'];
+    const rows = steps.map((t) => { const li = document.createElement('li'); li.innerHTML = '<i></i><span></span>'; li.lastChild.textContent = t; ul.append(li); return li; });
+    for (const li of rows) { li.classList.add('show'); await wait(220); }
+    await wait(400);
     for (const li of rows) {
-      li.classList.add('run'); await wait(700);
+      li.classList.add('run'); await wait(620);
       li.classList.remove('run'); li.classList.add('done'); li.firstChild.textContent = '✓';
     }
     await wait(500);
     const done = msg('CHO', 'Chomugiri', true);
-    await type(done.tx, 'Done — 14 files, signed APK ready.', 28);
-    await wait(2600);
+    await type(done.tx, 'Done — ChomuHorizon.apk is ready to install.', 28);
+    await wait(2800);
   }
 
   /* ---- scene 1: it reads the web, and shows where ---- */

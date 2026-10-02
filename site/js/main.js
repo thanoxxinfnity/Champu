@@ -183,3 +183,4 @@ whenVisible($('#space'), () => import('./space.js').then((m) => m.start()).catch
 import('./nasa-cards.js').then((m) => m.start());
 
 import('./fx.js').then((m) => m.start());
+import('./immersive.js').then((m) => m.start());
