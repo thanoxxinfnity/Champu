@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import handler from '../site/api/nasa.js';
-import { parseHorizons, plan, trimApod, trimEpic, trimNeo, upstreamUrl } from '../site/api/_nasa-lib.js';
+import { APOD_ARTICLE, isPlaceholderApod, parseApodArticle, parseApodIndex, parseHorizons, plan, trimApod, trimEpic, trimNeo, upstreamUrl } from '../site/api/_nasa-lib.js';
 
 const SECRET = 'TEST-KEY-do-not-leak-0123456789abcdef0123';
 
@@ -144,4 +144,62 @@ test('the real NASA key is nowhere in the repository, and not in anything the br
     try { text = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'); } catch { continue; }
     assert.ok(!text.includes(key), `the NASA key is written in ${file}`);
   }
+});
+
+/* ---------- picture of the day: the API's stand-in picture ---------- */
+const LOGO = { date: '2026-10-02', title: 'NASA Science', explanation: 'What does it take…', media_type: 'image', url: 'https://science.nasa.gov/wp-content/themes/nasa-child/assets/images/nasa-logo@2x.png', hdurl: 'https://science.nasa.gov/wp-content/themes/nasa-child/assets/images/nasa-logo@2x.png' };
+const INDEX_HTML = '<a href="https://science.nasa.gov/image-article/apod-2026-october-2-the-complete-sharpless-catalog-313-nebulae/">x</a><a href="https://science.nasa.gov/image-article/apod-2026-june-10-the-eagle-nebula-and-friends/">old</a>';
+const ARTICLE_HTML = `<meta property="og:title" content="APOD: 2026 October 2 - The Complete Sharpless Catalog: 313 Nebulas - NASA Science" />
+<meta property="og:image" content="https://assets.science.nasa.gov/content/dam/science/cds/apod/apod/2026/september/Complete%20Sharpless%20Catalog%20(313%20nebulae).jpg/jcr:content/renditions/cq5dam.web.1280.1280.jpeg" />
+<p><strong>Explanation:</strong> What does it take to image <a href="x">hundreds</a> of nebulas? Today&#8217;s image is huge.</p>`;
+
+test('the logo the APOD API sometimes sends instead of the picture is recognised', () => {
+  assert.equal(isPlaceholderApod(LOGO), true);
+  assert.equal(isPlaceholderApod({ ...LOGO, title: 'Real title', url: 'https://apod.nasa.gov/apod/image/2610/x.jpg', hdurl: undefined }), false);
+  assert.equal(isPlaceholderApod(null), true);
+});
+
+test('the APOD page on science.nasa.gov can stand in, and only exactly-shaped links are ever fetched', () => {
+  const link = parseApodIndex(INDEX_HTML);
+  assert.equal(link, 'https://science.nasa.gov/image-article/apod-2026-october-2-the-complete-sharpless-catalog-313-nebulae/');
+  const a = parseApodArticle(ARTICLE_HTML, link);
+  assert.equal(a.date, '2026-10-02');
+  assert.equal(a.title, 'The Complete Sharpless Catalog: 313 Nebulas');
+  assert.match(a.explanation, /^What does it take to image hundreds of nebulas\? Today’s image is huge\.$/);
+  assert.ok(a.url.startsWith('https://assets.science.nasa.gov/'));
+  // A picture from anywhere else, or a link that is not an APOD article, is refused.
+  assert.equal(parseApodArticle(ARTICLE_HTML.replace('assets.science.nasa.gov', 'evil.example'), link), null);
+  assert.equal(parseApodArticle(ARTICLE_HTML, 'https://evil.example/image-article/apod-x/'), null);
+  assert.equal(APOD_ARTICLE.test('https://science.nasa.gov/image-article/apod-2026-october-2-x/../../admin/'), false);
+});
+
+test('a stand-in picture from the API is replaced by the real one from the page', async () => {
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    calls.push(u);
+    if (u.startsWith('https://api.nasa.gov/planetary/apod')) return new Response(JSON.stringify(LOGO), { status: 200 });
+    if (u === 'https://science.nasa.gov/apod/') return new Response(INDEX_HTML, { status: 200 });
+    if (u.startsWith('https://science.nasa.gov/image-article/apod-2026-october-2-')) return new Response(ARTICLE_HTML, { status: 200 });
+    return new Response('no', { status: 404 });
+  };
+  const res = await ask({ kind: 'apod' }, '198.51.100.20');
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.data.title, 'The Complete Sharpless Catalog: 313 Nebulas');
+  assert.ok(!JSON.stringify(res.body).includes('nasa-logo'));
+  assert.ok(calls.every((u) => /^https:\/\/(api\.nasa\.gov\/planetary\/apod|science\.nasa\.gov\/)/.test(u)), 'only fixed NASA hosts are fetched');
+  assert.equal(calls.filter((u) => u.startsWith('https://api.nasa.gov')).length, 1, 'a stand-in is not retried');
+});
+
+test('an APOD 500 is retried once before the page is read', async () => {
+  let api = 0;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.startsWith('https://api.nasa.gov')) { api += 1; return api === 1 ? new Response('x', { status: 500 }) : new Response(JSON.stringify({ ...LOGO, title: 'Real', url: 'https://apod.nasa.gov/apod/image/a.jpg', hdurl: 'https://apod.nasa.gov/apod/image/a_big.jpg' }), { status: 200 }); }
+    return new Response('no', { status: 404 });
+  };
+  const res = await ask({ kind: 'apod' }, '198.51.100.21');
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.data.title, 'Real');
+  assert.equal(api, 2);
 });

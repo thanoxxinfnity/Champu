@@ -128,6 +128,46 @@ export function trimApod(json) {
   };
 }
 
+/**
+ * NASA's APOD API sometimes answers with the real text but a stand-in picture: the NASA
+ * logo from its website header (a thin banner), titled "NASA Science". On 2 Oct 2026 it did
+ * that for every date. A card showing that is worse than no card, so it is rejected.
+ */
+export function isPlaceholderApod(json) {
+  const url = String(json?.url ?? '') + String(json?.hdurl ?? '');
+  return !json?.title || json.title === 'NASA Science' || /nasa-logo|\/wp-content\/themes\//i.test(url);
+}
+
+/** The newest APOD article link on science.nasa.gov/apod/ — the first one listed. */
+export function parseApodIndex(html) {
+  const m = /https:\/\/science\.nasa\.gov\/image-article\/apod-[a-z0-9-]+\//.exec(String(html));
+  return m ? m[0] : null;
+}
+
+/** Only article pages of this exact shape are ever fetched. */
+export const APOD_ARTICLE = /^https:\/\/science\.nasa\.gov\/image-article\/apod-[a-z0-9-]+\/$/;
+const APOD_IMAGE_HOST = 'https://assets.science.nasa.gov/';
+const decode = (t) => String(t).replace(/&amp;/g, '&').replace(/&#0?39;|&#8217;/g, '’').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#038;/g, '&');
+const meta = (html, prop) => {
+  const m = new RegExp(`<meta[^>]+property="${prop}"[^>]+content="([^"]*)"`, 'i').exec(html);
+  return m ? decode(m[1]) : null;
+};
+
+/** An APOD article page → the same small shape trimApod gives. */
+export function parseApodArticle(html, link) {
+  const ogTitle = meta(html, 'og:title');
+  const image = meta(html, 'og:image');
+  if (!ogTitle || !image || !image.startsWith(APOD_IMAGE_HOST) || !APOD_ARTICLE.test(link)) return null;
+  const dm = /apod-(\d{4})-([a-z]+)-(\d{1,2})-/.exec(link);
+  const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+  const mi = dm ? months.indexOf(dm[2]) : -1;
+  const date = dm && mi >= 0 ? `${dm[1]}-${String(mi + 1).padStart(2, '0')}-${dm[3].padStart(2, '0')}` : '';
+  const title = ogTitle.replace(/^APOD:\s*\d{4}\s+\w+\s+\d{1,2}\s*-\s*/, '').replace(/\s*-\s*NASA Science$/, '');
+  const ex = /<strong>\s*Explanation:\s*<\/strong>([\s\S]*?)<\/p>/i.exec(html);
+  const explanation = ex ? decode(ex[1].replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim() : (meta(html, 'og:description') ?? '');
+  return { date, title, explanation, media: 'image', url: image, hdurl: null, thumb: null, link, copyright: null };
+}
+
 /** The first vector row of a Horizons `VECTORS` CSV answer, in AU. */
 export function parseHorizons(json) {
   const m = /\$\$SOE\s*([\s\S]*?)\s*\$\$EOE/.exec(String(json?.result ?? ''));

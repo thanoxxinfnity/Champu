@@ -306,3 +306,10 @@ footer nav { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap;
 .space-info { max-height: 44%; overflow: auto; }
 @media (max-width: 600px) { .space-info { font-size: 12.5px; } .space-info p { display: none; } .space-info.more p { display: block; } }
 @media (max-width: 480px) { .wave i:nth-child(n+9) { display: none; } .voice h4 { font-size: 24px; } }
+
+.apod { display: grid; gap: 14px; }
+.apod-pic { display: block; background: #000; border-radius: 14px; overflow: hidden; }
+.apod-img { width: 100%; max-height: 70vh; object-fit: contain; display: block; border-radius: 0 !important; }
+@media (min-width: 900px) { .apod { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+
+.wavlink { margin: 10px 0 0; font: 13px/1.4 var(--font-mono); }

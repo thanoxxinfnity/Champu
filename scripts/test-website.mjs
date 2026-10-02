@@ -128,7 +128,7 @@ test('the solar system names its sources and says what is not real', () => {
 });
 
 test('the privacy policy covers what this site does', () => {
-  for (const needle of ['/api/nasa', 'api.nasa.gov', 'ssd.jpl.nasa.gov', 'epic.gsfc.nasa.gov', 'local storage', 'GitHub']) {
+  for (const needle of ['/api/nasa', 'api.nasa.gov', 'ssd.jpl.nasa.gov', 'epic.gsfc.nasa.gov', 'science.nasa.gov', 'local storage', 'GitHub']) {
     assert.ok(POLICY.includes(needle), `the policy does not mention ${needle}`);
   }
   // And the page really does only store the theme.

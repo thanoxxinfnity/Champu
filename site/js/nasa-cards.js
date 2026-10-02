@@ -52,19 +52,31 @@ async function epic() {
 }
 
 /* ---------- APOD ---------- */
-async function apod() {
+async function apod(tries = 0) {
   const el = $('#apod-out');
   try {
     const { data } = await nasa('apod');
     const src = data.media === 'image' ? data.url : data.thumb;
-    const short = data.explanation.length > 420 ? `${data.explanation.slice(0, 420).replace(/\s+\S*$/, '')}…` : data.explanation;
-    el.innerHTML = `<div style="display:grid;gap:14px;${src ? 'grid-template-columns:minmax(0,1fr)' : ''}">
-      ${src ? `<a href="${esc(data.hdurl || data.link || src)}" rel="noopener" target="_blank"><img src="${esc(src)}" alt="${esc(data.title)}" loading="lazy" referrerpolicy="no-referrer"></a>` : ''}
+    const short = data.explanation.length > 520 ? `${data.explanation.slice(0, 520).replace(/\s+\S*$/, '')}…` : data.explanation;
+    const open = data.link || data.hdurl || src;
+    el.innerHTML = `<div class="apod">
+      ${src ? `<a href="${esc(open)}" rel="noopener" target="_blank" class="apod-pic"><img class="apod-img" src="${esc(src)}" alt="${esc(data.title)}" loading="lazy" referrerpolicy="no-referrer"></a>` : ''}
       <div><strong style="color:#fff;font-size:18px">${esc(data.title)}</strong> <span style="color:#6f7f9d;font:12px var(--font-mono)">${esc(data.date)}</span>
       <p style="font-size:14.5px;margin:8px 0 0">${esc(short)}</p>
-      ${data.media === 'video' && data.link ? `<p><a href="${esc(data.link)}" rel="noopener" target="_blank">Watch today’s video ↗</a></p>` : ''}
+      ${open ? `<p style="margin:6px 0 0"><a href="${esc(open)}" rel="noopener" target="_blank">${data.media === 'video' ? 'Watch today’s video' : 'Read the full story and zoom in'} on NASA ↗</a></p>` : ''}
       ${data.copyright ? `<p style="font-size:12px;color:#6f7f9d">Image credit: ${esc(data.copyright)} (not public domain — shown with credit as NASA publishes it)</p>` : ''}</div></div>`;
-  } catch { failure(el, 'picture-of-the-day', apod); }
+    // A stand-in banner (a logo, say) is much wider than any photograph; never show a thin strip as the picture.
+    const img = el.querySelector('img');
+    if (img) {
+      const check = () => { if (img.naturalHeight && img.naturalWidth / img.naturalHeight > 3) img.closest('.apod-pic').remove(); };
+      img.addEventListener('load', check);
+      img.addEventListener('error', () => img.closest('.apod-pic')?.remove());
+      if (img.complete) check();
+    }
+  } catch {
+    if (tries < 1) { await new Promise((r) => setTimeout(r, 4000)); return apod(tries + 1); }
+    failure(el, 'picture-of-the-day', () => apod(0));
+  }
 }
 
 /* ---------- check our planets against JPL Horizons ---------- */

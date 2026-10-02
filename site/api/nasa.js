@@ -21,7 +21,7 @@
  * from time to time; the last good copy is served for as long as the CDN keeps it
  * (stale-while-revalidate / stale-if-error) and, failing that, a plain error.
  */
-import { CACHE, parseHorizons, plan, trimApod, trimEpic, trimNeo, upstreamUrl } from './_nasa-lib.js';
+import { APOD_ARTICLE, CACHE, isPlaceholderApod, parseApodArticle, parseApodIndex, parseHorizons, plan, trimApod, trimEpic, trimNeo, upstreamUrl } from './_nasa-lib.js';
 
 export const config = { runtime: 'nodejs' };
 
@@ -34,6 +34,36 @@ function throttled(ip) {
   hits.set(ip, recent);
   if (hits.size > 500) hits.clear();
   return recent.length > 60;
+}
+
+const HEADERS = { Accept: 'application/json', 'User-Agent': 'chomugiri-site/1.0 (+https://chomugiri.vercel.app)' };
+const page = async (url) => {
+  const r = await fetch(url, { headers: { ...HEADERS, Accept: 'text/html' }, signal: AbortSignal.timeout(12_000) });
+  if (!r.ok) throw new Error(String(r.status));
+  return r.text();
+};
+
+/**
+ * Picture of the day. The API is tried twice (it answers 500 now and then); a stand-in
+ * picture is rejected; and then the real APOD page on science.nasa.gov is read instead.
+ */
+async function apod(url) {
+  for (let i = 0; i < 2; i += 1) {
+    try {
+      const r = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(10_000) });
+      if (r.ok) {
+        const json = await r.json();
+        if (!isPlaceholderApod(json)) return trimApod(json);
+        break; // a placeholder is not going to get better on a retry
+      }
+    } catch { /* try again, then the page */ }
+    await new Promise((res) => setTimeout(res, 500));
+  }
+  try {
+    const link = parseApodIndex(await page('https://science.nasa.gov/apod/'));
+    if (link && APOD_ARTICLE.test(link)) return parseApodArticle(await page(link), link);
+  } catch { /* nothing left to try */ }
+  return null;
 }
 
 /** The last good answer per cache key, for the moments NASA is down. */
@@ -65,17 +95,19 @@ export default async function handler(request, response) {
   let data = null;
   let status = 200;
   try {
-    const upstream = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'chomugiri-site/1.0 (+https://chomugiri.vercel.app)' }, signal: AbortSignal.timeout(15_000) });
-    status = upstream.status;
-    if (upstream.ok) {
+    if (chosen.kind === 'apod') {
+      data = await apod(url);
+    } else {
+      const upstream = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(15_000) });
+      status = upstream.status;
+      if (!upstream.ok) throw new Error(String(status));
       const json = await upstream.json();
-      if (chosen.kind === 'apod') data = trimApod(json);
-      else if (chosen.kind === 'neo') data = { asOf: new Date().toISOString(), objects: trimNeo(json) };
+      if (chosen.kind === 'neo') data = { asOf: new Date().toISOString(), objects: trimNeo(json) };
       else if (chosen.kind === 'epic') data = { frames: trimEpic(json) };
       else data = parseHorizons(json);
     }
   } catch {
-    status = 504;
+    if (status === 200) status = 504;
   }
 
   if (data && (!Array.isArray(data) || data.length)) {

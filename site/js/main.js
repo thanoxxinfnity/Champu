@@ -116,7 +116,8 @@ fetch('/data/transcripts.json').then((r) => r.json()).then((data) => {
       <div class="bar" role="slider" aria-label="${title} position" tabindex="0"><i></i></div>
       <div class="time"><span class="now">0:00</span><span class="len">${fmt(tr.duration)}</span></div>
       <div class="tx-box" aria-live="off"></div>
-      <audio preload="none" src="/voice/${id}.wav"></audio>`;
+      <p class="wavlink"><a href="/voice/${id}.wav" download>⬇ ${id}.wav</a></p>
+      <audio preload="metadata" src="/voice/${id}.wav"></audio>`;
     card.querySelector('h4').textContent = title;
     card.querySelector('.sub').textContent = sub;
     host.append(card);
