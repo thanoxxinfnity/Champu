@@ -4,14 +4,14 @@
  *   POST /api/ask   { messages: [{ role: 'user' | 'assistant', content }] }
  *   → text/event-stream:  data: {"t":"…"}  …  data: [DONE]
  *
- * The page never talks to the AI service itself. This function adds the instructions and the
- * facts the agent may use, asks the service, and streams back only the answer text — never the
+ * The page never talks to the AI service itself. This function adds the instructions, today's date
+ * and (only if the visitor asked for it) a rough place, and the Chomugiri facts when the talk is about us, asks the service, and streams back only the answer text — never the
  * model's private reasoning, and never a word about what runs behind it.
  *
  * It is a narrow door: same-site callers only, a handful of short messages, a capped answer,
  * a per-visitor throttle. The caller cannot choose the model, the instructions or the URL.
  */
-import { LIMITS, SYSTEM_PROMPT } from './_agent-knowledge.js';
+import { LIMITS, aboutUs, buildPrompt } from './_agent-knowledge.js';
 
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 
@@ -23,6 +23,20 @@ const allowed = (origin) => SITE.test(origin) || (process.env.VERCEL_URL && orig
 /** What the answer must never say about itself. */
 const SECRETS = /pollinations|gpt[-\s]?oss/gi;
 export const scrub = (text) => text.replace(SECRETS, 'Chomu agent');
+
+/** Answers to the same Chomugiri question (a first message, no place) are kept for a while: instant, and one less call upstream. */
+const answers = new Map();
+const TTL = 6 * 3600_000;
+
+/** City, region and country from the host's own geo headers — the visitor's connection, rough on purpose. */
+export function placeFrom(headers) {
+  const dec = (v) => { try { return decodeURIComponent(String(v ?? '')).trim(); } catch { return ''; } };
+  const parts = [dec(headers['x-vercel-ip-city']), dec(headers['x-vercel-ip-country-region']), dec(headers['x-vercel-ip-country'])].filter(Boolean);
+  return parts.join(', ') || null;
+}
+
+/** When a silent first request gets a second one beside it, when to give up, and how long a whole answer may take. Exported so tests do not have to wait it out. */
+export const timing = { hedge: 2_800, deadline: 14_000, total: 25_000 };
 
 const hits = new Map();
 function throttled(ip) {
@@ -64,25 +78,30 @@ export default async function handler(request, response) {
   const messages = clean(body?.messages);
   if (!messages) return fail(response, 400, 'Send a question.');
 
-  let upstream;
-  try {
-    upstream = await fetch(UPSTREAM, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify({
-        model: MODEL,
-        stream: true,
-        max_tokens: LIMITS.maxOutputTokens,
-        reasoning_effort: 'low',
-        temperature: 0.4,
-        messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
-      }),
-      signal: AbortSignal.timeout(25_000),
-    });
-  } catch {
-    return fail(response, 502, 'The agent is busy right now. Try again in a moment.');
+  const near = body?.near === true;
+  const key = messages.length === 1 && !near && aboutUs(messages) ? messages[0].content.toLowerCase().replace(/\s+/g, ' ') : null;
+  const hit = key && answers.get(key);
+  if (hit && Date.now() - hit.at < TTL) {
+    response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    response.setHeader('Cache-Control', 'no-store, no-transform');
+    response.status(200);
+    for (let i = 0; i < hit.text.length; i += 24) response.write(`data: ${JSON.stringify({ t: hit.text.slice(i, i + 24) })}\n\n`);
+    response.write('data: [DONE]\n\n');
+    response.end();
+    return;
   }
-  if (!upstream.ok || !upstream.body) return fail(response, 502, 'The agent is busy right now. Try again in a moment.');
+
+  const system = buildPrompt({ messages, tz: typeof body?.tz === 'string' ? body.tz.slice(0, 64) : undefined, place: near ? placeFrom(request.headers) : null });
+
+  const stream = await openStream({
+    model: MODEL,
+    stream: true,
+    max_tokens: LIMITS.maxOutputTokens,
+    reasoning_effort: 'low',
+    temperature: 0.4,
+    messages: [{ role: 'system', content: system }, ...messages],
+  });
+  if (!stream) return fail(response, 502, 'The agent is busy right now. Try again in a moment.');
 
   response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   response.setHeader('Cache-Control', 'no-store, no-transform');
@@ -90,47 +109,97 @@ export default async function handler(request, response) {
   response.status(200);
 
   const send = (obj) => { if (!response.writableEnded) try { response.write(`data: ${JSON.stringify(obj)}\n\n`); } catch { /* the visitor left */ } };
-  const reader = upstream.body.getReader();
-  request.on?.('close', () => { reader.cancel().catch(() => undefined); }); // visitor gone: stop reading and stop paying
-  const decoder = new TextDecoder();
-  let buffer = '';
+  request.on?.('close', () => stream.cancel()); // visitor gone: stop reading and stop paying
+  const total = setTimeout(() => stream.cancel(), timing.total);
   let pending = ''; // held back so a word cannot be caught half-way across two chunks by scrub()
   let any = false;
+  let whole = '';
   const HOLD = 14;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let at;
-      while ((at = buffer.indexOf('\n\n')) >= 0) {
-        const frame = buffer.slice(0, at);
-        buffer = buffer.slice(at + 2);
-        for (const line of frame.split('\n')) {
-          if (!line.startsWith('data:')) continue;
-          const raw = line.slice(5).trim();
-          if (!raw || raw === '[DONE]') continue;
-          let delta;
-          try { delta = JSON.parse(raw)?.choices?.[0]?.delta?.content; } catch { continue; }
-          if (typeof delta !== 'string' || !delta) continue; // reasoning deltas have no `content` and are dropped here
-          pending = scrub(pending + delta); // whole words in the held-back text are already caught; a half word stays held back
-          if (pending.length > HOLD) {
-            const out = pending.slice(0, -HOLD);
-            pending = pending.slice(-HOLD);
-            if (out) { send({ t: out }); any = true; }
-          }
-        }
-      }
+  const take = (delta) => {
+    pending = scrub(pending + delta); // whole words in the held-back text are already caught; a half word stays held back
+    if (pending.length > HOLD) {
+      const out = pending.slice(0, -HOLD);
+      pending = pending.slice(-HOLD);
+      if (out) { send({ t: out }); any = true; whole += out; }
     }
+  };
+  try {
+    take(stream.first);
+    for await (const delta of stream.rest) take(delta);
     const rest = scrub(pending);
-    if (rest) { send({ t: rest }); any = true; }
+    if (rest) { send({ t: rest }); any = true; whole += rest; }
+    if (key && whole.length > 20) {
+      if (answers.size >= 100) answers.delete(answers.keys().next().value);
+      answers.set(key, { at: Date.now(), text: whole });
+    }
     if (!any) send({ t: 'Hmm, I did not get an answer out. Ask me again?' });
   } catch {
     const rest = scrub(pending);
     if (rest) send({ t: rest });
     send({ t: any || rest ? '\n\n(The connection dropped — ask again to continue.)' : 'The agent is busy right now. Try again in a moment.' });
   } finally {
+    clearTimeout(total);
     if (!response.writableEnded) { try { response.write('data: [DONE]\n\n'); response.end(); } catch { /* gone */ } }
+  }
+}
+
+/** Only the answer text out of the service's event stream — its private reasoning frames carry no `content` and are dropped. */
+async function* contentDeltas(reader) {
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return;
+    buffer += decoder.decode(value, { stream: true });
+    let at;
+    while ((at = buffer.indexOf('\n\n')) >= 0) {
+      const frame = buffer.slice(0, at);
+      buffer = buffer.slice(at + 2);
+      for (const line of frame.split('\n')) {
+        if (!line.startsWith('data:')) continue;
+        const raw = line.slice(5).trim();
+        if (!raw || raw === '[DONE]') continue;
+        let delta;
+        try { delta = JSON.parse(raw)?.choices?.[0]?.delta?.content; } catch { continue; }
+        if (typeof delta === 'string' && delta) yield delta;
+      }
+    }
+  }
+}
+
+/**
+ * Asks the service and waits for the first word of the answer. The free service now and then accepts a
+ * request and then says nothing. Rather than leave the visitor staring at dots, a second identical
+ * request is sent a moment later if the first is still silent (or has failed), and whichever speaks first
+ * wins while the other is dropped. Returns null if neither speaks before the deadline.
+ */
+async function openStream(body) {
+  const acs = [new AbortController(), new AbortController()];
+  const once = async (ac) => {
+    const res = await fetch(UPSTREAM, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' }, body: JSON.stringify(body), signal: ac.signal });
+    if (!res.ok || !res.body) throw new Error('no stream');
+    const rest = contentDeltas(res.body.getReader());
+    const first = await rest.next();
+    if (first.done) throw new Error('empty');
+    return { first: first.value, rest, ac };
+  };
+  const p1 = once(acs[0]);
+  const p2 = new Promise((resolve) => {
+    let started = false;
+    const go = () => { if (started) return; started = true; clearTimeout(t); resolve(once(acs[1])); };
+    const t = setTimeout(go, timing.hedge);
+    p1.catch(go);
+  });
+  const deadline = setTimeout(() => acs.forEach((a) => a.abort()), timing.deadline);
+  try {
+    const win = await Promise.any([p1, p2]);
+    for (const a of acs) if (a !== win.ac) a.abort();
+    return { first: win.first, rest: win.rest, cancel: () => win.ac.abort() };
+  } catch {
+    acs.forEach((a) => a.abort());
+    return null;
+  } finally {
+    clearTimeout(deadline);
   }
 }
 

@@ -489,3 +489,7 @@ body.agent-open { overflow: hidden; }
 .ag-send:hover { transform: rotate(12deg) scale(1.06); } .ag-send svg { width: 22px; height: 22px; }
 
 @media (prefers-reduced-motion: reduce) { .agent, .ag-scrim { transition: none; } .ask-spark, .fab-icon, .ag-msg, .ag-dots i { animation: none; } }
+
+.ag-opts { flex: none; padding: 0 14px 8px; }
+.ag-near { background: transparent; color: var(--dim); border: 2px dashed var(--line); border-radius: var(--wob2); padding: 5px 12px; font: 700 16px/1 var(--font-hand); cursor: pointer; }
+.ag-near.on { color: var(--ink); background: var(--peach); border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--ink); }

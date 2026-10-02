@@ -35,8 +35,8 @@ function render(text) {
   return out.join('');
 }
 
-const GREETING = "Hi! I'm Chomu agent. Ask me anything about Chomugiri or Chomu Horizon — how to install, what it can build, how it works. Hinglish me bhi puch sakte ho.";
-const SUGGESTIONS = ['How do I install Chomugiri?', 'What can it build?', 'Chomu Horizon kya hai?', 'Which AI models does it use?', 'Is my data safe?'];
+const GREETING = "Hi! I'm Chomu agent. Ask me anything — Chomugiri and Chomu Horizon, school or code help, ideas, or just a chat. Hinglish me bhi puch sakte ho. Turn on “near me” and I can help with things around you too.";
+const SUGGESTIONS = ['How do I install Chomugiri?', 'What can it build?', 'Chomu Horizon kya hai?', 'Explain black holes simply', 'Mere aas-paas kya dekhne layak hai?', 'Is my data safe?'];
 
 export function start() {
   const panel = document.createElement('aside');
@@ -50,14 +50,15 @@ export function start() {
   panel.innerHTML = `
     <header class="ag-head">
       <span class="mark" aria-hidden="true">&gt;_</span>
-      <div><h2 class="ag-title">Chomu agent</h2><p class="ag-sub">asks &amp; answers about Chomugiri</p></div>
+      <div><h2 class="ag-title">Chomu agent</h2><p class="ag-sub">ask me anything</p></div>
       <button class="ag-x" type="button" aria-label="Close">✕</button>
       <svg class="ag-squiggle" viewBox="0 0 300 10" preserveAspectRatio="none" aria-hidden="true"><path d="M2 6 C 20 0, 30 10, 50 5 S 80 1, 100 6 S 130 10, 150 5 S 190 0, 210 6 S 250 10, 298 4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
     </header>
     <div class="ag-log" id="ag-log" role="log" aria-live="polite"></div>
     <div class="ag-chips" id="ag-chips"></div>
+    <div class="ag-opts"><button class="ag-near" id="ag-near" type="button" aria-pressed="false" title="Lets me use your rough area (city) for “near me” questions. Off by default.">📍 near me: off</button></div>
     <form class="ag-form" id="ag-form">
-      <textarea id="ag-input" rows="1" maxlength="600" placeholder="Ask about Chomugiri…" aria-label="Your question"></textarea>
+      <textarea id="ag-input" rows="1" maxlength="600" placeholder="Ask me anything…" aria-label="Your question"></textarea>
       <button class="ag-send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 21 3l-7 18-3-7.5z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/></svg></button>
     </form>`;
   const scrim = document.createElement('div');
@@ -66,7 +67,14 @@ export function start() {
 
   const log = $('#ag-log'), input = $('#ag-input'), form = $('#ag-form'), chips = $('#ag-chips');
   const convo = [];
-  let busy = false, opener = null;
+  let busy = false, opener = null, near = false;
+  const nearBtn = $('#ag-near');
+  nearBtn.addEventListener('click', () => {
+    near = !near;
+    nearBtn.setAttribute('aria-pressed', String(near));
+    nearBtn.textContent = near ? '📍 near me: on (rough city)' : '📍 near me: off';
+    nearBtn.classList.toggle('on', near);
+  });
 
   const bubble = (who, html) => {
     const el = document.createElement('div');
@@ -141,7 +149,7 @@ export function start() {
     requestAnimationFrame(drain);
 
     try {
-      const res = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: convo.slice(-8) }) });
+      const res = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: convo.slice(-8), near, tz: Intl.DateTimeFormat().resolvedOptions().timeZone }) });
       if (!res.ok) {
         const j = await res.json().catch(() => null);
         throw new Error(j?.error || 'The agent is busy right now. Try again in a moment.');
