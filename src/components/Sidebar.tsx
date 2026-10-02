@@ -137,6 +137,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
     if (!useWorkspace.getState().runSessionId) {
       setPlan(null);
       setFiles(new Map());
+      useWorkspace.getState().setSlotOwner(null);
     }
   };
 

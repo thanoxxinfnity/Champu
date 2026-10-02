@@ -128,7 +128,7 @@ test('the solar system names its sources and says what is not real', () => {
 });
 
 test('the privacy policy covers what this site does', () => {
-  for (const needle of ['/api/nasa', 'api.nasa.gov', 'ssd.jpl.nasa.gov', 'epic.gsfc.nasa.gov', 'science.nasa.gov', 'local storage', 'GitHub']) {
+  for (const needle of ['/api/ask', 'Ask Chomu agent', '/api/nasa', 'api.nasa.gov', 'ssd.jpl.nasa.gov', 'epic.gsfc.nasa.gov', 'science.nasa.gov', 'local storage', 'GitHub']) {
     assert.ok(POLICY.includes(needle), `the policy does not mention ${needle}`);
   }
   // And the page really does only store the theme.
@@ -159,4 +159,14 @@ test('the version on the download button is the version in the Android project',
   assert.equal(info.chomugiri.version, version, 'site/data/release.json is stale — run node scripts/release-info.mjs');
   assert.ok(info.chomugiri.mb > 5 && info.horizon.mb > 20);
   assert.match(read('deploy.sh'), /release-info\.mjs/);
+});
+
+test('the agent is never described as running on a named service anywhere a visitor reads', () => {
+  // The privacy policy names the processor (it has to, to be true); nothing else on the site may.
+  const visible = [HTML, ...own('js', 'css').map((f) => readFileSync(f, 'utf8')), readFileSync(join(SITE_DIR, 'api/_agent-knowledge.js'), 'utf8')].join('\n');
+  assert.ok(!/pollinations|gpt-?oss/i.test(visible), 'a page, script or the agent’s own instructions name the service behind it');
+  assert.match(HTML, /id="askbar"/);
+  assert.match(HTML, /id="fab"/);
+  // and the panel sits behind a same-origin door
+  assert.match(read('vercel.json'), /connect-src 'self'/);
 });

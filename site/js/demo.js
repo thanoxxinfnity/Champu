@@ -171,9 +171,11 @@ export function start() {
       current = (current + 1) % scenes.length;
     }
   }
+  let pick = 0;
   buttons.forEach((b, i) => b.addEventListener('click', () => {
     token.stop = true; auto = false;
-    sleep(60).then(() => loop(i));
+    const mine = ++pick; // a double-tap must start one scene, not two
+    sleep(60).then(() => { if (mine === pick) loop(i); });
   }));
   loop(0);
 }

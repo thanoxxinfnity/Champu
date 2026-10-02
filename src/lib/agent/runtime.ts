@@ -377,7 +377,7 @@ interface ExecOutcome {
  */
 export async function executeCommand(
   command: string,
-  opts: { cwd?: string; sessionId?: string; suite?: SuiteId; signal?: AbortSignal } = {},
+  opts: { cwd?: string; sessionId?: string; suite?: SuiteId; signal?: AbortSignal; /** Tell the thinking bubble — only for commands the run itself is executing. */ narrate?: boolean } = {},
 ): Promise<ExecOutcome> {
   const state = useWorkspace.getState();
   const { bridge, heartbeat, guard, appendTerminal, setRunningExecId, refreshFingerprints } = state;
@@ -396,7 +396,7 @@ export async function executeCommand(
   }
 
   appendTerminal({ stream: 'command', text: `$ ${command}` });
-  narrate(describeCommand(command));
+  if (opts.narrate) narrate(describeCommand(command));
 
   const startedAt = Date.now();
   try {
@@ -421,7 +421,7 @@ export async function executeCommand(
     );
 
     setRunningExecId(null);
-    narrate('Reading the result…');
+    if (opts.narrate) narrate('Reading the result…');
 
     const ok = outcome.exitCode === 0;
     appendTerminal({
@@ -616,6 +616,7 @@ async function runDrafts(opts: {
  * ahead of it ends. "Running" is only ever shown in the session that owns the run.
  */
 let busy = false;
+let creating: Promise<string> | null = null;
 
 export async function send(opts: SendOptions): Promise<void> {
   const st = useWorkspace.getState();
@@ -625,14 +626,18 @@ export async function send(opts: SendOptions): Promise<void> {
 
   if (busy) {
     const suite = opts.suite ?? st.activeSuite;
-    let sessionId = st.sessionId;
-    if (!sessionId) {
-      // A brand-new chat: give it its session now, so everything typed into it while it waits belongs together.
-      const session = await createSession(suite, input.slice(0, 80) || 'Untitled run', { provider: st.selection.provider, model: st.selection.model });
-      sessionId = session.id;
-      useWorkspace.getState().setSessionId(sessionId);
-    }
+    // A brand-new chat gets its session now, once, so everything typed into it while it waits belongs together.
+    creating ??= (st.sessionId
+      ? Promise.resolve(st.sessionId)
+      : createSession(suite, input.slice(0, 80) || 'Untitled run', { provider: st.selection.provider, model: st.selection.model }).then((s) => {
+          useWorkspace.getState().setSessionId(s.id);
+          return s.id;
+        })
+    ).finally(() => { creating = null; });
+    const sessionId = await creating;
     useWorkspace.getState().enqueue({ id: uid('q'), sessionId, suite, input, attachments, forceLane: opts.forceLane, at: Date.now() });
+    // The run ahead may have ended while the session was being made; then nobody else is coming to start this.
+    if (!busy) void drainQueue();
     return;
   }
 
@@ -941,11 +946,16 @@ async function execute(opts: SendOptions): Promise<void> {
 
     // `prefix` is what earlier passes already produced, so a continuation
     // streams into the same bubble instead of replacing it.
+    let narratedAt = 0;
     const callbacksFor = (prefix: string): StreamCallbacks => ({
       onDelta: (_delta, part) => {
         const full = prefix + part;
         patch(assistantId, { content: full });
-        narrate(streamingPhrase(full, lane));
+        // Re-reading the whole reply on every delta gets slow on a phone; the stage only changes at a fence.
+        if (_delta.includes('`') || full.length - narratedAt > 800) {
+          narratedAt = full.length;
+          narrate(streamingPhrase(full, lane));
+        }
 
         // Extract artifacts live so the file manager fills in mid-stream.
         if (lane === 'B' && full.includes('```')) {
@@ -1876,6 +1886,7 @@ async function execute(opts: SendOptions): Promise<void> {
               sessionId,
               suite,
               signal: controller.signal,
+              narrate: true,
             });
           let outcome = await runOnce();
 
@@ -2027,12 +2038,8 @@ async function execute(opts: SendOptions): Promise<void> {
 
     const finished = after.messages.find((m) => m.id === assistantId);
 
-    // The plan and files are the run's, not whichever session the user wandered into. If they are
-    // not looking at this session now, they must not be left on screen in another one.
-    if (!isCurrent()) {
-      after.setPlan(null);
-      after.setFiles(new Map());
-    }
+    // The plan and files stay in the slot, owned by this session: the views hide them from other
+    // sessions, and a follow-up in this one (a queued "now package it") still finds its work.
 
     if (announce) {
       after.pushNotice({

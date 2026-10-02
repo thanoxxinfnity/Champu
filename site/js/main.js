@@ -184,3 +184,4 @@ import('./nasa-cards.js').then((m) => m.start());
 
 import('./fx.js').then((m) => m.start());
 import('./immersive.js').then((m) => m.start());
+import('./agent.js').then((m) => m.start());

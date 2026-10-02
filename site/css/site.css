@@ -413,3 +413,79 @@ footer nav { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap;
 .dots a:hover::after { opacity: 1; translate: 0 -50%; }
 
 @media (prefers-reduced-motion: reduce) { .head h2 .w { opacity: 1; transform: none; transition: none; } .embers { display: none; } .horizon-hero img, .horizon-hero img.on { transform: none; } }
+
+/* ================= Ask Chomu agent — sketch style ================= */
+:root { --sketch: 3px solid var(--ink); --wob: 22px 8px 26px 10px / 10px 24px 8px 22px; --wob2: 10px 24px 8px 22px / 22px 8px 26px 10px; }
+
+/* the bar at the very top of the page */
+.askbar { position: relative; display: flex; align-items: center; gap: 10px; width: min(100%, 560px); min-height: 56px; padding: 8px 18px; background: var(--card); color: var(--ink); border: var(--sketch); border-radius: var(--wob); box-shadow: 4px 4px 0 var(--ink); font: 700 22px/1 var(--font-hand); cursor: pointer; text-align: left; transition: transform .2s, box-shadow .2s; }
+.askbar:hover { transform: translate(-2px, -2px) rotate(-.4deg); box-shadow: 6px 6px 0 var(--accent); }
+.askbar:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+.ask-spark { color: var(--accent); font-size: 24px; animation: spin-slow 6s linear infinite; display: inline-block; }
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+.ask-label { white-space: nowrap; }
+.ask-hint { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 14px/1 var(--font-mono); color: var(--faint); }
+@media (max-width: 480px) { .ask-hint { display: none; } .askbar { justify-content: center; } }
+
+.ask-nav { display: none; margin-left: 8px; background: var(--peach); color: var(--ink); border: 2.5px solid var(--ink); border-radius: var(--wob2); padding: 5px 14px; font: 700 18px/1.2 var(--font-hand); cursor: pointer; box-shadow: 2px 2px 0 var(--ink); }
+.ask-nav:hover { background: var(--accent-2); }
+@media (min-width: 860px) { .ask-nav { display: inline-block; } .icon-btn.theme { margin-left: 8px; } }
+
+/* floating button */
+.fab { position: fixed; right: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 18px 0 14px; background: var(--accent); color: #fff; border: var(--sketch); border-radius: var(--wob); box-shadow: 3px 3px 0 var(--ink); font: 700 21px/1 var(--font-hand); cursor: pointer; transition: padding .3s, gap .3s, transform .2s; }
+:root[data-theme='dark'] .fab { color: #1a0e05; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .fab { color: #1a0e05; } }
+.fab-icon { font-size: 22px; animation: spin-slow 8s linear infinite; }
+.fab-text { max-width: 180px; overflow: hidden; white-space: nowrap; transition: max-width .35s, opacity .3s; }
+.fab.small { padding: 0 14px; gap: 0; } .fab.small .fab-text { max-width: 0; opacity: 0; }
+.fab:hover { transform: translate(-1px, -2px) rotate(-1deg); }
+body.agent-open .fab { display: none; }
+
+/* the panel */
+.ag-scrim { position: fixed; inset: 0; z-index: 94; background: rgba(0, 0, 0, .4); opacity: 0; pointer-events: none; transition: opacity .3s; }
+.ag-scrim.open { opacity: 1; pointer-events: auto; }
+.agent { position: fixed; z-index: 95; right: 18px; bottom: 18px; width: min(430px, calc(100vw - 24px)); height: min(680px, calc(100svh - 36px)); display: flex; flex-direction: column;
+  background-color: var(--paper); background-image: radial-gradient(color-mix(in oklab, var(--ink) 10%, transparent) 1px, transparent 1.2px); background-size: 18px 18px;
+  color: var(--ink); border: var(--sketch); border-radius: var(--wob); box-shadow: 7px 7px 0 var(--ink); overflow: hidden;
+  transform: translateY(24px) scale(.96) rotate(.6deg); opacity: 0; pointer-events: none; transition: transform .35s cubic-bezier(.2, .9, .3, 1.15), opacity .25s; }
+.agent:not(.open) { visibility: hidden; transition: transform .35s cubic-bezier(.2, .9, .3, 1.15), opacity .25s, visibility 0s .35s; }
+.agent.open { transform: none; opacity: 1; pointer-events: auto; visibility: visible; }
+@media (max-width: 640px) { .agent { right: 0; left: 0; bottom: 0; width: 100%; height: 90svh; border-width: 3px 0 0; border-radius: 26px 26px 0 0 / 14px 14px 0 0; box-shadow: none; transform: translateY(100%); } }
+body.agent-open { overflow: hidden; }
+
+.ag-head { position: relative; display: flex; align-items: center; gap: 12px; padding: 14px 14px 18px; flex: none; }
+.ag-title { margin: 0; font: 700 32px/1 var(--font-hand); letter-spacing: 0; }
+.ag-sub { margin: 2px 0 0; font: 600 12.5px/1 var(--font-mono); color: var(--faint); }
+.ag-x { margin-left: auto; width: 40px; height: 40px; border: 2.5px solid var(--ink); border-radius: 50% 40% 55% 45%; background: var(--card); color: var(--ink); font-size: 16px; cursor: pointer; transition: transform .2s; }
+.ag-x:hover { transform: rotate(90deg); background: var(--peach); }
+.ag-squiggle { position: absolute; left: 14px; right: 14px; bottom: 4px; width: calc(100% - 28px); height: 8px; color: var(--accent); }
+
+.ag-log { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 14px 12px; display: flex; flex-direction: column; gap: 12px; overscroll-behavior: contain; scroll-behavior: smooth; }
+.ag-msg { max-width: 88%; padding: 10px 14px; font: 500 16px/1.55 var(--font-body); border: 2.5px solid var(--ink); animation: ag-in .35s cubic-bezier(.2, .9, .3, 1.2) both; overflow-wrap: anywhere; }
+.ag-msg p { margin: 0 0 .5em; color: inherit; } .ag-msg p:last-child { margin: 0; }
+.ag-msg ul { margin: .3em 0; padding-left: 1.2em; } .ag-msg li { margin: .2em 0; color: inherit; } .ag-msg li::marker { color: var(--accent); }
+.ag-msg b { color: inherit; } .ag-msg a { color: var(--accent-3); word-break: break-all; }
+.ag-msg.bot { align-self: flex-start; background: var(--card); border-radius: 6px 22px 20px 22px / 6px 20px 22px 18px; box-shadow: 3px 3px 0 var(--ink); }
+.ag-msg.me { align-self: flex-end; background: var(--peach); border-radius: 22px 6px 22px 20px / 20px 6px 18px 22px; box-shadow: -3px 3px 0 var(--ink); }
+@keyframes ag-in { from { opacity: 0; transform: translateY(10px) scale(.95); } }
+
+/* thinking: three pencil dots */
+.ag-dots { display: inline-flex; gap: 6px; padding: 6px 2px; }
+.ag-dots i { width: 9px; height: 9px; border: 2px solid var(--ink); border-radius: 50%; animation: ag-bob 1s ease-in-out infinite; }
+.ag-dots i:nth-child(2) { animation-delay: .15s; } .ag-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes ag-bob { 0%, 100% { transform: translateY(0); background: transparent; } 40% { transform: translateY(-7px); background: var(--accent); } }
+
+.ag-chips { flex: none; display: flex; gap: 8px; padding: 0 14px 10px; overflow-x: auto; scrollbar-width: none; }
+.ag-chips::-webkit-scrollbar { display: none; }
+.ag-chips[hidden] { display: none; }
+.ag-chips button { flex: none; background: var(--card); color: var(--ink); border: 2px dashed var(--ink); border-radius: var(--wob2); padding: 7px 14px; font: 700 17px/1 var(--font-hand); cursor: pointer; white-space: nowrap; transition: transform .2s, background .2s; }
+.ag-chips button:hover { background: var(--peach); transform: translateY(-2px) rotate(-1deg); border-style: solid; }
+
+.ag-form { flex: none; display: flex; align-items: flex-end; gap: 10px; padding: 10px 14px calc(14px + env(safe-area-inset-bottom)); border-top: 2.5px dashed var(--line); background: color-mix(in oklab, var(--paper) 88%, transparent); }
+.ag-form textarea { flex: 1; min-height: 48px; max-height: 120px; resize: none; padding: 12px 14px; background: var(--card); color: var(--ink); border: 2.5px solid var(--ink); border-radius: var(--wob2); font: 500 16px/1.4 var(--font-body); outline: none; }
+.ag-form textarea:focus { box-shadow: 3px 3px 0 var(--accent); }
+.ag-send { flex: none; width: 48px; height: 48px; display: grid; place-items: center; background: var(--accent); color: #fff; border: 2.5px solid var(--ink); border-radius: 55% 45% 50% 50% / 50% 55% 45% 50%; box-shadow: 2px 2px 0 var(--ink); cursor: pointer; transition: transform .2s; }
+:root[data-theme='dark'] .ag-send { color: #1a0e05; } @media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .ag-send { color: #1a0e05; } }
+.ag-send:hover { transform: rotate(12deg) scale(1.06); } .ag-send svg { width: 22px; height: 22px; }
+
+@media (prefers-reduced-motion: reduce) { .agent, .ag-scrim { transition: none; } .ask-spark, .fab-icon, .ag-msg, .ag-dots i { animation: none; } }

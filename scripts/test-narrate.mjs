@@ -34,6 +34,15 @@ test('commands are described in plain words', () => {
   assert.equal(describeCommand('ls -la'), 'Running ls -la…');
 });
 
+test('words that merely appear in a command do not change what it is called', () => {
+  assert.equal(describeCommand('cat vercel.json'), 'Running cat vercel.json…');
+  assert.equal(describeCommand('grep -r godot notes.txt'), 'Running grep -r godot notes.txt…');
+  assert.equal(describeCommand('echo "gradle build"'), 'Running echo "gradle build"…');
+  assert.equal(describeCommand('npx vercel --prod'), 'Deploying to Vercel…');
+  assert.equal(describeCommand('CI=1 sudo npm install'), 'Installing packages…');
+  assert.equal(describeCommand('cd app && ./gradlew assembleRelease'), 'Building the Android app…');
+});
+
 test('a token in a command never reaches the bubble', () => {
   const token = 'vcp_8F76abcdefghijklmnopqrstuvwxyz0123456789ABCD';
   for (const cmd of [`vercel --prod --yes --token ${token}`, `echo ${token} > x && cat x`, `curl -H "Authorization: Bearer ${token}" https://x.test`]) {

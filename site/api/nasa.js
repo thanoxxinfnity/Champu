@@ -109,8 +109,10 @@ export default async function handler(request, response) {
   } catch {
     if (status === 200) status = 504;
   }
+  if (!data && status === 200) status = 504; // nothing usable came back, and nothing threw
 
   if (data && (!Array.isArray(data) || data.length)) {
+    if (lastGood.size >= 200) lastGood.delete(lastGood.keys().next().value);
     lastGood.set(cacheKey, data);
     response.setHeader('Cache-Control', `public, s-maxage=${CACHE[chosen.kind]}, stale-while-revalidate=86400, stale-if-error=604800`);
     response.status(200).json({ source: 'NASA', kind: chosen.kind, data });

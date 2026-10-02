@@ -42,7 +42,11 @@ createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
     let p = decodeURIComponent(url.pathname);
     applyHeaders(p, res);
-    if (p.startsWith('/api/nasa')) return await api('nasa', req, res, url);
+    const route = /^\/api\/([a-z-]+)$/.exec(p)?.[1];
+    if (route && existsSync(join(site, 'api', `${route}.js`))) {
+      if (req.method === 'POST') { let raw = ''; for await (const c of req) raw += c; req.body = raw; }
+      return await api(route, req, res, url);
+    }
     let file = p.startsWith('/voice/') ? join(root, 'public', normalize(p)) : join(site, normalize(p));
     if (!file.startsWith(site) && !file.startsWith(join(root, 'public'))) { res.statusCode = 403; return res.end(); }
     if (p.endsWith('/')) file = join(file, 'index.html');

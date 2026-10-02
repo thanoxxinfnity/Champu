@@ -35,7 +35,10 @@ interface Expandable extends HTMLElement {
 
 function collapse(block: Expandable): void {
   block.classList.remove('is-expanded');
-  block.__home?.replaceWith(block);
+  // If the reply was redrawn while the block was open (a streaming delta, a session switch) its
+  // place is gone; put nothing back rather than leave a stray copy at the bottom of the page.
+  if (block.__home?.isConnected) block.__home.replaceWith(block);
+  else block.remove();
   block.__home = undefined;
   block.querySelector('[data-code-action="expand"]')?.setAttribute('aria-label', 'Expand code');
   document.body.classList.remove('code-expanded');

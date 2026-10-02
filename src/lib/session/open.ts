@@ -21,9 +21,10 @@ export async function openSession(session: SessionRecord): Promise<void> {
   // The plan and files are one live slot owned by the run in flight. While a run is going they
   // are left alone (the views hide them from sessions that do not own the run); otherwise this
   // session starts clean.
-  if (!s.runSessionId) {
+  if (!s.runSessionId && s.slotSessionId !== session.id) {
     s.setPlan(null);
     s.setFiles(new Map());
+    s.setSlotOwner(session.id);
   }
 
   const messages = await listMessages(session.id);

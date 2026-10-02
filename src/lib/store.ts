@@ -291,6 +291,9 @@ interface WorkspaceState {
   runSessionId: string | null;
   /** The placeholder assistant message of that run, so coming back to the session mid-run can show it filling in. */
   runAssistantId: string | null;
+  /** Whose plan and files are in the shared live slot. Stays set after the run ends, so a follow-up in that session finds its work. */
+  slotSessionId: string | null;
+  setSlotOwner: (id: string | null) => void;
   setRun: (sessionId: string | null, assistantId?: string | null) => void;
   queue: QueuedMessage[];
   enqueue: (item: QueuedMessage) => void;
@@ -311,8 +314,8 @@ const NO_FILES = new Map<string, FileArtifact>();
  * The plan and files are one live slot shared by the whole app, written by whichever run is going.
  * While a run belongs to a different session they are not this session's, so they are not shown.
  */
-export const visiblePlan = (s: WorkspaceState) => (s.runSessionId && s.runSessionId !== s.sessionId ? null : s.plan);
-export const visibleFiles = (s: WorkspaceState) => (s.runSessionId && s.runSessionId !== s.sessionId ? NO_FILES : s.files);
+export const visiblePlan = (s: WorkspaceState) => (s.slotSessionId && s.slotSessionId !== s.sessionId ? null : s.plan);
+export const visibleFiles = (s: WorkspaceState) => (s.slotSessionId && s.slotSessionId !== s.sessionId ? NO_FILES : s.files);
 
 const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
@@ -591,7 +594,10 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   runSessionId: null,
   runAssistantId: null,
-  setRun: (sessionId, assistantId = null) => set({ runSessionId: sessionId, runAssistantId: sessionId ? assistantId : null }),
+  slotSessionId: null,
+  setSlotOwner: (id) => set({ slotSessionId: id }),
+  setRun: (sessionId, assistantId = null) =>
+    set((s) => ({ runSessionId: sessionId, runAssistantId: sessionId ? assistantId : null, slotSessionId: sessionId ?? s.slotSessionId })),
   queue: [],
   enqueue: (item) => set((s) => ({ queue: [...s.queue, item] })),
   dequeue: () => {

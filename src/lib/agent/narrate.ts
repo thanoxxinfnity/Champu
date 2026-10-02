@@ -22,11 +22,16 @@ const shortPath = (p: string) => (p.length > MAX_PATH ? `…${p.slice(-(MAX_PATH
  */
 export function streamingPhrase(full: string, lane: 'A' | 'B'): string {
   if (lane === 'B') {
-    const opens = [...full.matchAll(/```[^\n]*?\bpath=([^\s`]+)[^\n]*\n/g)];
-    const last = opens[opens.length - 1];
-    if (last) {
-      const after = full.slice((last.index ?? 0) + last[0].length);
-      if (!after.includes('```')) return `Writing ${shortPath(last[1])}…`;
+    // Fences alternate open, close, open, close… so an odd count means the last one is still open.
+    // One pass over the text, and only the last fence's own line is looked at.
+    let count = 0, last = -1;
+    for (let i = full.indexOf('```'); i >= 0; i = full.indexOf('```', i + 3)) { count += 1; last = i; }
+    if (count % 2 === 1) {
+      const eol = full.indexOf('\n', last);
+      if (eol > 0) {
+        const path = /\bpath=([^\s`]+)/.exec(full.slice(last, eol))?.[1];
+        if (path) return `Writing ${shortPath(path)}…`;
+      }
     }
   }
   return 'Writing the answer…';
@@ -38,14 +43,21 @@ export function streamingPhrase(full: string, lane: 'A' | 'B'): string {
  */
 export function describeCommand(command: string): string {
   const clean = redact(command, scanForSecrets(command)).replace(/--token[= ]\S+/gi, '--token [REDACTED]');
-  const c = clean.toLowerCase();
-  if (/\bvercel\b/.test(c)) return 'Deploying to Vercel…';
-  if (/\bgradlew?\b/.test(c)) return /assemble|bundle|build/.test(c) ? 'Building the Android app…' : 'Running Gradle…';
-  if (/\bgodot\b/.test(c)) return /--export/.test(c) ? 'Exporting the Godot project…' : 'Running Godot…';
-  if (/\b(npm|pnpm|yarn)\s+(i|install|ci|add)\b/.test(c)) return 'Installing packages…';
-  if (/\b(npm|pnpm|yarn)\s+(run\s+)?build\b|\bnext build\b/.test(c)) return 'Building the site…';
-  if (/\bgit\s+(push|pull|clone)\b/.test(c)) return 'Syncing with git…';
-  if (/\b(zip|tar)\b/.test(c)) return 'Packaging the files…';
+  // Judge by what is being *run*, not by words that merely appear: `cat vercel.json` reads a file, it does not deploy.
+  // Each piece of `a && b | c` is looked at from its own first word, past sudo / npx / env assignments.
+  for (const piece of clean.toLowerCase().split(/&&|\|\||;|\|/)) {
+    const words = piece.trim().split(/\s+/).filter((w) => !/^(sudo|time|npx|env|exec|\w+=\S*)$/.test(w));
+    const [tool, ...args] = words;
+    const rest = args.join(' ');
+    if (tool === 'vercel') return 'Deploying to Vercel…';
+    if (tool === 'gradle' || tool === './gradlew' || tool === 'gradlew') return /assemble|bundle|build/.test(rest) ? 'Building the Android app…' : 'Running Gradle…';
+    if (tool === 'godot' || tool?.endsWith('/godot')) return /--export/.test(rest) ? 'Exporting the Godot project…' : 'Running Godot…';
+    if (/^(npm|pnpm|yarn)$/.test(tool ?? '') && /^(i|install|ci|add)\b/.test(rest)) return 'Installing packages…';
+    if (/^(npm|pnpm|yarn)$/.test(tool ?? '') && /^(run\s+)?build\b/.test(rest)) return 'Building the site…';
+    if (tool === 'next' && /^build\b/.test(rest)) return 'Building the site…';
+    if (tool === 'git' && /^(push|pull|clone)\b/.test(rest)) return 'Syncing with git…';
+    if (tool === 'zip' || tool === 'tar') return 'Packaging the files…';
+  }
   const one = clean.replace(/\s+/g, ' ').trim();
   return `Running ${one.length > 48 ? `${one.slice(0, 47)}…` : one}…`;
 }
