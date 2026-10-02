@@ -1,0 +1,36 @@
+name: Chomugiri APK release
+
+# The APK is signed with a keystore that is deliberately not in git or CI, so it is
+# built locally (RELEASE.md) and committed to releases/. This only publishes it.
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - claude/chomugiri-workspace-design-09sxwa
+    paths:
+      - "releases/Chomugiri.apk"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the version from the project
+        id: ver
+        run: |
+          echo "name=$(grep -oP 'versionName = "\K[^"]+' android/app/build.gradle.kts)" >> "$GITHUB_OUTPUT"
+          ls -la releases/Chomugiri.apk
+
+      - name: Publish the download release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: chomugiri-latest
+          name: Chomugiri v${{ steps.ver.outputs.name }} (latest)
+          body: |
+            Signed Chomugiri APK, version ${{ steps.ver.outputs.name }}, built from ${{ github.sha }}.
+            Installs over the previous version (same signing key). Enable "install from unknown sources" to sideload.
+          files: releases/Chomugiri.apk
