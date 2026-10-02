@@ -81,7 +81,7 @@ the camera swoops from behind to the side to a low front shot. Warm sunset light
 **types itself along the bottom, speedometer-style: "drive anywhere"** with a blinking orange cursor. Clean, colorful
 game-engine look.
 
-## 7 — Chomu Horizon: three worlds, one key · `h_drive_speed.png` → `h_city.png` / `h_canyon.png`
+## 7 — Chomu Horizon: three worlds, one key · `h_drive_speed.png` (the portal moment is `h_city.png`)
 
 Portrait. The car drives through a swirling green portal ring and comes out in a different world: first rolling green
 hills, then a glowing neon city at dusk, then a red desert canyon at sunset. Each jump is a quick flash of light and a
@@ -108,7 +108,7 @@ slowly pulls back and ends on a calm still frame.
 
 Chomugiri: `p01_home_light`, `p02_home_dark`, `p03_menu_open`, `p05_prompt_typed`, `p07_research_note`,
 `c01_typing_sites_in_box`, `c02_sent_message_with_logos`.
-Chomu Horizon: `h_garage`, `h_drive_start`, `h_drive_speed`, `h_drift`, `h_low_cam` (+ `h_city`, `h_canyon`).
+Chomu Horizon: `h_garage`, `h_drive_start`, `h_drive_speed`, `h_drift`, `h_low_cam`, `h_city` (a portal jump mid-flash).
 
 ### Order on the site (top → bottom)
 
