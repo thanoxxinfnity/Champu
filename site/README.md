@@ -1,27 +1,36 @@
 # The Chomugiri site
 
-Two static pages — the landing page and the privacy policy — plus the three voice
-recordings, which are not kept here: they already live in `public/voice/` for the
-app, and a second 10 MB copy in git would be 10 MB of the same bytes. `deploy.sh`
-copies them in at deploy time.
+<https://chomugiri.vercel.app> — one page (`index.html`) plus `/privacy`.
 
-    ./site/deploy.sh          # needs VERCEL_TOKEN
+| Path | What it is |
+| --- | --- |
+| `index.html`, `css/`, `js/` | The page. `js/demo.js` is the phone replica (HTML, not video); `js/space.js` the three.js solar system; `js/nasa-cards.js` the NASA cards; `js/type.js` the typing effect |
+| `js/ephemeris.js` | Planet and Moon positions for any date (JPL Keplerian elements, Meeus Moon). Tested against JPL Horizons in `scripts/test-ephemeris.mjs` |
+| `api/nasa.js`, `api/_nasa-lib.js` | The NASA proxy. A narrow door: four kinds (`apod`, `neo`, `epic`, `horizons`), fixed hosts and parameters. The key is `NASA_API_KEY` in the Vercel project environment — never in a file, never in a response |
+| `api/blob-upload.js`, `api/gradio.js` | Older routes, unchanged |
+| `vendor/three`, `fonts/`, `img/`, `textures/`, `data/` | Everything self-hosted, so the page asks no third party anything. Texture credits are on the page |
+| `vercel.json` | Headers: Content-Security-Policy (inline scripts allowed by hash — `scripts/test-website.mjs` fails if the hash drifts), caching |
 
-Live at <https://chomugiri.vercel.app>, `/privacy` for the policy.
+The three voice recordings are not kept here — they live in `public/voice/` for the app, and `deploy.sh` stages them.
 
-`cleanUrls` is what serves `privacy.html` at `/privacy`. The `framework: null`
-and `buildCommand: null` in `vercel.json` matter: the Vercel project is shared
-with the app, so without them Vercel runs `npm run vercel-build` against a
-directory that has no package.json and the deploy fails.
+## Look at it locally
 
-## The APK
+    node scripts/dev-site.mjs        # http://localhost:4173, same headers as Vercel, real /api/nasa (reads .env.local)
 
-`deploy.sh` publishes one at `/download/<name>.apk` when `APK` points at a file:
+## Deploy
 
-    APK=/tmp/ChomuGame-1.0.apk ./site/deploy.sh
+    VERCEL_TOKEN=… ./site/deploy.sh  # also sets NASA_API_KEY on the project if it is in the environment or .env.local
 
-It is not kept in git — 28 MB of compiled output that Godot regenerates from the
-project on demand. Vercel Blob would be the tidier home, but the token Vercel
-hands a project is a v2 envelope that only resolves inside a deployment; using
-it from a shell needs a classic `vercel_blob_rw_…` token minted in the
-dashboard, which is the user's to create.
+`cleanUrls` serves `privacy.html` at `/privacy`. `framework: null` and `buildCommand: null` matter: the Vercel
+project is shared with the app, so without them Vercel runs `npm run vercel-build` in a directory with no such script.
+
+## Downloads
+
+The buttons link to GitHub release assets that the workflows keep current, so a new build never needs a site deploy:
+`chomugiri-latest/Chomugiri.apk` and `latest-apk/ChomuHorizon.apk`. `scripts/test-website.mjs` reads the workflows
+and fails if the page and the workflows disagree.
+
+## NASA key
+
+`.env.local` (gitignored) for local runs; `NASA_API_KEY` as a sensitive production variable on Vercel. Without it the
+proxy falls back to NASA's shared `DEMO_KEY`, which is rate-limited hard. Rotate it at <https://api.nasa.gov> if it leaks.
