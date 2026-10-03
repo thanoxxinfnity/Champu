@@ -493,3 +493,8 @@ body.agent-open { overflow: hidden; }
 .ag-opts { flex: none; padding: 0 14px 8px; }
 .ag-near { background: transparent; color: var(--dim); border: 2px dashed var(--line); border-radius: var(--wob2); padding: 5px 12px; font: 700 16px/1 var(--font-hand); cursor: pointer; }
 .ag-near.on { color: var(--ink); background: var(--peach); border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--ink); }
+
+/* the "App not installed?" help under each download */
+.dl-card .fix { margin: 14px 0 0; border: 2px dashed var(--faint); border-radius: 12px 18px 14px 20px / 18px 12px 20px 14px; padding: 10px 14px; background: transparent; }
+.dl-card .fix summary { cursor: pointer; font-weight: 700; }
+.dl-card .fix p { margin: 10px 0 2px; font-size: .95em; line-height: 1.55; }

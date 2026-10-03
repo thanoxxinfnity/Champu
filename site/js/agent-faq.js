@@ -27,6 +27,12 @@ const ENTRIES = [
     hi: 'Hey! Main Chomu agent hoon. Chomugiri ya Chomu Horizon ke baare me poochho — install kaise karein, kya kar sakte hain — ya koi aur sawal bhi.',
   },
   {
+    id: 'not-installed',
+    any: [/not installed/i, /install.{0,12}(nahi|nahin|nhi|fail|error|problem|issue|won'?t|not work)/i, /(nahi|nhi).{0,12}install/i, /(will|would|does|do|can|could)(n'?t| not).{0,14}install/i, /unable to install|cannot install|can't install/i],
+    en: `"App not installed" almost always means an older copy of the app is on the phone that was signed with a different key, so Android will not let the new one replace it.\n\nFix: Settings → Apps → (Chomugiri or Chomu Horizon) → Uninstall, then install the new file again. For Chomugiri, export anything you want to keep first. Also make sure you have enough free space (about 100 MB for Chomugiri, 400 MB for Chomu Horizon, which also needs a 64-bit phone).`,
+    hi: `"App not installed" ka matlab aksar ye hota hai ki phone me purani copy hai jo kisi aur key se sign thi, isliye Android nayi wali ko uske upar nahi lagne deta.\n\nFix: Settings → Apps → (Chomugiri ya Chomu Horizon) → Uninstall, phir nayi file dobara install karo. Chomugiri me jo rakhna ho woh pehle export kar lo. Jagah bhi dekh lo (Chomugiri ~100 MB, Chomu Horizon ~400 MB aur 64-bit phone chahiye).`,
+  },
+  {
     id: 'horizon-install',
     any: [/\b(install|download|apk|setup|get)\b/i],
     ctx: 'horizon',

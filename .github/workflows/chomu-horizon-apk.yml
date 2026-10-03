@@ -7,6 +7,7 @@ on:
       - claude/chomugiri-workspace-design-09sxwa
     paths:
       - "examples/chomu-horizon/**"
+      - "examples/sideload.keystore"
 
 permissions:
   contents: write
@@ -34,18 +35,17 @@ jobs:
           find / -maxdepth 6 -iname "android_release.apk" 2>/dev/null || true
           ls -la /root/.local/share/godot/export_templates/ 2>/dev/null || true
 
-      - name: Generate a sideload signing keystore
+      - name: Give this build a higher version number than the last
+        # Android refuses to install a build over a newer one, so the number must only ever go up.
         run: |
-          keytool -genkeypair -v -keystore /tmp/release.keystore -alias androiddebugkey \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass android -keypass android \
-            -dname "CN=Chomu Horizon,O=Chomu Giri,C=IN"
+          sed -i "s/^version\/code=.*/version\/code=$((1000 + GITHUB_RUN_NUMBER))/" export_presets.cfg
+          grep -n "^version/" export_presets.cfg
 
       - name: Export Android APK
         env:
-          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: /tmp/release.keystore
-          GODOT_ANDROID_KEYSTORE_RELEASE_USER: androiddebugkey
-          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: android
+          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/examples/sideload.keystore
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: chomugames
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: chomugames
         run: |
           mkdir -pv build
           godot --headless --export-release "Android" build/ChomuHorizon.apk

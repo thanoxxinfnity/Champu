@@ -47,3 +47,12 @@ test('every answer is plain text with bare links, and none names what runs behin
     }
   }
 });
+
+test('"App not installed" gets the real cause and the fix, in both languages', () => {
+  for (const q of ['App not installed', 'chomu horizon install nahi ho raha', 'the apk will not install']) {
+    const a = faqAnswer(q);
+    assert.ok(a, q);
+    assert.match(a, /Uninstall/i);
+  }
+  assert.equal(faqAnswer('how do I install Python?'), null);
+});
