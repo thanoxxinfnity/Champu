@@ -155,6 +155,7 @@ export function start() {
     } catch (err) {
       queue += `${shown || queue ? '\n\n' : ''}${err.message}`;
       convo.pop(); // the unanswered question is not part of the conversation
+      chips.hidden = false; // the buttons are the way to a sure answer
     } finally {
       finished = true;
       busy = false;
