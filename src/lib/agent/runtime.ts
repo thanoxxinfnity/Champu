@@ -46,7 +46,7 @@ import { PLANNER_NIM_MODEL } from '@/lib/providers/registry';
 import { endpointConfigFor } from '@/lib/providers/endpoint-models';
 import { draftSystemSuffix, pickAngles } from './drafts';
 import { scanForSecrets, hasBlockingSecret } from '@/lib/security/secrets';
-import { appendMessage, createSession, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
+import { appendMessage, createSession, listMessages, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
 import type { SuiteId } from '@/lib/db/schema';
 import { BridgeOfflineError } from '@/lib/bridge/client';
 
@@ -66,6 +66,8 @@ export interface SendOptions {
   /** Overrides the lane classifier. */
   forceLane?: 'A' | 'B';
   custom?: CustomEndpointConfig;
+  /** The session this message belongs to; defaults to the one on screen. */
+  sessionId?: string;
 }
 
 interface StreamCallbacks {
@@ -312,17 +314,17 @@ async function referenceImage(prompt: string): Promise<Uint8Array | null> {
 
 // ── Thinking bubble ─────────────────────────────────────────────────────────
 
-function startNarration(lane: 'A' | 'B'): () => void {
+function startNarration(sessionId: string, lane: 'A' | 'B'): () => void {
   // One honest opening line; real stages (planning, researching, writing a named file, running a
   // command) replace it as they happen. No rotating filler: see narrate.ts.
-  useWorkspace.getState().setThinking(true, openingPhrase(lane));
-  return () => useWorkspace.getState().setThinking(false);
+  useWorkspace.getState().setThinking(true, openingPhrase(lane), sessionId);
+  return () => useWorkspace.getState().setThinking(false, undefined, sessionId);
 }
 
-/** Says what stage the run is in — only when it changed, so the bubble does not flicker. */
-function narrate(phrase: string): void {
+/** Says what stage a session's run is in — only when it changed, so the bubble does not flicker. */
+function narrate(sessionId: string, phrase: string): void {
   const s = useWorkspace.getState();
-  if (s.runSessionId && s.thinking.phrase !== phrase) s.setThinking(true, phrase);
+  if (s.runs[sessionId] && s.thinkingBy[sessionId]?.phrase !== phrase) s.setThinking(true, phrase, sessionId);
 }
 
 // ── Message assembly ────────────────────────────────────────────────────────
@@ -349,12 +351,18 @@ function buildUserContent(input: string, attachments: ChatAttachment[]): ChatMes
   ];
 }
 
-function historyFor(limit = 12): ChatMessage[] {
-  const { messages } = useWorkspace.getState();
-  return messages
+/**
+ * The conversation so far for one session. The live transcript is only the session on screen, so a run
+ * in another session reads its own from storage.
+ */
+async function historyFor(sessionId: string, limit = 12): Promise<ChatMessage[]> {
+  const live = useWorkspace.getState();
+  const rows: Array<{ role: string; content: string; error?: unknown }> =
+    live.sessionId === sessionId ? live.messages : (await listMessages(sessionId)).filter((m) => m.role !== 'tool');
+  return rows
     .filter((m) => !m.error && m.content.trim())
     .slice(-limit)
-    .map((m) => ({ role: m.role === 'system' ? ('system' as const) : m.role, content: m.content }));
+    .map((m) => ({ role: m.role === 'system' ? ('system' as const) : (m.role as 'user' | 'assistant'), content: m.content }));
 }
 
 // ── Bridge execution ────────────────────────────────────────────────────────
@@ -396,7 +404,7 @@ export async function executeCommand(
   }
 
   appendTerminal({ stream: 'command', text: `$ ${command}` });
-  if (opts.narrate) narrate(describeCommand(command));
+  if (opts.narrate && opts.sessionId) narrate(opts.sessionId, describeCommand(command));
 
   const startedAt = Date.now();
   try {
@@ -421,7 +429,7 @@ export async function executeCommand(
     );
 
     setRunningExecId(null);
-    if (opts.narrate) narrate('Reading the result…');
+    if (opts.narrate && opts.sessionId) narrate(opts.sessionId, 'Reading the result…');
 
     const ok = outcome.exitCode === 0;
     appendTerminal({
@@ -610,13 +618,33 @@ async function runDrafts(opts: {
 // ── Main entry point ────────────────────────────────────────────────────────
 
 /**
- * One run at a time, many messages. The plan, files, terminal and abort handle are a single
- * live slot, so two runs cannot share it. A message sent while a run is going is therefore
- * queued — against the session it was typed in — and starts, in order, the moment the run
- * ahead of it ends. "Running" is only ever shown in the session that owns the run.
+ * Many sessions at once, one message at a time per session.
+ *
+ * Each session runs on its own: a chat in one session streams while another builds in the next, and
+ * "running" is shown only where it is true. Two things are shared and so cannot be doubled: the plan,
+ * files and terminal are one live slot, so only one build (or drafts run) may hold it at a time. A
+ * message that has to wait — behind the run in its own session, or for a build that wants the slot while
+ * another holds it — is queued against its session and starts, in order, the moment it can. Starting a
+ * queued message never moves the view; the user stays where they are.
  */
-let busy = false;
 let creating: Promise<string> | null = null;
+
+/** Builds and draft runs write the shared slot; a plain chat answer does not. */
+function needsSlot(opts: SendOptions): boolean {
+  const st = useWorkspace.getState();
+  const attachments = opts.attachments ?? [];
+  const lane = opts.forceLane ?? classifyLocal(opts.input.trim(), { hasAttachments: attachments.length > 0 }).lane;
+  return lane === 'B' || (st.draftsEnabled && !opts.forceLane);
+}
+
+/** Sessions a queued message has been taken for but whose run has not registered yet (true = it wants the slot). */
+const claimed = new Map<string, boolean>();
+
+function canStartNow(sessionId: string, heavy: boolean): boolean {
+  const st = useWorkspace.getState();
+  const slotClaimed = [...claimed.values()].some(Boolean);
+  return !st.runs[sessionId] && !claimed.has(sessionId) && (!heavy || (st.runSessionId === null && !slotClaimed));
+}
 
 export async function send(opts: SendOptions): Promise<void> {
   const st = useWorkspace.getState();
@@ -624,61 +652,69 @@ export async function send(opts: SendOptions): Promise<void> {
   const attachments = opts.attachments ?? [];
   if (!input && !attachments.length) return;
 
-  if (busy) {
-    const suite = opts.suite ?? st.activeSuite;
-    // A brand-new chat gets its session now, once, so everything typed into it while it waits belongs together.
-    creating ??= (st.sessionId
-      ? Promise.resolve(st.sessionId)
-      : createSession(suite, input.slice(0, 80) || 'Untitled run', { provider: st.selection.provider, model: st.selection.model }).then((s) => {
-          useWorkspace.getState().setSessionId(s.id);
-          return s.id;
-        })
-    ).finally(() => { creating = null; });
-    const sessionId = await creating;
-    useWorkspace.getState().enqueue({ id: uid('q'), sessionId, suite, input, attachments, forceLane: opts.forceLane, at: Date.now() });
-    // The run ahead may have ended while the session was being made; then nobody else is coming to start this.
-    if (!busy) void drainQueue();
-    return;
+  const suite = opts.suite ?? st.activeSuite;
+  // A brand-new chat gets its session now, once, so everything typed into it while it waits belongs together.
+  let sessionId = opts.sessionId ?? st.sessionId;
+  if (!sessionId) {
+    creating ??= createSession(suite, input.slice(0, 80) || 'Untitled run', { provider: st.selection.provider, model: st.selection.model })
+      .then((made) => {
+        useWorkspace.getState().setSessionId(made.id);
+        return made.id;
+      })
+      .finally(() => { creating = null; });
+    sessionId = await creating;
   }
 
-  busy = true;
+  const heavy = needsSlot(opts);
+  if (!canStartNow(sessionId, heavy)) {
+    useWorkspace.getState().enqueue({ id: uid('q'), sessionId, suite, input, attachments, forceLane: opts.forceLane, at: Date.now() });
+    // The run it waits for may have ended while the session was being made; then nobody else is coming to start this.
+    void drainQueue();
+    return;
+  }
+  await launch(sessionId, { ...opts, sessionId, suite }, heavy);
+}
+
+/** Runs one message to its end, then gives whatever was waiting its turn. */
+async function launch(sessionId: string, opts: SendOptions, heavy: boolean): Promise<void> {
   try {
-    await execute(opts);
+    await execute({ ...opts, sessionId }, heavy);
   } finally {
-    busy = false;
-    useWorkspace.getState().setRun(null);
+    useWorkspace.getState().endRun(sessionId);
     // Even if this run threw, whatever waited behind it still gets its turn.
     void drainQueue();
   }
 }
 
-/** Starts queued messages one after another, taking the view to the session each belongs to. */
+/** Starts every queued message that can start now — without taking the view away from where the user is. */
 async function drainQueue(): Promise<void> {
-  while (!busy) {
-    const next = useWorkspace.getState().dequeue();
+  for (;;) {
+    const next = useWorkspace.getState().takeQueued((item) =>
+      canStartNow(item.sessionId, needsSlot({ input: item.input, attachments: item.attachments, forceLane: item.forceLane })),
+    );
     if (!next) return;
-    busy = true;
+    const opts: SendOptions = { input: next.input, attachments: next.attachments, suite: next.suite, forceLane: next.forceLane, sessionId: next.sessionId };
+    const heavy = needsSlot(opts);
+    // Claimed before the first await, so nothing else can start in this session (or take the slot) meanwhile.
+    claimed.set(next.sessionId, heavy);
     try {
-      const now = useWorkspace.getState();
-      if (now.sessionId !== next.sessionId) {
-        const { openSessionById } = await import('@/lib/session/open');
-        if (!(await openSessionById(next.sessionId))) continue; // the session was deleted while it waited
-      }
-      await execute({ input: next.input, attachments: next.attachments, suite: next.suite, forceLane: next.forceLane });
-    } catch {
-      // a failed queued run must not strand the ones behind it
+      const { db, isBrowser } = await import('@/lib/db/schema');
+      if (isBrowser() && !(await db().sessions.get(next.sessionId))) continue; // the session was deleted while it waited
+      // execute() registers its run before its first await, so the claim can be let go as soon as it returns a promise.
+      const running = launch(next.sessionId, opts, heavy).catch(() => undefined);
+      claimed.delete(next.sessionId);
+      void running;
     } finally {
-      busy = false;
-      useWorkspace.getState().setRun(null);
+      claimed.delete(next.sessionId);
     }
   }
 }
 
-async function execute(opts: SendOptions): Promise<void> {
+async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
   const state = useWorkspace.getState();
   const {
     selection, activeSuite, guard, heartbeat, pushMessage, patchMessage,
-    setPlan, setTaskStatus, upsertFile, setAbortController, setRightPaneTab,
+    setPlan, setTaskStatus, setRightPaneTab,
   } = state;
 
   const baseSuite = opts.suite ?? activeSuite;
@@ -714,7 +750,7 @@ async function execute(opts: SendOptions): Promise<void> {
   const suite = baseSuite;
 
   // Session bootstrap.
-  let sessionId = state.sessionId;
+  let sessionId = opts.sessionId ?? state.sessionId;
   if (!sessionId) {
     const session = await createSession(suite, input.slice(0, 80) || 'Untitled run', {
       provider: selection.provider,
@@ -723,10 +759,20 @@ async function execute(opts: SendOptions): Promise<void> {
     sessionId = session.id;
     useWorkspace.getState().setSessionId(sessionId);
   }
-  useWorkspace.getState().setRun(sessionId);
 
   const controller = new AbortController();
-  setAbortController(controller);
+  useWorkspace.getState().beginRun(sessionId, { controller, heavy });
+
+  /** Shows what this run is doing, in this session's own bubble. */
+  const think = (active: boolean, phrase?: string) => useWorkspace.getState().setThinking(active, phrase, sessionId);
+  /**
+   * The plan and files are one live slot. A run may write it unless a build in another session holds it;
+   * what it makes is still saved to its own session either way.
+   */
+  const upsertFile: typeof state.upsertFile = (file) => {
+    const held = useWorkspace.getState().runSessionId;
+    if (held === null || held === sessionId) state.upsertFile(file);
+  };
 
   /**
    * Writes that belong to *this* run's session.
@@ -776,21 +822,21 @@ async function execute(opts: SendOptions): Promise<void> {
     createdAt: Date.now(),
     streaming: true,
   });
-  useWorkspace.getState().setRun(sessionId, assistantId);
+  useWorkspace.getState().patchRun(sessionId, { assistantId });
 
   // Android freezes a backgrounded process unless something says work is
   // happening. Saying it here, rather than at the transport, means the whole
   // run is covered — planning, streaming, terminal steps and all.
   void runStarted(noticeTopic(input));
 
-  const stopPhrases = startNarration(lane);
+  const stopPhrases = startNarration(sessionId, lane);
   const startedAt = Date.now();
 
   try {
     // ── Plan (Lane B only) ──────────────────────────────────────────────────
     let plan: Plan | null = null;
     if (lane === 'B') {
-      useWorkspace.getState().setThinking(true, 'Decomposing into atomic steps...');
+      think(true, 'Decomposing into atomic steps...');
       plan = await buildPlan(input, selection, suite, custom, controller.signal);
 
       // Park terminal steps immediately if the tunnel is already down, rather
@@ -812,7 +858,7 @@ async function execute(opts: SendOptions): Promise<void> {
     // user can correct it in one sentence instead of after a whole build.
     const design = suite === 'godot' ? planGame(input) : null;
     if (design) {
-      useWorkspace.getState().setThinking(true, `Planning ${design.name}…`);
+      think(true, `Planning ${design.name}…`);
       // Shown before the build, not after it. A misread prompt costs one
       // sentence to correct here and a whole regenerated project later.
       const note = {
@@ -833,7 +879,7 @@ async function execute(opts: SendOptions): Promise<void> {
     // triggering rather than staying quiet.
     let liveSearch: LiveSearchResult | null = null;
     if (needsLiveSearch(input).needed) {
-      useWorkspace.getState().setThinking(true, 'Checking the live web…');
+      think(true, 'Checking the live web…');
       liveSearch = await liveSearchContext(input, { signal: controller.signal });
       if (liveSearch) {
         const note = {
@@ -856,7 +902,7 @@ async function execute(opts: SendOptions): Promise<void> {
     if (needsResearch(input, suite, lane)) {
       const queries = planResearch(input, suite);
       if (queries.length) {
-        useWorkspace.getState().setThinking(true, 'Researching the live web before building…');
+        think(true, 'Researching the live web before building…');
         research = await runResearch(queries, async (body) => {
           const res = await fetch('/api/research', withKeys({
             method: 'POST',
@@ -905,14 +951,14 @@ async function execute(opts: SendOptions): Promise<void> {
         : {}),
     });
 
-    const history = historyFor(10);
+    const history = await historyFor(sessionId, 10);
     const userContent = buildUserContent(input, attachments);
 
     // Drafts replace the single answer entirely; the chosen one is committed
     // into the transcript when the user picks it.
     if (useWorkspace.getState().draftsEnabled && !opts.forceLane) {
       patch(assistantId, { streaming: false, content: '' });
-      useWorkspace.getState().setThinking(true, 'Drafting two approaches...');
+      think(true, 'Drafting two approaches...');
 
       await runDrafts({
         input,
@@ -954,7 +1000,7 @@ async function execute(opts: SendOptions): Promise<void> {
         // Re-reading the whole reply on every delta gets slow on a phone; the stage only changes at a fence.
         if (_delta.includes('`') || full.length - narratedAt > 800) {
           narratedAt = full.length;
-          narrate(streamingPhrase(full, lane));
+          narrate(sessionId, streamingPhrase(full, lane));
         }
 
         // Extract artifacts live so the file manager fills in mid-stream.
@@ -972,7 +1018,7 @@ async function execute(opts: SendOptions): Promise<void> {
       },
       onReasoning: (_delta, full) => {
         patch(assistantId, { reasoning: full });
-        narrate('Reasoning…');
+        narrate(sessionId, 'Reasoning…');
       },
       onError: (message) => patch(assistantId, { error: message }),
     });
@@ -1406,7 +1452,7 @@ async function execute(opts: SendOptions): Promise<void> {
       const wantsModel = referencedResources(files, detectGodotProject(files)?.root ?? '').some((r) => r.endsWith('.glb'));
 
       if (wantsModel && design) {
-        useWorkspace.getState().setThinking(true, `Building the ${design.player.description} model…`);
+        think(true, `Building the ${design.player.description} model…`);
         try {
           const outcome = await generateModel(
             {
@@ -1417,7 +1463,7 @@ async function execute(opts: SendOptions): Promise<void> {
             },
             { meshy: keys.meshy, tripo: keys.tripo, nim: keys.nim, trellisUrl: keys.trellisUrl, kaggle: keys.kaggle, huggingface: keys.huggingface },
             {
-              onStage: (_source, message) => useWorkspace.getState().setThinking(true, message),
+              onStage: (_source, message) => think(true, message),
               renderImage: referenceImage,
             },
           );
@@ -1494,7 +1540,7 @@ async function execute(opts: SendOptions): Promise<void> {
         for (let i = 0; i < planned.length; i += 1) {
           if (controller.signal.aborted) break;
           const texture = planned[i];
-          useWorkspace.getState().setThinking(true, `Painting ${texture.subject}…`);
+          think(true, `Painting ${texture.subject}…`);
           try {
             let art = await paintTexture(gameTexturePrompt(texture, themeFor(i)), texture.seed, controller.signal);
             // A flat texture is worse than none: the surface renders as a blank
@@ -1524,7 +1570,7 @@ async function execute(opts: SendOptions): Promise<void> {
       // effects a game needs, all derived from the plan so two stages actually
       // sound different.
       if (!files.some((f) => f.path.startsWith('audio/'))) {
-        useWorkspace.getState().setThinking(true, 'Writing the soundtrack…');
+        think(true, 'Writing the soundtrack…');
         try {
           const moods: Array<{ scale: ScaleName; bpm: number; root: number }> = [
             { scale: 'pentatonic', bpm: 104, root: -12 },
@@ -1629,7 +1675,7 @@ async function execute(opts: SendOptions): Promise<void> {
             // message that asked for it. The APK is still worth having, and
             // still native-fast, but nobody should have to install a thing to
             // find out whether it is any good.
-            useWorkspace.getState().setThinking(true, 'Compiling it to run in the chat…');
+            think(true, 'Compiling it to run in the chat…');
             // Godot's own export is the part that used to be invisible: its
             // stdout/stderr only ever showed up, truncated, in the chat message
             // after the whole thing finished or failed. Streamed into the same
@@ -1639,7 +1685,7 @@ async function execute(opts: SendOptions): Promise<void> {
             const web = await buildWebOnBridge(useWorkspace.getState().bridge, forBridge, {
               name: design?.name ?? 'Chomugiri Game',
               onStage: (message) => {
-                useWorkspace.getState().setThinking(true, message);
+                think(true, message);
                 useWorkspace.getState().appendTerminal({ stream: 'system', text: `— ${message}` });
               },
               onOutput: (chunk, stream) => useWorkspace.getState().appendTerminal({ stream, text: chunk }),
@@ -1683,7 +1729,7 @@ async function execute(opts: SendOptions): Promise<void> {
               void appendMessage({ ...nope, sessionId, suite });
             }
 
-            useWorkspace.getState().setThinking(true, 'Compiling the APK on the bridge…');
+            think(true, 'Compiling the APK on the bridge…');
             const built = await buildApkOnBridge(
               useWorkspace.getState().bridge,
               forBridge,
@@ -1691,7 +1737,7 @@ async function execute(opts: SendOptions): Promise<void> {
                 name: design?.name ?? 'Chomugiri Game',
                 versionName: '1.0',
                 onStage: (message) => {
-                  useWorkspace.getState().setThinking(true, message);
+                  think(true, message);
                   useWorkspace.getState().appendTerminal({ stream: 'system', text: `— ${message}` });
                 },
                 onOutput: (chunk, stream) => useWorkspace.getState().appendTerminal({ stream, text: chunk }),
@@ -2019,7 +2065,6 @@ async function execute(opts: SendOptions): Promise<void> {
     });
   } finally {
     stopPhrases();
-    setAbortController(null);
 
     // ── Tell the user it finished, if they are not watching ─────────────────
     //

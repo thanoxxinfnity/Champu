@@ -23,18 +23,19 @@ const bubble = readFileSync(new URL('../src/components/ThinkingBubble.tsx', impo
 
 test('there is no pool of flavour phrases left, and nothing rotates on a timer', () => {
   assert.ok(!/THINKING_PHRASES|LANE_B_PHRASES|phrasesForRun|Verifying terminal heartbeat/.test(store + runtime));
-  const fn = /function startNarration\(lane: 'A' \| 'B'\): \(\) => void \{[\s\S]*?\n\}/.exec(runtime)?.[0];
+  const fn = /function startNarration\(sessionId: string, lane: 'A' \| 'B'\): \(\) => void \{[\s\S]*?\n\}/.exec(runtime)?.[0];
   assert.ok(fn, 'startNarration not found');
   assert.ok(!/setInterval/.test(fn), 'the bubble must not change on a timer');
 });
 
 test('real stages feed the bubble: streaming, reasoning, and terminal commands', () => {
-  assert.match(runtime, /narrate\(streamingPhrase\(full, lane\)\)/);
-  assert.match(runtime, /narrate\('Reasoning…'\)/);
-  assert.match(runtime, /narrate\(describeCommand\(command\)\)/);
+  assert.match(runtime, /narrate\(sessionId, streamingPhrase\(full, lane\)\)/);
+  assert.match(runtime, /narrate\(sessionId, 'Reasoning…'\)/);
+  assert.match(runtime, /narrate\(opts\.sessionId, describeCommand\(command\)\)/);
 });
 
 test('the bubble only shows in the session that owns the run', () => {
   assert.match(bubble, /isRunningHere/);
   assert.match(bubble, /!thinking\.active \|\| !runningHere/);
+  assert.match(bubble, /thinkingBy\[s\.sessionId\]/);
 });

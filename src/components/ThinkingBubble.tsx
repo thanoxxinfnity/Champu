@@ -42,8 +42,11 @@ function Sparkle() {
   );
 }
 
+const IDLE = { active: false, phrase: '', since: 0 };
+
 export function ThinkingBubble() {
-  const thinking = useWorkspace((s) => s.thinking);
+  // Each session has its own bubble: this one shows what the session on screen is doing.
+  const thinking = useWorkspace((s) => (s.sessionId ? s.thinkingBy[s.sessionId] : undefined)) ?? IDLE;
   const cancelRun = useWorkspace((s) => s.cancelRun);
   // "Running" belongs to the one session whose run it is; every other session is idle.
   const runningHere = useWorkspace(isRunningHere);

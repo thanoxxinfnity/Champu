@@ -101,6 +101,13 @@ export interface ModelSelection {
   endpointId?: string;
 }
 
+export interface RunInfo {
+  /** The placeholder assistant message of the run, so coming back to the session mid-run can show it filling in. */
+  assistantId: string | null;
+  controller: AbortController;
+  heavy: boolean;
+}
+
 export interface ThinkingState {
   active: boolean;
   phrase: string;
@@ -219,8 +226,9 @@ interface WorkspaceState {
   clearMessages: () => void;
 
   // ── Thinking indicator ────────────────────────────────────────────────────
-  thinking: ThinkingState;
-  setThinking: (active: boolean, phrase?: string) => void;
+  /** What each running session is doing right now. Every session has its own, so two runs never share a bubble. */
+  thinkingBy: Record<string, ThinkingState>;
+  setThinking: (active: boolean, phrase: string | undefined, sessionId: string) => void;
 
   // ── Plan / HUD ────────────────────────────────────────────────────────────
   plan: Plan | null;
@@ -285,29 +293,31 @@ interface WorkspaceState {
 
   // ── Run control ───────────────────────────────────────────────────────────
   /**
-   * Which session the run in flight belongs to. "Running" is a fact about that
-   * session only: every other session is idle and must look it. null = no run.
+   * Every run in flight, by session. Sessions run side by side: "running" is a fact about one session,
+   * and every session without an entry here is idle and must look it.
    */
+  runs: Record<string, RunInfo>;
+  /** Registers a run. Only one run at a time owns the shared plan/files/terminal slot (`heavy`); see runtime.ts. */
+  beginRun: (sessionId: string, info: { controller: AbortController; heavy: boolean }) => void;
+  patchRun: (sessionId: string, patch: Partial<Pick<RunInfo, 'assistantId'>>) => void;
+  endRun: (sessionId: string) => void;
+  /** The session whose run owns the shared plan/files/terminal slot right now (a build, or drafts). null = nobody. */
   runSessionId: string | null;
-  /** The placeholder assistant message of that run, so coming back to the session mid-run can show it filling in. */
-  runAssistantId: string | null;
   /** Whose plan and files are in the shared live slot. Stays set after the run ends, so a follow-up in that session finds its work. */
   slotSessionId: string | null;
   setSlotOwner: (id: string | null) => void;
-  setRun: (sessionId: string | null, assistantId?: string | null) => void;
   queue: QueuedMessage[];
   enqueue: (item: QueuedMessage) => void;
-  dequeue: () => QueuedMessage | undefined;
+  /** Takes the first queued message that `canStart` accepts, leaving the rest in order. */
+  takeQueued: (canStart: (item: QueuedMessage) => boolean) => QueuedMessage | undefined;
   removeQueued: (id: string) => void;
-  abortController: AbortController | null;
-  setAbortController: (controller: AbortController | null) => void;
   cancelRun: () => void;
 
   hydrate: () => Promise<void>;
 }
 
-/** True while the run in flight belongs to this very session. */
-export const isRunningHere = (s: Pick<WorkspaceState, 'runSessionId' | 'sessionId'>) => s.runSessionId !== null && s.runSessionId === s.sessionId;
+/** True while this very session has a run going (other sessions may be running too). */
+export const isRunningHere = (s: Pick<WorkspaceState, 'runs' | 'sessionId'>) => s.sessionId !== null && s.runs[s.sessionId] !== undefined;
 
 const NO_FILES = new Map<string, FileArtifact>();
 /**
@@ -426,21 +436,21 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     set((s) => ({ messages: s.messages.map((m) => (m.id === id ? { ...m, ...patch } : m)) })),
   clearMessages: () => set({ messages: [] }),
 
-  thinking: { active: false, phrase: '', since: 0 },
-  setThinking: (active, phrase) =>
+  thinkingBy: {},
+  setThinking: (active, phrase, sessionId) =>
     set((s) => {
+      const before = s.thinkingBy[sessionId];
       // Every narrated step goes through here, so this is the one place that
       // can keep the background notification in step with the transcript
       // without every call site in runtime.ts having to remember to say so.
       // A browser tab has no shell to tell; updateRunProgress is a no-op there.
-      if (active && phrase && phrase !== s.thinking.phrase) {
+      if (active && phrase && phrase !== before?.phrase) {
         void updateRunProgress(phrase);
       }
-      return {
-        thinking: active
-          ? { active: true, phrase: phrase ?? s.thinking.phrase, since: s.thinking.active ? s.thinking.since : Date.now() }
-          : { active: false, phrase: '', since: 0 },
-      };
+      const thinkingBy = { ...s.thinkingBy };
+      if (active) thinkingBy[sessionId] = { active: true, phrase: phrase ?? before?.phrase ?? '', since: before?.active ? before.since : Date.now() };
+      else delete thinkingBy[sessionId];
+      return { thinkingBy };
     }),
 
   plan: null,
@@ -592,31 +602,60 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     void setSetting('draftsEnabled', enabled);
   },
 
+  runs: {},
   runSessionId: null,
-  runAssistantId: null,
   slotSessionId: null,
   setSlotOwner: (id) => set({ slotSessionId: id }),
-  setRun: (sessionId, assistantId = null) =>
-    set((s) => ({ runSessionId: sessionId, runAssistantId: sessionId ? assistantId : null, slotSessionId: sessionId ?? s.slotSessionId })),
+  beginRun: (sessionId, { controller, heavy }) =>
+    set((s) => {
+      // The slot goes to whoever starts while nobody else holds it; a build holds it until it ends.
+      const free = s.runSessionId === null || s.runSessionId === sessionId;
+      return {
+        runs: { ...s.runs, [sessionId]: { assistantId: null, controller, heavy } },
+        runSessionId: heavy && free ? sessionId : s.runSessionId,
+        slotSessionId: free ? sessionId : s.slotSessionId,
+      };
+    }),
+  patchRun: (sessionId, patch) =>
+    set((s) => (s.runs[sessionId] ? { runs: { ...s.runs, [sessionId]: { ...s.runs[sessionId], ...patch } } } : {})),
+  endRun: (sessionId) =>
+    set((s) => {
+      const runs = { ...s.runs };
+      delete runs[sessionId];
+      const thinkingBy = { ...s.thinkingBy };
+      delete thinkingBy[sessionId];
+      return { runs, thinkingBy, runSessionId: s.runSessionId === sessionId ? null : s.runSessionId };
+    }),
   queue: [],
   enqueue: (item) => set((s) => ({ queue: [...s.queue, item] })),
-  dequeue: () => {
-    const [first, ...rest] = get().queue;
-    if (first) set({ queue: rest });
-    return first;
+  takeQueued: (canStart) => {
+    const queue = get().queue;
+    // A message may not jump ahead of an earlier one from its own session, even when the earlier one is stuck waiting.
+    const blocked = new Set<string>();
+    for (const item of queue) {
+      if (!blocked.has(item.sessionId) && canStart(item)) {
+        set({ queue: queue.filter((q) => q.id !== item.id) });
+        return item;
+      }
+      blocked.add(item.sessionId);
+    }
+    return undefined;
   },
   removeQueued: (id) => set((s) => ({ queue: s.queue.filter((q) => q.id !== id) })),
-  abortController: null,
-  setAbortController: (controller) => set({ abortController: controller }),
+  /** Stops the run of the session being looked at. Other sessions keep going. */
   cancelRun: () => {
-    const { abortController, runningExecId, bridge } = get();
-    abortController?.abort();
-    if (runningExecId) void bridge.kill(runningExecId).catch(() => undefined);
-    set({ abortController: null, runningExecId: null });
-    // Any draft still streaming is dead the moment the controller aborts; leaving
-    // them marked `streaming` would spin their placeholders forever.
-    set((s) => ({ drafts: s.drafts?.map((d) => (d.streaming ? { ...d, streaming: false } : d)) ?? null }));
-    get().setThinking(false);
+    const { sessionId, runs, runSessionId, runningExecId, bridge } = get();
+    if (!sessionId) return;
+    runs[sessionId]?.controller.abort();
+    const ownsSlot = runSessionId === sessionId;
+    if (ownsSlot && runningExecId) void bridge.kill(runningExecId).catch(() => undefined);
+    if (ownsSlot) {
+      set({ runningExecId: null });
+      // Any draft still streaming is dead the moment the controller aborts; leaving
+      // them marked `streaming` would spin their placeholders forever.
+      set((s) => ({ drafts: s.drafts?.map((d) => (d.streaming ? { ...d, streaming: false } : d)) ?? null }));
+    }
+    get().setThinking(false, undefined, sessionId);
   },
 
   hydrate: async () => {

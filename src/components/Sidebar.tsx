@@ -103,7 +103,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const activeSuite = useWorkspace((s) => s.activeSuite);
   const setSuite = useWorkspace((s) => s.setSuite);
   const sessionId = useWorkspace((s) => s.sessionId);
-  const runSessionId = useWorkspace((s) => s.runSessionId);
+  const runs = useWorkspace((s) => s.runs);
   const queuedIds = useWorkspace((s) => s.queue);
   const setSessionId = useWorkspace((s) => s.setSessionId);
   const capabilityTabs = useWorkspace((s) => s.capabilityTabs);
@@ -233,7 +233,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
                         >
                           {session.title}
                         </button>
-                        {runSessionId === session.id && (
+                        {runs[session.id] && (
                           <span className="thinking-dot shrink-0" role="status" aria-label="Running in this session" title="Running" />
                         )}
                         {queuedIds.some((q) => q.sessionId === session.id) && (

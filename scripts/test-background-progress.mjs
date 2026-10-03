@@ -27,12 +27,12 @@ test('updateRunProgress sends the same wire shape RunService already treats as a
 });
 
 test('setThinking mirrors the current step to the background notification', () => {
-  const fn = /setThinking: \(active, phrase\) =>[\s\S]*?\n {4}\}\),/.exec(store)?.[0];
+  const fn = /setThinking: \(active, phrase, sessionId\) =>[\s\S]*?\n {4}\}\),/.exec(store)?.[0];
   assert.ok(fn, 'setThinking implementation not found in store.ts');
   assert.match(fn, /updateRunProgress\(phrase\)/);
   // Only on a real, changed phrase — not on every call (setThinking(false) to
   // clear, or a repeat of the same phrase, must not spam the shell).
-  assert.match(fn, /if \(active && phrase && phrase !== s\.thinking\.phrase\)/);
+  assert.match(fn, /if \(active && phrase && phrase !== before\?\.phrase\)/);
 });
 
 test('store.ts imports updateRunProgress from the real module, not a stray local redefinition', () => {

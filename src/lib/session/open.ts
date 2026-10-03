@@ -48,8 +48,9 @@ export async function openSession(session: SessionRecord): Promise<void> {
   // Coming back to the session whose run is still going: put its half-written answer back on
   // screen, so what streams in next lands somewhere instead of vanishing until the run ends.
   const now = useWorkspace.getState();
-  if (now.runSessionId === session.id && now.runAssistantId && !now.messages.some((m) => m.id === now.runAssistantId)) {
-    now.pushMessage({ id: now.runAssistantId, role: 'assistant', content: '', streaming: true, createdAt: Date.now() });
+  const assistantId = now.runs[session.id]?.assistantId;
+  if (assistantId && !now.messages.some((m) => m.id === assistantId)) {
+    now.pushMessage({ id: assistantId, role: 'assistant', content: '', streaming: true, createdAt: Date.now() });
   }
 }
 

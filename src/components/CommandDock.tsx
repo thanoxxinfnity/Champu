@@ -437,13 +437,10 @@ Open Settings → API Keys to add
 export function CommandDock() {
   // Running is a fact about one session. Here: is it *this* one, or another one that is busy?
   const runningHere = useWorkspace(isRunningHere);
-  const runSessionId = useWorkspace((s) => s.runSessionId);
-  const runningElsewhere = runSessionId !== null && !runningHere;
   const currentSessionId = useWorkspace((s) => s.sessionId);
   const queue = useWorkspace((s) => s.queue);
   const removeQueued = useWorkspace((s) => s.removeQueued);
   const queuedHere = queue.filter((q) => q.sessionId === currentSessionId);
-  const anyRun = runSessionId !== null;
   const activeSuite = useWorkspace((s) => s.activeSuite);
   const heartbeat = useWorkspace((s) => s.heartbeat);
   const draftsEnabled = useWorkspace((s) => s.draftsEnabled);
@@ -804,9 +801,7 @@ export function CommandDock() {
               // line is cut in half on a phone.
               runningHere
                 ? 'Running… next message will queue'
-                : runningElsewhere
-                  ? 'Another session runs · yours queues'
-                  : 'Ask, or describe what to build…'
+                : 'Ask, or describe what to build…'
             }
             className="w-full resize-none bg-transparent px-4 py-3 text-[14px] leading-[1.55] outline-none placeholder:opacity-45"
             style={{ color: 'var(--ink)' }}
@@ -906,7 +901,7 @@ export function CommandDock() {
                   boxShadow: '0 4px 16px -6px color-mix(in oklab, var(--accent) 70%, transparent)',
                 }}
               >
-                {blocked ? '🔒' : anyRun ? 'queue' : 'run'}
+                {blocked ? '🔒' : runningHere ? 'queue' : 'run'}
               </button>
             </div>
           </div>
