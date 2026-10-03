@@ -85,7 +85,7 @@ function BridgeTab() {
     } catch (err) {
       setResult(
         !token
-          ? '✘ No token found in that paste — append it after a # right after the URL, exactly as the agent printed it.'
+          ? `✘ No token found in that paste. The address ${url ? `(${url}) ` : ''}needs its password after a # — like ${url || 'https://your-bridge'}#YOUR_TOKEN. For a Hugging Face Space, the token is the CHOMUGIRI_TOKEN secret you set in the Space's Settings.`
           : `✘ ${(err as Error).message}`,
       );
     } finally {

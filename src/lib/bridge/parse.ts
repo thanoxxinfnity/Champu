@@ -18,7 +18,24 @@ export function normalizeUrl(url: string): string {
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
+/**
+ * A Hugging Face Space is reachable at https://<user>-<name>.hf.space. People paste the address they see
+ * in the browser (huggingface.co/spaces/<user>/<name>) or the API one (huggingface.co/api/spaces/...), which
+ * are pages about the Space, not the Space itself — so turn them into the real address.
+ */
+export function hfSpaceHost(url: string): string {
+  const m = /^(?:https?:\/\/)?(?:www\.)?huggingface\.co\/(?:api\/)?spaces\/([^/?#\s]+)\/([^/?#\s]+)/i.exec(url.trim());
+  if (!m) return url;
+  const slug = (part: string) => part.toLowerCase().replace(/[._]/g, '-');
+  return `https://${slug(m[1])}-${slug(m[2])}.hf.space`;
+}
+
 export function parseBridgeInput(raw: string): { url: string; token: string } {
+  const parsed = splitBridgeInput(raw);
+  return { url: hfSpaceHost(parsed.url), token: parsed.token };
+}
+
+function splitBridgeInput(raw: string): { url: string; token: string } {
   const trimmed = raw.trim();
   if (!trimmed) return { url: '', token: '' };
 

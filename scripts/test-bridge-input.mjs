@@ -42,3 +42,19 @@ test('empty input yields empty url and token', () => {
   assert.equal(url, '');
   assert.equal(token, '');
 });
+
+test('a Hugging Face Space page or API address becomes the Space\'s real address, token kept', () => {
+  for (const pasted of [
+    'https://huggingface.co/api/spaces/tertrxcuvuvjvj/Voicer',
+    'https://huggingface.co/spaces/tertrxcuvuvjvj/Voicer',
+    'huggingface.co/spaces/tertrxcuvuvjvj/Voicer/',
+  ]) {
+    assert.equal(parseBridgeInput(pasted).url, 'https://tertrxcuvuvjvj-voicer.hf.space');
+    assert.equal(parseBridgeInput(pasted).token, '');
+  }
+  const withToken = parseBridgeInput('https://huggingface.co/api/spaces/tertrxcuvuvjvj/Voicer#s3cret');
+  assert.equal(withToken.url, 'https://tertrxcuvuvjvj-voicer.hf.space');
+  assert.equal(withToken.token, 's3cret');
+  assert.equal(parseBridgeInput('https://tertrxcuvuvjvj-voicer.hf.space#t').url, 'https://tertrxcuvuvjvj-voicer.hf.space');
+  assert.equal(parseBridgeInput('Some_User/My.Space'.length ? 'https://huggingface.co/spaces/Some_User/My.Space' : '').url, 'https://some-user-my-space.hf.space');
+});
