@@ -149,6 +149,8 @@ export function start() {
     };
     requestAnimationFrame(drain);
 
+    // The free service gives each visitor about one answer per 15 seconds; say so rather than leave dots spinning.
+    const waitNote = setTimeout(() => { if (!shown && !queue) el.innerHTML = '<span class="ag-dots" aria-label="Waiting"><i></i><i></i><i></i></span> <small>In line — everyone gets a turn every few seconds…</small>'; }, 5000);
     try {
       for await (const t of answer({ messages: convo.slice(-8), near, tz: Intl.DateTimeFormat().resolvedOptions().timeZone })) queue += t;
       convo.push({ role: 'assistant', content: shown + queue });
@@ -157,6 +159,7 @@ export function start() {
       convo.pop(); // the unanswered question is not part of the conversation
       chips.hidden = false; // the buttons are the way to a sure answer
     } finally {
+      clearTimeout(waitNote);
       finished = true;
       busy = false;
       setTimeout(() => { el.innerHTML = render(shown + queue); log.scrollTop = log.scrollHeight; }, 400);

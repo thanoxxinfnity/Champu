@@ -13,20 +13,26 @@ import { LIMITS, buildPrompt, contentDeltas, makeScrubber } from './agent-core.j
 import { faqAnswer } from './agent-faq.js';
 
 const SERVICE = 'https://text.pollinations.ai/openai';
-const TRIES = [5000, 7000];
+// The free service lets each address through about once every 15 seconds and queues one more behind it.
+// A question sent soon after the last one therefore waits its turn (~2s once it is served), so the first word
+// gets a long wait instead of an abort-and-retry, which would only join the queue again.
+const FIRST_WORD_MS = 32_000;
+const GIVE_UP_MS = 45_000;
 export const DOWN = "My thinking service is taking a break, so I can't answer that one right now — try again in a minute. I can still answer questions about Chomugiri and Chomu Horizon straight away (try the buttons above).";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Opens the service's stream and waits for the first word. Null if it does not speak, errors, or says "slow down" twice. */
 async function openDirect(body, why) {
   why.reason = 'service';
-  for (const wait of TRIES) {
+  const started = Date.now();
+  while (Date.now() - started < GIVE_UP_MS) {
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), wait);
+    const timer = setTimeout(() => ac.abort(), Math.min(FIRST_WORD_MS, GIVE_UP_MS - (Date.now() - started)));
     try {
       const res = await fetch(SERVICE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, seed: Math.floor(Math.random() * 1e9) }), signal: ac.signal });
       if (!res.ok || !res.body) {
-        if (res.status === 429 || res.status === 402) await sleep(2200);
+        // 429: our line at the service is full, so wait for it to move. 402 and 5xx come and go within seconds.
+        await sleep(res.status === 429 ? 4000 : 1800);
         throw new Error('no stream');
       }
       const rest = contentDeltas(res.body.getReader());
