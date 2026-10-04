@@ -92,6 +92,19 @@ export function referencedResources(files: WorkspaceFile[], root: string): strin
 }
 
 /**
+ * Settings a phone build cannot do without, put into a `project.godot` the model wrote without them.
+ *
+ * Godot refuses an Android export unless ETC2/ASTC texture import is on ("ETC2/ASTC texture compression is required
+ * for Android export"), and a model writing the file by hand leaves it out. Returns the same string when nothing was missing.
+ */
+export function withMobileSettings(content: string): string {
+  if (/import_etc2_astc\s*=\s*true/.test(content)) return content;
+  return /^\[rendering\]\s*$/m.test(content)
+    ? content.replace(/^\[rendering\]\s*$/m, '[rendering]\n\ntextures/vram_compression/import_etc2_astc=true')
+    : `${content.trimEnd()}\n\n[rendering]\n\ntextures/vram_compression/import_etc2_astc=true\n`;
+}
+
+/**
  * Fills in whatever the project needs and the model did not write.
  *
  * Deliberately additive: a file the model wrote is never replaced, because it
@@ -124,7 +137,8 @@ export function completeProject(
     filledIn.push(file.path);
   }
 
-  return { files: out, filledIn };
+  const withSettings = out.map((f) => (/(^|\/)project\.godot$/.test(f.path) && typeof f.content === 'string' ? { ...f, content: withMobileSettings(f.content) } : f));
+  return { files: withSettings, filledIn };
 }
 
 /** A filename Godot and a file manager will both accept. */

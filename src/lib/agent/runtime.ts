@@ -18,7 +18,7 @@ import { advancePlan, NO_EVIDENCE, settleRemaining, type RunEvidence } from './p
 import { buildPackExport, describeExport, detectPacks, missingGeometries, validatePacks } from '@/lib/suites/minecraft/pack';
 import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geometry';
 import { planBrief, planGame, planSummary, playerParts } from '@/lib/suites/godot/plan';
-import { buildGodotExport, describeExport as describeGodotExport, detectGodotProject, referencedResources, relativePath } from '@/lib/suites/godot/export';
+import { buildGodotExport, describeExport as describeGodotExport, detectGodotProject, referencedResources, relativePath, withMobileSettings } from '@/lib/suites/godot/export';
 import { buildProject } from '@/lib/suites/godot/project';
 import { generateModel, pipelineStatement, sourceChain } from '@/lib/suites/godot/model-source';
 import { creditsFile } from '@/lib/suites/godot/sketchfab';
@@ -85,6 +85,7 @@ async function streamCompletion(
     messages: ChatMessage[];
     temperature?: number;
     maxTokens?: number;
+    reasoningEffort?: 'low' | 'medium' | 'high';
     json?: boolean;
     custom?: CustomEndpointConfig;
   },
@@ -240,17 +241,25 @@ async function complete(
  * caller's own abort signal so the stop button actually cuts a hung attempt
  * short, keeps that from happening again.
  */
+/** When NVIDIA's image service last failed to answer in time; while that is recent, the keyless one goes first. */
+let nimImageFailedAt = 0;
+const NIM_IMAGE_COOLDOWN_MS = 10 * 60_000;
+
 async function paintTexture(
   prompt: string,
   seed: number,
   signal?: AbortSignal,
 ): Promise<{ dataUrl: string; bytes: number } | null> {
-  for (const body of [
-    { provider: 'nim', model: 'black-forest-labs/flux.1-dev', prompt, width: 1024, height: 1024, steps: 30, seed: seed % 1_000_000 },
-    { provider: 'pollinations', prompt, width: 1024, height: 1024, seed: seed % 1_000_000 },
-  ]) {
+  const nim = { provider: 'nim', model: 'black-forest-labs/flux.1-dev', prompt, width: 1024, height: 1024, steps: 30, seed: seed % 1_000_000 };
+  const free = { provider: 'pollinations', prompt, width: 1024, height: 1024, seed: seed % 1_000_000 };
+  // A slow NVIDIA image service used to cost every single texture its full wait before the free one was tried
+  // (ten textures, ten waits: minutes of "Painting…" for one game). After it fails once, go straight to the free
+  // one for a while, and keep NVIDIA as the fallback with a shorter wait.
+  const nimDown = Date.now() - nimImageFailedAt < NIM_IMAGE_COOLDOWN_MS;
+  const attempts = nimDown ? [{ body: free, ms: 45_000 }, { body: nim, ms: 20_000 }] : [{ body: nim, ms: 25_000 }, { body: free, ms: 45_000 }];
+  for (const { body, ms } of attempts) {
     try {
-      const timeout = AbortSignal.timeout(45_000);
+      const timeout = AbortSignal.timeout(ms);
       const composed = signal ? AbortSignal.any([signal, timeout]) : timeout;
       const res = await fetch('/api/image', withKeys({
         method: 'POST',
@@ -258,7 +267,7 @@ async function paintTexture(
         body: JSON.stringify(body),
         signal: composed,
       }));
-      if (!res.ok) continue;
+      if (!res.ok) { if (body.provider === 'nim') nimImageFailedAt = Date.now(); continue; }
 
       const json = (await res.json()) as { images?: Array<{ dataUrl?: string }> };
       const dataUrl = json.images?.[0]?.dataUrl;
@@ -270,6 +279,7 @@ async function paintTexture(
       return { dataUrl, bytes: Math.round(b64.length * 0.75) };
     } catch {
       // One provider stalling or refusing is not both refusing.
+      if (body.provider === 'nim' && !signal?.aborted) nimImageFailedAt = Date.now();
     }
   }
   return null;
@@ -1030,6 +1040,8 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
         messages,
         temperature: lane === 'B' ? 0.25 : 0.5,
         maxTokens: 8192,
+        // Writing a project is not a puzzle: thinking for minutes first is what made a game take a quarter of an hour.
+        reasoningEffort: lane === 'B' ? 'low' : undefined,
         custom,
       },
       callbacksFor(''),
@@ -1070,6 +1082,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
           messages: [...messages, { role: 'assistant', content: next.kept }, { role: 'user', content: next.prompt }],
           temperature: 0.25,
           maxTokens: 8192,
+          reasoningEffort: 'low',
           custom,
         },
         callbacksFor(prefix),
@@ -1537,31 +1550,45 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
         const themeFor = (i: number) =>
           i < RUNNER_THEMES.length * 2 ? RUNNER_THEMES[Math.floor(i / 2)] : undefined;
 
-        for (let i = 0; i < planned.length; i += 1) {
-          if (controller.signal.aborted) break;
-          const texture = planned[i];
-          think(true, `Painting ${texture.subject}…`);
-          try {
-            let art = await paintTexture(gameTexturePrompt(texture, themeFor(i)), texture.seed, controller.signal);
-            // A flat texture is worse than none: the surface renders as a blank
-            // sheet and the geometry on it disappears. One reroll, insisting.
-            if (art && looksFlat(art.bytes)) {
-              const retry = await paintTexture(
-                insistOnDetail(texture, themeFor(i)),
-                (texture.seed + 7919) % 1_000_000,
-                controller.signal,
-              );
-              if (retry && retry.bytes > art.bytes) art = retry;
+        // A few at a time, and inside a time budget: ten surfaces painted one after another is minutes of waiting for
+        // a game that is already written. Whatever is not done in time is left out and falls back to flat colour, and the
+        // project is handed over either way.
+        const PAINT_AT_ONCE = 3;
+        const PAINT_BUDGET_MS = 150_000;
+        const paintStart = Date.now();
+        let nextTexture = 0;
+        let painted = 0;
+        think(true, `Painting ${planned.length} surfaces…`);
+        const worker = async () => {
+          while (!controller.signal.aborted && Date.now() - paintStart < PAINT_BUDGET_MS) {
+            const i = nextTexture++;
+            if (i >= planned.length) return;
+            const texture = planned[i];
+            try {
+              let art = await paintTexture(gameTexturePrompt(texture, themeFor(i)), texture.seed, controller.signal);
+              // A flat texture is worse than none: the surface renders as a blank
+              // sheet and the geometry on it disappears. One reroll, insisting.
+              if (art && looksFlat(art.bytes)) {
+                const retry = await paintTexture(
+                  insistOnDetail(texture, themeFor(i)),
+                  (texture.seed + 7919) % 1_000_000,
+                  controller.signal,
+                );
+                if (retry && retry.bytes > art.bytes) art = retry;
+              }
+              if (!art) continue;
+              const artifact = textureArtifact(texture.path, art.dataUrl);
+              files.push(artifact);
+              upsertFile(artifact);
+              painted += 1;
+              think(true, `Painted ${painted} of ${planned.length} surfaces…`);
+            } catch {
+              // One surface failing costs that surface, not the build; the game
+              // falls back to flat colour for it.
             }
-            if (!art) continue;
-            const artifact = textureArtifact(texture.path, art.dataUrl);
-            files.push(artifact);
-            upsertFile(artifact);
-          } catch {
-            // One surface failing costs that surface, not the build; the game
-            // falls back to flat colour for it.
           }
-        }
+        };
+        await Promise.all(Array.from({ length: PAINT_AT_ONCE }, worker));
         if (files.some((f) => f.path.startsWith('textures/'))) evidence.artifactProduced = true;
       }
 
@@ -1602,6 +1629,62 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
             content: `Could not write the soundtrack — ${(err as Error).message}. The game is still here; it will just be quiet.`,
             createdAt: Date.now(),
           });
+        }
+      }
+
+      // The model sometimes writes scenes that name scripts it never wrote (it ran out of room, or lost track). Godot would
+      // open such a project with those nodes missing. Ask once for exactly those files, instead of handing over a broken game.
+      {
+        const root = detectGodotProject(files)?.root ?? '';
+        const have = new Set(files.map((f) => relativePath(f.path, root)));
+        const missing = referencedResources(files, root).filter((r) => /\.(gd|gdshader)$/.test(r) && !have.has(r));
+        if (missing.length && !controller.signal.aborted) {
+          think(true, `Writing the ${missing.length} missing script${missing.length === 1 ? '' : 's'}…`);
+          const names = missing.map((m) => `\`res://${m}\``).join(', ');
+          const ask = `The scenes reference ${names}, but ${missing.length === 1 ? 'that file was' : 'those files were'} not written. Write ${missing.length === 1 ? 'it' : 'them'} now: each as its own fenced file with its path, in the same format as before, complete and consistent with the scenes and the other scripts. Only the missing files, nothing else.`;
+          const repair = await streamCompletion(
+            {
+              provider: selection.provider,
+              model: selection.model,
+              messages: [...messages, { role: 'assistant', content: result.content }, { role: 'user', content: ask }],
+              temperature: 0.25,
+              maxTokens: 8192,
+              reasoningEffort: 'low',
+              custom,
+            },
+            {},
+            controller.signal,
+          );
+          for (const file of filesOf(extractArtifacts(repair.content))) {
+            const rel = relativePath(file.path, root);
+            if (have.has(rel)) continue;
+            const placed = { ...file, path: root ? `${root}/${rel}` : rel };
+            files.push(placed);
+            upsertFile(placed);
+            void upsertArtifact({ sessionId, suite, path: placed.path, language: placed.language, content: placed.content, bytes: placed.bytes });
+            have.add(rel);
+          }
+          const stillMissing = missing.filter((m) => !have.has(m));
+          emit({
+            id: uid('msg'),
+            role: 'system',
+            content: stillMissing.length
+              ? `Wrote ${missing.length - stillMissing.length} of ${missing.length} missing scripts; still missing: ${stillMissing.join(', ')}.`
+              : `Wrote the ${missing.length} script${missing.length === 1 ? '' : 's'} the scenes needed: ${missing.join(', ')}.`,
+            createdAt: Date.now(),
+          });
+        }
+      }
+
+      // A hand-written project.godot usually lacks the one setting Godot insists on for an Android export.
+      {
+        const idx = files.findIndex((f) => /(^|\/)project\.godot$/.test(f.path));
+        if (idx >= 0) {
+          const fixed = withMobileSettings(files[idx].content);
+          if (fixed !== files[idx].content) {
+            files[idx] = { ...files[idx], content: fixed, bytes: new TextEncoder().encode(fixed).length };
+            upsertFile(files[idx]);
+          }
         }
       }
 

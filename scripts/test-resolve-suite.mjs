@@ -26,7 +26,8 @@ test('a question is left alone, even one that mentions Android', () => {
 test('a suite the user already chose is never overridden', () => {
   assert.equal(resolveSuite('minecraft', 'make me an android app', 'B'), 'minecraft');
   assert.equal(resolveSuite('godot', 'build the APK', 'B'), 'godot');
-  assert.equal(resolveSuite('game', 'make a shooter', 'B'), 'game');
+  // the Game Studio tab runs builds under the game pipeline's own suite id
+  assert.equal(resolveSuite('game', 'make a shooter', 'B'), 'godot');
 });
 
 test('ordinary builds stay in chat', () => {
@@ -43,4 +44,22 @@ test('"runner" and "pack" in ordinary dev work do not summon a game or a Bedrock
 test('a game has to say it is a game', () => {
   assert.equal(resolveSuite('chat', 'make an endless runner game', 'B'), 'godot');
   assert.equal(resolveSuite('chat', 'build a godot platformer', 'B'), 'godot');
+});
+
+test('a game typed in the Game Studio tab is a game build, even "for Android"', () => {
+  assert.equal(resolveSuite('game', 'Make a simple 3D game for Android: drive a car and collect coins. Touch controls.', 'B'), 'godot');
+  assert.equal(resolveSuite('game', 'make a zombie shooter', 'B'), 'godot');
+  assert.equal(resolveSuite('game', 'what genre suits a phone?', 'A'), 'game'); // a question stays a question
+});
+
+test('"a game for Android" in plain chat goes to the game pipeline, not a native Android project', () => {
+  assert.equal(resolveSuite('chat', 'Make a simple 3D game for Android: drive a car around an arena and collect coins', 'B'), 'godot');
+  assert.equal(resolveSuite('chat', 'build me an android game apk with a racing car', 'B'), 'godot');
+});
+
+test('a native Android project still goes to Android', () => {
+  assert.equal(resolveSuite('chat', 'make an Android app with Kotlin and Gradle', 'B'), 'android');
+  assert.equal(resolveSuite('chat', 'build an android app that tracks my expenses', 'B'), 'android');
+  // naming the native toolchain keeps a game out of the game pipeline
+  assert.notEqual(resolveSuite('chat', 'a Kotlin game for Android with Jetpack Compose', 'B'), 'godot');
 });

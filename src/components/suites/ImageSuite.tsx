@@ -6,6 +6,7 @@ import { useWorkspace } from '@/lib/store';
 import { listAssets, saveAsset, deleteAsset } from '@/lib/db/history';
 import type { AssetRecord } from '@/lib/db/schema';
 import { dataUrlToBytes, downloadBlob } from '@/lib/zip';
+import { ZoomViewer } from './media/ZoomViewer';
 
 type Provider = 'pollinations' | 'nim' | 'custom';
 
@@ -32,6 +33,7 @@ export function ImageSuite() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [gallery, setGallery] = useState<AssetRecord[]>([]);
+  const [zoomed, setZoomed] = useState<string | null>(null);
   const [endpointId, setEndpointId] = useState<string>('');
 
   const imageEndpoints = endpoints.filter((e) => e.capabilities.includes('image') && e.enabled);
@@ -247,8 +249,10 @@ export function ImageSuite() {
           <div className="mx-auto grid w-full max-w-5xl grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {gallery.map((asset) => (
               <figure key={asset.id} className="group relative overflow-hidden rounded-lg border" style={{ borderColor: 'var(--line)' }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={asset.dataUrl} alt={asset.prompt ?? ''} className="aspect-square w-full object-cover" loading="lazy" />
+                <button type="button" onClick={() => setZoomed(asset.id)} className="block w-full" aria-label="Open and zoom">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={asset.dataUrl} alt={asset.prompt ?? ''} className="aspect-square w-full object-cover" loading="lazy" />
+                </button>
                 <figcaption
                   className="absolute inset-x-0 bottom-0 translate-y-full p-2 transition-transform group-hover:translate-y-0"
                   style={{ background: 'linear-gradient(transparent, rgba(0,0,0,0.9))' }}
@@ -297,6 +301,11 @@ export function ImageSuite() {
           </div>
         )}
       </div>
+      {(() => {
+        const open = gallery.find((g) => g.id === zoomed && g.dataUrl);
+        const step = (d: number) => { const at = gallery.findIndex((g) => g.id === zoomed); if (at >= 0) setZoomed(gallery[(at + d + gallery.length) % gallery.length].id); };
+        return open ? <ZoomViewer kind="image" src={open.dataUrl!} title={open.prompt} onClose={() => setZoomed(null)} onPrev={() => step(-1)} onNext={() => step(1)} /> : null;
+      })()}
     </div>
   );
 }

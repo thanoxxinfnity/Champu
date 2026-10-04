@@ -28,10 +28,15 @@ const CORE_SUITES: SuiteEntry[] = [
 
 const CAPABILITY_SUITE_META: Record<string, { label: string; icon: string; hint: string }> = {
   image: { label: 'Image', icon: '◐', hint: 'Multi-provider image generation' },
-  video: { label: 'Video', icon: '▷', hint: 'Detected on a custom endpoint' },
-  audio: { label: 'Audio', icon: '◍', hint: 'Detected on a custom endpoint' },
-  model3d: { label: '3D', icon: '⬢', hint: 'Detected on a custom endpoint' },
+  video: { label: 'Video', icon: '▷', hint: 'Scenes on a timeline, generated clips' },
+  audio: { label: 'Audio', icon: '◍', hint: 'Speech and sound, with a waveform' },
+  model3d: { label: '3D', icon: '⬢', hint: 'Make and turn 3D models' },
 };
+
+/** Opens a viewer or editor of its own, so it has no list of chat sessions. */
+const STANDALONE = new Set(['library', 'video', 'audio', 'model3d']);
+
+const LIBRARY_ENTRY: SuiteEntry = { id: 'library', label: 'Library', icon: '▦', hint: 'Everything you generated — open and zoom up to 50×' };
 
 function BridgeStatusCard({ onOpenSettings }: { onOpenSettings: () => void }) {
   const heartbeat = useWorkspace((s) => s.heartbeat);
@@ -99,7 +104,7 @@ function BridgeStatusCard({ onOpenSettings }: { onOpenSettings: () => void }) {
 }
 
 /** Left navigation with an independent history viewer per suite. */
-export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
+export function Sidebar({ onOpenSettings, onNavigate }: { onOpenSettings: () => void; /** Called after the user picks somewhere to go, so a phone's overlay menu can close. */ onNavigate?: () => void }) {
   const activeSuite = useWorkspace((s) => s.activeSuite);
   const setSuite = useWorkspace((s) => s.setSuite);
   const sessionId = useWorkspace((s) => s.sessionId);
@@ -107,6 +112,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const queuedIds = useWorkspace((s) => s.queue);
   const setSessionId = useWorkspace((s) => s.setSessionId);
   const capabilityTabs = useWorkspace((s) => s.capabilityTabs);
+  const mediaHidden = useWorkspace((s) => s.mediaHidden);
   const clearMessages = useWorkspace((s) => s.clearMessages);
   const pushMessage = useWorkspace((s) => s.pushMessage);
   const setPlan = useWorkspace((s) => s.setPlan);
@@ -142,9 +148,10 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
   };
 
   const suites: SuiteEntry[] = [
+    LIBRARY_ENTRY,
     ...CORE_SUITES,
     ...capabilityTabs
-      .filter((id) => CAPABILITY_SUITE_META[id])
+      .filter((id) => CAPABILITY_SUITE_META[id] && !mediaHidden.includes(id))
       .map((id) => ({ id, ...CAPABILITY_SUITE_META[id] })),
   ];
 
@@ -173,6 +180,27 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
         {suites.map((suite) => {
           const isExpanded = expanded === suite.id;
           const isActive = activeSuite === suite.id;
+
+          if (STANDALONE.has(suite.id)) {
+            return (
+              <div key={suite.id} className="mb-0.5">
+                <button
+                  type="button"
+                  onClick={() => { setSuite(suite.id); setExpanded(null); onNavigate?.(); }}
+                  className="press flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left"
+                  style={{
+                    background: isActive ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : undefined,
+                    boxShadow: isActive ? 'inset 2px 0 0 var(--accent)' : undefined,
+                    color: isActive ? 'var(--accent)' : 'var(--ink-dim)',
+                  }}
+                  title={suite.hint}
+                >
+                  <span className="shrink-0 text-[12px]" aria-hidden>{suite.icon}</span>
+                  <span className="truncate text-[12.5px] font-medium">{suite.label}</span>
+                </button>
+              </div>
+            );
+          }
 
           return (
             <div key={suite.id} className="mb-0.5">
@@ -207,7 +235,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
                 <div className="ml-2 mt-0.5 border-l pl-2" style={{ borderColor: 'var(--line)' }}>
                   <button
                     type="button"
-                    onClick={() => newSession(suite.id)}
+                    onClick={() => { newSession(suite.id); onNavigate?.(); }}
                     className="mono mb-0.5 w-full rounded px-2 py-1 text-left text-[10.5px] transition-colors"
                     style={{ color: 'var(--accent)' }}
                   >
@@ -223,7 +251,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
                       <div key={session.id} className="group flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => void openSession(session)}
+                          onClick={() => { void openSession(session); onNavigate?.(); }}
                           className="press min-w-0 flex-1 truncate rounded px-2 py-1 text-left text-[11px]"
                           style={{
                             color: sessionId === session.id ? 'var(--accent)' : 'var(--ink-dim)',

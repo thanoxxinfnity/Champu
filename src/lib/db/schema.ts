@@ -30,7 +30,9 @@ export type SuiteId =
   | 'video'
   | 'audio'
   | 'model3d'
-  | 'assets';
+  | 'assets'
+  // Everything generated, in one place (a viewer, not a place where sessions live).
+  | 'library';
 
 export interface SessionRecord {
   id: string;
@@ -264,6 +266,7 @@ export function isBrowser(): boolean {
 export const SUITE_LABELS: Record<SuiteId, string> = {
   chat: 'Chat',
   assets: 'Asset Studio',
+  library: 'Library',
   android: 'Android & Cross-Platform',
   minecraft: 'Minecraft Engineering',
   godot: 'Godot Game Studio',

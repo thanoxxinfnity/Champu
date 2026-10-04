@@ -15,7 +15,7 @@ import { isShellHosted, loadKeys, maskKey, nimConfigured, saveKeys, validateNimK
 import { normalizeBase } from '@/lib/providers/model-list';
 import { parseBridgeInput } from '@/lib/bridge/parse';
 
-type Tab = 'guide' | 'keys' | 'bridge' | 'secrets' | 'endpoints' | 'deploy' | 'voice' | 'guard';
+type Tab = 'guide' | 'keys' | 'bridge' | 'secrets' | 'endpoints' | 'media' | 'deploy' | 'voice' | 'guard';
 
 function Field({
   label,
@@ -1707,13 +1707,16 @@ function GuideTab() {
   ];
 
   const suites = [
+    ['Library', 'Everything you generated — images, video, audio and 3D — in one place. Open an image or a video and zoom in up to 50×.'],
     ['Chat', 'Ask anything. Questions get answered directly; describe something to build and it switches to building it.'],
     ['Android', 'Generates a full Android project and compiles an APK when the terminal bridge is connected.'],
     ['Minecraft', 'Bedrock add-ons end to end — manifests, items, entities, a 3D model for anything that needs one, and painted textures. Exports an installable .mcaddon.'],
     ['Studio', 'Slide decks, documents and a visual canvas from a prompt.'],
+    ['Game Studio', 'Describe a game and get a Godot project (and an APK when the bridge has Godot). Typed here, it is always built as a game.'],
     ['Workdrive', 'Research mode: searches, reads and writes up what it found.'],
     ['Asset Studio', 'Generate an image, cut its background out, and export icon sets for Android or the web.'],
     ['Skills', 'Your own slash commands, saved and reusable.'],
+    ['Image · Video · Audio · 3D', 'Each has its own screen — a timeline for video, a waveform for audio, a turntable for 3D. They appear only after you add a provider for them (Settings → Custom Endpoints), and can be hidden under Settings → Media.'],
   ];
 
   return (
@@ -1812,6 +1815,53 @@ function GuideTab() {
  * all. Picking silently would mean quality quietly depending on a setting the
  * user cannot see.
  */
+const MEDIA_ROWS: Array<{ id: 'image' | 'video' | 'audio' | 'model3d'; label: string; what: string }> = [
+  { id: 'image', label: 'Image', what: 'make pictures' },
+  { id: 'video', label: 'Video', what: 'make scenes and lay them on a timeline' },
+  { id: 'audio', label: 'Audio', what: 'speech and sound, shown as a waveform' },
+  { id: 'model3d', label: '3D', what: 'make 3D models and turn them around' },
+];
+
+/** Which media tabs are on. A tab exists only while a provider for it does; this also lets you hide one you do not want. */
+function MediaTab({ goTo }: { goTo: (tab: Tab) => void }) {
+  const endpoints = useWorkspace((s) => s.endpoints);
+  const hidden = useWorkspace((s) => s.mediaHidden);
+  const setHidden = useWorkspace((s) => s.setMediaHidden);
+  return (
+    <div className="space-y-4">
+      <p className="text-[11.5px] leading-[1.6]" style={{ color: 'var(--ink-dim)' }}>
+        Image, Video, Audio and 3D each get their own screen — but only once you add a provider that can do it. Add one under
+        <button type="button" onClick={() => goTo('endpoints')} className="mx-1 underline" style={{ color: 'var(--accent)' }}>Custom Endpoints</button>
+        and the tab appears; remove the provider and the tab goes away. Everything you make is kept in the <strong>Library</strong> at the top of the menu, where you can open it and zoom in up to 50×.
+      </p>
+      <ul className="space-y-2">
+        {MEDIA_ROWS.map((row) => {
+          const providers = endpoints.filter((e) => e.enabled && e.capabilities.includes(row.id));
+          const on = providers.length > 0;
+          const isHidden = hidden.includes(row.id);
+          return (
+            <li key={row.id} className="flex items-center gap-3 rounded-lg border p-3" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
+              <div className="min-w-0 flex-1">
+                <p className="text-[12.5px] font-medium">{row.label} <span className="mono text-[10px] font-normal" style={{ color: 'var(--ink-faint)' }}>{row.what}</span></p>
+                <p className="mono mt-0.5 truncate text-[10.5px]" style={{ color: on ? 'var(--accent)' : 'var(--ink-faint)' }}>
+                  {on ? `provider: ${providers.map((p) => p.label).join(', ')}` : 'no provider added yet — tab is off'}
+                </p>
+              </div>
+              {on ? (
+                <button type="button" onClick={() => setHidden(row.id, !isHidden)} className="press mono shrink-0 rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: isHidden ? 'var(--line)' : 'var(--accent)', color: isHidden ? 'var(--ink-dim)' : 'var(--accent)' }} aria-pressed={!isHidden}>
+                  {isHidden ? 'hidden · show' : 'shown · hide'}
+                </button>
+              ) : (
+                <button type="button" onClick={() => goTo('endpoints')} className="press mono shrink-0 rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>add provider</button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function ImageModelField() {
   const imageModel = useWorkspace((s) => s.imageModel);
   const setImageModel = useWorkspace((s) => s.setImageModel);
@@ -1852,6 +1902,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'bridge', label: 'Terminal Bridge' },
   { id: 'secrets', label: 'Secrets' },
   { id: 'endpoints', label: 'Custom Endpoints' },
+  { id: 'media', label: 'Media' },
   { id: 'deploy', label: 'Deployment' },
   { id: 'voice', label: 'Voice' },
   { id: 'guard', label: 'Anti-Loop Ledger' },
@@ -1915,6 +1966,7 @@ export function Settings({ open, onClose }: { open: boolean; onClose: () => void
           {tab === 'bridge' && <BridgeTab />}
           {tab === 'secrets' && <SecretsTab />}
           {tab === 'endpoints' && <EndpointsTab />}
+          {tab === 'media' && <MediaTab goTo={setTab} />}
           {tab === 'deploy' && <DeployTab />}
           {tab === 'voice' && <VoiceTab />}
           {tab === 'guard' && <GuardTab />}

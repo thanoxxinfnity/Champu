@@ -218,6 +218,9 @@ interface WorkspaceState {
   setEndpoints: (endpoints: EndpointRecord[]) => void;
   /** Capability-driven tabs instantiated from probed endpoints. */
   capabilityTabs: SuiteId[];
+  /** Media tabs (image, video, audio, model3d) the user chose to hide even though a provider exists. */
+  mediaHidden: SuiteId[];
+  setMediaHidden: (id: SuiteId, hidden: boolean) => void;
 
   // ── Chat ──────────────────────────────────────────────────────────────────
   messages: ChatMessageView[];
@@ -412,6 +415,12 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   endpoints: [],
   capabilityTabs: [],
+  mediaHidden: [],
+  setMediaHidden: (id, hidden) => {
+    const next = hidden ? [...new Set([...get().mediaHidden, id])] : get().mediaHidden.filter((x) => x !== id);
+    set({ mediaHidden: next });
+    void setSetting('mediaHidden', next);
+  },
   setEndpoints: (endpoints) => {
     const tabs = new Set<SuiteId>();
     for (const endpoint of endpoints) {
@@ -680,6 +689,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const priorDeploy = await getSetting<DeployResult | null>('deploy', null);
     if (priorDeploy?.project) set({ lastDeploy: priorDeploy });
     set({ draftsEnabled: await getSetting<boolean>('draftsEnabled', false) });
+    set({ mediaHidden: await getSetting<SuiteId[]>('mediaHidden', []) });
     set({ imageModel: await getSetting<string>('imageModel', 'nim:black-forest-labs/flux.1-dev') });
 
     // The boot script already painted the stored theme; this re-syncs the store

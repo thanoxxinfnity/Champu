@@ -21,6 +21,8 @@ endpoint you point it at.
 | **Minecraft** | Bedrock addon generator, Java-mod converter with a coverage report, in-browser Blockbench voxel editor |
 | **Studio** | Animated HTML5 decks, print-ready documents, spreadsheets, multi-provider image generation |
 | **Workdrive** | Search → fetch → embed → rerank → cited synthesis, with milestones and browser alerts |
+| **Library** | Everything generated (images, video, audio, 3D) in one place; open an image or video and zoom up to 50× |
+| **Video · Audio · 3D** | Each its own screen — a scene timeline with a monitor, a waveform player, a turntable viewer. They appear only once a provider is added (Settings → Custom Endpoints) and can be hidden under Settings → Media |
 | **Skills** | `/` command palette, custom skills, AI-authored skills, multimodal attachments |
 | **Deploy** | One-click Vercel deployment with preflight validation |
 | **Storage** | Per-suite IndexedDB history — independent, searchable, exportable |

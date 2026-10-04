@@ -264,6 +264,13 @@ export async function listAssets(suite: SuiteId, limit = 300): Promise<AssetReco
     .catch(() => []);
 }
 
+/** Everything generated, across suites, newest first — images, video, audio and 3D (not loose binaries). */
+export async function listAllAssets(limit = 400): Promise<AssetRecord[]> {
+  if (!isBrowser()) return [];
+  const rows = await db().assets.orderBy('createdAt').reverse().limit(limit * 2).toArray().catch(() => [] as AssetRecord[]);
+  return rows.filter((a) => a.kind !== 'binary' && (a.dataUrl || a.url)).slice(0, limit);
+}
+
 export async function deleteAsset(id: string): Promise<void> {
   if (!isBrowser()) return;
   await db().assets.delete(id).catch(() => undefined);

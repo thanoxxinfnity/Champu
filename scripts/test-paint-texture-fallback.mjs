@@ -34,7 +34,7 @@ test('paintTexture tries NIM then falls back to Pollinations, like referenceImag
   assert.match(paintTexture, /provider:\s*'pollinations'/);
   // Both bodies must be tried in one loop — a body array, not two branches
   // that stop after the first failure.
-  assert.match(paintTexture, /for \(const body of \[/);
+  assert.match(paintTexture, /for \(const \{ body, ms \} of attempts\)/);
 });
 
 test('paintTexture bounds every attempt with a timeout composed with the caller signal', () => {
@@ -48,11 +48,11 @@ test('a stalled or failing provider is caught, not left to abort the whole loop'
   assert.match(paintTexture, /catch\s*\{/);
 });
 
-const runnerLoop = /if \(!files\.some\(\(f\) => f\.path\.startsWith\('textures\/'\)\)\) \{[\s\S]*?\n {6}\}\n {4}\}/.exec(src)?.[0];
+const runnerLoop = /if \(!files\.some\(\(f\) => f\.path\.startsWith\('textures\/'\)\)\) \{[\s\S]*?if \(files\.some\(\(f\) => f\.path\.startsWith\('textures\/'\)\)\) evidence\.artifactProduced = true;/.exec(src)?.[0];
 
 test('the RUNNER_THEMES texture loop checks controller.signal.aborted between iterations', () => {
   assert.ok(runnerLoop, 'RUNNER_THEMES texture loop not found in runtime.ts');
-  assert.match(runnerLoop, /if \(controller\.signal\.aborted\) break;/);
+  assert.match(runnerLoop, /while \(!controller\.signal\.aborted && Date\.now\(\) - paintStart < PAINT_BUDGET_MS\)/);
 });
 
 test('the RUNNER_THEMES loop passes controller.signal into both paintTexture calls', () => {

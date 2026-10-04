@@ -206,7 +206,13 @@ export function requestBody(
   if (req.maxTokens !== undefined) body.max_tokens = req.maxTokens;
   if (req.stop?.length) body.stop = req.stop;
   if (req.json) body.response_format = { type: 'json_object' };
+  if (req.reasoningEffort && takesReasoningEffort(model)) body.reasoning_effort = req.reasoningEffort;
   return body;
+}
+
+/** Models verified to accept `reasoning_effort` (Kimi K3 answers in ~2s instead of ~30s with it set to low). Others are left alone: an unknown field can be a 400. */
+export function takesReasoningEffort(model: string): boolean {
+  return /kimi|gpt-oss/i.test(model);
 }
 
 // ── Responses ───────────────────────────────────────────────────────────────

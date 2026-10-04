@@ -56,6 +56,8 @@ const EXECUTION_SLASH = new Set([
 ]);
 
 const SUITE_HINTS: Array<[RegExp | ((text: string) => boolean), string]> = [
+  // "a 3D game for Android" is a game, not a native Android project: the word "android" must not win over "game".
+  [(text) => wantsGame(text) && !MINECRAFT_EXPLICIT.test(text), 'godot'],
   [/\b(apk|aab|android|gradle|jetpack ?compose|exe|\.exe|desktop app|electron|winforms|wpf|tkinter|pyqt)\b/i, 'android'],
   [/\b(minecraft|bedrock|mcpack|mcaddon|blockbench|behaviou?r ?pack|resource ?pack|\.jar mod|forge|fabric|voxel)\b/i, 'minecraft'],
   // Games are matched by the planner's own genre vocabulary rather than a
@@ -112,13 +114,27 @@ const GAME_EXPLICIT = /\b(games?|godot|gdscript)\b/i;
  * add-on), but an explicit APK/Android-app request wins over a website.
  */
 export function resolveSuite(base: string, input: string, lane: Lane): string {
+  // The Game Studio tab is where games are made, so a build typed there is a game build. Without this the
+  // tab's own name ("game") never matched the suite the game pipeline runs under ("godot"), and a request such
+  // as "a 3D game for Android" was written as a plain Android project instead — no plan, no Godot rules, no check.
+  if (base === 'game') return lane === 'B' ? 'godot' : base;
   if (base !== 'chat' || lane !== 'B') return base;
+  if (wantsGame(input) && !wantsSite(input) && !MINECRAFT_EXPLICIT.test(input)) return 'godot';
   if (ANDROID_DELIVERABLE.test(input)) return 'android';
   if (wantsSite(input)) return base;
   const detected = detectSuite(input);
   if (detected === 'minecraft' && MINECRAFT_EXPLICIT.test(input)) return 'minecraft';
   if (detected === 'godot' && GAME_EXPLICIT.test(input)) return 'godot';
   return base;
+}
+
+/**
+ * A game, even one said to be "for Android" or shipped as an APK — Godot exports those. Only a request that names
+ * the native toolchain (Gradle, Kotlin, Jetpack, Android Studio) is a native Android project.
+ */
+const ANDROID_NATIVE = /\b(gradle|kotlin|jetpack|compose|android studio|xml layout|java)\b/i;
+export function wantsGame(text: string): boolean {
+  return GAME_EXPLICIT.test(text) && looksLikeGame(text) && !ANDROID_NATIVE.test(text);
 }
 
 export function detectSuite(text: string): string | undefined {

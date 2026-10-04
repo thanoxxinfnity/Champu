@@ -89,6 +89,8 @@ export interface ChatRequest {
   temperature?: number;
   topP?: number;
   maxTokens?: number;
+  /** How long a reasoning model may think first. A build wants code quickly, so it asks for 'low'; sent only to models known to take it. */
+  reasoningEffort?: 'low' | 'medium' | 'high';
   stop?: string[];
   stream?: boolean;
   /** Force JSON-object responses where the upstream supports it. */

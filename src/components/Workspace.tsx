@@ -23,6 +23,10 @@ import { BlockbenchStudio } from './suites/Blockbench';
 import { AndroidStudio } from './suites/AndroidStudio';
 import { GameStudio } from './suites/GameStudio';
 import { ImageSuite } from './suites/ImageSuite';
+import { AudioStudio } from './suites/media/AudioStudio';
+import { LibraryView } from './suites/media/LibraryView';
+import { Model3D } from './suites/media/Model3D';
+import { VideoFlow } from './suites/media/VideoFlow';
 import { Workdrive } from './suites/Workdrive';
 import { SkillsManager } from './suites/SkillsManager';
 import { Studio } from './suites/Studio';
@@ -75,6 +79,18 @@ function SuiteTool() {
   }
 }
 
+/** Suites that are an editor of their own and take the whole screen — no chat beside them. */
+function FullSuite({ id }: { id: string }) {
+  switch (id) {
+    case 'library': return <LibraryView />;
+    case 'video': return <VideoFlow />;
+    case 'audio': return <AudioStudio />;
+    case 'model3d': return <Model3D />;
+    default: return null;
+  }
+}
+const FULL_SCREEN = new Set(['library', 'video', 'audio', 'model3d']);
+
 const HAS_TOOL = new Set(['android', 'minecraft', 'studio', 'game', 'image', 'workdrive', 'skills', 'assets']);
 
 export function Workspace() {
@@ -104,6 +120,14 @@ export function Workspace() {
   const files = useWorkspace(visibleFiles);
   const plan = useWorkspace(visiblePlan);
   const modelWarnings = useWorkspace((s) => s.modelWarnings);
+  const capabilityTabs = useWorkspace((s) => s.capabilityTabs);
+  const mediaHidden = useWorkspace((s) => s.mediaHidden);
+  const setSuite = useWorkspace((s) => s.setSuite);
+  // A media tab exists only while a provider for it does (and it is not hidden). Remove the provider and the tab goes;
+  // if you were on it, you land back in chat rather than on something that is no longer there.
+  useEffect(() => {
+    if (['video', 'audio', 'model3d', 'image'].includes(activeSuite) && (!capabilityTabs.includes(activeSuite) || mediaHidden.includes(activeSuite))) setSuite('chat');
+  }, [activeSuite, capabilityTabs, mediaHidden, setSuite]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Below `lg` the split pane has nowhere to live, so plan/files/terminal move
@@ -222,6 +246,7 @@ export function Workspace() {
             style={{ background: 'var(--panel)', borderRight: '1.5px solid var(--stroke)' }}
           >
             <Sidebar
+              onNavigate={() => setMobileNavOpen(false)}
               onOpenSettings={() => {
                 setSettingsOpen(true);
                 setMobileNavOpen(false);
@@ -309,6 +334,9 @@ export function Workspace() {
           </div>
         )}
 
+        {FULL_SCREEN.has(activeSuite) ? (
+          <div className="min-h-0 flex-1"><FullSuite id={activeSuite} /></div>
+        ) : (
         <div className="flex min-h-0 flex-1">
           {/* Chat column */}
           <section className="flex min-w-0 flex-1 flex-col">
@@ -425,6 +453,7 @@ export function Workspace() {
             <div className="min-h-0 flex-1">{paneBody}</div>
           </section>
         </div>
+        )}
       </main>
 
       {sheetOpen && (
