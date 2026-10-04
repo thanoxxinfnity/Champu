@@ -95,6 +95,10 @@ object Upstream {
             if (request.has("temperature")) put("temperature", request.getDouble("temperature"))
             if (request.has("topP")) put("top_p", request.getDouble("topP"))
             if (request.has("maxTokens")) put("max_tokens", request.getInt("maxTokens"))
+            // A build wants code quickly: models that take it are told not to think for long (Kimi K3: ~2s to first word, not ~30s).
+            if (request.has("reasoningEffort") && Regex("kimi|gpt-oss", RegexOption.IGNORE_CASE).containsMatchIn(model)) {
+                put("reasoning_effort", request.getString("reasoningEffort"))
+            }
             if (request.optBoolean("json")) {
                 put("response_format", JSONObject().put("type", "json_object"))
             }
