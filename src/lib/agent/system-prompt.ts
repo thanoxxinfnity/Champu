@@ -152,6 +152,14 @@ these right, because each one is the difference between a scene and a black box:
 - Never ship a placeholder \`.glb\` URL or a texture path that does not exist.
   Build geometry in code — that is what renders with nothing to download.
 
+### Icons are drawn, never typed
+Never use an emoji or a symbol character (→ ✓ ★ ☰ ▶ 🚀) as an icon, a bullet or a button label: it looks different on every
+phone, can show as an empty box, and cannot take the page's colour. Draw icons as SVG. Write
+\`<svg class="icon" aria-hidden="true"><use href="#i-NAME"></use></svg>\` with NAME from this list, and the app adds the drawings
+(do not write the <symbol> definitions yourself): menu, close, plus, minus, check, search, arrow-right, arrow-left, arrow-up, arrow-down, chevron-right, chevron-left, chevron-down, chevron-up, star, heart, home, user, users, mail, phone, map-pin, clock, calendar, play, pause, download, upload, external-link, link, globe, sun, moon, rocket, zap, shield, lock, settings, code, cube, layers, image, camera, video, music, mic, chat, bell, cart, trash, edit, copy, eye, sparkle, flame, leaf, trophy, target, compass, gift, coffee, lightbulb, cloud, database, cpu, wifi, flag, info, alert, x, instagram, youtube, linkedin, facebook, github, dot.
+For anything not in the list, write your own inline \`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">\`.
+The same rule holds for markup built in JavaScript. Brand logos and a hero illustration are SVG too — never a character.
+
 ### The rest of the page
 - Real copy, not lorem ipsum. If the user gave a subject, write about it.
 - Responsive down to 360px: one column, no horizontal scroll, tap targets ≥ 40px.
@@ -548,6 +556,7 @@ The bridge has platform android-35 and build-tools 35.0.0. Any other compileSdk 
 
 ### Every resource you name must exist
 A manifest that says \`android:icon="@mipmap/ic_launcher"\`, or code that uses \`R.drawable.x\`, \`@color/x\`, \`@string/x\` or a theme, fails resource linking before anything compiles unless you create it in the same reply.
+- Every icon in the UI — toolbar, buttons, list rows, empty states — is a **vector drawable** (\`res/drawable/ic_<name>.xml\`, a 24dp \`<vector>\` with \`viewportWidth="24"\`, drawn with paths) shown through \`painterResource\` / \`android:src\`, or a Material icon from the SDK. Never an emoji or a text glyph (→ ✓ ★) standing in for an icon: it renders differently on every phone.
 - Launcher icon: an \`<adaptive-icon>\` in \`res/mipmap-anydpi-v26/ic_launcher.xml\` (and \`ic_launcher_round.xml\`) over vector drawables for background and foreground, plus a plain vector in \`res/mipmap-anydpi/\` for API 24-25. No PNGs — you cannot emit binary. Draw something that fits the app, not a default.
 - Colours, strings and the app theme go in \`res/values/\`.
 
@@ -602,6 +611,11 @@ export interface PromptContext {
    * for every build instead of only when the message says "latest".
    */
   research?: ResearchReport;
+  /**
+   * The Three.js reference for this website (see skills/threejs): the fundamentals always, plus up to two skills the request is
+   * about. Passed in, like `research`, because the prompt builder is pure.
+   */
+  threejsSkills?: string;
 }
 
 export function buildSystemPrompt(ctx: PromptContext): string {
@@ -629,7 +643,10 @@ export function buildSystemPrompt(ctx: PromptContext): string {
 
   // A website is not a suite of its own — "build me a landing page" arrives in
   // chat — so the contract is attached by what is being built, not by where.
-  if (ctx.buildingSite) parts.push(WEB_ADDENDUM);
+  if (ctx.buildingSite) {
+    parts.push(WEB_ADDENDUM);
+    if (ctx.threejsSkills) parts.push(ctx.threejsSkills);
+  }
 
   if (ctx.bridgeStatus) {
     const line =

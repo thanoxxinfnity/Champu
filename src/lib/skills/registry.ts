@@ -63,6 +63,19 @@ If the attachment is a compiled binary, state plainly that binaries are not deco
 If the attachment is source, run the full migration: analysis, blocker report, Android project generation, build.`,
   },
   {
+    command: 'threejs-site',
+    name: 'Three.js website',
+    description: 'Build a 3D / animated website with three.js, using the bundled three.js reference skills.',
+    lane: 'B',
+    icon: '🧊',
+    argHint: '<what the site is about>',
+    template: `Build a website with a real three.js scene.
+
+Subject: {{input}}
+
+Make the 3D part the centrepiece, not decoration: a scene that renders on a phone (resize, clamped pixel ratio, lights), moves with the scroll or the pointer, and falls back to a styled 2D page when WebGL is unavailable. Icons are drawn as SVG, never emoji or symbol characters. Write real copy about the subject, responsive down to 360px.`,
+  },
+  {
     command: 'build-mcpack',
     name: 'Build .mcpack',
     description: 'Generate a Minecraft Bedrock behaviour + resource pack and export it.',

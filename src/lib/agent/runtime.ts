@@ -18,6 +18,8 @@ import { advancePlan, NO_EVIDENCE, settleRemaining, type RunEvidence } from './p
 import { buildPackExport, describeExport, detectPacks, missingGeometries, validatePacks } from '@/lib/suites/minecraft/pack';
 import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geometry';
 import { planBrief, planGame, planSummary, playerParts } from '@/lib/suites/godot/plan';
+import { threejsSkillsPrompt } from '@/lib/skills/threejs/select';
+import { prepareSiteIcons } from '@/lib/suites/web/icons';
 import { buildGodotExport, describeExport as describeGodotExport, detectGodotProject, referencedResources, relativePath, withMobileSettings } from '@/lib/suites/godot/export';
 import { buildProject } from '@/lib/suites/godot/project';
 import { generateModel, pipelineStatement, sourceChain } from '@/lib/suites/godot/model-source';
@@ -950,6 +952,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       attachments: attachments.map((a) => ({ name: a.name, kind: a.kind, bytes: a.bytes })),
       workspaceFiles: [...useWorkspace.getState().files.keys()],
       buildingSite: wantsSite(input),
+      threejsSkills: wantsSite(input) ? threejsSkillsPrompt(input) : undefined,
       ...(design ? { gamePlan: planBrief(design) } : {}),
       // Computed from the keys that are actually set, so the pipeline line the
       // model prints is a fact about this session rather than a guess.
@@ -1176,6 +1179,29 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
         content: file.content,
         bytes: file.bytes,
       });
+    }
+
+    // ── Websites: icons are drawn, never typed ──────────────────────────────
+    //
+    // A model reaches for emoji and arrow characters as icons however it is told not to. Whatever slipped into the page text is
+    // swapped for a drawn icon here, and every icon the page references gets its drawing — see suites/web/icons.ts.
+    if (wantsSite(input)) {
+      const prepared = prepareSiteIcons(files);
+      if (prepared.replaced || prepared.added.length) {
+        prepared.files.forEach((f, i) => {
+          if (f === files[i]) return;
+          const next = { ...files[i], content: f.content, bytes: new TextEncoder().encode(f.content).length };
+          files[i] = next;
+          upsertFile(next);
+          void upsertArtifact({ sessionId, suite, path: next.path, language: next.language, content: next.content, bytes: next.bytes });
+        });
+        const parts = [
+          prepared.replaced ? `swapped ${prepared.replaced} emoji or symbol character${prepared.replaced === 1 ? '' : 's'} for drawn icons` : '',
+          prepared.added.length ? `added the drawings for ${prepared.added.join(', ')}` : '',
+          prepared.unknown.length ? `no drawing exists for ${prepared.unknown.join(', ')} — draw those inline` : '',
+        ].filter(Boolean);
+        emit({ id: uid('msg'), role: 'system', content: `Icons: ${parts.join('; ')}.`, createdAt: Date.now() });
+      }
     }
 
     // ── Android: make every icon and drawable the project names exist ───────
