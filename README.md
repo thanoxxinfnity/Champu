@@ -20,7 +20,6 @@ endpoint you point it at.
 | **Android** | Desktop-source analysis → Compose/Gradle project → compiled APK + source ZIP |
 | **Minecraft** | Bedrock addon generator, Java-mod converter with a coverage report, in-browser Blockbench voxel editor |
 | **Studio** | Animated HTML5 decks, print-ready documents, spreadsheets, multi-provider image generation |
-| **MCP** | Visual scaffolder for spec-compliant MCP servers (TypeScript / Python) + client configs |
 | **Workdrive** | Search → fetch → embed → rerank → cited synthesis, with milestones and browser alerts |
 | **Skills** | `/` command palette, custom skills, AI-authored skills, multimodal attachments |
 | **Deploy** | One-click Vercel deployment with preflight validation |
@@ -106,7 +105,7 @@ browser at tunnel latency instead of tunnel + server latency.
 | `src/lib/agent/fingerprint.ts` | Error normalisation + anti-loop guard |
 | `src/lib/agent/planner.ts` | Atomic task decomposition; bridge-bound steps park instead of failing |
 | `src/lib/agent/artifacts.ts` | Streaming extraction of `path=`-tagged fenced blocks |
-| `src/lib/suites/` | Android, Minecraft, Studio, MCP engines |
+| `src/lib/suites/` | Android, Minecraft, Studio engines |
 | `agent/chomugiri-agent.mjs` | The terminal bridge daemon (zero dependencies) |
 
 ### Anti-looping

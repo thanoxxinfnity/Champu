@@ -1711,7 +1711,6 @@ function GuideTab() {
     ['Android', 'Generates a full Android project and compiles an APK when the terminal bridge is connected.'],
     ['Minecraft', 'Bedrock add-ons end to end — manifests, items, entities, a 3D model for anything that needs one, and painted textures. Exports an installable .mcaddon.'],
     ['Studio', 'Slide decks, documents and a visual canvas from a prompt.'],
-    ['MCP Builder', 'Scaffolds Model Context Protocol servers for Claude Code, Cursor and others.'],
     ['Workdrive', 'Research mode: searches, reads and writes up what it found.'],
     ['Asset Studio', 'Generate an image, cut its background out, and export icon sets for Android or the web.'],
     ['Skills', 'Your own slash commands, saved and reusable.'],

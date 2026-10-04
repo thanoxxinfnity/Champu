@@ -269,8 +269,8 @@ export const SUITE_LABELS: Record<SuiteId, string> = {
   godot: 'Godot Game Studio',
   game: 'Game Studio',
   studio: 'Presentations & Canvas',
-  // Legacy, for sessions saved before the MCP Builder was removed.
-  mcp: 'MCP Builder',
+  // Legacy, for sessions saved before that suite was removed.
+  mcp: 'Chat',
   workdrive: 'Workdrive Research',
   skills: 'Skills & Commands',
   terminal: 'Terminal',

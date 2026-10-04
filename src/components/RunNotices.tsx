@@ -19,7 +19,7 @@ const SUITE_LABEL: Record<string, string> = {
   android: 'Android',
   minecraft: 'Minecraft',
   studio: 'Studio',
-  mcp: 'MCP Builder',
+  mcp: 'Chat', // sessions saved before the MCP suite was removed
   workdrive: 'Workdrive',
   assets: 'Asset Studio',
   skills: 'Skills',
