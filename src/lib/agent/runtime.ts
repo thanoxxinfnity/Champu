@@ -20,7 +20,9 @@ import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geome
 import { planBrief, planGame, planSummary, playerParts } from '@/lib/suites/godot/plan';
 import { threejsSkillsPrompt } from '@/lib/skills/threejs/select';
 import { prepareSiteIcons } from '@/lib/suites/web/icons';
-import { buildGodotExport, describeExport as describeGodotExport, detectGodotProject, referencedResources, relativePath, withMobileSettings } from '@/lib/suites/godot/export';
+import { checkGameQuality, qualityRepairPrompt } from '@/lib/suites/godot/quality';
+import { kitFor } from '@/lib/suites/godot/kit';
+import { buildGodotExport, describeExport as describeGodotExport, detectGodotProject, referencedResources, relativePath, withIcon, withMobileSettings } from '@/lib/suites/godot/export';
 import { buildProject } from '@/lib/suites/godot/project';
 import { generateModel, pipelineStatement, sourceChain } from '@/lib/suites/godot/model-source';
 import { creditsFile } from '@/lib/suites/godot/sketchfab';
@@ -28,7 +30,7 @@ import { describeProblems } from '@/lib/suites/godot/verify';
 import { apkArtifact, glbArtifact, wavArtifact } from '@/lib/suites/godot/artifact';
 import { buildApkOnBridge } from '@/lib/suites/godot/bridge-build';
 import { buildWebOnBridge, describeBuild, keepPlayable } from '@/lib/suites/godot/web-export';
-import { effect as sfxFor, toWav, track as musicTrack, type ScaleName } from '@/lib/suites/godot/audio';
+import { effect as sfxFor, EFFECT_KINDS, toWav, track as musicTrack, type ScaleName } from '@/lib/suites/godot/audio';
 import {
   RUNNER_THEMES,
   insistOnDetail,
@@ -1641,7 +1643,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
             files.push(artifact);
             upsertFile(artifact);
           }
-          for (const kind of ['coin', 'jump', 'crash', 'levelup'] as const) {
+          for (const kind of EFFECT_KINDS) {
             const artifact = wavArtifact(`audio/sfx_${kind}.wav`, toWav(sfxFor(kind)));
             files.push(artifact);
             upsertFile(artifact);
@@ -1655,6 +1657,25 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
             content: `Could not write the soundtrack — ${(err as Error).message}. The game is still here; it will just be quiet.`,
             createdAt: Date.now(),
           });
+        }
+      }
+
+      // The kit: the frame, sound, feedback, look, props, car and touch controls every game is built on (see suites/godot/kit.ts).
+      // Added before anything is checked, so a reference to res://kit/... is never reported as a missing file.
+      {
+        const root = detectGodotProject(files)?.root ?? '';
+        const kit = kitFor(files, root);
+        for (const k of kit.add) {
+          const artifact = { kind: 'file' as const, path: k.path, language: languageForPath(k.path), content: k.content, complete: true, bytes: new TextEncoder().encode(k.content).length };
+          files.push(artifact);
+          upsertFile(artifact);
+        }
+        if (kit.projectGodot) {
+          const idx = files.findIndex((f) => f.path === kit.projectGodot!.path);
+          if (idx >= 0) {
+            files[idx] = { ...files[idx], content: kit.projectGodot.content, bytes: new TextEncoder().encode(kit.projectGodot.content).length };
+            upsertFile(files[idx]);
+          }
         }
       }
 
@@ -1702,11 +1723,61 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
         }
       }
 
+      // The quality gate: has the game got what a shipped game has? A prototype is sent back once with exactly what is missing.
+      {
+        const root = detectGodotProject(files)?.root ?? '';
+        const prefix = root ? `${root}/` : '';
+        const asGame = () => files.map((f) => ({ path: f.path, content: f.content }));
+        let report = checkGameQuality(asGame());
+        if (report.problems.length && !controller.signal.aborted) {
+          think(true, 'Polishing — adding what a finished game has…');
+          const ask = qualityRepairPrompt(report.problems);
+          const polish = await streamCompletion(
+            {
+              provider: selection.provider,
+              model: selection.model,
+              messages: [...messages, { role: 'assistant', content: result.content }, { role: 'user', content: ask }],
+              temperature: 0.25,
+              maxTokens: 8192,
+              reasoningEffort: 'low',
+              custom,
+            },
+            {},
+            controller.signal,
+          );
+          let changed = 0;
+          for (const file of filesOf(extractArtifacts(polish.content))) {
+            if (!file.path.endsWith('.gd') && !file.path.endsWith('.tscn')) continue;
+            if (/(^|\/)kit\//.test(file.path)) continue; // the kit is not the model's to change
+            const rel = relativePath(file.path, root);
+            const placed = { ...file, path: `${prefix}${rel}` };
+            const at = files.findIndex((f) => f.path === placed.path);
+            if (at >= 0) files[at] = { ...files[at], content: placed.content, bytes: placed.bytes };
+            else files.push(placed);
+            upsertFile(at >= 0 ? files[at] : placed);
+            void upsertArtifact({ sessionId, suite, path: placed.path, language: placed.language, content: placed.content, bytes: placed.bytes });
+            changed += 1;
+          }
+          const before = report.problems.length;
+          report = checkGameQuality(asGame());
+          emit({
+            id: uid('msg'),
+            role: 'system',
+            content: !changed
+              ? `Polish pass found nothing it could apply. Still missing: ${report.problems.length} thing${report.problems.length === 1 ? '' : 's'}.`
+              : report.problems.length
+                ? `Polish pass fixed ${before - report.problems.length} of ${before}. Still missing:\n${report.problems.map((p) => `- ${p.split('.')[0]}.`).join('\n')}`
+                : `Polish pass: added what was missing (${before} thing${before === 1 ? '' : 's'}) — the game now has the shell, sound, feedback and a designed look.`,
+            createdAt: Date.now(),
+          });
+        }
+      }
+
       // A hand-written project.godot usually lacks the one setting Godot insists on for an Android export.
       {
         const idx = files.findIndex((f) => /(^|\/)project\.godot$/.test(f.path));
         if (idx >= 0) {
-          const fixed = withMobileSettings(files[idx].content);
+          const fixed = withIcon(withMobileSettings(files[idx].content), files.some((f) => /(^|\/)icon\.svg$/.test(f.path)));
           if (fixed !== files[idx].content) {
             files[idx] = { ...files[idx], content: fixed, bytes: new TextEncoder().encode(fixed).length };
             upsertFile(files[idx]);

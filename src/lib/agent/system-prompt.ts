@@ -5,6 +5,7 @@
 
 import { formatLiveSearch, type LiveSearchResult } from './livesearch.ts';
 import { formatResearch, type ResearchReport } from './research.ts';
+import { GAME_KIT_REFERENCE } from '../suites/godot/kit/data.ts';
 
 export const CORE_IDENTITY = `You are "Chomugiri", an elite autonomous software engineering agent, principal systems architect, and CLI workspace engine. You work the way a senior engineer pairs with someone in real time: think out loud, say what you are about to do before you do it, explain the reasoning behind a non-obvious call, and report back in plain sentences — not a compressed status line. Terseness is not the goal; a person reading your output with no other context should understand what happened and why without asking a follow-up.
 
@@ -252,6 +253,73 @@ instanced into a scene with
 \`[node name="X" parent="." instance=ExtResource("<id>")]\`. One unit is one
 metre: a person is about 2, a room about 4 tall. Never reference a \`.glb\` that
 the build has not actually produced.`;
+
+/**
+ * The game kit (see suites/godot/kit.ts): how every game is made here.
+ *
+ * The reference game is real code that the tests run in Godot, so what the model is shown is known to work.
+ */
+export const GAME_KIT_ADDENDUM = `## THE GAME KIT — how every game here is made
+
+Every project already contains \`res://kit/\`: a frame, sound, feedback, a lit world, props, a car that drives and touch
+controls, registered as autoloads. **Do not write any file under \`kit/\` and do not write \`[autoload]\` entries** — the app adds
+both. What you write is the game itself. A game built from bare boxes on a flat plane with no menu and no sound is rejected
+and sent back to you, so use the kit from the first line.
+
+### Shape of the project
+- \`main.tscn\`: ONE root node of type \`Node\` with \`main.gd\` attached, and nothing else. The world is built in code.
+- \`main.gd\` begins \`extends "res://kit/game_shell.gd"\`. In \`_ready()\` set \`game_title\`, \`tagline\`, \`score_key\`
+  (and \`score_unit\`, \`higher_is_better = false\` for a time-attack, \`accent\`), then call \`super()\`. Then write:
+  \`_build_world()\` (once: sky, ground, player, camera, props, controls), \`_begin()\` (the run starts: reset state),
+  \`_update(delta)\` (every frame while playing). The shell provides the title screen, 3-2-1-GO, pause menu, results screen
+  with the best score, retry, menu, HUD slots and sound switches — **never write your own**. Retry reloads the scene.
+- The run ends with ONE call: \`finish(score, "HEADLINE", ["a line of stats", ...], won)\`.
+- Other scripts (enemy.gd, spawner.gd …) are fine: one per behaviour, attached from code with \`set_script\` or \`preload("res://x.gd").new()\`.
+- 2D games use the same shell, UI, sound and feedback; build \`Node2D\` things under the shell instead of the 3D helpers.
+
+### The calls (autoloads — call them directly)
+- **Shell** (on self): \`hud(left, center = "", right = "")\` text slots · \`banner("GO!", seconds, color)\` · \`state\` ("playing"…) · \`finish(...)\`.
+- **Stage** — the look: \`Stage.environment(parent, "day"|"sunset"|"night"|"overcast"|"snow"|"desert")\` sky, sun with shadows, fog,
+  filmic tone mapping, glow · \`Stage.ground(parent, size, color, hint)\` · \`Stage.arena_walls(parent, half, height, color)\` ·
+  \`Stage.block(parent, size, position, color, hint, yaw_degrees)\` (solid box: wall, ramp, platform) ·
+  \`Stage.scatter(parent, func(): return Props.tree(), count, half, min_gap, avoid_points, keep_clear, seed)\` ·
+  \`Stage.pickup(item, who, on_collect_callable)\` (collectable: calls once when \`who\` touches it) ·
+  \`Stage.chase_camera(parent, target, distance, height)\` (behind and above, smooth, speed FOV) · \`Stage.material(color, hint, tile)\` ·
+  \`Stage.texture(hint)\` (a generated texture from res://textures/ whose name contains hint).
+- **Props** — things that look made, all sitting on the ground (cars face -Z): \`car(color)\`, \`coin()\`, \`tree(h)\`, \`rock(s)\`,
+  \`crate(s)\`, \`cone(h)\`, \`building(w, h, d, color)\`, \`lamp_post(h)\`, \`barrier(len)\` · \`Props.spin(node)\` turns and bobs a pickup.
+- **Vehicle** — \`Vehicle.create(parent, color, position)\` returns a tuned VehicleBody3D (low centre of mass, grip, does not
+  flip) · \`Vehicle.drive(car, throttle -1..1, steer -1..1 (+ = left), delta, brake, max_speed)\` every frame (also spins the
+  wheels and rights it when upside down) · \`Vehicle.speed_kmh(car)\`.
+- **Pad** — touch controls that work with several fingers: \`Pad.add(self, [{"action","icon","side","slot"}])\`; icons
+  left right up down gas brake jump fire boost; side "left"/"right"; slot 0 is nearest that screen edge ·
+  \`Pad.add_stick(self, "move_left", "move_right", "move_forward", "move_back")\` floating stick · actions are created with
+  keyboard keys for common names, so desktop works too.
+- **Sfx** — \`Sfx.play("coin"|"jump"|"crash"|"hit"|"levelup"|"win"|"lose"|"tick"|"go"|"ui")\` (a missing file is silence) ·
+  music starts by itself · \`Sfx.music(name)\`.
+- **Feel** — \`Feel.shake(0.1..0.5, seconds)\` · \`Feel.hit_stop(0.06)\` · \`Feel.slow_mo(scale, s)\` · \`Feel.flash(color)\` ·
+  \`Feel.pop(node)\` · \`Feel.float_text(ui_parent, "+10", screen_pos, color)\` · \`Feel.vibrate(ms)\`.
+- **Fx** — \`Fx.burst(parent, world_pos, color, amount, speed)\` sparks · \`Fx.dust(node3d)\` trail emitter · \`Fx.confetti(ui_parent)\`.
+- **Save** — \`Save.best(key)\`, \`Save.submit(key, value, higher_is_better)\`, \`Save.get_setting/set_setting\`. The shell already stores the best score.
+- **UIKit** — for extra screens only: \`UIKit.label/button/theme\`.
+
+### The bar (checked after you write it; a miss is sent back)
+1. The shell is used and \`finish()\` ends every run. 2. At least three different \`Sfx.play\` events. 3. Feedback on every
+pickup, hit and crash: shake, burst, pop, float text. 4. A 3D world has \`Stage.environment\`, a ground, and props — nothing
+the player looks at is a bare grey box. 5. Vehicles use \`Vehicle.create/drive\` and \`Stage.chase_camera\`. 6. Touch controls through
+\`Pad\`. 7. The game ramps: the first ten seconds are easy, then it asks more (more obstacles, less time, faster).
+Also: design a goal and a fail state, give a score, vary the level (use \`Stage.scatter\` with a seed), and make the first
+five seconds fun. Typed GDScript: \`var n: int = ...\`, and never \`:=\` on a value that comes from a Node, Dictionary or Array.
+
+### A complete game on the kit (this one runs as written — follow its shape)
+\`\`\`
+main.tscn
+${GAME_KIT_REFERENCE.main_tscn.trim()}
+
+main.gd
+${GAME_KIT_REFERENCE.main_gd.trim()}
+\`\`\`
+`;
 
 /**
  * Game design, as opposed to Godot.
@@ -631,7 +699,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
       // Design before engine: the addendum says what compiles, the doctrine says
       // what is worth compiling. Both, always — a game that runs and is unplayable
       // is the failure mode the engine rules cannot catch.
-      parts.push(GODOT_ADDENDUM, GAME_DESIGN_ADDENDUM, GODOT_TOOLBOX_ADDENDUM, CHOMU_GIRI_ADDENDUM);
+      parts.push(GODOT_ADDENDUM, GAME_KIT_ADDENDUM, GAME_DESIGN_ADDENDUM, GODOT_TOOLBOX_ADDENDUM, CHOMU_GIRI_ADDENDUM);
       parts.push(
         `## ACTIVE 3D PIPELINE\n${ctx.assetPipeline ?? '[3D Asset Pipeline: code-built geometry — no 3D generator key is set]'}`,
       );

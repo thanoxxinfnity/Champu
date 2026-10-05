@@ -104,6 +104,14 @@ export function withMobileSettings(content: string): string {
     : `${content.trimEnd()}\n\n[rendering]\n\ntextures/vram_compression/import_etc2_astc=true\n`;
 }
 
+/** Points the project at its icon when it has one and the project file does not say so (Godot warns on export otherwise). */
+export function withIcon(content: string, hasIcon: boolean): string {
+  if (!hasIcon || /^config\/icon\s*=/m.test(content)) return content;
+  return /^\[application\]\s*$/m.test(content)
+    ? content.replace(/^\[application\]\s*$/m, '[application]\n\nconfig/icon="res://icon.svg"')
+    : `${content.trimEnd()}\n\n[application]\n\nconfig/icon="res://icon.svg"\n`;
+}
+
 /**
  * Fills in whatever the project needs and the model did not write.
  *
@@ -137,7 +145,7 @@ export function completeProject(
     filledIn.push(file.path);
   }
 
-  const withSettings = out.map((f) => (/(^|\/)project\.godot$/.test(f.path) && typeof f.content === 'string' ? { ...f, content: withMobileSettings(f.content) } : f));
+  const withSettings = out.map((f) => (/(^|\/)project\.godot$/.test(f.path) && typeof f.content === 'string' ? { ...f, content: withIcon(withMobileSettings(f.content), out.some((o) => /(^|\/)icon\.svg$/.test(o.path))) } : f));
   return { files: withSettings, filledIn };
 }
 

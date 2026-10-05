@@ -1712,7 +1712,7 @@ function GuideTab() {
     ['Android', 'Generates a full Android project and compiles an APK when the terminal bridge is connected.'],
     ['Minecraft', 'Bedrock add-ons end to end — manifests, items, entities, a 3D model for anything that needs one, and painted textures. Exports an installable .mcaddon.'],
     ['Studio', 'Slide decks, documents and a visual canvas from a prompt.'],
-    ['Game Studio', 'Describe a game and get a Godot project (and an APK when the bridge has Godot). Typed here, it is always built as a game.'],
+    ['Game Studio', 'Describe a game and get a Godot project (and an APK when the bridge has Godot). Typed here, it is always built as a game, on a ready-made kit: title screen, countdown, pause, results with a best score, sound, effects, a lit world, a car that drives and multi-touch controls.'],
     ['Workdrive', 'Research mode: searches, reads and writes up what it found.'],
     ['Asset Studio', 'Generate an image, cut its background out, and export icon sets for Android or the web.'],
     ['Skills', 'Your own slash commands, saved and reusable.'],

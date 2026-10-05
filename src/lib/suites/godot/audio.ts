@@ -208,7 +208,12 @@ export function track(options: TrackOptions = {}): Float32Array {
 }
 
 /** The short sounds a runner needs. Each is a single gesture, not a tune. */
-export function effect(kind: 'coin' | 'jump' | 'crash' | 'levelup'): Float32Array {
+export type EffectKind = 'coin' | 'jump' | 'crash' | 'levelup' | 'win' | 'lose' | 'tick' | 'go' | 'ui' | 'hit';
+
+/** Every effect the game kit plays by name, so each exists as a file. */
+export const EFFECT_KINDS: EffectKind[] = ['coin', 'jump', 'crash', 'levelup', 'win', 'lose', 'tick', 'go', 'ui', 'hit'];
+
+export function effect(kind: EffectKind): Float32Array {
   switch (kind) {
     case 'coin':
       // Two quick rising notes — the universal "you got it".
@@ -230,6 +235,37 @@ export function effect(kind: 'coin' | 'jump' | 'crash' | 'levelup'): Float32Arra
         ],
         0.55,
       );
+    case 'win':
+      // A rising fanfare that lands on a held top note.
+      return render(
+        [
+          { pitch: 0, at: 0, duration: 0.14, gain: 0.3, wave: 'square' },
+          { pitch: 4, at: 0.13, duration: 0.14, gain: 0.3, wave: 'square' },
+          { pitch: 7, at: 0.26, duration: 0.14, gain: 0.3, wave: 'square' },
+          { pitch: 12, at: 0.39, duration: 0.14, gain: 0.32, wave: 'square' },
+          { pitch: 16, at: 0.52, duration: 0.5, gain: 0.34, wave: 'triangle' },
+          { pitch: 12, at: 0.52, duration: 0.5, gain: 0.2, wave: 'square' },
+        ],
+        1.1,
+      );
+    case 'lose':
+      // Three falling notes.
+      return render(
+        [
+          { pitch: 7, at: 0, duration: 0.2, gain: 0.3, wave: 'triangle' },
+          { pitch: 3, at: 0.2, duration: 0.2, gain: 0.3, wave: 'triangle' },
+          { pitch: -2, at: 0.4, duration: 0.5, gain: 0.32, wave: 'saw' },
+        ],
+        1.0,
+      );
+    case 'tick':
+      return render([{ pitch: 12, at: 0, duration: 0.07, gain: 0.3, wave: 'square' }], 0.1);
+    case 'go':
+      return render([{ pitch: 19, at: 0, duration: 0.3, gain: 0.34, wave: 'square' }, { pitch: 12, at: 0, duration: 0.3, gain: 0.2, wave: 'triangle' }], 0.35);
+    case 'ui':
+      return render([{ pitch: 14, at: 0, duration: 0.04, gain: 0.26, wave: 'triangle' }], 0.06);
+    case 'hit':
+      return render([{ pitch: -8, at: 0, duration: 0.14, gain: 0.4, wave: 'noise' }, { pitch: -20, at: 0, duration: 0.16, gain: 0.34, wave: 'saw' }], 0.2);
     case 'levelup':
     default:
       return render(
