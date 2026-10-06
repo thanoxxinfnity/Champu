@@ -659,6 +659,7 @@ function previousTurn(): { previousLane?: 'A' | 'B'; previousOps?: boolean } {
 }
 
 const MAX_OPS_TURNS = 6;
+const MAX_FIX_TURNS = 3;
 
 /** What a command did, in the words the model reads next: the command, how it ended, the tail of its output. */
 function opsResultLine(command: string, out: { ok: boolean; exitCode: number | null; stdout: string; stderr: string; skipped?: string; message?: string }): string {
@@ -672,6 +673,22 @@ function opsResultLine(command: string, out: { ok: boolean; exitCode: number | n
 function opsFallback(feed: string, failed: boolean): string {
   const last = feed.split('\n\n').pop() ?? feed;
   return `${failed ? 'The model stopped answering, so here is' : 'Here is'} what the terminal reported last:\n\n\`\`\`\n${last}\n\`\`\``;
+}
+
+/** A build failed: what the follow-up asks for depends on whether the code or the network was at fault. */
+function fixFollowUp(feed: string, last: boolean): string {
+  const network = /\b(429|too many requests|timed out|timeout|connection (reset|refused)|could not resolve|temporarily unavailable|50[234])\b/i.test(feed);
+  return [
+    'The build did not succeed. Terminal results:',
+    '',
+    feed,
+    '',
+    last
+      ? 'This is the last attempt. Do not run anything more: say plainly what is wrong and what the user should do next.'
+      : network
+        ? 'This looks like the package server refusing or dropping requests, not a mistake in the code. Do not change any file. Wait, then run the SAME build again: ```bash path=@terminal cwd=<project>``` with `sleep 60 && <the same build command>`.'
+        : 'Read the first real error (a compile error names a file and a line). Re-emit each broken file IN FULL in a ```<lang> path=<file>``` block with the fix, then run the build again in a ```bash path=@terminal``` block. Fix the cause, not the symptom; do not delete features to make it pass.',
+  ].join('\n');
 }
 
 function opsFollowUp(feed: string, last: boolean): string {
@@ -972,8 +989,9 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
         });
         const line = summarizeResearch(research);
         if (line) {
-          const note = { id: uid('msg'), role: 'system' as const, content: line, createdAt: Date.now() };
-          emit(note);
+          // The research came first, so it sits above the answer it informed, on screen and after a reload.
+          const note = { id: uid('msg'), role: 'system' as const, content: line, createdAt: Math.max(0, startedAt - 1) };
+          if (isCurrent()) useWorkspace.getState().insertMessageBefore(assistantId, note);
           void appendMessage({ ...note, sessionId, suite });
         }
       }
@@ -2214,18 +2232,23 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
 
         // A terminal job is a conversation with the machine: read what came back, decide the next command, go on
         // until it is done. Without this the agent runs its first guess and stops, whatever the output said.
-        if (classification.ops && opsFeed.length) {
+        // A build that failed gets the same: the error is read, the files it names are fixed, the build is run again.
+        const lastRun = commandResults[commandResults.length - 1];
+        const buildFailed = Boolean(lastRun && !lastRun.ok && lastRun.skipped !== 'offline');
+        const feedback = Boolean(classification.ops) || buildFailed;
+        const maxTurns = classification.ops ? MAX_OPS_TURNS : MAX_FIX_TURNS;
+        if (feedback && opsFeed.length) {
           let convo: ChatMessage[] = [...messages, { role: 'assistant', content: result.content }];
           let feed = opsFeed.join('\n\n');
-          for (let turn = 0; turn < MAX_OPS_TURNS && !controller.signal.aborted; turn++) {
-            convo = [...convo, { role: 'user', content: opsFollowUp(feed, turn === MAX_OPS_TURNS - 1) }];
+          for (let turn = 0; turn < maxTurns && !controller.signal.aborted; turn++) {
+            convo = [...convo, { role: 'user', content: classification.ops ? opsFollowUp(feed, turn === maxTurns - 1) : fixFollowUp(feed, turn === maxTurns - 1) }];
             const turnId = uid('msg');
             const turnAt = Date.now();
             emit({ id: turnId, role: 'assistant', content: '', lane, model: selection.model, provider: selection.provider, createdAt: turnAt, streaming: true });
             useWorkspace.getState().patchRun(sessionId, { assistantId: turnId });
-            think(true, 'Reading what came back…');
+            think(true, classification.ops ? 'Reading what came back…' : 'Reading the build error…');
             const reply = await streamCompletion(
-              { provider: selection.provider, model: selection.model, messages: convo, temperature: 0.25, maxTokens: 4096, reasoningEffort: 'low', custom },
+              { provider: selection.provider, model: selection.model, messages: convo, temperature: 0.25, maxTokens: classification.ops ? 4096 : 8192, reasoningEffort: 'low', custom },
               {
                 onDelta: (_d, part) => patch(turnId, { content: part }),
                 onReasoning: () => narrate(sessionId, 'Reasoning…'),
@@ -2239,7 +2262,22 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
             patch(turnId, { content: said, streaming: false, error: reply.error, durationMs: Date.now() - turnAt });
             void appendMessage({ id: turnId, sessionId, suite, role: 'assistant', content: said, createdAt: turnAt, model: selection.model, provider: selection.provider, lane, error: reply.error });
             convo = [...convo, { role: 'assistant', content: said }];
-            const more = commandsOf(extractArtifacts(reply.content, { shellRuns: true })).filter((c) => c.complete && c.command);
+            const replyArtifacts = extractArtifacts(reply.content, { shellRuns: true });
+            const more = commandsOf(replyArtifacts).filter((c) => c.complete && c.command);
+            // Files re-emitted to fix the build are saved and sent to the bridge before the build runs again.
+            const fixed = filesOf(replyArtifacts).filter((f) => f.complete);
+            if (fixed.length) {
+              for (const file of fixed) {
+                upsertFile(file);
+                void upsertArtifact({ sessionId, suite, path: file.path, language: file.language, content: file.content, bytes: file.bytes });
+              }
+              try {
+                await useWorkspace.getState().bridge.writeFiles(fixed.map((f) => ({ path: f.path, content: f.content })));
+                useWorkspace.getState().appendTerminal({ stream: 'system', text: `⇪ re-synced ${fixed.length} fixed file${fixed.length === 1 ? '' : 's'} to the bridge` });
+              } catch (err) {
+                useWorkspace.getState().appendTerminal({ stream: 'system', text: `⚠  file sync failed: ${(err as Error).message}` });
+              }
+            }
             if (reply.error || !more.length) break;
             const lines: string[] = [];
             for (const c of more) {

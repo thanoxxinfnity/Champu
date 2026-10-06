@@ -123,3 +123,18 @@ test('a command that passed on retry says so; one that failed twice says that', 
   const bad = renderCommandLog([{ command: 'npm i', ok: false, exitCode: 1, retried: true, errorExcerpt: 'ECONNRESET' }]);
   assert.match(bad, /failed again on retry/);
 });
+
+test('a big build is summarised a folder at a time, not as a wall of paths', () => {
+  const changes = Array.from({ length: 12 }, (_, i) => ({
+    path: `app/src/main/res/drawable/ic_${i}.xml`, action: 'created', language: 'xml', defines: `ic_${i}.xml`, lines: 10, delta: 10,
+  }));
+  changes.push({ path: 'app/src/main/java/x/Main.kt', action: 'created', language: 'kotlin', defines: 'defines Main', lines: 40, delta: 40 });
+  const text = renderWorkLog(changes);
+  assert.equal(text.split('\n').filter((l) => l.startsWith('- ')).length, 2);
+  assert.match(text, /12 files, 120 lines/);
+});
+
+test('a "defines" that only repeats the file name is left out', () => {
+  const text = renderWorkLog([{ path: 'a/ExpenseDao.kt', action: 'created', language: 'kotlin', defines: 'ExpenseDao.kt', lines: 19, delta: 19 }]);
+  assert.ok(!/ExpenseDao\.kt` — ExpenseDao/.test(text), text);
+});

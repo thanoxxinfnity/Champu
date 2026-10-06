@@ -227,6 +227,8 @@ interface WorkspaceState {
   // ── Chat ──────────────────────────────────────────────────────────────────
   messages: ChatMessageView[];
   pushMessage: (message: ChatMessageView) => void;
+  /** Puts a message just above another, for notes that belong before an answer already on screen. */
+  insertMessageBefore: (beforeId: string, message: ChatMessageView) => void;
   patchMessage: (id: string, patch: Partial<ChatMessageView>) => void;
   clearMessages: () => void;
 
@@ -445,6 +447,12 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   messages: [],
   pushMessage: (message) => set((s) => ({ messages: [...s.messages, message] })),
+  insertMessageBefore: (beforeId, message) =>
+    set((s) => {
+      const at = s.messages.findIndex((m) => m.id === beforeId);
+      if (at < 0) return { messages: [...s.messages, message] };
+      return { messages: [...s.messages.slice(0, at), message, ...s.messages.slice(at)] };
+    }),
   patchMessage: (id, patch) =>
     set((s) => ({ messages: s.messages.map((m) => (m.id === id ? { ...m, ...patch } : m)) })),
   clearMessages: () => set({ messages: [] }),

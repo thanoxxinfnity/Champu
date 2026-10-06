@@ -103,9 +103,16 @@ const FILLER =
 
 /** The proper-noun-ish things the user named: capitalised words, versions, acronyms. */
 function namedThings(text: string): string[] {
-  const found = text.match(/\b(?:[A-Z][a-zA-Z0-9]{2,}|[A-Z]{2,}[0-9]*|[a-z]+[0-9]+(?:\.[0-9]+)*)\b/g) ?? [];
-  const skip = new Set(['Please', 'Bro', 'Make', 'Build', 'Create', 'The', 'And', 'Android', 'Godot', 'Minecraft']);
-  return [...new Set(found.filter((w) => !skip.has(w)))].slice(0, 4);
+  // Only what looks like a product or library name: FastAPI, PostgreSQL, ESP32, three.js2. A plain capitalised
+  // word is far more often a sentence start, a person, or a Hindi word spelled in English ("Kharche", "Hinglish")
+  // — searching for those pulled travel blogs into an expense-tracker build.
+  const found =
+    text.match(/\b(?:[A-Z][a-z]+[A-Z][a-zA-Z0-9]*|[A-Z]{3,}[0-9]*|[a-z]+[0-9]+(?:\.[0-9]+)*)\b/g) ?? [];
+  const skip = new Set([
+    'APK', 'AAB', 'API', 'APIS', 'URL', 'HTML', 'CSS', 'PDF', 'ZIP', 'GUI', 'CLI', 'JSON', 'USD', 'INR',
+    'PLEASE', 'BRO', 'MAKE', 'BUILD', 'CREATE', 'THE', 'AND', 'ANDROID', 'GODOT', 'MINECRAFT', 'ENGLISH', 'HINGLISH', 'HINDI',
+  ]);
+  return [...new Set(found.filter((w) => !skip.has(w.toUpperCase())))].slice(0, 4);
 }
 
 /** Does this message deserve research before any work starts? */

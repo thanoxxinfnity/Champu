@@ -42,6 +42,11 @@ function matchAll(content: string, re: RegExp, group = 1): string[] {
  * wrong here is a slightly vague sentence, and the cost of a parser per
  * language is not worth paying for that.
  */
+/** A long folder path keeps its tail, which is the part that tells folders apart. */
+function shortDir(dir: string): string {
+  return dir.length > 40 ? `…${dir.slice(-39)}` : dir;
+}
+
 export function describeContents(path: string, language: string, content: string): string {
   const lang = (language || path.split('.').pop() || '').toLowerCase();
   const name = path.split('/').pop() ?? path;
@@ -163,12 +168,29 @@ export function renderWorkLog(changes: FileChange[], commands: CommandArtifact[]
 
   lines.push(`**What I did** — ${parts.join(' · ')}`, '');
 
-  for (const c of changes) {
-    const verb = c.action === 'created' ? 'Created' : 'Updated';
-    // A net line change is only interesting on a file that already existed.
-    const churn =
-      c.action === 'updated' && c.delta !== 0 ? ` (${c.delta > 0 ? '+' : ''}${c.delta} lines)` : '';
-    lines.push(`- **${verb}** \`${c.path}\` — ${c.defines}. ${c.lines} lines${churn}`);
+  if (changes.length > 8) {
+    // Twenty-two paths down a phone screen is a wall nobody reads: one line per folder instead.
+    const folders = new Map<string, FileChange[]>();
+    for (const c of changes) {
+      const dir = c.path.includes('/') ? c.path.slice(0, c.path.lastIndexOf('/')) : '.';
+      folders.set(dir, [...(folders.get(dir) ?? []), c]);
+    }
+    for (const [dir, group] of folders) {
+      const names = group.map((c) => c.path.split('/').pop()).join(', ');
+      const n = group.reduce((sum, c) => sum + c.lines, 0);
+      lines.push(`- \`${shortDir(dir)}\` — ${group.length} file${group.length === 1 ? '' : 's'}, ${n} lines: ${names}`);
+    }
+  } else {
+    for (const c of changes) {
+      const verb = c.action === 'created' ? 'Created' : 'Updated';
+      // A net line change is only interesting on a file that already existed.
+      const churn =
+        c.action === 'updated' && c.delta !== 0 ? ` (${c.delta > 0 ? '+' : ''}${c.delta} lines)` : '';
+      // "defines" that only repeats the file's own name tells the reader nothing.
+      const base = c.path.split('/').pop() ?? c.path;
+      const what = c.defines.replace(/\.$/, '').trim() === base ? '' : ` — ${c.defines}.`;
+      lines.push(`- **${verb}** \`${c.path}\`${what} ${c.lines} lines${churn}`);
+    }
   }
 
   if (commands.length) {

@@ -141,9 +141,9 @@ export function Message({ message }: { message: ChatMessageView }) {
                     : 'color-mix(in oklab, var(--color-indigo) 16%, transparent)',
                 color: message.lane === 'B' ? 'var(--accent)' : 'var(--color-indigo)',
               }}
-              title={message.lane === 'B' ? 'Autonomous execution' : 'Technical discourse'}
+              title={message.lane === 'B' ? 'Build mode: planned and ran the work' : 'Answer mode: replied directly'}
             >
-              Lane {message.lane}
+              {message.lane === 'B' ? 'build' : 'answer'}
             </span>
           )}
 

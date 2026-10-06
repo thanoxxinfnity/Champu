@@ -353,10 +353,8 @@ export function Workspace() {
                     </div>
                     <h2 className="hand text-[34px] leading-none">Chomugiri</h2>
                     <p className="mt-2 text-[12.5px] leading-[1.65]" style={{ color: 'var(--ink-dim)', textWrap: 'balance' }}>
-                      Ask a technical question and it routes to <strong>Lane A</strong> — direct answers, no filler.
-                      <br />
-                      Describe something to build and it routes to <strong>Lane B</strong> — an atomic plan, generated
-                      files, and real builds over the terminal bridge.
+                      Ask anything and get a straight answer. Or describe something to build — an app, a game, a
+                      website — and it plans it, writes the files, and runs the real build on your terminal.
                     </p>
                     <p className="mono mt-5 text-[10.5px] leading-[1.9]" style={{ color: 'var(--ink-faint)', textWrap: 'balance' }}>
                       /make-apk · /build-mcpack · /build-game

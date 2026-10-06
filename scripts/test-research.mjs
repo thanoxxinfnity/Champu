@@ -113,3 +113,9 @@ test('the bridge reads the installed Godot version instead of leaving it to memo
   const runtime = readFileSync(new URL('../src/lib/agent/runtime.ts', import.meta.url), 'utf8');
   assert.match(runtime, /godot: \$\{heartbeat\.health\.toolchains\.godot/);
 });
+
+test('plain capitalised words (Hindi in English letters, a language) are not searched as product names', () => {
+  const q = planResearch('Ek Android app banao: daily expense tracker. Kharche add karo, simple English, Hinglish UI.', 'chat').map((x) => x.query).join(' | ');
+  assert.ok(!/Kharche|Hinglish|English/.test(q), q);
+  assert.match(planResearch('make a FastAPI server with PostgreSQL', 'chat').map((x) => x.query).join(' '), /FastAPI/);
+});

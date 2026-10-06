@@ -147,7 +147,7 @@ export function FileManager() {
             No generated files yet.
           </p>
           <p className="mt-1.5 text-[11.5px] leading-4" style={{ color: 'var(--ink-faint)' }}>
-            Lane B runs write artifacts here as they stream.
+            Files the build writes appear here as they stream.
           </p>
         </div>
       </div>

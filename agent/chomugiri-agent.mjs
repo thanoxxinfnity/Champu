@@ -89,9 +89,20 @@ function resolveInWorkspace(relative) {
 
 // ── Toolchain detection ─────────────────────────────────────────────────────
 
+/**
+ * The first line of the output that actually names a version. `java -version` leads with "Picked up
+ * JAVA_TOOL_OPTIONS…" on machines that set it, and `gradle --version` leads with a blank line and a row of
+ * dashes; taking line one reported "-----" as the Gradle version.
+ */
 function probe(cmd) {
   try {
-    return execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'], timeout: 6000 }).toString().trim().split('\n')[0].slice(0, 160);
+    const lines = execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'], timeout: 6000 })
+      .toString()
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !/^[-=─\s]+$/.test(l) && !/^Picked up /i.test(l));
+    const line = lines.find((l) => /\d+\.\d+/.test(l)) ?? lines[0];
+    return line ? line.slice(0, 160) : null;
   } catch {
     return null;
   }
@@ -194,7 +205,9 @@ function startRun({ cmd, cwd, env, timeoutMs }) {
   }
 
   const shell = process.platform === 'win32' ? process.env.COMSPEC ?? 'cmd.exe' : '/bin/bash';
-  const args = process.platform === 'win32' ? ['/d', '/s', '/c', cmd] : ['-lc', cmd];
+  // pipefail: `gradle build 2>&1 | tail -30` must fail when gradle fails. Without it the exit code is tail's,
+  // a broken build reads "all passed", and nothing downstream knows to fix it.
+  const args = process.platform === 'win32' ? ['/d', '/s', '/c', cmd] : ['-o', 'pipefail', '-lc', cmd];
 
   const child = spawn(shell, args, {
     cwd: workdir,

@@ -847,8 +847,8 @@ export function CommandDock() {
                 }}
                 title={
                   effectiveLane === 'B'
-                    ? 'Lane B — autonomous execution. Click to force Lane A.'
-                    : 'Lane A — technical discourse. Click to force Lane B.'
+                    ? 'Build mode — plans, writes files, runs the terminal. Click to switch to plain answers.'
+                    : 'Answer mode — just replies. Click to switch to build mode.'
                 }
               >
                 Lane {effectiveLane}

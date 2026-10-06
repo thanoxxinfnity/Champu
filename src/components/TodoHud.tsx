@@ -116,9 +116,9 @@ export function TodoHud({ compact = false }: { compact?: boolean }) {
             No active plan.
           </p>
           <p className="mt-1.5 text-[11.5px] leading-4" style={{ color: 'var(--ink-faint)' }}>
-            Lane B requests build an atomic checklist here.
+            Build requests get a step-by-step checklist here.
             <br />
-            Questions route to Lane A and skip planning.
+            Plain questions skip planning.
           </p>
         </div>
       </div>
