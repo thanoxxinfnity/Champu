@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { isRunningHere, useWorkspace } from '@/lib/store';
 import { CloneAvatar } from './CloneAvatar';
+import { activityOf, type Activity } from '@/lib/agent/activity';
 
 /**
  * Gemini-style processing indicator.
@@ -37,6 +38,93 @@ function Sparkle() {
             <stop offset="100%" stopColor="var(--accent)" />
           </linearGradient>
         </defs>
+      </svg>
+    </span>
+  );
+}
+
+
+/**
+ * One small moving picture per kind of work, so a glance says what is happening before the words do.
+ * Every one is plain SVG driven by CSS (transform / opacity / stroke-dashoffset only), no JS timers.
+ */
+function ActivityIcon({ kind }: { kind: Activity }) {
+  if (kind === 'think') return <Sparkle />;
+  return (
+    <span className={`act-icon act-${kind}`} aria-hidden>
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        {kind === 'terminal' && (
+          <>
+            <rect x="1.5" y="3" width="17" height="14" rx="3" />
+            <path d="M5 8l3 2-3 2" />
+            <path className="t-cursor" d="M10.5 13h4" />
+          </>
+        )}
+        {kind === 'write' && (
+          <>
+            <path className="w-line w1" d="M3 6h9" />
+            <path className="w-line w2" d="M3 10h12" />
+            <path className="w-line w3" d="M3 14h7" />
+            <g className="w-pen">
+              <path d="M13 17l5-5-1.6-1.6-5 5z" fill="currentColor" stroke="none" />
+            </g>
+          </>
+        )}
+        {kind === 'download' && (
+          <>
+            <path className="d-arrow" d="M10 2v9m-4-4l4 4 4-4" />
+            <path d="M3 14v2.5h14V14" />
+            <path className="d-fill" d="M3 16.5h14" strokeWidth="2.4" />
+          </>
+        )}
+        {kind === 'paint' && (
+          <>
+            <path className="p-stroke ps1" d="M3 15c3-8 5-8 7 0s4 8 7 0" />
+            <circle className="p-drop" cx="16" cy="4.5" r="1.6" fill="currentColor" stroke="none" />
+            <circle className="p-drop pd2" cx="4" cy="4.5" r="1.2" fill="currentColor" stroke="none" />
+          </>
+        )}
+        {kind === 'build' && (
+          <g className="b-gear">
+            <circle cx="10" cy="10" r="3" />
+            <path d="M10 1.8v2.4M10 15.8v2.4M1.8 10h2.4M15.8 10h2.4M4.2 4.2l1.7 1.7M14.1 14.1l1.7 1.7M4.2 15.8l1.7-1.7M14.1 5.9l1.7-1.7" />
+          </g>
+        )}
+        {kind === 'search' && (
+          <g className="s-orbit">
+            <circle cx="8.5" cy="8.5" r="5" />
+            <path d="M12.2 12.2L17 17" />
+          </g>
+        )}
+        {kind === 'deploy' && (
+          <g className="r-rocket">
+            <path d="M10 2c3 2 4 5 3.5 9h-7C6 7 7 4 10 2z" />
+            <circle cx="10" cy="7.5" r="1.3" />
+            <path className="r-flame" d="M8.5 13.5L10 18l1.5-4.5" />
+          </g>
+        )}
+        {kind === 'audio' && (
+          <>
+            <path className="a-bar a1" d="M4 10v0" strokeWidth="2.6" />
+            <path className="a-bar a2" d="M8 10v0" strokeWidth="2.6" />
+            <path className="a-bar a3" d="M12 10v0" strokeWidth="2.6" />
+            <path className="a-bar a4" d="M16 10v0" strokeWidth="2.6" />
+          </>
+        )}
+        {kind === 'plan' && (
+          <>
+            <path className="l-tick lt1" d="M3 5.5l1.7 1.7L7.6 4" />
+            <path className="l-tick lt2" d="M3 11l1.7 1.7L7.6 9.5" />
+            <path className="l-tick lt3" d="M3 16.5l1.7 1.7L7.6 15" transform="translate(0 -1.2)" />
+            <path d="M10.5 5.5H17M10.5 11H17M10.5 15.8H15" opacity=".55" />
+          </>
+        )}
+        {kind === 'read' && (
+          <>
+            <path d="M2.5 4.5c2.5-1 5-1 7.5 1v11c-2.5-2-5-2-7.5-1zM17.5 4.5c-2.5-1-5-1-7.5 1v11c2.5-2 5-2 7.5-1z" />
+            <path className="rd-scan" d="M4.5 9h3M12.5 9h3" />
+          </>
+        )}
       </svg>
     </span>
   );
@@ -85,16 +173,17 @@ export function ThinkingBubble() {
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   if (!thinking.active || !runningHere) return null;
+  const kind = activityOf(current || thinking.phrase);
 
   return (
     <div className="enter-pop flex items-center gap-2.5 py-1">
       <CloneAvatar active size={38} />
 
-      <div className="thinking-shell" role="status" aria-live="polite" aria-label={current || 'Working'}>
+      <div className="thinking-shell" data-activity={kind} role="status" aria-live="polite" aria-label={current || 'Working'}>
         <span className="thinking-aurora" aria-hidden />
 
         <div className="thinking-badge">
-          <Sparkle />
+          <ActivityIcon kind={kind} />
 
           <div className="thinking-phrase-track">
             {previous && (
@@ -106,6 +195,10 @@ export function ThinkingBubble() {
               {current || 'Working…'}
             </span>
           </div>
+
+          <span className="act-tail" aria-hidden>
+            <i /><i /><i />
+          </span>
 
           {elapsed > 2 && (
             <span className="mono shrink-0 text-[10px] tabular-nums" style={{ color: 'var(--ink-faint)' }}>

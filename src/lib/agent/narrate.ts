@@ -57,6 +57,12 @@ export function describeCommand(command: string): string {
     if (tool === 'next' && /^build\b/.test(rest)) return 'Building the site…';
     if (tool === 'git' && /^(push|pull|clone)\b/.test(rest)) return 'Syncing with git…';
     if (tool === 'zip' || tool === 'tar') return 'Packaging the files…';
+    if (tool === 'unzip') return 'Unpacking the archive…';
+    if (tool === 'curl' || tool === 'wget' || tool === 'gdown') {
+      const host = /https?:\/\/([^/\s'"]+)/.exec(clean)?.[1];
+      return host ? `Downloading from ${host}…` : 'Downloading…';
+    }
+    if (/^(apt|apt-get|brew|pip3?|dnf|pacman)$/.test(tool ?? '') && /\binstall\b/.test(rest)) return 'Installing packages…';
   }
   const one = clean.replace(/\s+/g, ' ').trim();
   return `Running ${one.length > 48 ? `${one.slice(0, 47)}…` : one}…`;
