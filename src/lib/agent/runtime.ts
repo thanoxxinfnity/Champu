@@ -423,7 +423,7 @@ export async function executeCommand(
   const startedAt = Date.now();
   try {
     const { execId } = await bridge.exec(command, { cwd: opts.cwd });
-    setRunningExecId(execId);
+    setRunningExecId(execId, command);
 
     let stdout = '';
     let stderr = '';

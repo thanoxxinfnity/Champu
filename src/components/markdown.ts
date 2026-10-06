@@ -1,6 +1,9 @@
 import { Marked } from 'marked';
 import hljs from 'highlight.js/lib/common';
 import { chipifyHtml } from '../lib/sites/domains.ts';
+import { activityOf } from '../lib/agent/activity.ts';
+import { describeCommand } from '../lib/agent/narrate.ts';
+import { iconHtml, pick, SCENE_HTML, TAIL_HTML, VARIANTS } from '../lib/agent/activity-icons.ts';
 
 /**
  * Markdown → HTML for chat bubbles.
@@ -77,17 +80,52 @@ marked.use({
       const expandIcon = icon('<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/>');
       const closeIcon = icon('<path d="M6 6l12 12M18 6L6 18"/>');
 
+      // A block that carries work (a file being written, a command being run) can light up while that is
+      // happening: the same icon, scene and words the thinking bubble uses, so the two read as one thing.
+      const isCommand = path === '@terminal' || path === '@shell' || (!path && /^(bash|sh|shell|zsh|console)$/.test(language));
+      const work = isCommand || Boolean(path);
+      const phrase = isCommand ? describeCommand(text.trim()) : `Writing ${path}…`;
+      const kind = isCommand ? activityOf(phrase) : 'write';
+      const chip = work
+        ? `<span class="live-chip">${iconHtml(kind)}<span class="live-text">${escapeHtml(phrase.length > 60 ? `${phrase.slice(0, 59)}…` : phrase).replace(/\./g, '&#46;')}</span>${TAIL_HTML}</span>`
+        : '';
+      const attrs = work
+        ? ` data-activity="${kind}" data-variant="${pick(path ?? '', VARIANTS)}"${isCommand ? ` data-cmd="${pick(text.trim(), 1_000_000_007).toString(36)}"` : ''}`
+        : '';
+
       const header =
-        `<div class="code-head"><span class="code-label${path ? ' is-path' : ''}">${path ? '<span style="color:var(--accent)">▸</span> ' : ''}${escapeHtml(label)}</span>` +
+        `<div class="code-head">${work ? SCENE_HTML : ''}<span class="code-label${path ? ' is-path' : ''}">${path ? '<span style="color:var(--accent)">▸</span> ' : ''}${escapeHtml(label)}</span>${chip}` +
         `<span class="code-actions">` +
         `<button type="button" class="code-btn" data-code-action="copy" aria-label="Copy code" title="Copy"><span class="ic-copy">${copyIcon}</span><span class="ic-done">${doneIcon}</span></button>` +
         `<button type="button" class="code-btn" data-code-action="expand" aria-label="Expand code" title="Expand"><span class="ic-expand">${expandIcon}</span><span class="ic-close">${closeIcon}</span></button>` +
         `</span></div>`;
 
-      return `<div class="code-block">${header}<pre><code class="hljs language-${escapeHtml(language)}">${highlighted}</code></pre></div>`;
+      return `<div class="code-block"${attrs}>${header}<pre><code class="hljs language-${escapeHtml(language)}">${highlighted}</code></pre></div>`;
     },
   },
 });
+
+/**
+ * Marks the blocks that are working right now. `liveLast` is a block still being streamed (the last one);
+ * `runningCmd` is the command the terminal is executing, matched by the hash each command block carries.
+ */
+export function markLive(html: string, opts: { liveLast?: boolean; runningCmd?: string | null }): string {
+  let out = html;
+  if (opts.runningCmd) {
+    const tag = `data-cmd="${pick(opts.runningCmd.trim(), 1_000_000_007).toString(36)}"`;
+    out = out.replace(
+      new RegExp(`<div class="code-block"([^>]*${tag}[^>]*)>`, 'g'),
+      '<div class="code-block is-live"$1>',
+    );
+  }
+  if (opts.liveLast) {
+    const at = out.lastIndexOf('<div class="code-block"');
+    if (at >= 0 && !out.startsWith('<div class="code-block is-live"', at) && /data-activity=/.test(out.slice(at, out.indexOf('>', at)))) {
+      out = `${out.slice(0, at)}<div class="code-block is-live"${out.slice(at + '<div class="code-block"'.length)}`;
+    }
+  }
+  return out;
+}
 
 export function renderMarkdown(source: string): string {
   try {

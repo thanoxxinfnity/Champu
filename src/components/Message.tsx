@@ -5,7 +5,7 @@ import { dataUrlToBytes, downloadBlob, downloadZip } from '@/lib/zip';
 import { buildPackExport, detectPacks } from '@/lib/suites/minecraft/pack';
 import { buildGodotExport } from '@/lib/suites/godot/export';
 import { useMemo, useState } from 'react';
-import { renderMarkdown } from './markdown';
+import { markLive, renderMarkdown } from './markdown';
 import { TextWithSites } from './SiteChip';
 import './codeActions';
 import type { ChatMessageView } from '@/lib/store';
@@ -109,10 +109,17 @@ function AttachmentChips({ attachments }: { attachments: NonNullable<ChatMessage
 }
 
 export function Message({ message }: { message: ChatMessageView }) {
-  const html = useMemo(
+  const rendered = useMemo(
     () => (message.role === 'user' ? null : renderMarkdown(message.content)),
     [message.content, message.role],
   );
+  // The block still being written, and the command the terminal is running, light up in place.
+  const runningCommand = useWorkspace((s) => s.runningCommand);
+  const html = useMemo(() => {
+    if (rendered == null) return null;
+    const open = message.streaming && (message.content.match(/^\s*(```|~~~)/gm)?.length ?? 0) % 2 === 1;
+    return markLive(rendered, { liveLast: open, runningCmd: runningCommand });
+  }, [rendered, message.streaming, message.content, runningCommand]);
 
   const isUser = message.role === 'user';
 

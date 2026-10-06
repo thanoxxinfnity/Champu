@@ -254,7 +254,9 @@ interface WorkspaceState {
   appendTerminal: (line: Omit<TerminalLine, 'id' | 'at'> & { at?: number }) => void;
   clearTerminal: () => void;
   runningExecId: string | null;
-  setRunningExecId: (id: string | null) => void;
+  /** The command behind runningExecId, so the chat can light up the very block that is running. */
+  runningCommand: string | null;
+  setRunningExecId: (id: string | null, command?: string) => void;
 
   // ── Bridge ────────────────────────────────────────────────────────────────
   bridge: BridgeClient;
@@ -520,7 +522,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }),
   clearTerminal: () => set({ terminal: [] }),
   runningExecId: null,
-  setRunningExecId: (id) => set({ runningExecId: id }),
+  runningCommand: null,
+  setRunningExecId: (id, command) => set({ runningExecId: id, runningCommand: id ? (command ?? null) : null }),
 
   bridge: new BridgeClient({
     url: process.env.NEXT_PUBLIC_DEFAULT_BRIDGE_URL ?? '',
@@ -661,7 +664,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const ownsSlot = runSessionId === sessionId;
     if (ownsSlot && runningExecId) void bridge.kill(runningExecId).catch(() => undefined);
     if (ownsSlot) {
-      set({ runningExecId: null });
+      set({ runningExecId: null, runningCommand: null });
       // Any draft still streaming is dead the moment the controller aborts; leaving
       // them marked `streaming` would spin their placeholders forever.
       set((s) => ({ drafts: s.drafts?.map((d) => (d.streaming ? { ...d, streaming: false } : d)) ?? null }));

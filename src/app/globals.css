@@ -502,12 +502,12 @@ select {
   overflow: visible;
 }
 
-.thinking-spark .spark-lg {
+.act-think .spark-lg {
   transform-origin: 50% 50%;
   animation: spark-pulse 2.1s var(--ease-in-out) infinite;
 }
 
-.thinking-spark .spark-sm {
+.act-think .spark-sm {
   transform-origin: 50% 50%;
   animation: spark-pulse 2.1s var(--ease-in-out) infinite;
   animation-delay: 0.62s;
@@ -591,16 +591,16 @@ select {
  * The phrase decides the kind (see lib/agent/activity.ts). Each kind gets its own colour pair, its own small
  * moving icon and its own tail, so a download does not look like a build does not look like thinking.
  */
-.thinking-shell[data-activity='terminal'] { --act: #3fa66b; --act2: #7ee0a3; }
-.thinking-shell[data-activity='download'] { --act: #2f7fe0; --act2: #6fc3ff; }
-.thinking-shell[data-activity='paint']    { --act: #d6409f; --act2: #ffb347; }
-.thinking-shell[data-activity='build']    { --act: #d9822b; --act2: #f6c453; }
-.thinking-shell[data-activity='search']   { --act: #1fa7b5; --act2: #8be9f0; }
-.thinking-shell[data-activity='deploy']   { --act: #7a5af0; --act2: #ff7ac6; }
-.thinking-shell[data-activity='audio']    { --act: #e0475f; --act2: #ffa07a; }
-.thinking-shell[data-activity='plan']     { --act: #2b9a8f; --act2: #a3e635; }
-.thinking-shell[data-activity='write']    { --act: var(--accent); --act2: var(--accent-alt); }
-.thinking-shell[data-activity='read']     { --act: #6b7fd6; --act2: #b8c4ff; }
+[data-activity='terminal'] { --act: #3fa66b; --act2: #7ee0a3; }
+[data-activity='download'] { --act: #2f7fe0; --act2: #6fc3ff; }
+[data-activity='paint']    { --act: #d6409f; --act2: #ffb347; }
+[data-activity='build']    { --act: #d9822b; --act2: #f6c453; }
+[data-activity='search']   { --act: #1fa7b5; --act2: #8be9f0; }
+[data-activity='deploy']   { --act: #7a5af0; --act2: #ff7ac6; }
+[data-activity='audio']    { --act: #e0475f; --act2: #ffa07a; }
+[data-activity='plan']     { --act: #2b9a8f; --act2: #a3e635; }
+[data-activity='write']    { --act: var(--accent); --act2: var(--accent-alt); }
+[data-activity='read']     { --act: #6b7fd6; --act2: #b8c4ff; }
 
 .act-icon {
   position: relative;
@@ -683,66 +683,219 @@ select {
 /* The tail after the words: each kind ends its line differently. */
 .act-tail { display: none; align-items: center; gap: 3px; flex: none; }
 .act-tail i { display: block; background: var(--act, var(--accent)); }
-.thinking-shell[data-activity='terminal'] .act-tail,
-.thinking-shell[data-activity='download'] .act-tail,
-.thinking-shell[data-activity='paint'] .act-tail,
-.thinking-shell[data-activity='build'] .act-tail,
-.thinking-shell[data-activity='search'] .act-tail,
-.thinking-shell[data-activity='deploy'] .act-tail,
-.thinking-shell[data-activity='write'] .act-tail { display: inline-flex; }
+[data-activity='terminal'] .act-tail,
+[data-activity='download'] .act-tail,
+[data-activity='paint'] .act-tail,
+[data-activity='build'] .act-tail,
+[data-activity='search'] .act-tail,
+[data-activity='deploy'] .act-tail,
+[data-activity='write'] .act-tail { display: inline-flex; }
 
 /* terminal: a block cursor */
-.thinking-shell[data-activity='terminal'] .act-tail i { width: 6px; height: 12px; border-radius: 1px; animation: t-blink 0.9s steps(1) infinite; }
-.thinking-shell[data-activity='terminal'] .act-tail i:nth-child(n + 2) { display: none; }
+[data-activity='terminal'] .act-tail i { width: 6px; height: 12px; border-radius: 1px; animation: t-blink 0.9s steps(1) infinite; }
+[data-activity='terminal'] .act-tail i:nth-child(n + 2) { display: none; }
 
 /* download: a progress bar that keeps filling */
-.thinking-shell[data-activity='download'] .act-tail { width: 38px; height: 4px; border-radius: 4px; overflow: hidden; background: color-mix(in oklab, var(--act) 20%, transparent); }
-.thinking-shell[data-activity='download'] .act-tail i { width: 40%; height: 100%; border-radius: 4px; animation: d-bar 1.3s var(--ease-in-out) infinite; }
-.thinking-shell[data-activity='download'] .act-tail i:nth-child(n + 2) { display: none; }
+[data-activity='download'] .act-tail { width: 38px; height: 4px; border-radius: 4px; overflow: hidden; background: color-mix(in oklab, var(--act) 20%, transparent); }
+[data-activity='download'] .act-tail i { width: 40%; height: 100%; border-radius: 4px; animation: d-bar 1.3s var(--ease-in-out) infinite; }
+[data-activity='download'] .act-tail i:nth-child(n + 2) { display: none; }
 @keyframes d-bar { from { transform: translateX(-110%); } to { transform: translateX(260%); } }
 
 /* paint: three swatches take turns */
-.thinking-shell[data-activity='paint'] .act-tail i { width: 7px; height: 7px; border-radius: 50%; animation: sw-pop 1.2s var(--ease-in-out) infinite; }
-.thinking-shell[data-activity='paint'] .act-tail i:nth-child(1) { background: #d6409f; }
-.thinking-shell[data-activity='paint'] .act-tail i:nth-child(2) { background: #ffb347; animation-delay: 0.2s; }
-.thinking-shell[data-activity='paint'] .act-tail i:nth-child(3) { background: #2f7fe0; animation-delay: 0.4s; }
+[data-activity='paint'] .act-tail i { width: 7px; height: 7px; border-radius: 50%; animation: sw-pop 1.2s var(--ease-in-out) infinite; }
+[data-activity='paint'] .act-tail i:nth-child(1) { background: #d6409f; }
+[data-activity='paint'] .act-tail i:nth-child(2) { background: #ffb347; animation-delay: 0.2s; }
+[data-activity='paint'] .act-tail i:nth-child(3) { background: #2f7fe0; animation-delay: 0.4s; }
 @keyframes sw-pop { 0%, 100% { transform: scale(0.6); opacity: 0.5; } 40% { transform: scale(1.25); opacity: 1; } }
 
 /* build: three bars chase */
-.thinking-shell[data-activity='build'] .act-tail i { width: 3px; height: 11px; border-radius: 2px; animation: bar-chase 1s var(--ease-in-out) infinite; }
-.thinking-shell[data-activity='build'] .act-tail i:nth-child(2) { animation-delay: 0.15s; }
-.thinking-shell[data-activity='build'] .act-tail i:nth-child(3) { animation-delay: 0.3s; }
+[data-activity='build'] .act-tail i { width: 3px; height: 11px; border-radius: 2px; animation: bar-chase 1s var(--ease-in-out) infinite; }
+[data-activity='build'] .act-tail i:nth-child(2) { animation-delay: 0.15s; }
+[data-activity='build'] .act-tail i:nth-child(3) { animation-delay: 0.3s; }
 @keyframes bar-chase { 0%, 100% { transform: scaleY(0.4); opacity: 0.4; } 50% { transform: scaleY(1); opacity: 1; } }
 
 /* search: a ping that grows and fades */
-.thinking-shell[data-activity='search'] .act-tail i { width: 6px; height: 6px; border-radius: 50%; background: transparent; border: 1.5px solid var(--act); animation: ping 1.6s ease-out infinite; }
-.thinking-shell[data-activity='search'] .act-tail i:nth-child(2) { animation-delay: 0.5s; }
-.thinking-shell[data-activity='search'] .act-tail i:nth-child(3) { display: none; }
+[data-activity='search'] .act-tail i { width: 6px; height: 6px; border-radius: 50%; background: transparent; border: 1.5px solid var(--act); animation: ping 1.6s ease-out infinite; }
+[data-activity='search'] .act-tail i:nth-child(2) { animation-delay: 0.5s; }
+[data-activity='search'] .act-tail i:nth-child(3) { display: none; }
 @keyframes ping { 0% { transform: scale(0.5); opacity: 0.9; } 100% { transform: scale(1.9); opacity: 0; } }
 
 /* deploy: chevrons streaming upward-right */
-.thinking-shell[data-activity='deploy'] .act-tail i { width: 6px; height: 6px; background: transparent; border-top: 2px solid var(--act); border-right: 2px solid var(--act); transform: rotate(45deg); animation: chev 1s linear infinite; }
-.thinking-shell[data-activity='deploy'] .act-tail i:nth-child(2) { animation-delay: 0.18s; }
-.thinking-shell[data-activity='deploy'] .act-tail i:nth-child(3) { animation-delay: 0.36s; }
+[data-activity='deploy'] .act-tail i { width: 6px; height: 6px; background: transparent; border-top: 2px solid var(--act); border-right: 2px solid var(--act); transform: rotate(45deg); animation: chev 1s linear infinite; }
+[data-activity='deploy'] .act-tail i:nth-child(2) { animation-delay: 0.18s; }
+[data-activity='deploy'] .act-tail i:nth-child(3) { animation-delay: 0.36s; }
 @keyframes chev { 0% { opacity: 0; } 40% { opacity: 1; } 100% { opacity: 0; } }
 
 /* write: typing dots */
-.thinking-shell[data-activity='write'] .act-tail i { width: 4px; height: 4px; border-radius: 50%; animation: dot-bounce 1s var(--ease-in-out) infinite; }
-.thinking-shell[data-activity='write'] .act-tail i:nth-child(2) { animation-delay: 0.15s; }
-.thinking-shell[data-activity='write'] .act-tail i:nth-child(3) { animation-delay: 0.3s; }
+[data-activity='write'] .act-tail i { width: 4px; height: 4px; border-radius: 50%; animation: dot-bounce 1s var(--ease-in-out) infinite; }
+[data-activity='write'] .act-tail i:nth-child(2) { animation-delay: 0.15s; }
+[data-activity='write'] .act-tail i:nth-child(3) { animation-delay: 0.3s; }
 
 /* The pill itself changes character with the work: a terminal is a console, a download is a tray. */
-.thinking-shell[data-activity='terminal'] .thinking-badge { border-radius: 10px; background: color-mix(in oklab, #0c1510 78%, var(--surface)); }
-.thinking-shell[data-activity='terminal'] .thinking-badge::before { border-radius: 10px; }
-.thinking-shell[data-activity='terminal'] .thinking-phrase { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11.5px; }
-.thinking-shell[data-activity='terminal'] .thinking-phrase {
+[data-activity='terminal'] .thinking-badge { border-radius: 10px; background: color-mix(in oklab, #0c1510 78%, var(--surface)); }
+[data-activity='terminal'] .thinking-badge::before { border-radius: 10px; }
+[data-activity='terminal'] .thinking-phrase { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11.5px; }
+[data-activity='terminal'] .thinking-phrase {
   background-image: linear-gradient(100deg, #9fd8b5 8%, #f3fff7 30%, var(--act2) 50%, #f3fff7 70%, #9fd8b5 92%);
   background-size: 260% 100%;
 }
-.thinking-shell[data-activity='terminal'] .mono { color: #8fcba6 !important; }
-.thinking-shell[data-activity='build'] .thinking-badge::before { animation-duration: 1.6s; }
-.thinking-shell[data-activity='download'] .thinking-badge::before { animation-duration: 1.9s; }
-.thinking-shell[data-activity='deploy'] .thinking-badge::before { animation-duration: 1.4s; }
+[data-activity='terminal'] .mono { color: #8fcba6 !important; }
+[data-activity='build'] .thinking-badge::before { animation-duration: 1.6s; }
+[data-activity='download'] .thinking-badge::before { animation-duration: 1.9s; }
+[data-activity='deploy'] .thinking-badge::before { animation-duration: 1.4s; }
+
+
+/* ── Scene: particles drifting behind the words ──────────────────────────
+ * Eight marks per surface. Kind decides how they move; the variant (picked at random per phrase or per
+ * block) decides how they look: soft dots, hard squares, or rings, quick or slow, same colour or the second.
+ */
+.act-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.8;
+  --sp: 1;
+}
+.act-scene b {
+  position: absolute;
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--act, var(--accent));
+  opacity: 0;
+  animation: scene-rise calc(var(--sp) * 2.6s) linear infinite;
+  will-change: transform, opacity;
+}
+.act-scene b:nth-child(1) { left: 5%;  animation-delay: -0.2s; }
+.act-scene b:nth-child(2) { left: 17%; animation-delay: -1.4s; width: 3px; height: 3px; }
+.act-scene b:nth-child(3) { left: 29%; animation-delay: -0.8s; }
+.act-scene b:nth-child(4) { left: 41%; animation-delay: -2.1s; width: 5px; height: 5px; }
+.act-scene b:nth-child(5) { left: 53%; animation-delay: -1.1s; width: 3px; height: 3px; }
+.act-scene b:nth-child(6) { left: 65%; animation-delay: -1.9s; }
+.act-scene b:nth-child(7) { left: 78%; animation-delay: -0.5s; width: 5px; height: 5px; }
+.act-scene b:nth-child(8) { left: 91%; animation-delay: -1.6s; width: 3px; height: 3px; }
+
+@keyframes scene-rise { 0% { transform: translateY(130%) scale(0.6); opacity: 0; } 25% { opacity: 0.9; } 100% { transform: translateY(-150%) scale(1); opacity: 0; } }
+@keyframes scene-fall { 0% { transform: translateY(-150%); opacity: 0; } 25% { opacity: 0.9; } 100% { transform: translateY(150%); opacity: 0; } }
+@keyframes scene-drift { 0% { transform: translate(-30%, 40%) scale(0.3); opacity: 0; } 30% { opacity: 0.8; } 100% { transform: translate(120%, -60%) scale(2.6); opacity: 0; } }
+@keyframes scene-streak { 0% { transform: translateX(-60%); opacity: 0; } 20% { opacity: 0.9; } 100% { transform: translateX(240%); opacity: 0; } }
+@keyframes scene-pulse { 0% { transform: scale(0.2); opacity: 0.9; } 100% { transform: scale(3.4); opacity: 0; } }
+@keyframes scene-bar { 0%, 100% { transform: scaleY(0.15); opacity: 0.5; } 50% { transform: scaleY(1); opacity: 0.95; } }
+@keyframes scene-blink { 0%, 100% { opacity: 0; } 50% { opacity: 0.9; } }
+
+/* terminal: glyph rain, thin and quick */
+[data-activity='terminal'] .act-scene b { width: 2px; height: 9px; border-radius: 1px; animation-name: scene-fall; --sp: 0.8; }
+/* download: packets dropping into the tray */
+[data-activity='download'] .act-scene b { animation-name: scene-fall; --sp: 1.1; }
+/* paint: blobs of colour smearing across, each its own hue */
+[data-activity='paint'] .act-scene b { animation-name: scene-drift; width: 7px; height: 7px; --sp: 1.4; }
+[data-activity='paint'] .act-scene b:nth-child(3n) { background: #2f7fe0; }
+[data-activity='paint'] .act-scene b:nth-child(3n + 1) { background: #ffb347; }
+[data-activity='paint'] .act-scene b:nth-child(3n + 2) { background: #d6409f; }
+/* build: sparks thrown up */
+[data-activity='build'] .act-scene b { animation-name: scene-rise; --sp: 0.9; bottom: 0; background: var(--act2, var(--act)); }
+/* search: rings that ping outward */
+[data-activity='search'] .act-scene b { animation-name: scene-pulse; background: transparent; border: 1.5px solid var(--act); top: 40%; --sp: 1.5; }
+/* deploy: streaks racing past */
+[data-activity='deploy'] .act-scene b { animation-name: scene-streak; width: 16px; height: 2px; border-radius: 2px; left: -20%; --sp: 0.7; background: linear-gradient(90deg, transparent, var(--act2)); }
+[data-activity='deploy'] .act-scene b:nth-child(odd) { top: 24%; }
+[data-activity='deploy'] .act-scene b:nth-child(even) { top: 66%; }
+/* audio: a row of bars breathing */
+[data-activity='audio'] .act-scene b { animation-name: scene-bar; width: 3px; height: 70%; bottom: 0; border-radius: 2px 2px 0 0; transform-origin: bottom; --sp: 0.5; }
+/* plan: squares ticking on one after another */
+[data-activity='plan'] .act-scene b { animation-name: scene-blink; border-radius: 1.5px; top: 50%; --sp: 1.2; }
+/* write / read: lines being laid down */
+[data-activity='write'] .act-scene b,
+[data-activity='read'] .act-scene b { animation-name: scene-streak; width: 12px; height: 2px; border-radius: 2px; left: -15%; --sp: 1.1; }
+[data-activity='write'] .act-scene b:nth-child(odd),
+[data-activity='read'] .act-scene b:nth-child(odd) { top: 30%; }
+[data-activity='write'] .act-scene b:nth-child(even),
+[data-activity='read'] .act-scene b:nth-child(even) { top: 68%; }
+/* think: a slow twinkle */
+[data-activity='think'] .act-scene b { animation-name: scene-blink; --sp: 1.6; top: 50%; }
+[data-activity='think'] .act-scene b:nth-child(odd) { top: 28%; }
+
+/* Variants — the same kind, a different look, chosen at random */
+[data-variant='1'] .act-scene { --sp: 0.65; }
+[data-variant='1'] .act-scene b { border-radius: 1px; background: var(--act2, var(--act)); }
+[data-variant='2'] .act-scene { --sp: 1.5; }
+[data-variant='2'] .act-scene b { border-radius: 50%; background: transparent; border: 1.5px solid var(--act2, var(--act)); }
+[data-variant='1'][data-activity='terminal'] .act-scene b { height: 5px; width: 5px; }
+[data-variant='2'][data-activity='terminal'] .act-scene b { width: 5px; height: 5px; }
+
+/* Inside the pill, words and icon sit above the scene. */
+.thinking-badge .act-icon,
+.thinking-badge .thinking-phrase-track,
+.thinking-badge .act-tail,
+.thinking-badge .mono { position: relative; z-index: 1; }
+
+/* ── The same motion where the work is happening ─────────────────────── */
+
+.code-block .live-chip { display: none; align-items: center; gap: 7px; min-width: 0; flex: 0 1 auto; margin: 0 auto 0 12px; font-size: 11px; position: relative; z-index: 1; }
+.code-block .live-text,
+.live-bar .live-text {
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  background: linear-gradient(100deg, var(--ink-dim) 8%, var(--ink) 26%, var(--act, var(--accent)) 42%, var(--act2, var(--accent-alt)) 54%, var(--ink) 70%, var(--ink-dim) 92%);
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: phrase-shimmer 2.9s linear infinite;
+}
+.code-block.is-live .live-chip { display: inline-flex; }
+.code-block .act-scene { display: none; }
+.code-block.is-live .act-scene { display: block; }
+.code-block.is-live .code-label { position: relative; z-index: 1; flex: none; }
+.code-block .live-chip .act-tail { flex: none; }
+.code-block.is-live .code-actions { position: relative; z-index: 1; }
+.code-head { position: relative; }
+.code-block.is-live {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--act, var(--accent)) 50%, var(--line)), 0 0 22px -6px color-mix(in oklab, var(--act, var(--accent)) 55%, transparent);
+  animation: live-breathe 2.2s var(--ease-in-out) infinite;
+}
+@keyframes live-breathe { 50% { box-shadow: 0 0 0 1px color-mix(in oklab, var(--act, var(--accent)) 70%, var(--line)), 0 0 30px -4px color-mix(in oklab, var(--act, var(--accent)) 70%, transparent); } }
+.code-block.is-live .code-head::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, var(--act, var(--accent)) 35%, var(--act2, var(--accent-alt)) 65%, transparent 100%);
+  background-size: 220% 100%;
+  animation: line-run 1.3s linear infinite;
+}
+@keyframes line-run { from { background-position: 120% 0; } to { background-position: -100% 0; } }
+
+/* the strip at the top of the terminal pane */
+.live-bar {
+  display: block;
+  flex: none;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in oklab, var(--act, var(--accent)) 8%, var(--panel));
+  overflow: hidden;
+}
+.live-bar-inner { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.live-bar .act-scene { opacity: 0.5; }
+.live-bar .act-icon, .live-bar .live-text, .live-bar .act-tail { position: relative; z-index: 1; }
+.live-bar::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0; height: 2px;
+  background: linear-gradient(90deg, transparent 0%, var(--act, var(--accent)) 35%, var(--act2, var(--accent-alt)) 65%, transparent 100%);
+  background-size: 220% 100%;
+  animation: line-run 1.3s linear infinite;
+}
 
 /* ── Dots ──────────────────────────────────────────────────────────────── */
 

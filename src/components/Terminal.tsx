@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useWorkspace } from '@/lib/store';
 import { executeCommand } from '@/lib/agent/runtime';
+import { LiveBar } from './LiveBar';
 
 const STREAM_COLOR: Record<string, string> = {
   stdout: 'var(--ink)',
@@ -22,6 +23,7 @@ export function Terminal() {
   const clearTerminal = useWorkspace((s) => s.clearTerminal);
   const heartbeat = useWorkspace((s) => s.heartbeat);
   const runningExecId = useWorkspace((s) => s.runningExecId);
+  const runningCommand = useWorkspace((s) => s.runningCommand);
   const bridge = useWorkspace((s) => s.bridge);
   const sessionId = useWorkspace((s) => s.sessionId);
   const activeSuite = useWorkspace((s) => s.activeSuite);
@@ -121,6 +123,8 @@ export function Terminal() {
           </button>
         </div>
       </header>
+
+      {runningExecId && runningCommand ? <LiveBar command={runningCommand} /> : null}
 
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-3 py-2.5">
         {lines.length === 0 ? (
