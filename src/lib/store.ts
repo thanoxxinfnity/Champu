@@ -50,6 +50,8 @@ export interface ChatMessageView {
   content: string;
   reasoning?: string;
   lane?: 'A' | 'B';
+  /** A terminal job (install, download, run) — its short follow-ups stay terminal jobs. */
+  ops?: boolean;
   model?: string;
   provider?: ProviderId;
   createdAt: number;

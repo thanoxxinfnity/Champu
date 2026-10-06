@@ -643,11 +643,54 @@ async function runDrafts(opts: {
  */
 let creating: Promise<string> | null = null;
 
+/**
+ * The lane of the last real message in this conversation, while it is still fresh.
+ * "Ha" / "ok bro" / a pasted link only mean something next to the task they answer.
+ */
+const GREETING = /^(hi+|hello|hey+|hlo|yo|thanks?|thank you|bye)\b[\s!.]*$/i;
+function previousTurn(): { previousLane?: 'A' | 'B'; previousOps?: boolean } {
+  const { messages } = useWorkspace.getState();
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== 'user' || GREETING.test(m.content.trim())) continue;
+    return Date.now() - m.createdAt < 15 * 60_000 ? { previousLane: m.lane, previousOps: m.ops } : {};
+  }
+  return {};
+}
+
+const MAX_OPS_TURNS = 6;
+
+/** What a command did, in the words the model reads next: the command, how it ended, the tail of its output. */
+function opsResultLine(command: string, out: { ok: boolean; exitCode: number | null; stdout: string; stderr: string; skipped?: string; message?: string }): string {
+  const tail = (t: string) => (t.length > 1800 ? `…${t.slice(-1800)}` : t).trim();
+  const verdict = out.skipped === 'offline' ? 'NOT RUN — the bridge is offline' : out.skipped === 'banned' ? 'NOT RUN — this exact command already failed twice' : out.ok ? 'exit 0' : `FAILED, exit ${out.exitCode ?? '?'}`;
+  const body = tail(`${out.stdout}${out.stderr ? `\n${out.stderr}` : ''}`) || out.message || '(no output)';
+  return `$ ${command}\n[${verdict}]\n${body}`;
+}
+
+/** No words from the model: show the last thing the terminal said, plainly. */
+function opsFallback(feed: string, failed: boolean): string {
+  const last = feed.split('\n\n').pop() ?? feed;
+  return `${failed ? 'The model stopped answering, so here is' : 'Here is'} what the terminal reported last:\n\n\`\`\`\n${last}\n\`\`\``;
+}
+
+function opsFollowUp(feed: string, last: boolean): string {
+  return [
+    'Terminal results:',
+    '',
+    feed,
+    '',
+    last
+      ? 'This is the last turn. Do not run anything more: say plainly what is done, what is not, and what the user should do next.'
+      : 'Read these. If the job is not finished, run the next command in a ```bash path=@terminal cwd=.``` block (one command). If it is finished, or it cannot be finished, say so in plain words — what now exists, where, which version — and emit no command block.',
+  ].join('\n');
+}
+
 /** Builds and draft runs write the shared slot; a plain chat answer does not. */
 function needsSlot(opts: SendOptions): boolean {
   const st = useWorkspace.getState();
   const attachments = opts.attachments ?? [];
-  const lane = opts.forceLane ?? classifyLocal(opts.input.trim(), { hasAttachments: attachments.length > 0 }).lane;
+  const lane = opts.forceLane ?? classifyLocal(opts.input.trim(), { hasAttachments: attachments.length > 0, ...previousTurn() }).lane;
   return lane === 'B' || (st.draftsEnabled && !opts.forceLane);
 }
 
@@ -809,7 +852,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
   // ── Classify ──────────────────────────────────────────────────────────────
   const classification: Classification = opts.forceLane
     ? { lane: opts.forceLane, confidence: 1, reason: 'explicit override', suite }
-    : classifyLocal(input, { hasAttachments: attachments.length > 0 });
+    : classifyLocal(input, { hasAttachments: attachments.length > 0, ...previousTurn() });
 
   const lane = classification.lane;
 
@@ -820,6 +863,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
     createdAt: Date.now(),
     attachments,
     lane,
+    ops: classification.ops,
   };
   emit(userMessage);
   void appendMessage({ ...userMessage, sessionId, suite });
@@ -849,7 +893,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
   try {
     // ── Plan (Lane B only) ──────────────────────────────────────────────────
     let plan: Plan | null = null;
-    if (lane === 'B') {
+    if (lane === 'B' && !classification.ops) {
       think(true, 'Decomposing into atomic steps...');
       plan = await buildPlan(input, selection, suite, custom, controller.signal);
 
@@ -913,7 +957,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
     // real pages — see research.ts. Fails soft: no result means "build from
     // what you know", the same as before this existed.
     let research: ResearchReport | null = null;
-    if (needsResearch(input, suite, lane)) {
+    if (!classification.ops && needsResearch(input, suite, lane)) {
       const queries = planResearch(input, suite);
       if (queries.length) {
         think(true, 'Researching the live web before building…');
@@ -1020,7 +1064,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
 
         // Extract artifacts live so the file manager fills in mid-stream.
         if (lane === 'B' && full.includes('```')) {
-          const artifacts = extractArtifacts(full);
+          const artifacts = extractArtifacts(full, { shellRuns: true });
           const files = filesOf(artifacts).filter((f) => f.complete);
           if (files.length) {
             const merged = mergeFiles(seenFiles, files);
@@ -1165,7 +1209,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
     }
 
     // ── Post-stream artifact persistence ────────────────────────────────────
-    const artifacts = extractArtifacts(result.content);
+    const artifacts = extractArtifacts(result.content, { shellRuns: lane === 'B' });
     // A block left open because the reply was cut off is half a file; one left
     // open because a weaker model forgot the closing fence is still the whole
     // file. Only the first kind is dropped.
@@ -2103,6 +2147,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
         }
 
         const commandResults: CommandOutcome[] = [];
+        const opsFeed: string[] = [];
         for (const command of commands) {
           if (controller.signal.aborted) break;
           const startedAt = Date.now();
@@ -2144,6 +2189,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
             retried,
             errorExcerpt: outcome.ok ? undefined : (outcome.stderr || outcome.stdout || outcome.message || ''),
           });
+          opsFeed.push(opsResultLine(command.command, outcome));
           // A command parked because the bridge is offline did not run, so it
           // is neither a success nor a failure to report.
           if (outcome.skipped !== 'offline') {
@@ -2164,6 +2210,56 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
           const note = { id: uid('msg'), role: 'system' as const, content: commandSummary, createdAt: Date.now() };
           emit(note);
           void appendMessage({ ...note, sessionId, suite });
+        }
+
+        // A terminal job is a conversation with the machine: read what came back, decide the next command, go on
+        // until it is done. Without this the agent runs its first guess and stops, whatever the output said.
+        if (classification.ops && opsFeed.length) {
+          let convo: ChatMessage[] = [...messages, { role: 'assistant', content: result.content }];
+          let feed = opsFeed.join('\n\n');
+          for (let turn = 0; turn < MAX_OPS_TURNS && !controller.signal.aborted; turn++) {
+            convo = [...convo, { role: 'user', content: opsFollowUp(feed, turn === MAX_OPS_TURNS - 1) }];
+            const turnId = uid('msg');
+            const turnAt = Date.now();
+            emit({ id: turnId, role: 'assistant', content: '', lane, model: selection.model, provider: selection.provider, createdAt: turnAt, streaming: true });
+            useWorkspace.getState().patchRun(sessionId, { assistantId: turnId });
+            think(true, 'Reading what came back…');
+            const reply = await streamCompletion(
+              { provider: selection.provider, model: selection.model, messages: convo, temperature: 0.25, maxTokens: 4096, reasoningEffort: 'low', custom },
+              {
+                onDelta: (_d, part) => patch(turnId, { content: part }),
+                onReasoning: () => narrate(sessionId, 'Reasoning…'),
+                onError: (message) => patch(turnId, { error: message }),
+              },
+              controller.signal,
+            );
+            // A reasoning model can spend the whole budget thinking and answer nothing: the bubble must still say
+            // what happened, in the machine's own words.
+            const said = reply.content.trim() ? reply.content : opsFallback(feed, Boolean(reply.error));
+            patch(turnId, { content: said, streaming: false, error: reply.error, durationMs: Date.now() - turnAt });
+            void appendMessage({ id: turnId, sessionId, suite, role: 'assistant', content: said, createdAt: turnAt, model: selection.model, provider: selection.provider, lane, error: reply.error });
+            convo = [...convo, { role: 'assistant', content: said }];
+            const more = commandsOf(extractArtifacts(reply.content, { shellRuns: true })).filter((c) => c.complete && c.command);
+            if (reply.error || !more.length) break;
+            const lines: string[] = [];
+            for (const c of more) {
+              if (controller.signal.aborted) break;
+              const at = Date.now();
+              const out = await executeCommand(c.command, { cwd: c.cwd, sessionId, suite, signal: controller.signal, narrate: true });
+              lines.push(opsResultLine(c.command, out));
+              commandResults.push({
+                command: c.command, cwd: c.cwd, ok: out.ok, exitCode: out.exitCode, durationMs: Date.now() - at, skipped: out.skipped,
+                errorExcerpt: out.ok ? undefined : (out.stderr || out.stdout || out.message || ''),
+              });
+              if (out.skipped !== 'offline') {
+                evidence.commandsRun += 1;
+                if (!out.ok) evidence.commandsFailed += 1;
+              }
+              if (!out.ok && out.skipped) break;
+            }
+            if (!lines.length) break;
+            feed = lines.join('\n\n');
+          }
         }
 
         // A built artifact buried in terminal scrollback may as well not exist.

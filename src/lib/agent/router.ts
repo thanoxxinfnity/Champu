@@ -18,6 +18,8 @@ export interface Classification {
   reason: string;
   /** Suite the prompt most likely belongs to, if any. */
   suite?: string;
+  /** Work on the machine itself (install, download, run): no plan, no research, just the commands. */
+  ops?: boolean;
   /** Set when the deterministic pass was inconclusive. */
   needsModel?: boolean;
 }
@@ -54,6 +56,30 @@ const EXECUTION_SLASH = new Set([
   'zip',
   'test',
 ]);
+
+/**
+ * Asking for something to be done on the machine: "download godot on the terminal", "terminal me install karo".
+ * This is work, not conversation — the answer is a command that runs, not a command pasted into chat.
+ */
+const TERMINAL_WORDS = /\b(terminal|shell|bash|cmd|command ?line|bridge|ssh|apt(-get)?|pip3?|npm|curl|wget|chmod|unzip|sudo)\b/i;
+const MACHINE_VERBS =
+  /\b(download|donload|downlod|dowload|donlod|dwnld|install|uninstall|setup|set ?up|run|execute|start|launch|clone|pull|fetch|update|upgrade|kheech|kheecho|utaro|utar|chala|chalao|laga|lagao|dalo|karo|kar do|kardo)\b/i;
+const MACHINE_THINGS = /\b(godot|gradle|java|jdk|node|python|android ?sdk|sdk|adb|docker|git|ffmpeg|package|toolchain|engine|tool)\b/i;
+const HAS_URL = /https?:\/\/\S+|drive\.google\.com\/\S+/i;
+
+export function wantsTerminal(text: string): boolean {
+  if (INQUIRY_MARKERS.test(text.trim()) && !MACHINE_VERBS.test(text)) return false;
+  if (TERMINAL_WORDS.test(text) && MACHINE_VERBS.test(text)) return true;
+  return MACHINE_VERBS.test(text) && MACHINE_THINGS.test(text) && /\b(download|donload|downlod|dowload|donlod|dwnld|install|setup|set ?up|kheech\w*|utar\w*|laga\w*)\b/i.test(text);
+}
+
+/** "Ha", "ok bro", "ya wala bro", a bare link: a reply to work already under way, not a new topic. */
+export function isFollowUp(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (HAS_URL.test(t) && t.length < 400) return true;
+  return t.length <= 60 && !t.includes('\n') && !/\?\s*$/.test(t);
+}
 
 const SUITE_HINTS: Array<[RegExp | ((text: string) => boolean), string]> = [
   // "a 3D game for Android" is a game, not a native Android project: the word "android" must not win over "game".
@@ -117,6 +143,8 @@ export function resolveSuite(base: string, input: string, lane: Lane): string {
   // The Game Studio tab is where games are made, so a build typed there is a game build. Without this the
   // tab's own name ("game") never matched the suite the game pipeline runs under ("godot"), and a request such
   // as "a 3D game for Android" was written as a plain Android project instead — no plan, no Godot rules, no check.
+  // Installing or downloading Godot is a job for the terminal, not a game to be designed.
+  if (wantsTerminal(input) && !ANDROID_DELIVERABLE.test(input)) return base;
   if (base === 'game') return lane === 'B' ? 'godot' : base;
   if (base !== 'chat' || lane !== 'B') return base;
   if (wantsGame(input) && !wantsSite(input) && !MINECRAFT_EXPLICIT.test(input)) return 'godot';
@@ -144,7 +172,10 @@ export function detectSuite(text: string): string | undefined {
   return undefined;
 }
 
-export function classifyLocal(input: string, opts: { hasAttachments?: boolean } = {}): Classification {
+export function classifyLocal(
+  input: string,
+  opts: { hasAttachments?: boolean; previousLane?: Lane; previousOps?: boolean } = {},
+): Classification {
   const text = input.trim();
   const suite = detectSuite(text);
 
@@ -158,6 +189,14 @@ export function classifyLocal(input: string, opts: { hasAttachments?: boolean } 
       return { lane: 'B', confidence: 1, reason: `Slash command /${cmd} is an execution skill.`, suite };
     }
     return { lane: 'A', confidence: 0.8, reason: `Slash command /${cmd} is informational.`, suite };
+  }
+
+  // 2. Work on the machine itself, and the short replies that carry it on ("Ha", a link, "ok bro").
+  if (wantsTerminal(text)) {
+    return { lane: 'B', confidence: 0.95, reason: 'running it on the terminal — this is work, not a question', ops: true };
+  }
+  if (opts.previousLane === 'B' && isFollowUp(text) && !INQUIRY_MARKERS.test(text)) {
+    return { lane: 'B', confidence: 0.85, reason: 'carrying on the task already under way', suite: opts.previousOps ? undefined : suite, ops: opts.previousOps };
   }
 
   let score = 0;

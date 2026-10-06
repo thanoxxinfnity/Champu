@@ -15,8 +15,8 @@ android {
         applicationId = "com.chomugiri.workspace"
         minSdk = 24
         targetSdk = 35
-        versionCode = 63
-        versionName = "3.33"
+        versionCode = 64
+        versionName = "3.34"
     }
 
     /**

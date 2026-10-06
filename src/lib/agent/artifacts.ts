@@ -94,7 +94,7 @@ export function sanitizePath(path: string): string | null {
  * cheap and idempotent, which beats trying to keep a delta-based state machine
  * correct across chunk boundaries that split a fence in half.
  */
-export function extractArtifacts(text: string): Artifact[] {
+export function extractArtifacts(text: string, opts: { shellRuns?: boolean } = {}): Artifact[] {
   const lines = text.split('\n');
   const out: Artifact[] = [];
 
@@ -105,7 +105,7 @@ export function extractArtifacts(text: string): Artifact[] {
       const close = FENCE.exec(line);
       // A closing fence is the same char, at least as long, and carries no info.
       if (close && close[2][0] === open.fence[0] && close[2].length >= open.fence.length && !close[3].trim()) {
-        out.push(finish(open, true));
+        out.push(finish(open, true, opts));
         open = null;
         continue;
       }
@@ -118,7 +118,7 @@ export function extractArtifacts(text: string): Artifact[] {
   }
 
   // A block still streaming is emitted as incomplete so the UI can show progress.
-  if (open) out.push(finish(open, false));
+  if (open) out.push(finish(open, false, opts));
 
   return out.filter(Boolean);
 }
@@ -152,11 +152,15 @@ export function splitAtOpenBlock(text: string): { complete: string; openPath?: s
 function finish(
   open: { meta: Meta; body: string[] },
   complete: boolean,
+  opts: { shellRuns?: boolean } = {},
 ): Artifact {
   const content = open.body.join('\n');
   const { meta } = open;
 
-  if (meta.path === '@terminal' || meta.path === '@shell') {
+  // While executing, a shell block with no path is a command to run, not a file to keep: a model that
+  // forgets `path=@terminal` still means "run this", and a snippet-xxxx.sh nobody ran helps no one.
+  const bareShell = opts.shellRuns && !meta.path && /^(bash|sh|shell|zsh|console)$/i.test(meta.language);
+  if (meta.path === '@terminal' || meta.path === '@shell' || bareShell) {
     return {
       kind: 'command',
       command: content.trim(),
