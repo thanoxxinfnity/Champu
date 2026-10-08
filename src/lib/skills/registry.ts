@@ -76,6 +76,16 @@ Subject: {{input}}
 Make the 3D part the centrepiece, not decoration: a scene that renders on a phone (resize, clamped pixel ratio, lights), moves with the scroll or the pointer, and falls back to a styled 2D page when WebGL is unavailable. Icons are drawn as SVG, never emoji or symbol characters. Write real copy about the subject, responsive down to 360px.`,
   },
   {
+    command: 'od',
+    name: 'Open Design',
+    description: 'Design skills, 150+ brand design systems, ready layouts and image/video prompts. "/od list", "/od style stripe <task>", "/od design-review <what>".',
+    lane: 'B',
+    icon: '🎨',
+    argHint: 'list | style <brand> <task> | <skill> <task> | prompt <words>',
+    // Passed through as typed: the runtime reads the sub-command itself.
+    template: `/od {{input}}`,
+  },
+  {
     command: 'build-mcpack',
     name: 'Build .mcpack',
     description: 'Generate a Minecraft Bedrock behaviour + resource pack and export it.',

@@ -19,6 +19,10 @@ import { buildPackExport, describeExport, detectPacks, missingGeometries, valida
 import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geometry';
 import { planBrief, planGame, planSummary, playerParts } from '@/lib/suites/godot/plan';
 import { threejsSkillsPrompt } from '@/lib/skills/threejs/select';
+import { browserIo, loadOdIndex } from '@/lib/skills/opendesign/io';
+import { OD_HELP, openDesignContext, parseOd, type OdCommand } from '@/lib/skills/opendesign/context';
+import { renderCatalog, renderPromptSearch } from '@/lib/skills/opendesign/catalog';
+import type { OdIndex } from '@/lib/skills/opendesign/types';
 import { prepareSiteIcons } from '@/lib/suites/web/icons';
 import { checkGameQuality, qualityRepairPrompt } from '@/lib/suites/godot/quality';
 import { kitFor } from '@/lib/suites/godot/kit';
@@ -908,11 +912,37 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
   const startedAt = Date.now();
 
   try {
+    // ── /od: Open Design, called by name ────────────────────────────────────
+    // Help, the catalogue and the prompt search are answered here, locally; naming a skill, style or layout carries on to a
+    // normal build with that thing forced in. Everything the model and the planner see is the task, not the command.
+    const odIndex: OdIndex | null = await loadOdIndex().catch(() => null);
+    const odCmd: OdCommand | null = parseOd(input, odIndex ?? undefined);
+    let modelInput = input;
+    if (odCmd) {
+      const needsTask = odCmd.kind === 'use' && !odCmd.task && Object.keys(odCmd.force).length > 0;
+      if (odCmd.kind !== 'use' || needsTask) {
+        let reply: string;
+        if (!odIndex) reply = 'Open Design material could not be loaded just now (it is read from the app itself). Try again in a moment.';
+        else if (odCmd.kind === 'help') reply = OD_HELP;
+        else if (odCmd.kind === 'list') reply = renderCatalog(odIndex, odCmd.what);
+        else if (odCmd.kind === 'prompt') reply = await renderPromptSearch(odIndex, browserIo, odCmd.query);
+        else {
+          const f = odCmd.force;
+          const form = f.system ? `style ${f.system}` : f.template ? `template ${f.template}` : (f.skill ?? '');
+          reply = `Tell me what to build with it, for example: \`/od ${form} a landing page for my bakery\``;
+        }
+        patch(assistantId, { content: reply, streaming: false, durationMs: Date.now() - startedAt });
+        void appendMessage({ id: assistantId, sessionId, suite, role: 'assistant', content: reply, createdAt: startedAt, lane, model: selection.model, provider: selection.provider });
+        return;
+      }
+      if (odCmd.task) modelInput = odCmd.task;
+    }
+
     // ── Plan (Lane B only) ──────────────────────────────────────────────────
     let plan: Plan | null = null;
     if (lane === 'B' && !classification.ops) {
       think(true, 'Decomposing into atomic steps...');
-      plan = await buildPlan(input, selection, suite, custom, controller.signal);
+      plan = await buildPlan(modelInput, selection, suite, custom, controller.signal);
 
       // Park terminal steps immediately if the tunnel is already down, rather
       // than letting them fail one at a time later.
@@ -974,8 +1004,8 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
     // real pages — see research.ts. Fails soft: no result means "build from
     // what you know", the same as before this existed.
     let research: ResearchReport | null = null;
-    if (!classification.ops && needsResearch(input, suite, lane)) {
-      const queries = planResearch(input, suite);
+    if (!classification.ops && needsResearch(modelInput, suite, lane)) {
+      const queries = planResearch(modelInput, suite);
       if (queries.length) {
         think(true, 'Researching the live web before building…');
         research = await runResearch(queries, async (body) => {
@@ -997,6 +1027,24 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       }
     }
 
+    // ── Open Design: the skills, brand looks and craft rules this request calls for ──
+    // Chosen by what the request is about (see skills/opendesign/select.ts) or by name via /od, and said out loud in the chat so
+    // it is never a hidden influence. Design work only: a game or a Bedrock pack gets nothing from it.
+    let openDesign: string | undefined;
+    const designSuite = ['chat', 'android', 'studio', 'design'].includes(suite);
+    if (odIndex && lane === 'B' && !classification.ops && (designSuite || (odCmd && odCmd.kind === 'use'))) {
+      const ctxOd = await openDesignContext(modelInput, odIndex, browserIo, {
+        force: odCmd?.kind === 'use' ? odCmd.force : undefined,
+        native: suite === 'android',
+      }).catch(() => null);
+      if (ctxOd) {
+        openDesign = ctxOd.text;
+        const note = { id: uid('msg'), role: 'system' as const, content: ctxOd.summary, createdAt: Math.max(0, startedAt - 1) };
+        if (isCurrent()) useWorkspace.getState().insertMessageBefore(assistantId, note);
+        void appendMessage({ ...note, sessionId, suite });
+      }
+    }
+
     // ── Stream the answer ───────────────────────────────────────────────────
     const systemPrompt = buildSystemPrompt({
       lane,
@@ -1015,8 +1063,9 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       failedApproaches: guard.bannedApproaches(),
       attachments: attachments.map((a) => ({ name: a.name, kind: a.kind, bytes: a.bytes })),
       workspaceFiles: [...useWorkspace.getState().files.keys()],
-      buildingSite: wantsSite(input),
-      threejsSkills: wantsSite(input) ? threejsSkillsPrompt(input) : undefined,
+      buildingSite: wantsSite(modelInput),
+      threejsSkills: wantsSite(modelInput) ? threejsSkillsPrompt(modelInput) : undefined,
+      ...(openDesign ? { openDesign } : {}),
       ...(design ? { gamePlan: planBrief(design) } : {}),
       // Computed from the keys that are actually set, so the pipeline line the
       // model prints is a fact about this session rather than a guess.
@@ -1029,7 +1078,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
     });
 
     const history = await historyFor(sessionId, 10);
-    const userContent = buildUserContent(input, attachments);
+    const userContent = buildUserContent(modelInput, attachments);
 
     // Drafts replace the single answer entirely; the chosen one is committed
     // into the transcript when the user picks it.
@@ -1249,7 +1298,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
     //
     // A model reaches for emoji and arrow characters as icons however it is told not to. Whatever slipped into the page text is
     // swapped for a drawn icon here, and every icon the page references gets its drawing — see suites/web/icons.ts.
-    if (wantsSite(input)) {
+    if (wantsSite(modelInput)) {
       const prepared = prepareSiteIcons(files);
       if (prepared.replaced || prepared.added.length) {
         prepared.files.forEach((f, i) => {

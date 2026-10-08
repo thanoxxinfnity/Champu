@@ -41,6 +41,9 @@ const EXPLAIN_MARKERS =
 
 /** Slash commands are unambiguous execution intent. */
 const EXECUTION_SLASH = new Set([
+  'od',
+  'opendesign',
+  'open-design',
   'make-apk',
   'deploy',
   'build-mcpack',
