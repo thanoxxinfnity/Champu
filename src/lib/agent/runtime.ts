@@ -19,10 +19,8 @@ import { buildPackExport, describeExport, detectPacks, missingGeometries, valida
 import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geometry';
 import { planBrief, planGame, planSummary, playerParts } from '@/lib/suites/godot/plan';
 import { threejsSkillsPrompt } from '@/lib/skills/threejs/select';
-import { browserIo, libraryIo, loadLibIndex, loadOdIndex, videoIo } from '@/lib/skills/opendesign/io';
-import { wantsCodeVideo, type VideoEngine } from '@/lib/suites/video/detect';
-import { videoContext } from '@/lib/suites/video/context';
-import { hasComposition, localGsap, videoKitFor } from '@/lib/suites/video/kit';
+import { browserIo, libraryIo, loadLibIndex, loadOdIndex, motionIo } from '@/lib/skills/opendesign/io';
+import { motionContext, wantsMotion } from '@/lib/suites/web/motion';
 import { parseSkillsCommand, renderSkillsOverview, renderSkillsSearch, skillLibraryContext, type SkillsCommand } from '@/lib/skills/library/context';
 import type { LibIndex } from '@/lib/skills/library/types';
 import { OD_HELP, openDesignContext, parseOd, type OdCommand } from '@/lib/skills/opendesign/context';
@@ -59,7 +57,7 @@ import { PLANNER_NIM_MODEL } from '@/lib/providers/registry';
 import { endpointConfigFor } from '@/lib/providers/endpoint-models';
 import { draftSystemSuffix, pickAngles } from './drafts';
 import { scanForSecrets, hasBlockingSecret } from '@/lib/security/secrets';
-import { appendMessage, createSession, getSetting, listMessages, saveAsset, setSetting, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
+import { appendMessage, createSession, getSetting, listMessages, setSetting, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
 import type { SuiteId } from '@/lib/db/schema';
 import { BridgeOfflineError } from '@/lib/bridge/client';
 
@@ -699,10 +697,7 @@ function opsFallback(feed: string, failed: boolean): string {
 }
 
 /** A build failed: what the follow-up asks for depends on whether the code or the network was at fault. */
-function fixFollowUp(feed: string, last: boolean, notRenderedYet = false): string {
-  if (notRenderedYet && !last) {
-    return ['Terminal results so far:', '', feed, '', 'The video is not rendered yet. Run the render command now, in a ```bash path=@terminal cwd=.``` block (one command). Do not write any file again unless a result above shows an error in it.'].join('\n');
-  }
+function fixFollowUp(feed: string, last: boolean): string {
   const network = /\b(429|too many requests|timed out|timeout|connection (reset|refused)|could not resolve|temporarily unavailable|50[234])\b/i.test(feed);
   return [
     'The build did not succeed. Terminal results:',
@@ -1102,9 +1097,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
     // Bedrock pack has its own suite knowledge and skips it unless a skill is called by name.
     let skillLibrary: string | undefined;
     const ownKnowledge = suite === 'godot' || suite === 'minecraft';
-    // A video request has its own recipe (suites/video); the library's video-analysis skills are about watching videos, not making them.
-    const videoRequest = lane === 'B' && wantsCodeVideo(modelInput);
-    if (libIndex && lane === 'B' && !classification.ops && (forcedSkill || (autoSkills && !ownKnowledge && !videoRequest))) {
+    if (libIndex && lane === 'B' && !classification.ops && (forcedSkill || (autoSkills && !ownKnowledge))) {
       const lib = await skillLibraryContext(modelInput, libIndex, libraryIo, {
         force: forcedSkill ? [forcedSkill] : undefined,
         max: openDesign ? 1 : 2,
@@ -1117,18 +1110,13 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       }
     }
 
-    // ── A video, made from code ─────────────────────────────────────────────────
-    // HyperFrames (or Remotion, when asked for) renders on the bridge: the tested recipe and the framework's own guidance go in
-    // front of the model, and the chat says so. See suites/video.
-    let videoPrompt: string | undefined;
-    let videoEngineUsed: VideoEngine | null = null;
-    const makingVideo = lane === 'B' && !classification.ops && (suite === 'chat' || suite === 'studio') && wantsCodeVideo(modelInput);
-    if (makingVideo) {
-      const v = await videoContext(modelInput, videoIo).catch(() => null);
-      if (v) {
-        videoPrompt = v.text;
-        videoEngineUsed = v.engine;
-        const note = { id: uid('msg'), role: 'system' as const, content: v.summary, createdAt: Math.max(0, startedAt - 1) };
+    // ── Motion rules, for a website that moves ──────────────────────────────────
+    let motionGuide: string | undefined;
+    if (lane === 'B' && !classification.ops && wantsSite(modelInput) && wantsMotion(modelInput)) {
+      const m = await motionContext(modelInput, motionIo).catch(() => null);
+      if (m) {
+        motionGuide = m.text;
+        const note = { id: uid('msg'), role: 'system' as const, content: m.summary, createdAt: Math.max(0, startedAt - 1) };
         if (isCurrent()) useWorkspace.getState().insertMessageBefore(assistantId, note);
         void appendMessage({ ...note, sessionId, suite });
       }
@@ -1156,7 +1144,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       threejsSkills: wantsSite(modelInput) ? threejsSkillsPrompt(modelInput) : undefined,
       ...(openDesign ? { openDesign } : {}),
       ...(skillLibrary ? { skillLibrary } : {}),
-      ...(videoPrompt ? { videoPrompt } : {}),
+      ...(motionGuide ? { motionGuide } : {}),
       ...(design ? { gamePlan: planBrief(design) } : {}),
       // Computed from the keys that are actually set, so the pipeline line the
       // model prints is a fact about this session rather than a guess.
@@ -1257,10 +1245,8 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
 
     // A reply that came out as noise (control tokens leaking into the text, hundreds of scraps called files) is not saved or
     // continued: say so and ask once more, cooler.
-    // A video reply without its composition file is the same failure in another shape (the model lost the thread halfway).
-    const videoMissing = () => Boolean(videoEngineUsed) && !hasComposition(videoEngineUsed!, filesOf(extractArtifacts(result.content)));
-    if (lane === 'B' && !result.error && (looksDegenerate(result.content) || videoMissing()) && !controller.signal.aborted) {
-      const note = { id: uid('msg'), role: 'system' as const, content: videoMissing() && !looksDegenerate(result.content) ? "The reply did not contain the video's composition file, so none of it was kept. Asking again." : "The model's reply came out garbled, so none of it was kept. Asking again.", createdAt: Date.now() };
+    if (lane === 'B' && !result.error && looksDegenerate(result.content) && !controller.signal.aborted) {
+      const note = { id: uid('msg'), role: 'system' as const, content: "The model's reply came out garbled, so none of it was kept. Asking again.", createdAt: Date.now() };
       emit(note);
       void appendMessage({ ...note, sessionId, suite });
       patch(assistantId, { content: '', reasoning: '' });
@@ -1271,9 +1257,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
         {
           provider: selection.provider,
           model: selection.model,
-          messages: videoEngineUsed
-            ? [...messages, { role: 'user', content: `Write the complete composition now: ${videoEngineUsed === 'hyperframes' ? '`video/index.html` as one full file' : '`video/src/Root.tsx` and the scene files, each as one full file'}, each in a fenced block with its path=, then the render command. Keep it compact — a short, well-made video beats a long one. No other prose.` }]
-            : messages,
+          messages,
           temperature: 0.1,
           maxTokens: 8192,
           reasoningEffort: 'low',
@@ -1414,35 +1398,11 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       });
     }
 
-    // ── Video: the package files around the composition the model wrote ──────────
-    if (videoEngineUsed) {
-      const gsap = videoEngineUsed === 'hyperframes' ? await videoIo.text('gsap.min.js').catch(() => null) : null;
-      // The composition loads the copy of GSAP beside it, whatever the model wrote.
-      if (gsap) {
-        for (const [i, f] of files.entries()) {
-          if (!/\.html?$/i.test(f.path)) continue;
-          const fixed = localGsap(f.content);
-          if (fixed !== f.content) {
-            files[i] = { ...f, content: fixed, bytes: new TextEncoder().encode(fixed).length };
-            upsertFile(files[i]);
-          }
-        }
-      }
-      for (const k of videoKitFor(videoEngineUsed, files, { gsap })) {
-        const artifact = { kind: 'file' as const, path: k.path, language: languageForPath(k.path), content: k.content, complete: true, bytes: new TextEncoder().encode(k.content).length };
-        const at = files.findIndex((f) => f.path === k.path);
-        if (at >= 0) files.splice(at, 1);
-        files.push(artifact);
-        upsertFile(artifact);
-        void upsertArtifact({ sessionId, suite, path: artifact.path, language: artifact.language, content: artifact.content, bytes: artifact.bytes });
-      }
-    }
-
     // ── Websites: icons are drawn, never typed ──────────────────────────────
     //
     // A model reaches for emoji and arrow characters as icons however it is told not to. Whatever slipped into the page text is
     // swapped for a drawn icon here, and every icon the page references gets its drawing — see suites/web/icons.ts.
-    if (wantsSite(modelInput) || videoEngineUsed === 'hyperframes') {
+    if (wantsSite(modelInput)) {
       const prepared = prepareSiteIcons(files);
       if (prepared.replaced || prepared.added.length) {
         prepared.files.forEach((f, i) => {
@@ -2428,16 +2388,13 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
         // A build that failed gets the same: the error is read, the files it names are fixed, the build is run again.
         const lastRun = commandResults[commandResults.length - 1];
         const buildFailed = Boolean(lastRun && !lastRun.ok && lastRun.skipped !== 'offline');
-        // A video that was set up but not rendered (the model installed the packages and stopped) is carried on to its render.
-        const unrendered = Boolean(videoEngineUsed) && !commandResults.some((r) => r.ok && /\brender\b/.test(r.command));
-        const feedback = Boolean(classification.ops) || buildFailed || unrendered;
-        // A video has many small ways to fail (a type, a name, a string given to interpolate): it gets more turns than a build.
-        const maxTurns = classification.ops ? MAX_OPS_TURNS : videoEngineUsed ? 6 : MAX_FIX_TURNS;
+        const feedback = Boolean(classification.ops) || buildFailed;
+        const maxTurns = classification.ops ? MAX_OPS_TURNS : MAX_FIX_TURNS;
         if (feedback && opsFeed.length) {
           let convo: ChatMessage[] = [...messages, { role: 'assistant', content: result.content }];
           let feed = opsFeed.join('\n\n');
           for (let turn = 0; turn < maxTurns && !controller.signal.aborted; turn++) {
-            const followUp = classification.ops ? opsFollowUp(feed, turn === maxTurns - 1) : fixFollowUp(feed, turn === maxTurns - 1, unrendered && !buildFailed);
+            const followUp = classification.ops ? opsFollowUp(feed, turn === maxTurns - 1) : fixFollowUp(feed, turn === maxTurns - 1);
             if (classification.ops) {
               convo = [...convo, { role: 'user', content: followUp }];
             } else {
@@ -2499,15 +2456,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
                 useWorkspace.getState().appendTerminal({ stream: 'system', text: `⚠  file sync failed: ${(err as Error).message}` });
               }
             }
-            if (answer.error) break;
-            if (!more.length) {
-              // "Now I'll render it:" with no command block under it. For a video that is not finished, say so and go round again.
-              if (videoEngineUsed && !commandResults.some((r) => r.ok && /\brender\b/.test(r.command)) && turn < maxTurns - 1) {
-                feed = 'Your reply had no command block, so nothing ran. The video is still not rendered: emit the render command in a ```bash path=@terminal cwd=.``` block.';
-                continue;
-              }
-              break;
-            }
+            if (answer.error || !more.length) break;
             const lines: string[] = [];
             for (const c of more) {
               if (controller.signal.aborted) break;
@@ -2532,7 +2481,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
         // A built artifact buried in terminal scrollback may as well not exist.
         // Collect and post it as a tappable link in the transcript.
         try {
-          const collected = await useWorkspace.getState().bridge.collect(videoEngineUsed ? ['.apk', '.aab', '.zip', '.mcpack', '.mcaddon', '.mp4', '.webm'] : ['.apk', '.aab', '.zip', '.mcpack', '.mcaddon']);
+          const collected = await useWorkspace.getState().bridge.collect(['.apk', '.aab', '.zip', '.mcpack', '.mcaddon']);
           if (collected.count) {
             evidence.artifactProduced = true;
             const bridgeClient = useWorkspace.getState().bridge;
@@ -2556,35 +2505,6 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
               createdAt: Date.now(),
             });
             void appendMessage({ id: artifactId, sessionId, suite, role: 'assistant', content: body, createdAt: Date.now(), lane });
-
-            // A video is played where it was made: fetched with the token, kept in the Library, shown with a player.
-            const film = [...collected.collected].reverse().find((a) => /\.(mp4|webm)$/i.test(a.name));
-            if (film && videoEngineUsed) {
-              try {
-                const blob = await bridgeClient.fetchArtifact(film.name);
-                const dataUrl = await new Promise<string>((resolve, reject) => {
-                  const r = new FileReader();
-                  r.onload = () => resolve(String(r.result));
-                  r.onerror = () => reject(r.error);
-                  r.readAsDataURL(blob);
-                });
-                const saved = await saveAsset({ sessionId, suite: 'video', kind: 'video', prompt: modelInput, provider: 'chomugiri', model: videoEngineUsed, dataUrl, bytes: blob.size, meta: { name: film.name, engine: videoEngineUsed } });
-                const note = {
-                  id: uid('msg'),
-                  role: 'system' as const,
-                  content: `**Your video is ready.** ${(blob.size / 1024 / 1024).toFixed(1)} MB, rendered on your machine. It is also in the Library.`,
-                  offer: { kind: 'video' as const, filename: film.name, label: `${videoEngineUsed === 'hyperframes' ? 'HyperFrames' : 'Remotion'} · ${(blob.size / 1024 / 1024).toFixed(1)} MB`, assetId: saved.id },
-                  createdAt: Date.now(),
-                };
-                emit(note);
-                const { offer: _transient, ...history } = note;
-                void appendMessage({ ...history, sessionId, suite });
-              } catch (err) {
-                const note = { id: uid('msg'), role: 'system' as const, content: `The video was rendered, but it could not be brought into the app (${(err as Error).message}). It is on your bridge as \`${film.name}\`; the link above downloads it.`, createdAt: Date.now() };
-                emit(note);
-                void appendMessage({ ...note, sessionId, suite });
-              }
-            }
           }
         } catch {
           // Collection is a convenience; a failure here must not fail the run.

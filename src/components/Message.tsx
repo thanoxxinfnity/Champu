@@ -1,11 +1,10 @@
 'use client';
 
 import { useWorkspace, visibleFiles } from '@/lib/store';
-import { db } from '@/lib/db/schema';
 import { dataUrlToBytes, downloadBlob, downloadZip } from '@/lib/zip';
 import { buildPackExport, detectPacks } from '@/lib/suites/minecraft/pack';
 import { buildGodotExport } from '@/lib/suites/godot/export';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { markLive, renderMarkdown } from './markdown';
 import { TextWithSites } from './SiteChip';
 import './codeActions';
@@ -220,56 +219,9 @@ export function Message({ message }: { message: ChatMessageView }) {
  * saved conversation would carry a second copy of every artifact, and a later
  * edit to a file would leave the download stale.
  */
-/** A rendered video, played right in the chat from the copy kept in the Library. */
-function VideoOffer({ assetId, filename, label }: { assetId?: string; filename: string; label: string }) {
-  const [src, setSrc] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let url: string | null = null;
-    let live = true;
-    (async () => {
-      try {
-        const asset = assetId ? await db().assets.get(assetId) : undefined;
-        if (!asset?.dataUrl) throw new Error('missing');
-        const blob = await (await fetch(asset.dataUrl)).blob();
-        url = URL.createObjectURL(blob);
-        if (live) setSrc(url);
-      } catch {
-        if (live) setFailed(true);
-      }
-    })();
-    return () => {
-      live = false;
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [assetId]);
-
-  return (
-    <div className="mt-2 max-w-[560px]">
-      {src ? (
-        <video src={`${src}#t=0.1`} controls playsInline preload="metadata" className="w-full rounded-xl border" style={{ borderColor: 'var(--line)', background: '#000' }} />
-      ) : (
-        <div className="skeleton h-40 w-full rounded-xl" aria-hidden />
-      )}
-      <div className="mt-1.5 flex items-center gap-3">
-        {src && (
-          <a href={src} download={filename} className="press mono inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[11.5px] font-semibold" style={{ borderColor: 'color-mix(in oklab, var(--accent) 45%, var(--line))', background: 'color-mix(in oklab, var(--accent) 10%, transparent)', color: 'var(--accent)' }}>
-            ↓ {filename}
-          </a>
-        )}
-        <span className="mono text-[10px]" style={{ color: 'var(--ink-faint)' }}>{label}</span>
-      </div>
-      {failed && <p className="mt-1 text-[10.5px]" style={{ color: 'var(--color-danger)' }}>The video could not be loaded here — it is in the Library.</p>}
-    </div>
-  );
-}
-
 function OfferDownload({ offer }: { offer: NonNullable<ChatMessageView['offer']> }) {
   const files = useWorkspace(visibleFiles);
   const [error, setError] = useState<string | null>(null);
-
-  if (offer.kind === 'video') return <VideoOffer assetId={offer.assetId} filename={offer.filename} label={offer.label} />;
 
   // Not a download at all: the game itself, in the message that built it.
   if (offer.kind === 'play') {

@@ -32,7 +32,9 @@ export type SuiteId =
   | 'model3d'
   | 'assets'
   // Everything generated, in one place (a viewer, not a place where sessions live).
-  | 'library';
+  | 'library'
+  // A board of app / website screens to design and export.
+  | 'canvas';
 
 export interface SessionRecord {
   id: string;
@@ -267,6 +269,7 @@ export const SUITE_LABELS: Record<SuiteId, string> = {
   chat: 'Chat',
   assets: 'Asset Studio',
   library: 'Library',
+  canvas: 'Design Canvas',
   android: 'Android & Cross-Platform',
   minecraft: 'Minecraft Engineering',
   godot: 'Godot Game Studio',

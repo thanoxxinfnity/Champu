@@ -83,8 +83,6 @@ export function renderSkillsOverview(index: LibIndex, odCounts: { skills: number
     `- anthropics/skills (${by('anthropic')}) — Claude API, web-app testing, internal comms, writing skills`,
     `- sickn33/agentic-awesome-skills (${by('agentic')}) — ${top}`,
     '',
-    '**Videos:** `/video <idea>` — or just ask for a promo, reel or explainer — writes a real MP4 as code and renders it on your bridge (HyperFrames, or Remotion if you say so).',
-    '',
     '**It picks the skill itself.** When a request needs one — a bug to fix, tests to write, an API to design, a database, a deploy pipeline, an SEO audit — that skill is put in front of the AI and the chat says which. Design work goes to Open Design.',
     '',
     '**Or you choose:** `/skills <words>` search · `/use <skill> <task>` use one by name · `/skills auto off` (or `on`) turn the automatic part off or on · `/od list` the design side.',

@@ -90,15 +90,6 @@ Make the 3D part the centrepiece, not decoration: a scene that renders on a phon
     template: `/od {{input}}`,
   },
   {
-    command: 'video',
-    name: 'Make a video',
-    description: 'A real MP4 written as code and rendered on your bridge (HyperFrames or Remotion): promo, explainer, reel, trailer, slideshow.',
-    lane: 'B',
-    icon: 'video',
-    argHint: '<what the video is about>  (add "remotion" to use Remotion)',
-    template: `Make a video: {{input}}`,
-  },
-  {
     command: 'skills',
     name: 'Skills library',
     description: 'Search the ~900 built-in skills, or switch their automatic use: "/skills redis", "/skills auto off".',

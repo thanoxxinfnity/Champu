@@ -35,7 +35,6 @@ export const CORE_IDENTITY = `You are "Chomugiri", an elite autonomous software 
 - Visual Canvas & Presentations: Generate responsive HTML5/CSS animated slide decks, design mockups, spreadsheets, and PDFs on demand.
 - Open Design (github.com/nexu-io/open-design, bundled): 160+ design skills, 150+ brand design systems (Stripe, Apple, Airbnb, Spotify, Notion, Vercel, Linear, Tesla, brutalism, glassmorphism…), 110+ ready layouts (dashboards, decks, docs, landing pages), craft rules and 100+ image/video prompts. It is brought in automatically when a request is design work — a website, app screen, dashboard, deck, poster or brand — and when a brand look is named. The user can also call it: \`/od list\`, \`/od <skill> <task>\`, \`/od style <brand> <task>\`, \`/od template <name> <task>\`, \`/od prompt <words>\`. When asked what it can do or how to trigger it, say exactly this. When its material appears below in this prompt, follow it.
 - Skills library (bundled, ~900 skills from obra/superpowers, anthropics/skills and sickn33/agentic-awesome-skills): working-method skills (brainstorm, plan, test first, debug systematically, verify before claiming done, code review) and topic skills (databases, docker, kubernetes, CI/CD, APIs, security, testing, mobile, SEO…). The right one is put in front of you automatically when a request needs it; the user can also run \`/skills <words>\` to search, \`/use <skill> <task>\` to use one by name, and \`/skills auto off|on\` to switch the automatic part. When a skill appears below in this prompt, work the way it says and skip steps that need tools you do not have.
-- Videos from code (HyperFrames and Remotion, bundled, no limits, no cost per video): ask for a promo, explainer, reel, short, trailer, title sequence or slideshow and a real MP4 is written as code and rendered on the user's bridge, then played in the chat. HyperFrames (HTML + GSAP, Apache-2.0) is the default; Remotion (React) when asked for by name. Triggered automatically by such a request, or with \`/video <idea>\`.
 - Slash Command System: Listen for \`/\` triggers to execute micro-skills (/make-apk, /deploy, /build-mcpack, /audit-code) and seamlessly ingest attached documents, code, or images.
 
 Maintain independent, structured session state and execution history across all active tools. Deliver bug-free, production-grade output on the first pass.`;
@@ -704,8 +703,8 @@ export interface PromptContext {
   openDesign?: string;
   /** Skills from the skills library (see skills/library) this request calls for, with the reason each is here. */
   skillLibrary?: string;
-  /** A video to be made from code: the tested recipe and the framework guidance (see suites/video). */
-  videoPrompt?: string;
+  /** Motion-design guidance for a website that moves (see suites/web/motion). */
+  motionGuide?: string;
 }
 
 export function buildSystemPrompt(ctx: PromptContext): string {
@@ -739,7 +738,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
   }
   if (ctx.openDesign) parts.push(ctx.openDesign);
   if (ctx.skillLibrary) parts.push(ctx.skillLibrary);
-  if (ctx.videoPrompt) parts.push(ctx.videoPrompt);
+  if (ctx.motionGuide) parts.push(ctx.motionGuide);
 
   if (ctx.bridgeStatus) {
     const line =

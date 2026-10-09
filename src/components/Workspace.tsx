@@ -27,6 +27,7 @@ import { AudioStudio } from './suites/media/AudioStudio';
 import { LibraryView } from './suites/media/LibraryView';
 import { Model3D } from './suites/media/Model3D';
 import { VideoFlow } from './suites/media/VideoFlow';
+import { CanvasBoard } from './suites/CanvasBoard';
 import { Workdrive } from './suites/Workdrive';
 import { SkillsManager } from './suites/SkillsManager';
 import { Studio } from './suites/Studio';
@@ -83,13 +84,14 @@ function SuiteTool() {
 function FullSuite({ id }: { id: string }) {
   switch (id) {
     case 'library': return <LibraryView />;
+    case 'canvas': return <CanvasBoard />;
     case 'video': return <VideoFlow />;
     case 'audio': return <AudioStudio />;
     case 'model3d': return <Model3D />;
     default: return null;
   }
 }
-const FULL_SCREEN = new Set(['library', 'video', 'audio', 'model3d']);
+const FULL_SCREEN = new Set(['library', 'canvas', 'video', 'audio', 'model3d']);
 
 const HAS_TOOL = new Set(['android', 'minecraft', 'studio', 'game', 'image', 'workdrive', 'skills', 'assets']);
 
