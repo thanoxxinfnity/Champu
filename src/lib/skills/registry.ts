@@ -79,6 +79,29 @@ Subject: {{input}}
 Make the 3D part the centrepiece, not decoration: a scene that renders on a phone (resize, clamped pixel ratio, lights), moves with the scroll or the pointer, and falls back to a styled 2D page when WebGL is unavailable. Icons are drawn as SVG, never emoji or symbol characters. Write real copy about the subject, responsive down to 360px.`,
   },
   {
+    command: 'browse',
+    name: 'Browse the web',
+    description: 'A real browser on your bridge: open sites, read them, click, fill forms, search the web, screenshot. "/browse price of iPhone 15 on amazon.in".',
+    lane: 'B',
+    icon: 'globe',
+    argHint: '<what to look up or do on the web>',
+    template: `Do a web search and open the website pages needed, using the real browser on the bridge (the browse command), to do this:
+
+{{input}}
+
+Read the actual pages, not just search snippets, and say which page each fact came from. Never invent a price, a quote or a result. If a login, OTP or payment is needed, stop and ask me.`,
+  },
+  {
+    command: 'memory',
+    name: 'Memory',
+    description: 'What the app remembers about you and your work: "/memory", "/memory add <text>", "/memory forget <words>", "/memory off". Or just say "yaad rakho: …".',
+    lane: 'A',
+    icon: 'brain',
+    argHint: '<words to search> | add <text> | forget <words> | on | off | clear',
+    bare: true,
+    template: `/memory {{input}}`,
+  },
+  {
     command: 'od',
     name: 'Open Design',
     description: 'Design skills, 150+ brand design systems, ready layouts and image/video prompts. "/od list", "/od style stripe <task>", "/od design-review <what>".',

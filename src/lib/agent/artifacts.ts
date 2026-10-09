@@ -236,6 +236,9 @@ export function stripArtifactBlocks(text: string): string {
  */
 export function looksDegenerate(text: string): boolean {
   if ((text.match(/<\|[a-z_]{2,20}\|>/gi) ?? []).length >= 3) return true;
+  // The other way it fails: a wall of "```path```" fences, bare "path" lines and stray combining strike-throughs (U+0336).
+  if ((text.match(/\u0336/g) ?? []).length >= 15) return true;
+  if ((text.match(/^\s*(?:`{3}\s*)?(?:path|code|Path|Code)\s*(?:`{3})?\s*$/gm) ?? []).length >= 12) return true;
   if (text.length < 400) return false;
   const loose = extractArtifacts(text).filter((a) => a.kind === 'file' && a.path.startsWith('untitled/snippet-')).length;
   return loose >= 15;

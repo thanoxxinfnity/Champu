@@ -23,6 +23,8 @@ import { browserIo, libraryIo, loadLibIndex, loadOdIndex, motionIo } from '@/lib
 import { motionContext, wantsMotion } from '@/lib/suites/web/motion';
 import { parseSkillsCommand, renderSkillsOverview, renderSkillsSearch, skillLibraryContext, type SkillsCommand } from '@/lib/skills/library/context';
 import type { LibIndex } from '@/lib/skills/library/types';
+import { CAPTURE_SYSTEM, MEMORY_HELP, captureInput, findToForget, formatMemory, looksSecret, makeMemory, memoryNote, parseMemory, parseObservations, recall, renderList, worthCapturing, type MemoryCommand } from '@/lib/memory/memory';
+import { forget, loadMemories, markUsed, memoryEnabled, remember, saveMemories, setMemoryEnabled } from '@/lib/memory/store';
 import { OD_HELP, openDesignContext, parseOd, type OdCommand } from '@/lib/skills/opendesign/context';
 import { renderCatalog, renderPromptSearch } from '@/lib/skills/opendesign/catalog';
 import type { OdIndex } from '@/lib/skills/opendesign/types';
@@ -655,17 +657,20 @@ let creating: Promise<string> | null = null;
  * "Ha" / "ok bro" / a pasted link only mean something next to the task they answer.
  */
 const GREETING = /^(hi+|hello|hey+|hlo|yo|thanks?|thank you|bye)\b[\s!.]*$/i;
-function previousTurn(): { previousLane?: 'A' | 'B'; previousOps?: boolean } {
+function previousTurn(): { previousLane?: 'A' | 'B'; previousOps?: boolean; previousBrowse?: boolean } {
   const { messages } = useWorkspace.getState();
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m.role !== 'user' || GREETING.test(m.content.trim())) continue;
-    return Date.now() - m.createdAt < 15 * 60_000 ? { previousLane: m.lane, previousOps: m.ops } : {};
+    return Date.now() - m.createdAt < 15 * 60_000 ? { previousLane: m.lane, previousOps: m.ops, previousBrowse: Boolean(m.ops) && messages.slice(-8).some((x) => x.role === 'assistant' && USED_BROWSER.test(x.content)) } : {};
   }
   return {};
 }
 
+/** A browse command the assistant ran lately: the next short reply ("ha", "next page") is still a browsing job. */
+const USED_BROWSER = /browse\s+(open|search|snapshot|click|type|shot|find|eval|tabs|press|select|wait|back)\b/;
 const MAX_OPS_TURNS = 6;
+const MAX_BROWSE_TURNS = 12;
 const MAX_FIX_TURNS = 3;
 
 /** The workspace's text files as they are now, for a model that has to fix them: paths and contents, bounded. */
@@ -682,9 +687,18 @@ function projectSnapshot(maxChars = 36_000): string {
   return `Current project files (what is on disk now):\n\n${out.join('\n\n')}`;
 }
 
+/** Earlier page snapshots are old news once the page has moved on: keep the first lines, drop the rest, so a long session stays small. */
+function shrinkOldFeeds(convo: ChatMessage[]): ChatMessage[] {
+  return convo.map((m, i) => (m.role === 'user' && i > 1 && typeof m.content === 'string' && m.content.startsWith('Terminal results:') && m.content.length > 1500
+    ? { ...m, content: `${m.content.slice(0, 700)}\n… (older page snapshot dropped; run browse snapshot to see the page again)` }
+    : m));
+}
+
 /** What a command did, in the words the model reads next: the command, how it ended, the tail of its output. */
 function opsResultLine(command: string, out: { ok: boolean; exitCode: number | null; stdout: string; stderr: string; skipped?: string; message?: string }): string {
-  const tail = (t: string) => (t.length > 1800 ? `…${t.slice(-1800)}` : t).trim();
+  // A page snapshot is read from the top (the page, then its elements); the end of a build log is where the error is.
+  const browsing = /\bbrowse\s+\w+/.test(command);
+  const tail = (t: string) => (browsing ? (t.length > 9000 ? `${t.slice(0, 9000)}\n… (cut: the page continues — use browse find <text>)` : t) : t.length > 1800 ? `…${t.slice(-1800)}` : t).trim();
   const verdict = out.skipped === 'offline' ? 'NOT RUN — the bridge is offline' : out.skipped === 'banned' ? 'NOT RUN — this exact command already failed twice' : out.ok ? 'exit 0' : `FAILED, exit ${out.exitCode ?? '?'}`;
   const body = tail(`${out.stdout}${out.stderr ? `\n${out.stderr}` : ''}`) || out.message || '(no output)';
   return `$ ${command}\n[${verdict}]\n${body}`;
@@ -712,7 +726,7 @@ function fixFollowUp(feed: string, last: boolean): string {
   ].join('\n');
 }
 
-function opsFollowUp(feed: string, last: boolean): string {
+function opsFollowUp(feed: string, last: boolean, browse = false): string {
   return [
     'Terminal results:',
     '',
@@ -720,7 +734,9 @@ function opsFollowUp(feed: string, last: boolean): string {
     '',
     last
       ? 'This is the last turn. Do not run anything more: say plainly what is done, what is not, and what the user should do next.'
-      : 'Read these. If the job is not finished, run the next command in a ```bash path=@terminal cwd=.``` block (one command). If it is finished, or it cannot be finished, say so in plain words — what now exists, where, which version — and emit no command block.',
+      : browse
+        ? 'Read the page above. If the task is not done, run the NEXT browse command in a ```bash path=@terminal cwd=.``` block (one command; use only refs printed above). If it is done, or cannot be done (blocked, login needed, nothing found), answer in plain words: what you found or did, the page URLs it came from, and any screenshot file name. Emit no command block then.'
+        : 'Read these. If the job is not finished, run the next command in a ```bash path=@terminal cwd=.``` block (one command). If it is finished, or it cannot be finished, say so in plain words — what now exists, where, which version — and emit no command block.',
   ].join('\n');
 }
 
@@ -958,6 +974,42 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       }
     }
 
+    // ── Memory: "yaad rakho …", "bhool jao …", /memory ──────────────────────────
+    // Answered here, locally: nothing to ask a model, and the user sees exactly what was kept.
+    const memCmd: MemoryCommand | null = parseMemory(input);
+    if (memCmd) {
+      let reply: string;
+      const all = await loadMemories();
+      if (memCmd.kind === 'help') reply = MEMORY_HELP;
+      else if (memCmd.kind === 'list') reply = renderList(all, memCmd.query);
+      else if (memCmd.kind === 'toggle') {
+        const on = memCmd.on ?? !(await memoryEnabled());
+        await setMemoryEnabled(on);
+        reply = `Memory is now **${on ? 'on' : 'off'}**. ${on ? 'What matters is noticed after a task and brought back when it helps.' : 'Nothing new is noticed and nothing is brought back (what is already saved stays until you delete it).'}`;
+      } else if (memCmd.kind === 'clear') {
+        await saveMemories([]);
+        reply = `Memory cleared (${all.length} thing${all.length === 1 ? '' : 's'} forgotten).`;
+      } else if (memCmd.kind === 'forget') {
+        const hits = findToForget(all, memCmd.query);
+        if (!hits.length) reply = `I had nothing remembered about "${memCmd.query}".`;
+        else if (hits.length > 3 && memCmd.natural) reply = `That matches ${hits.length} memories, which is a lot to drop on a guess. Be more specific, or open Skills → Memory to pick.\n\n${renderList(hits, '')}`;
+        else {
+          await forget(hits.map((h) => h.id));
+          reply = `Forgot ${hits.length === 1 ? 'it' : `${hits.length} things`}:\n${hits.map((h) => `- ${h.text}`).join('\n')}`;
+        }
+      } else {
+        const mem = looksSecret(memCmd.text) ? null : makeMemory({ text: memCmd.text, kind: /\b(hinglish|hindi|english|style|tone|prefer|pasand|chahiye|hamesha|always|never|mat )\b/i.test(memCmd.text) ? 'preference' : 'fact' }, { pinned: true });
+        if (!mem) reply = looksSecret(memCmd.text) ? 'That looks like a password or a key, so I did not save it. Memory is for things like preferences and decisions, never secrets.' : 'That is too short to be worth remembering. Say a little more.';
+        else {
+          const r = await remember([mem]);
+          reply = `${memCmd.natural ? 'Yaad rakh liya' : 'Saved'}: ${mem.text}\n\n${r.merged ? '_(It matched something already remembered, so that was updated.)_' : '_It comes back by itself when a request needs it. "bhool jao <words>" removes it._'}`;
+        }
+      }
+      patch(assistantId, { content: reply, streaming: false, durationMs: Date.now() - startedAt });
+      void appendMessage({ id: assistantId, sessionId, suite, role: 'assistant', content: reply, createdAt: startedAt, lane, model: selection.model, provider: selection.provider });
+      return;
+    }
+
     // ── /od: Open Design, called by name ────────────────────────────────────
     // Help, the catalogue and the prompt search are answered here, locally; naming a skill, style or layout carries on to a
     // normal build with that thing forced in. Everything the model and the planner see is the task, not the command.
@@ -1122,6 +1174,23 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       }
     }
 
+    // ── Memory: what earlier sessions left that this request needs ─────────────
+    let memoryText: string | undefined;
+    if (await memoryEnabled().catch(() => false)) {
+      const picked = recall(await loadMemories().catch(() => []), modelInput);
+      if (picked.length) {
+        memoryText = formatMemory(picked);
+        void markUsed(picked.map((m) => m.id));
+        // Said out loud only when something beyond the standing preferences was needed, so it is never a hidden influence
+        // and never chatter on every message.
+        if (picked.some((m) => m.kind !== 'preference')) {
+          const note = { id: uid('msg'), role: 'system' as const, content: memoryNote(picked), createdAt: Math.max(0, startedAt - 1) };
+          if (isCurrent()) useWorkspace.getState().insertMessageBefore(assistantId, note);
+          void appendMessage({ ...note, sessionId, suite });
+        }
+      }
+    }
+
     // ── Stream the answer ───────────────────────────────────────────────────
     const systemPrompt = buildSystemPrompt({
       lane,
@@ -1145,6 +1214,8 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       ...(openDesign ? { openDesign } : {}),
       ...(skillLibrary ? { skillLibrary } : {}),
       ...(motionGuide ? { motionGuide } : {}),
+      ...(classification.browse ? { browse: true } : {}),
+      ...(memoryText ? { memory: memoryText } : {}),
       ...(design ? { gamePlan: planBrief(design) } : {}),
       // Computed from the keys that are actually set, so the pipeline line the
       // model prints is a fact about this session rather than a guess.
@@ -2389,14 +2460,14 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
         const lastRun = commandResults[commandResults.length - 1];
         const buildFailed = Boolean(lastRun && !lastRun.ok && lastRun.skipped !== 'offline');
         const feedback = Boolean(classification.ops) || buildFailed;
-        const maxTurns = classification.ops ? MAX_OPS_TURNS : MAX_FIX_TURNS;
+        const maxTurns = classification.browse ? MAX_BROWSE_TURNS : classification.ops ? MAX_OPS_TURNS : MAX_FIX_TURNS;
         if (feedback && opsFeed.length) {
           let convo: ChatMessage[] = [...messages, { role: 'assistant', content: result.content }];
           let feed = opsFeed.join('\n\n');
           for (let turn = 0; turn < maxTurns && !controller.signal.aborted; turn++) {
-            const followUp = classification.ops ? opsFollowUp(feed, turn === maxTurns - 1) : fixFollowUp(feed, turn === maxTurns - 1);
+            const followUp = classification.ops ? opsFollowUp(feed, turn === maxTurns - 1, Boolean(classification.browse)) : fixFollowUp(feed, turn === maxTurns - 1);
             if (classification.ops) {
-              convo = [...convo, { role: 'user', content: followUp }];
+              convo = [...(classification.browse ? shrinkOldFeeds(convo) : convo), { role: 'user', content: followUp }];
             } else {
               // Each fix turn stands alone: the system prompt, the request, the project as it is now, and what the last run said.
               // Carrying the whole first reply and every earlier turn is what made a long-context model start emitting noise.
@@ -2547,6 +2618,41 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
     const finalPlan = useWorkspace.getState().plan;
     if (finalPlan) {
       setPlan(settleRemaining(advancePlan(finalPlan, evidence), evidence));
+    }
+
+    // ── Memory: notice what is worth keeping (best effort, never blocks or fails the run) ──
+    if (!controller.signal.aborted) {
+      void (async () => {
+        try {
+          if (!(await memoryEnabled())) return;
+          const state = useWorkspace.getState();
+          const last = [...state.messages].reverse().find((m) => m.id === assistantId || (m.role === 'assistant' && m.createdAt >= startedAt && !m.error));
+          const outcome = (last?.content ?? '').replace(/```[\s\S]*?```/g, ' ').trim();
+          if (!worthCapturing(modelInput ?? input, outcome)) return;
+          const res = await fetch('/api/chat', withKeys({
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              provider: selection.provider,
+              model: selection.model,
+              stream: false,
+              json: true,
+              maxTokens: 600,
+              messages: [
+                { role: 'system', content: CAPTURE_SYSTEM },
+                { role: 'user', content: captureInput({ request: modelInput ?? input, outcome, files: [...state.files.keys()].slice(-12) }) },
+              ],
+            }),
+            signal: AbortSignal.timeout(30_000),
+          }));
+          if (!res.ok) return;
+          const data = (await res.json()) as { content?: string };
+          const found = parseObservations(data.content ?? '');
+          if (found.length) await remember(found);
+        } catch {
+          // Noticing is a convenience; a failure must never touch the run.
+        }
+      })();
     }
 
     void touchSession(sessionId, {

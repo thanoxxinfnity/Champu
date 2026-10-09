@@ -20,6 +20,8 @@ export interface Classification {
   suite?: string;
   /** Work on the machine itself (install, download, run): no plan, no research, just the commands. */
   ops?: boolean;
+  /** The job is done in a real browser on the bridge (open pages, read them, click, search the web). Implies `ops`. */
+  browse?: boolean;
   /** Set when the deterministic pass was inconclusive. */
   needsModel?: boolean;
 }
@@ -75,6 +77,30 @@ export function wantsTerminal(text: string): boolean {
   if (INQUIRY_MARKERS.test(text.trim()) && !MACHINE_VERBS.test(text)) return false;
   if (TERMINAL_WORDS.test(text) && MACHINE_VERBS.test(text)) return true;
   return MACHINE_VERBS.test(text) && MACHINE_THINGS.test(text) && /\b(download|donload|downlod|dowload|donlod|dwnld|install|setup|set ?up|kheech\w*|utar\w*|laga\w*)\b/i.test(text);
+}
+
+/**
+ * Asking for a real browser: look at a website, use it, search the web, automate a flow ("is site ko khol ke dekho", "Amazon pe price
+ * check karo", "playwright se login karke", "web search karo"). A request to BUILD a website is not this: that needs a build verb near
+ * a site noun and no address to go to.
+ */
+const BROWSE_STRONG = /\b(playwright|browser automation|automate (?:the |a )?browser|headless browser|puppeteer|selenium|web ?scrap\w*|scrape)\b/i;
+const BROWSE_VERB = /\b(open|visit|browse|check|look at|go to|read|summari[sz]e|screenshot|click|log ?in|sign ?in|fill|submit|compare|find|kholo|khol|dekho|dekh|dekhna|padho|jao|nikalo|nikal)\b/i;
+const BROWSE_NOUN = /\b(website|web ?site|site|web ?page|page|url|link|portal|store|shop|amazon|flipkart|google|youtube|github|reddit|twitter|linkedin|wikipedia|news)\b/i;
+const WEB_SEARCH = /\b(web ?search|search (?:the )?(?:web|internet|online)|internet (?:pe|par|per|se) (?:search|dhund\w*|dekh\w*)|google (?:kar\w*|pe|par|se)|online (?:search|dhund)\w*)\b/i;
+const BUILD_A_SITE = /\b(build|create|make|generate|design|develop|banao|bana|likho)\b[^.\n]{0,40}\b(website|web ?site|landing ?page|web ?page|site|page)\b/i;
+const NOT_BROWSING = /\b(download|install|clone|apk|gradle|curl|wget)\b/i;
+export function wantsBrowse(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  const hasUrl = /https?:\/\/\S+|\bwww\.\S+/i.test(t);
+  if (INQUIRY_MARKERS.test(t) && !BROWSE_VERB.test(t) && !WEB_SEARCH.test(t)) return false;
+  if (BROWSE_STRONG.test(t) && !BUILD_A_SITE.test(t)) return true;
+  if (BUILD_A_SITE.test(t) && !hasUrl) return false;
+  if (WEB_SEARCH.test(t) && !/\b(code|repo|file|folder|project)\b/i.test(t)) return true;
+  if (NOT_BROWSING.test(t)) return false;
+  if (hasUrl && BROWSE_VERB.test(t)) return true;
+  return BROWSE_VERB.test(t) && BROWSE_NOUN.test(t) && !INQUIRY_MARKERS.test(t);
 }
 
 /** "Ha", "ok bro", "ya wala bro", a bare link: a reply to work already under way, not a new topic. */
@@ -178,7 +204,7 @@ export function detectSuite(text: string): string | undefined {
 
 export function classifyLocal(
   input: string,
-  opts: { hasAttachments?: boolean; previousLane?: Lane; previousOps?: boolean } = {},
+  opts: { hasAttachments?: boolean; previousLane?: Lane; previousOps?: boolean; previousBrowse?: boolean } = {},
 ): Classification {
   const text = input.trim();
   const suite = detectSuite(text);
@@ -195,12 +221,17 @@ export function classifyLocal(
     return { lane: 'A', confidence: 0.8, reason: `Slash command /${cmd} is informational.`, suite };
   }
 
+  // 2a. A job for the browser on the bridge.
+  if (wantsBrowse(text)) {
+    return { lane: 'B', confidence: 0.9, reason: 'using a real browser on the bridge — this is work, not a question', ops: true, browse: true };
+  }
+
   // 2. Work on the machine itself, and the short replies that carry it on ("Ha", a link, "ok bro").
   if (wantsTerminal(text)) {
     return { lane: 'B', confidence: 0.95, reason: 'running it on the terminal — this is work, not a question', ops: true };
   }
   if (opts.previousLane === 'B' && isFollowUp(text) && !INQUIRY_MARKERS.test(text)) {
-    return { lane: 'B', confidence: 0.85, reason: 'carrying on the task already under way', suite: opts.previousOps ? undefined : suite, ops: opts.previousOps };
+    return { lane: 'B', confidence: 0.85, reason: 'carrying on the task already under way', suite: opts.previousOps ? undefined : suite, ops: opts.previousOps, browse: opts.previousBrowse };
   }
 
   let score = 0;

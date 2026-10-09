@@ -12,6 +12,8 @@ import { searchSkills } from '@/lib/skills/library/select';
 import type { LibIndex } from '@/lib/skills/library/types';
 import { SKILL_ICON_NAMES, iconKey } from '@/lib/skills/icons';
 import { SkillIcon } from '@/components/SkillIcon';
+import { makeMemory, type Memory } from '@/lib/memory/memory';
+import { forget, loadMemories, memoryEnabled, remember, saveMemories, setMemoryEnabled } from '@/lib/memory/store';
 
 const SOURCE_LABEL = { superpowers: 'superpowers', anthropic: 'anthropic', agentic: 'agentic-awesome-skills' } as const;
 
@@ -70,6 +72,84 @@ function SkillLibrary() {
             </div>
           ))}
         </div>
+      )}
+    </section>
+  );
+}
+
+/** What the app remembers: listed, searchable, editable, never sent anywhere except into a run's prompt. */
+function MemoryPanel() {
+  const [items, setItems] = useState<Memory[]>([]);
+  const [on, setOn] = useState(true);
+  const [draft, setDraft] = useState('');
+  const [query, setQuery] = useState('');
+  const [note, setNote] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => setItems(await loadMemories().catch(() => [])), []);
+  useEffect(() => {
+    void refresh();
+    void memoryEnabled().then(setOn).catch(() => undefined);
+  }, [refresh]);
+
+  const add = async () => {
+    const m = makeMemory({ text: draft, kind: 'fact' }, { pinned: true });
+    if (!m) { setNote('Too short, or it looks like a password or key (those are never saved).'); return; }
+    await remember([m]);
+    setDraft('');
+    setNote(null);
+    await refresh();
+  };
+  const toggle = async () => { setOn(!on); await setMemoryEnabled(!on); };
+  const pin = async (m: Memory) => { await saveMemories(items.map((x) => (x.id === m.id ? { ...x, pinned: !x.pinned } : x))); await refresh(); };
+  const del = async (m: Memory) => { await forget([m.id]); await refresh(); };
+  const clear = async () => {
+    if (!items.length || !window.confirm(`Forget all ${items.length} memories?`)) return;
+    await saveMemories([]);
+    await refresh();
+  };
+  const q = query.trim().toLowerCase();
+  const shown = items
+    .filter((m) => !q || m.text.toLowerCase().includes(q) || m.tags.some((t) => t.includes(q)))
+    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt);
+
+  return (
+    <section className="rounded-xl border p-3" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
+      <div className="mb-1.5 flex items-center gap-2">
+        <SkillIcon name="brain" size={14} />
+        <h3 className="mono text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-faint)' }}>memory · {items.length} kept</h3>
+        <button type="button" onClick={() => void toggle()} role="switch" aria-checked={on} className="mono ml-auto text-[10px]" style={{ color: on ? 'var(--accent)' : 'var(--ink-faint)' }}>
+          {on ? 'on' : 'off'}
+        </button>
+      </div>
+      <p className="mb-2 text-[11px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
+        Preferences, project facts and decisions are noticed after a task and come back when a request needs them (the chat says when). Say "yaad rakho: …" in any chat, or add one here. Never passwords or keys. Stays on this device.
+      </p>
+      <div className="flex gap-1.5">
+        <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void add(); }} placeholder="e.g. Always reply in Hinglish; my app is Chai Time (Kotlin)" className={`${field} flex-1`} style={fieldStyle} />
+        <button type="button" onClick={() => void add()} disabled={!draft.trim()} className="mono shrink-0 rounded px-3 py-1.5 text-[11px] font-medium disabled:opacity-35" style={{ background: 'var(--accent)', color: '#04150e' }}>add</button>
+      </div>
+      {note && <p className="mt-1 text-[10.5px]" style={{ color: 'var(--danger, #e5484d)' }}>{note}</p>}
+      {items.length > 0 && (
+        <>
+          <div className="mt-2 flex gap-1.5">
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="search memory…" className={`${field} flex-1`} style={fieldStyle} />
+            <button type="button" onClick={() => downloadText(`${JSON.stringify(items, null, 2)}\n`, 'chomugiri-memory.json', 'application/json')} className="mono shrink-0 rounded border px-2 text-[10px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>export</button>
+            <button type="button" onClick={() => void clear()} className="mono shrink-0 rounded border px-2 text-[10px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>clear</button>
+          </div>
+          <div className="mt-2 max-h-72 space-y-1.5 overflow-y-auto">
+            {shown.map((m) => (
+              <div key={m.id} className="flex items-start gap-2 rounded-lg border px-2.5 py-2" style={{ borderColor: 'var(--line)' }}>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11.5px] leading-[1.45]" style={{ color: 'var(--ink)' }}>{m.text}</p>
+                  <p className="mono mt-0.5 text-[9px] uppercase" style={{ color: 'var(--ink-faint)' }}>{m.kind}{m.pinned ? ' · pinned' : ''}{m.uses ? ` · used ${m.uses}×` : ''}{m.tags.length ? ` · ${m.tags.join(', ')}` : ''}</p>
+                </div>
+                <button type="button" onClick={() => void pin(m)} className="mono shrink-0 text-[10px]" style={{ color: m.pinned ? 'var(--accent)' : 'var(--ink-faint)' }}>{m.pinned ? 'unpin' : 'pin'}</button>
+                <button type="button" onClick={() => void del(m)} className="mono shrink-0 text-[10px]" style={{ color: 'var(--ink-faint)' }}>delete</button>
+              </div>
+            ))}
+            {!shown.length && <p className="text-[11px]" style={{ color: 'var(--ink-faint)' }}>Nothing matches.</p>}
+          </div>
+        </>
       )}
     </section>
   );
@@ -209,6 +289,7 @@ export function SkillsManager() {
           )}
         </section>
 
+        <MemoryPanel />
         <SkillLibrary />
 
         <section className="rounded-xl border p-3" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>

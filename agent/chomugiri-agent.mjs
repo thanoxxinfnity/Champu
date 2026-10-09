@@ -29,7 +29,12 @@ import { mkdir, readFile, writeFile, readdir, stat, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createZip } from './zip.mjs';
+import { browseCli, createBrowser, explainBrowserError } from './browser.mjs';
+
+// `node chomugiri-agent.mjs browse …` is the model's way to use the bridge's browser from a terminal block: a client, not a server.
+if (process.argv[2] === 'browse') process.exit(await browseCli(process.argv.slice(3)));
 
 // ── CLI arguments ───────────────────────────────────────────────────────────
 
@@ -52,7 +57,8 @@ const TOKEN = arg('token', process.env.CHOMUGIRI_TOKEN ?? randomBytes(24).toStri
 const ALLOW_CMD = (arg('allow-cmd', process.env.CHOMUGIRI_ALLOW_CMD ?? '') || '')
   .split(',').map((s) => s.trim()).filter(Boolean);
 const MAX_EXEC_MS = Number(arg('max-exec-ms', 45 * 60_000));
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
+const browser = createBrowser({ outDir: ARTIFACTS });
 
 // ── Execution registry ──────────────────────────────────────────────────────
 
@@ -222,7 +228,7 @@ function startRun({ cmd, cwd, env, timeoutMs }) {
 
   const child = spawn(shell, args, {
     cwd: workdir,
-    env: { ...process.env, ...env, CHOMUGIRI: '1', CI: '1', FORCE_COLOR: '0', TERM: 'dumb' },
+    env: { ...process.env, ...env, CHOMUGIRI_BRIDGE_URL: `http://127.0.0.1:${PORT}`, CHOMUGIRI_BRIDGE_TOKEN: TOKEN, CHOMUGIRI_AGENT: fileURLToPath(import.meta.url), CHOMUGIRI: '1', CI: '1', FORCE_COLOR: '0', TERM: 'dumb' },
     windowsHide: true,
   });
 
@@ -404,6 +410,21 @@ const routes = {
   },
 };
 
+/** The bridge's browser (Playwright MCP). `{tool,args}` runs one step; `{list:true}` names the tools. */
+routes['POST /v1/browser'] = async (req) => {
+  const body = await readJson(req);
+  try {
+    await mkdir(ARTIFACTS, { recursive: true });
+    if (body.list) return { ok: true, text: (await browser.tools()).map((t) => `${t.name} — ${(t.description ?? '').split('\n')[0]}`).join('\n') };
+    const tool = String(body.tool ?? '');
+    if (!/^browser_[a-z_]+$/.test(tool)) { const e = new Error('`tool` must be a browser_* tool.'); e.statusCode = 400; throw e; }
+    return await browser.call(tool, body.args ?? {});
+  } catch (err) {
+    if (err.statusCode) throw err;
+    return { ok: false, text: explainBrowserError(err.message) };
+  }
+};
+
 /** Collect build outputs (APK/AAB/ZIP) from anywhere in the workspace. */
 routes['POST /v1/collect'] = async (req) => {
   const body = await readJson(req);
@@ -537,6 +558,7 @@ ${line('godot', tools.godot)}
 });
 
 const shutdown = () => {
+  browser.close();
   for (const run of runs.values()) if (!run.endedAt) run.child.kill('SIGTERM');
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000).unref();

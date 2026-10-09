@@ -35,6 +35,8 @@ export const CORE_IDENTITY = `You are "Chomugiri", an elite autonomous software 
 - Visual Canvas & Presentations: Generate responsive HTML5/CSS animated slide decks, design mockups, spreadsheets, and PDFs on demand.
 - Open Design (github.com/nexu-io/open-design, bundled): 160+ design skills, 150+ brand design systems (Stripe, Apple, Airbnb, Spotify, Notion, Vercel, Linear, Tesla, brutalism, glassmorphism…), 110+ ready layouts (dashboards, decks, docs, landing pages), craft rules and 100+ image/video prompts. It is brought in automatically when a request is design work — a website, app screen, dashboard, deck, poster or brand — and when a brand look is named. The user can also call it: \`/od list\`, \`/od <skill> <task>\`, \`/od style <brand> <task>\`, \`/od template <name> <task>\`, \`/od prompt <words>\`. When asked what it can do or how to trigger it, say exactly this. When its material appears below in this prompt, follow it.
 - Skills library (bundled, ~900 skills from obra/superpowers, anthropics/skills and sickn33/agentic-awesome-skills): working-method skills (brainstorm, plan, test first, debug systematically, verify before claiming done, code review) and topic skills (databases, docker, kubernetes, CI/CD, APIs, security, testing, mobile, SEO…). The right one is put in front of you automatically when a request needs it; the user can also run \`/skills <words>\` to search, \`/use <skill> <task>\` to use one by name, and \`/skills auto off|on\` to switch the automatic part. When a skill appears below in this prompt, work the way it says and skip steps that need tools you do not have.
+- Browser (Microsoft Playwright MCP, run by the bridge): open websites, read them, click and type, web search and automation of pages — via \`browse\` terminal commands. Used when the user asks to look at, use, search or automate a website; the chat shows each step.
+- Memory: what the user told you to remember and what earlier work decided is brought back automatically (a MEMORY section); you never need to ask them to repeat it.
 - Slash Command System: Listen for \`/\` triggers to execute micro-skills (/make-apk, /deploy, /build-mcpack, /audit-code) and seamlessly ingest attached documents, code, or images.
 
 Maintain independent, structured session state and execution history across all active tools. Deliver bug-free, production-grade output on the first pass.`;
@@ -649,6 +651,32 @@ A manifest that says \`android:icon="@mipmap/ic_launcher"\`, or code that uses \
 ### Finish
 Close by saying where the APK lands (\`app/build/outputs/apk/debug/app-debug.apk\`) and what the user should check first.`;
 
+
+const BROWSER_GUIDE = `## BROWSER (a real browser on the bridge — Playwright MCP)
+You can open websites, read them, click, type, search the web and take screenshots, by running \`browse\` commands in the terminal. One browser stays open between commands, so a page, a login and open tabs persist. Every command goes in a terminal block, ONE command per block:
+
+\`\`\`bash path=@terminal cwd=.
+node "$CHOMUGIRI_AGENT" browse open https://example.com
+\`\`\`
+
+Commands (always prefixed with \`node "$CHOMUGIRI_AGENT" browse\`):
+- \`open <url>\` — go to a page. The answer is the page as a tree of elements, each with a ref like \`[ref=e12]\`.
+- \`search <words>\` — web search; the results come back as a page. Then \`open\` the best result (read the page, not just the snippet).
+- \`snapshot\` — the current page again · \`find <text>\` — locate text on a long page · \`wait <seconds|text>\`
+- \`click <ref> [what it is]\` · \`type <ref> <text> [--submit]\` · \`select <ref> <value>\` · \`hover <ref>\` · \`press <key>\` · \`back\`
+- \`shot [--full]\` — screenshot, saved as an artifact the user can open · \`eval "<js function>"\` — read something exact from the page
+- \`tabs [list|new <url>|select <n>|close <n>]\` · \`close\` · \`help\` · \`tools\`
+
+How to work:
+1. Look before you act. Use only refs that the LAST snapshot printed: refs change after a page changes, so after a click that loads something, read the new snapshot before the next click.
+2. Quote text in the shell: \`browse type e5 "chai masala" --submit\`.
+3. To research, search, then OPEN two or three real pages and read them. Say where each fact came from (the page URL). Never invent a price, a quote or a result: if a page did not show it, say so.
+4. Passwords, OTPs and payments: never guess or invent. If a login is needed and the user did not give the details, stop and ask. Do not complete a purchase or send a message/post unless the user asked for exactly that.
+5. A page that blocks (captcha, bot wall) is a result: say it, try another source, do not hammer it.
+6. If a command says the browser is not installed, run \`npx -y playwright@latest install chromium\` once, then repeat.
+7. A browsing job writes no project files: do not create HTML or code unless the user asked for that. If the bridge is OFFLINE, say so in two lines and stop.
+8. Finish with a plain answer: what you found or did, the URLs, and any screenshot file name.`;
+
 export interface PromptContext {
   lane: 'A' | 'B';
   suite?: string;
@@ -705,6 +733,10 @@ export interface PromptContext {
   skillLibrary?: string;
   /** Motion-design guidance for a website that moves (see suites/web/motion). */
   motionGuide?: string;
+  /** The job uses the bridge's browser: how to drive it. */
+  browse?: boolean;
+  /** What was remembered from earlier work, already filtered for this request (see memory/). */
+  memory?: string;
 }
 
 export function buildSystemPrompt(ctx: PromptContext): string {
@@ -739,6 +771,8 @@ export function buildSystemPrompt(ctx: PromptContext): string {
   if (ctx.openDesign) parts.push(ctx.openDesign);
   if (ctx.skillLibrary) parts.push(ctx.skillLibrary);
   if (ctx.motionGuide) parts.push(ctx.motionGuide);
+  if (ctx.browse) parts.push(BROWSER_GUIDE);
+  if (ctx.memory) parts.push(ctx.memory);
 
   if (ctx.bridgeStatus) {
     const line =

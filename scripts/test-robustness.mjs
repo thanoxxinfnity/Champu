@@ -22,3 +22,9 @@ test('a stray backtick around a command is not part of the command', () => {
   assert.equal(cmds[0].command, 'cd app && npm install');
   assert.equal(commandsOf(extractArtifacts('```bash path=@terminal\necho `date`\n```\n'))[0].command, 'echo `date`');
 });
+
+test('a wall of path fences and strike-throughs is noise too', () => {
+  const wall = '```path```\n```path```\npath\npath\n̶\n```path    ̶\n```path    , ̶\n'.repeat(40);
+  assert.equal(looksDegenerate(wall), true);
+  assert.equal(looksDegenerate('Browser khol raha hoon.\n\n```bash path=@terminal cwd=.\nnode "$CHOMUGIRI_AGENT" browse open http://x\n```\n'), false);
+});
