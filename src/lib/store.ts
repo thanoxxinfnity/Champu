@@ -227,6 +227,9 @@ interface WorkspaceState {
   // ── Chat ──────────────────────────────────────────────────────────────────
   messages: ChatMessageView[];
   pushMessage: (message: ChatMessageView) => void;
+  /** Text another part of the app wants typed into the command dock (a skill's /use line), taken once by the dock. */
+  dockDraft: string | null;
+  setDockDraft: (text: string | null) => void;
   /** Puts a message just above another, for notes that belong before an answer already on screen. */
   insertMessageBefore: (beforeId: string, message: ChatMessageView) => void;
   patchMessage: (id: string, patch: Partial<ChatMessageView>) => void;
@@ -447,6 +450,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   messages: [],
   pushMessage: (message) => set((s) => ({ messages: [...s.messages, message] })),
+  dockDraft: null,
+  setDockDraft: (text) => set({ dockDraft: text }),
   insertMessageBefore: (beforeId, message) =>
     set((s) => {
       const at = s.messages.findIndex((m) => m.id === beforeId);

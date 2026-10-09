@@ -18,6 +18,8 @@ export interface SkillDefinition {
   icon?: string;
   /** Args the palette prompts for, e.g. `/deploy <project-name>`. */
   argHint?: string;
+  /** Works with no argument ("/skills", "/od"): Enter on the bare command runs it instead of completing it. */
+  bare?: boolean;
 }
 
 export const BUILTIN_SKILLS: SkillDefinition[] = [
@@ -82,8 +84,28 @@ Make the 3D part the centrepiece, not decoration: a scene that renders on a phon
     lane: 'B',
     icon: '🎨',
     argHint: 'list | style <brand> <task> | <skill> <task> | prompt <words>',
+    bare: true,
     // Passed through as typed: the runtime reads the sub-command itself.
     template: `/od {{input}}`,
+  },
+  {
+    command: 'skills',
+    name: 'Skills library',
+    description: 'Search the ~900 built-in skills, or switch their automatic use: "/skills redis", "/skills auto off".',
+    lane: 'A',
+    icon: '📚',
+    argHint: '<words to search> | auto on|off',
+    bare: true,
+    template: `/skills {{input}}`,
+  },
+  {
+    command: 'use',
+    name: 'Use a skill',
+    description: 'Run a task with one skill from the library, by name: "/use test-driven-development add tests for my cart".',
+    lane: 'B',
+    icon: '📚',
+    argHint: '<skill> <task>',
+    template: `/use {{input}}`,
   },
   {
     command: 'build-mcpack',
@@ -712,7 +734,7 @@ export function expandSkill(
     : '_none_';
 
   return skill.template
-    .replace(/\{\{\s*input\s*\}\}/g, args || '(no argument supplied — infer from context)')
+    .replace(/\{\{\s*input\s*\}\}/g, args || ('bare' in skill && skill.bare ? '' : '(no argument supplied — infer from context)'))
     .replace(/\{\{\s*files\s*\}\}/g, fileBlock)
     .trim();
 }

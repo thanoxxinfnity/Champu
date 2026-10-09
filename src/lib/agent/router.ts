@@ -41,6 +41,7 @@ const EXPLAIN_MARKERS =
 
 /** Slash commands are unambiguous execution intent. */
 const EXECUTION_SLASH = new Set([
+  'use',
   'od',
   'opendesign',
   'open-design',

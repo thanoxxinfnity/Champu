@@ -447,6 +447,14 @@ export function CommandDock() {
   const setDraftsEnabled = useWorkspace((s) => s.setDraftsEnabled);
 
   const [value, setValue] = useState('');
+  // Another screen (the skills library) can hand the dock a line to start from.
+  const dockDraft = useWorkspace((s) => s.dockDraft);
+  useEffect(() => {
+    if (dockDraft == null) return;
+    setValue(dockDraft);
+    useWorkspace.getState().setDockDraft(null);
+    textareaRef.current?.focus();
+  }, [dockDraft]);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [customSkills, setCustomSkills] = useState<SkillRecord[]>([]);
   const [paletteIndex, setPaletteIndex] = useState(0);
@@ -653,7 +661,9 @@ export function CommandDock() {
         setPaletteIndex((i) => (i - 1 + matches.length) % matches.length);
         return;
       }
-      if (e.key === 'Tab' || (e.key === 'Enter' && !parsed?.args)) {
+      const top = matches[paletteIndex]?.skill;
+      const bareDone = e.key === 'Enter' && !parsed?.args && top && 'bare' in top && top.bare && parsed?.command === top.command;
+      if (!bareDone && (e.key === 'Tab' || (e.key === 'Enter' && !parsed?.args))) {
         e.preventDefault();
         applySkill(matches[paletteIndex].skill);
         setPaletteIndex(0);

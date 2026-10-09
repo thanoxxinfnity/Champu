@@ -19,7 +19,9 @@ import { buildPackExport, describeExport, detectPacks, missingGeometries, valida
 import { bodyPlan, buildGeometry, inferPlan } from '@/lib/suites/minecraft/geometry';
 import { planBrief, planGame, planSummary, playerParts } from '@/lib/suites/godot/plan';
 import { threejsSkillsPrompt } from '@/lib/skills/threejs/select';
-import { browserIo, loadOdIndex } from '@/lib/skills/opendesign/io';
+import { browserIo, libraryIo, loadLibIndex, loadOdIndex } from '@/lib/skills/opendesign/io';
+import { parseSkillsCommand, renderSkillsOverview, renderSkillsSearch, skillLibraryContext, type SkillsCommand } from '@/lib/skills/library/context';
+import type { LibIndex } from '@/lib/skills/library/types';
 import { OD_HELP, openDesignContext, parseOd, type OdCommand } from '@/lib/skills/opendesign/context';
 import { renderCatalog, renderPromptSearch } from '@/lib/skills/opendesign/catalog';
 import type { OdIndex } from '@/lib/skills/opendesign/types';
@@ -54,7 +56,7 @@ import { PLANNER_NIM_MODEL } from '@/lib/providers/registry';
 import { endpointConfigFor } from '@/lib/providers/endpoint-models';
 import { draftSystemSuffix, pickAngles } from './drafts';
 import { scanForSecrets, hasBlockingSecret } from '@/lib/security/secrets';
-import { appendMessage, createSession, listMessages, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
+import { appendMessage, createSession, getSetting, listMessages, setSetting, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
 import type { SuiteId } from '@/lib/db/schema';
 import { BridgeOfflineError } from '@/lib/bridge/client';
 
@@ -912,6 +914,35 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
   const startedAt = Date.now();
 
   try {
+    // ── /skills and /use: the skills library, searched or called by name ────────
+    const libWanted = /^\/(skills|use)\b/i.test(input.trim());
+    const autoSkills = await getSetting<boolean>('skillsAuto', true);
+    const libIndex: LibIndex | null = libWanted || (lane === 'B' && !classification.ops && autoSkills) ? await loadLibIndex().catch(() => null) : null;
+    const skCmd: SkillsCommand | null = libWanted ? parseSkillsCommand(input, libIndex ?? undefined) : null;
+    let forcedSkill: string | undefined;
+    let skillTask: string | undefined;
+    if (skCmd) {
+      if (skCmd.kind === 'use' && skCmd.task) {
+        forcedSkill = skCmd.id;
+        skillTask = skCmd.task;
+      } else {
+        let reply: string;
+        if (skCmd.kind === 'auto') {
+          const on = skCmd.on ?? !autoSkills;
+          await setSetting('skillsAuto', on);
+          reply = `Automatic skills are now **${on ? 'on' : 'off'}**. ${on ? 'The right skill is brought in whenever a request needs one.' : 'Skills are only used when you call them: `/use <skill> <task>`.'}`;
+        } else if (!libIndex) reply = 'The skills library could not be loaded just now (it is read from the app itself). Try again in a moment.';
+        else if (skCmd.kind === 'overview') {
+          const od = await loadOdIndex().catch(() => null);
+          reply = renderSkillsOverview(libIndex, od ? { skills: od.skills.length, systems: od.systems.length } : null, autoSkills);
+        } else if (skCmd.kind === 'search') reply = renderSkillsSearch(libIndex, skCmd.query);
+        else reply = `Tell me what to do with it, for example: \`/use ${skCmd.id} <your task>\``;
+        patch(assistantId, { content: reply, streaming: false, durationMs: Date.now() - startedAt });
+        void appendMessage({ id: assistantId, sessionId, suite, role: 'assistant', content: reply, createdAt: startedAt, lane, model: selection.model, provider: selection.provider });
+        return;
+      }
+    }
+
     // ── /od: Open Design, called by name ────────────────────────────────────
     // Help, the catalogue and the prompt search are answered here, locally; naming a skill, style or layout carries on to a
     // normal build with that thing forced in. Everything the model and the planner see is the task, not the command.
@@ -937,6 +968,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       }
       if (odCmd.task) modelInput = odCmd.task;
     }
+    if (skillTask) modelInput = skillTask;
 
     // ── Plan (Lane B only) ──────────────────────────────────────────────────
     let plan: Plan | null = null;
@@ -1045,6 +1077,24 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       }
     }
 
+    // ── Skills library: the skill this request needs, if it needs one ──────────────
+    // Same rule as Open Design: chosen from what the request is about, said in the chat, and only for build work. A game or a
+    // Bedrock pack has its own suite knowledge and skips it unless a skill is called by name.
+    let skillLibrary: string | undefined;
+    const ownKnowledge = suite === 'godot' || suite === 'minecraft';
+    if (libIndex && lane === 'B' && !classification.ops && (forcedSkill || (autoSkills && !ownKnowledge))) {
+      const lib = await skillLibraryContext(modelInput, libIndex, libraryIo, {
+        force: forcedSkill ? [forcedSkill] : undefined,
+        max: openDesign ? 1 : 2,
+      }).catch(() => null);
+      if (lib) {
+        skillLibrary = lib.text;
+        const note = { id: uid('msg'), role: 'system' as const, content: lib.summary, createdAt: Math.max(0, startedAt - 1) };
+        if (isCurrent()) useWorkspace.getState().insertMessageBefore(assistantId, note);
+        void appendMessage({ ...note, sessionId, suite });
+      }
+    }
+
     // ── Stream the answer ───────────────────────────────────────────────────
     const systemPrompt = buildSystemPrompt({
       lane,
@@ -1066,6 +1116,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       buildingSite: wantsSite(modelInput),
       threejsSkills: wantsSite(modelInput) ? threejsSkillsPrompt(modelInput) : undefined,
       ...(openDesign ? { openDesign } : {}),
+      ...(skillLibrary ? { skillLibrary } : {}),
       ...(design ? { gamePlan: planBrief(design) } : {}),
       // Computed from the keys that are actually set, so the pipeline line the
       // model prints is a fact about this session rather than a guess.

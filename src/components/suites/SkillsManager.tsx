@@ -6,6 +6,72 @@ import { db, isBrowser, type SkillRecord } from '@/lib/db/schema';
 import { BUILTIN_SKILLS, parseGeneratedSkill, toRecord } from '@/lib/skills/registry';
 import { useWorkspace } from '@/lib/store';
 import { downloadText } from '@/lib/zip';
+import { getSetting, setSetting } from '@/lib/db/history';
+import { loadLibIndex } from '@/lib/skills/opendesign/io';
+import { searchSkills } from '@/lib/skills/library/select';
+import type { LibIndex } from '@/lib/skills/library/types';
+
+const SOURCE_LABEL = { superpowers: 'superpowers', anthropic: 'anthropic', agentic: 'agentic-awesome-skills' } as const;
+
+/** The built-in skills library: what it holds, whether it is used automatically, and a search that hands a /use line to the dock. */
+function SkillLibrary() {
+  const setDockDraft = useWorkspace((s) => s.setDockDraft);
+  const [index, setIndex] = useState<LibIndex | null>(null);
+  const [auto, setAuto] = useState(true);
+  const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    void loadLibIndex().then(setIndex).catch(() => undefined);
+    void getSetting<boolean>('skillsAuto', true).then(setAuto);
+  }, []);
+
+  const results = index && query.trim() ? searchSkills(query, index, 12) : [];
+  const toggle = async () => {
+    setAuto(!auto);
+    await setSetting('skillsAuto', !auto);
+  };
+
+  return (
+    <section className="rounded-xl border p-3" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
+      <div className="mb-1.5 flex items-center gap-2">
+        <h3 className="mono text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-faint)' }}>
+          library · {index ? `${index.skills.length} skills` : 'loading…'}
+        </h3>
+        <button type="button" onClick={() => void toggle()} role="switch" aria-checked={auto} className="mono ml-auto text-[10px]" style={{ color: auto ? 'var(--accent)' : 'var(--ink-faint)' }}>
+          automatic use: {auto ? 'on' : 'off'}
+        </button>
+      </div>
+      <p className="mb-2 text-[11px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
+        When a request needs one — a bug, tests, a database, Docker, CI, an API, security — the right skill is put in front of the AI and the chat says which. Design work uses Open Design (<span className="mono">/od list</span>). Or search and pick one yourself:
+      </p>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="search skills: redis, docker, debugging, seo…"
+        className={field}
+        style={fieldStyle}
+      />
+      {results.length > 0 && (
+        <div className="mt-2 space-y-1.5">
+          {results.map((s) => (
+            <div key={s.id} className="flex items-start gap-2 rounded-lg border px-2.5 py-2" style={{ borderColor: 'var(--line)' }}>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2">
+                  <span className="mono text-[11.5px]" style={{ color: 'var(--accent)' }}>{s.id}</span>
+                  <span className="mono rounded px-1 py-0.5 text-[8.5px] uppercase" style={{ background: 'var(--surface)', color: 'var(--ink-faint)' }}>{SOURCE_LABEL[s.source]}</span>
+                </div>
+                <p className="mt-0.5 line-clamp-2 text-[10.5px] leading-[1.4]" style={{ color: 'var(--ink-dim)' }}>{s.description}</p>
+              </div>
+              <button type="button" onClick={() => setDockDraft(`/use ${s.id} `)} className="mono shrink-0 text-[10px]" style={{ color: 'var(--accent)' }}>
+                use
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
 
 const field = 'mono w-full rounded border bg-transparent px-2 py-1.5 text-[11px] outline-none';
 const fieldStyle = { borderColor: 'var(--line)', color: 'var(--ink)' } as const;
@@ -140,6 +206,8 @@ export function SkillsManager() {
             </p>
           )}
         </section>
+
+        <SkillLibrary />
 
         <section className="rounded-xl border p-3" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
           <div className="mb-2 flex items-center gap-2">
