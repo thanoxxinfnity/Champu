@@ -161,9 +161,12 @@ function finish(
   // forgets `path=@terminal` still means "run this", and a snippet-xxxx.sh nobody ran helps no one.
   const bareShell = opts.shellRuns && !meta.path && /^(bash|sh|shell|zsh|console)$/i.test(meta.language);
   if (meta.path === '@terminal' || meta.path === '@shell' || bareShell) {
+    // A lone backtick at either end is the model's inline-code quoting leaking into the block, not part of the command.
+    let command = content.trim();
+    if ((command.match(/`/g) ?? []).length % 2 === 1) command = command.replace(/^`+/, '').replace(/`+$/, '').trim();
     return {
       kind: 'command',
-      command: content.trim(),
+      command,
       cwd: meta.cwd,
       complete,
     };
@@ -224,4 +227,16 @@ export function stripArtifactBlocks(text: string): string {
     /^([ \t]*)(`{3,}|~{3,})[ \t]*[^\n]*(?:path|file|filename)=[^\n]*\n[\s\S]*?(?:\1\2[ \t]*$|$)/gm,
     (_m, _i, _f) => '',
   );
+}
+
+/**
+ * A reply that came out as noise: the model's own control tokens (`<|close|>`) leaking into the text, or hundreds of path-less
+ * "files" made of scraps. Seen once from a hosted model mid-stream; a build made from it is worse than none, so the caller
+ * asks again instead of saving it.
+ */
+export function looksDegenerate(text: string): boolean {
+  if ((text.match(/<\|[a-z_]{2,20}\|>/gi) ?? []).length >= 3) return true;
+  if (text.length < 400) return false;
+  const loose = extractArtifacts(text).filter((a) => a.kind === 'file' && a.path.startsWith('untitled/snippet-')).length;
+  return loose >= 15;
 }

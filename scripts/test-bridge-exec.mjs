@@ -43,3 +43,13 @@ test('toolchain versions skip banner noise instead of reporting it as the versio
     }
   });
 });
+
+test('a command that is not valid shell is refused before it runs, with a reason the model can act on', async () => {
+  await withAgent(async () => {
+    const h = { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' };
+    const res = await fetch(`http://127.0.0.1:${PORT}/v1/exec`, { method: 'POST', headers: h, body: JSON.stringify({ cmd: 'cd video && npm install\nInstall ho gaya `render', cwd: '.' }) });
+    assert.equal(res.status, 400);
+    assert.match((await res.json()).error, /not valid shell/);
+    assert.equal(await run('echo ok'), 0);
+  });
+});

@@ -132,6 +132,8 @@ export function chipifyHtml(html: string): string {
       if (/site-chip/.test(whole)) return whole;
       const domain = hostOf(href.replace(/&amp;/g, '&'));
       if (!domain) return whole;
+      // The terminal bridge (a tunnel, a LAN address, localhost) has no logo to look up: its links are file downloads, not websites.
+      if (/^(\d{1,3}\.){3}\d{1,3}$/.test(domain) || /^localhost$|\.local$|\.internal$|^\[/.test(domain)) return whole;
       return `<a ${before}href="${href}"${after} class="site-chip">${logoHtml(domain)}<span class="site-chip-name">${inner}</span></a>`;
     },
   );

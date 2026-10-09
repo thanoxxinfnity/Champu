@@ -100,7 +100,7 @@ export async function openDesignContext(
   }
 
   if (!parts.length) return null;
-  return { text: parts.join('\n\n'), summary: `🎨 Open Design — using ${said.join(', ')}.`, pick };
+  return { text: parts.join('\n\n'), summary: `::palette:: Open Design — using ${said.join(', ')}.`, pick };
 }
 
 // ── The /od command ──────────────────────────────────────────────────────────

@@ -30,6 +30,7 @@ export function makeIo(base: string): OdIo {
 
 export const browserIo: OdIo = makeIo('/od/');
 export const libraryIo: OdIo = makeIo('/skills/');
+export const videoIo: OdIo = makeIo('/video/');
 
 export const loadOdIndex = (io: OdIo = browserIo): Promise<OdIndex | null> => io.json<OdIndex>('index.json');
 

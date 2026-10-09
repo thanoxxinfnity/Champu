@@ -3,6 +3,7 @@ import hljs from 'highlight.js/lib/common';
 import { chipifyHtml } from '../lib/sites/domains.ts';
 import { activityOf } from '../lib/agent/activity.ts';
 import { describeCommand } from '../lib/agent/narrate.ts';
+import { iconSvg, SKILL_ICON_NAMES } from '../lib/skills/icons.ts';
 import { iconHtml, pick, SCENE_HTML, TAIL_HTML, VARIANTS } from '../lib/agent/activity-icons.ts';
 
 /**
@@ -131,7 +132,9 @@ export function renderMarkdown(source: string): string {
   try {
     // Website names get their logo after rendering, so code blocks are already
     // closed off and nothing untrusted is ever handed to the chip builder raw.
-    return chipifyHtml(marked.parse(source, { async: false }));
+    // `::name::` in a note is a drawn icon (see lib/skills/icons.ts): chat notes never carry emoji.
+    const withIcons = (html: string) => html.replace(/::([a-z-]+)::/g, (m, n: string) => (SKILL_ICON_NAMES.includes(n) ? iconSvg(n, 15) : m));
+    return withIcons(chipifyHtml(marked.parse(source, { async: false })));
   } catch {
     return `<p>${escapeHtml(source)}</p>`;
   }

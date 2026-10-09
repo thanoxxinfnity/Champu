@@ -30,7 +30,7 @@ const BUILD_VERBS =
 
 /** Nouns that name a deliverable. */
 const ARTIFACT_NOUNS =
-  /\b(apk|aab|app|application|component|module|endpoint|api|service|server|page|screen|deck|slide|presentation|pdf|spreadsheet|mcpack|mcaddon|addon|behaviou?r ?pack|resource ?pack|model|mesh|geometry|blockbench|mcp ?server|skill|script|zip|archive|repo|project|website|site|landing ?page|dashboard|test|suite|pipeline|workflow|docker|schema|migration|game|level|character)\b/i;
+  /\b(apk|aab|app|application|component|module|endpoint|api|service|server|page|screen|deck|slide|presentation|pdf|spreadsheet|mcpack|mcaddon|addon|behaviou?r ?pack|resource ?pack|model|mesh|geometry|blockbench|mcp ?server|skill|script|zip|archive|repo|project|website|site|landing ?page|dashboard|test|suite|pipeline|workflow|docker|schema|migration|game|level|character|videos?|reels?|promo|slideshow)\b/i;
 
 /** Pure-discussion signals. */
 const INQUIRY_MARKERS =

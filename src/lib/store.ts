@@ -66,7 +66,9 @@ export interface ChatMessageView {
    * should not carry a second copy of every artifact.
    */
   offer?: {
-    kind: 'minecraft-pack' | 'godot-project' | 'apk' | 'play';
+    kind: 'minecraft-pack' | 'godot-project' | 'apk' | 'play' | 'video';
+    /** For a video: the Library asset holding the MP4. */
+    assetId?: string;
     filename: string;
     label: string;
     /**

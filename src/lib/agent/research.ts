@@ -214,7 +214,7 @@ export function summarizeResearch(report: ResearchReport): string {
   }
   const list = [...hosts].slice(0, 5).join(', ');
   const topics = report.findings.map((f) => f.why).join('; ');
-  return `🔎 Researched before building — ${topics}. Read ${report.pagesRead || 'several'} live page${report.pagesRead === 1 ? '' : 's'}${list ? ` (${list})` : ''}.`;
+  return `::search:: Researched before building — ${topics}. Read ${report.pagesRead || 'several'} live page${report.pagesRead === 1 ? '' : 's'}${list ? ` (${list})` : ''}.`;
 }
 
 const PER_FINDING_CHARS = 2600;

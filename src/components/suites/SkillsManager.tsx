@@ -10,6 +10,8 @@ import { getSetting, setSetting } from '@/lib/db/history';
 import { loadLibIndex } from '@/lib/skills/opendesign/io';
 import { searchSkills } from '@/lib/skills/library/select';
 import type { LibIndex } from '@/lib/skills/library/types';
+import { SKILL_ICON_NAMES, iconKey } from '@/lib/skills/icons';
+import { SkillIcon } from '@/components/SkillIcon';
 
 const SOURCE_LABEL = { superpowers: 'superpowers', anthropic: 'anthropic', agentic: 'agentic-awesome-skills' } as const;
 
@@ -210,11 +212,11 @@ export function SkillsManager() {
         <SkillLibrary />
 
         <section className="rounded-xl border p-3" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
-          <div className="mb-2 flex items-center gap-2">
+          <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
             <h3 className="mono text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-faint)' }}>
               skills · {skills.length} stored, {BUILTIN_SKILLS.length} built in
             </h3>
-            <button type="button" onClick={() => void installBuiltins()} className="mono ml-auto text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+            <button type="button" onClick={() => void installBuiltins()} className="mono ml-auto whitespace-nowrap text-[10px]" style={{ color: 'var(--ink-dim)' }}>
               copy built-ins for editing
             </button>
             <button
@@ -232,10 +234,10 @@ export function SkillsManager() {
                   updatedAt: Date.now(),
                   usageCount: 0,
                   enabled: 1,
-                  icon: '✦',
+                  icon: 'spark',
                 })
               }
-              className="mono text-[10px]"
+              className="mono whitespace-nowrap text-[10px]"
               style={{ color: 'var(--accent)' }}
             >
               + new
@@ -245,7 +247,7 @@ export function SkillsManager() {
           <div className="space-y-1.5">
             {[...skills, ...BUILTIN_SKILLS.filter((b) => !skills.some((s) => s.command === b.command)).map((b) => toRecord(b))].map((skill) => (
               <div key={skill.id} className="flex items-start gap-2 rounded-lg border px-2.5 py-2" style={{ borderColor: 'var(--line)' }}>
-                <span className="mt-px shrink-0 text-[13px]" aria-hidden>{skill.icon ?? '✦'}</span>
+                <span className="mt-px shrink-0" style={{ color: 'var(--accent)' }} aria-hidden><SkillIcon name={skill.icon} size={15} /></span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
                     <span className="mono text-[11.5px]" style={{ color: 'var(--accent)' }}>/{skill.command}</span>
@@ -308,10 +310,28 @@ export function SkillsManager() {
                 <span className="mono block text-[9px] uppercase" style={{ color: 'var(--ink-faint)' }}>name</span>
                 <input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} className={field} style={fieldStyle} />
               </label>
-              <label className="w-16">
+              <div className="w-full">
                 <span className="mono block text-[9px] uppercase" style={{ color: 'var(--ink-faint)' }}>icon</span>
-                <input value={editing.icon ?? ''} onChange={(e) => setEditing({ ...editing, icon: e.target.value })} className={field} style={fieldStyle} />
-              </label>
+                <div className="mt-1 flex flex-wrap gap-1" role="radiogroup" aria-label="icon">
+                  {SKILL_ICON_NAMES.map((n) => {
+                    const on = iconKey(editing.icon) === n;
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        title={n}
+                        onClick={() => setEditing({ ...editing, icon: n })}
+                        className="press grid h-7 w-7 place-items-center rounded-md border"
+                        style={{ borderColor: on ? 'var(--accent)' : 'var(--line)', color: on ? 'var(--accent)' : 'var(--ink-dim)', background: on ? 'color-mix(in oklab, var(--accent) 10%, transparent)' : 'transparent' }}
+                      >
+                        <SkillIcon name={n} size={14} />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <label className="w-20">
                 <span className="mono block text-[9px] uppercase" style={{ color: 'var(--ink-faint)' }}>lane</span>
                 <select

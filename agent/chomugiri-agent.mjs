@@ -23,7 +23,7 @@
  */
 
 import { createServer } from 'node:http';
-import { spawn, execSync } from 'node:child_process';
+import { spawn, spawnSync, execSync } from 'node:child_process';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile, readdir, stat, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -202,6 +202,17 @@ function startRun({ cmd, cwd, env, timeoutMs }) {
     const err = new Error(`cwd does not exist: ${cwd}`);
     err.statusCode = 400;
     throw err;
+  }
+
+  // A command that is not even valid shell (prose that slipped into the block, an unclosed quote) is refused before it runs, so the
+  // model is told what is wrong instead of a half-run command doing something nobody asked for.
+  if (process.platform !== 'win32') {
+    const syntax = spawnSync('/bin/bash', ['-n', '-c', cmd], { encoding: 'utf8', timeout: 5000 });
+    if (syntax.status !== 0 && syntax.stderr) {
+      const err = new Error(`Not run: this is not valid shell (${syntax.stderr.trim().split('\n')[0].replace(/^\/bin\/bash: (-c: )?/, '')}). Prose or a stray quote probably got into the command block: one plain command, nothing else.`);
+      err.statusCode = 400;
+      throw err;
+    }
   }
 
   const shell = process.platform === 'win32' ? process.env.COMSPEC ?? 'cmd.exe' : '/bin/bash';

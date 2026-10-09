@@ -6,6 +6,7 @@ import { isRunningHere, useWorkspace, type ChatAttachment } from '@/lib/store';
 import { send } from '@/lib/agent/runtime';
 import { BUILTIN_SKILLS, expandSkill, parseSlash, searchSkills, type SkillDefinition } from '@/lib/skills/registry';
 import { classifyLocal, resolveSuite } from '@/lib/agent/router';
+import { SkillIcon } from './SkillIcon';
 import { formatBytes } from '@/lib/zip';
 import { hasBlockingSecret, maskSecret, redact, scanForSecrets, suggestEnvName, validateSecretName, type SecretMatch } from '@/lib/security/secrets';
 import { activateKey, isActivatable, type ActivationResult } from '@/lib/security/activate-key';
@@ -212,8 +213,8 @@ function SkillPalette({
           role="option"
           aria-selected={i === selected}
         >
-          <span className="mt-px shrink-0 text-[14px]" aria-hidden>
-            {'icon' in skill ? (skill.icon ?? '⌘') : '⌘'}
+          <span className="mt-px shrink-0" style={{ color: 'var(--accent)' }} aria-hidden>
+            <SkillIcon name={'icon' in skill ? skill.icon : 'terminal'} size={16} />
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-2">

@@ -207,6 +207,13 @@ export class BridgeClient {
     );
   }
 
+  /** The bytes of a collected artifact, fetched with the token (the download link itself cannot carry one). */
+  async fetchArtifact(name: string): Promise<Blob> {
+    const res = await fetch(this.artifactUrl(name), { headers: { Authorization: `Bearer ${this.config.token}` }, signal: AbortSignal.timeout(300_000) });
+    if (!res.ok) throw new Error(`The bridge answered ${res.status} for ${name}.`);
+    return res.blob();
+  }
+
   artifactUrl(name: string): string {
     return `${this.config.url}/v1/artifact/${encodeURIComponent(name)}`;
   }

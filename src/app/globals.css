@@ -1585,3 +1585,6 @@ body.code-expanded {
 html, body { overflow-x: hidden; overscroll-behavior-x: none; max-width: 100vw; }
 .chat-scroll { touch-action: pan-y; overscroll-behavior-x: none; }
 .prose-chomu pre, .prose-chomu .code-block pre { touch-action: pan-x pan-y; }
+
+/* Drawn icons in chat notes (see lib/skills/icons.ts) */
+.prose-chomu .ico { display: inline-block; vertical-align: -3px; margin-right: 6px; color: var(--accent); flex: none; }
