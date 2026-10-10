@@ -737,6 +737,10 @@ export interface PromptContext {
   browse?: boolean;
   /** What was remembered from earlier work, already filtered for this request (see memory/). */
   memory?: string;
+  /** The Ponytail rule (small changes), when the request edits what already exists. */
+  ponytail?: string;
+  /** Edge cases the plan thought of before writing; the code must handle each. */
+  edgeCases?: string[];
 }
 
 export function buildSystemPrompt(ctx: PromptContext): string {
@@ -773,6 +777,10 @@ export function buildSystemPrompt(ctx: PromptContext): string {
   if (ctx.motionGuide) parts.push(ctx.motionGuide);
   if (ctx.browse) parts.push(BROWSER_GUIDE);
   if (ctx.memory) parts.push(ctx.memory);
+  if (ctx.ponytail) parts.push(ctx.ponytail);
+  if (ctx.edgeCases?.length) {
+    parts.push(`## EDGE CASES TO HANDLE (found while planning)\n${ctx.edgeCases.map((e) => `- ${e}`).join('\n')}\nEach one must be handled in the code, not only mentioned.`);
+  }
 
   if (ctx.bridgeStatus) {
     const line =

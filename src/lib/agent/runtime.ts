@@ -55,6 +55,9 @@ import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types
 import type { CustomEndpointConfig } from '@/lib/providers/types';
 import { useWorkspace, type ChatAttachment } from '@/lib/store';
 import { describeCommand, openingPhrase, streamingPhrase } from './narrate.ts';
+import { parsePipeline, renderStatus } from '@/lib/pipeline/commands';
+import { wantsPonytail, PONYTAIL_RULE } from '@/lib/pipeline/ponytail';
+import { loadMemoryFile, pipelineState, reviewFiles, saveMemoryFile, setPipeline } from '@/lib/pipeline/run';
 import { PLANNER_NIM_MODEL } from '@/lib/providers/registry';
 import { endpointConfigFor } from '@/lib/providers/endpoint-models';
 import { draftSystemSuffix, pickAngles } from './drafts';
@@ -517,6 +520,8 @@ export async function executeCommand(
 }
 
 // ── Planning ────────────────────────────────────────────────────────────────
+
+let memoryFileLoaded = false;
 
 async function buildPlan(
   input: string,
@@ -1005,6 +1010,28 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
           reply = `${memCmd.natural ? 'Yaad rakh liya' : 'Saved'}: ${mem.text}\n\n${r.merged ? '_(It matched something already remembered, so that was updated.)_' : '_It comes back by itself when a request needs it. "bhool jao <words>" removes it._'}`;
         }
       }
+      if (memCmd.kind === 'add' || memCmd.kind === 'forget' || memCmd.kind === 'clear') {
+        if ((await pipelineState()).memfile) await saveMemoryFile(useWorkspace.getState().bridge, [...useWorkspace.getState().files.keys()]);
+      }
+      patch(assistantId, { content: reply, streaming: false, durationMs: Date.now() - startedAt });
+      void appendMessage({ id: assistantId, sessionId, suite, role: 'assistant', content: reply, createdAt: startedAt, lane, model: selection.model, provider: selection.provider });
+      return;
+    }
+
+    // ── /review and /pipeline: answered here, no model needed to read the switches ────
+    const pipeCmd = parsePipeline(input);
+    if (pipeCmd) {
+      let reply: string;
+      if (pipeCmd.kind === 'set') {
+        await setPipeline(pipeCmd.step, pipeCmd.on);
+        reply = renderStatus(await pipelineState());
+      } else if (pipeCmd.kind === 'status') reply = renderStatus(await pipelineState());
+      else {
+        const list = [...useWorkspace.getState().files.values()].map((f) => ({ path: f.path, content: f.content }));
+        reply = list.length
+          ? ((await reviewFiles(list, (system, user) => complete({ provider: selection.provider, model: selection.model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], json: true, maxTokens: 1500, custom }, controller.signal))) ?? 'The review could not run just now. Try again in a moment.')
+          : 'There are no files in the workspace to review yet. Build something first.';
+      }
       patch(assistantId, { content: reply, streaming: false, durationMs: Date.now() - startedAt });
       void appendMessage({ id: assistantId, sessionId, suite, role: 'assistant', content: reply, createdAt: startedAt, lane, model: selection.model, provider: selection.provider });
       return;
@@ -1042,6 +1069,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
     if (lane === 'B' && !classification.ops) {
       think(true, 'Decomposing into atomic steps...');
       plan = await buildPlan(modelInput, selection, suite, custom, controller.signal);
+      if (!(await pipelineState()).plan) plan = { ...plan, edgeCases: undefined };
 
       // Park terminal steps immediately if the tunnel is already down, rather
       // than letting them fail one at a time later.
@@ -1175,6 +1203,12 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
     }
 
     // ── Memory: what earlier sessions left that this request needs ─────────────
+    const pipe = await pipelineState();
+    // The project's own memory file, once per page load: a fresh browser on a known project starts knowing it.
+    if (pipe.memfile && !memoryFileLoaded && (heartbeat.status === 'online' || heartbeat.status === 'degraded')) {
+      memoryFileLoaded = true;
+      await loadMemoryFile(useWorkspace.getState().bridge);
+    }
     let memoryText: string | undefined;
     if (await memoryEnabled().catch(() => false)) {
       const picked = recall(await loadMemories().catch(() => []), modelInput);
@@ -1216,6 +1250,8 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       ...(motionGuide ? { motionGuide } : {}),
       ...(classification.browse ? { browse: true } : {}),
       ...(memoryText ? { memory: memoryText } : {}),
+      ...(lane === 'B' && pipe.ponytail && wantsPonytail(modelInput, useWorkspace.getState().files.size) ? { ponytail: PONYTAIL_RULE } : {}),
+      ...(plan?.edgeCases?.length ? { edgeCases: plan.edgeCases } : {}),
       ...(design ? { gamePlan: planBrief(design) } : {}),
       // Computed from the keys that are actually set, so the pipeline line the
       // model prints is a fact about this session rather than a guess.
@@ -2314,6 +2350,18 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
         emit(note);
         void appendMessage({ ...note, sessionId, suite });
       }
+
+      // Five reviewers read what was just written; only what they are 80%+ sure of is shown.
+      if (lane === 'B' && !classification.ops && pipe.review && !controller.signal.aborted) {
+        think(true, 'Reviewing what was built...');
+        const verdict = await reviewFiles(files.map((f) => ({ path: f.path, content: f.content })), (system, user) =>
+          complete({ provider: selection.provider, model: selection.provider === 'nim' ? PLANNER_NIM_MODEL : selection.model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], json: true, maxTokens: 1500, custom }, controller.signal));
+        if (verdict) {
+          const note = { id: uid('msg'), role: 'system' as const, content: verdict, createdAt: Date.now() };
+          emit(note);
+          void appendMessage({ ...note, sessionId, suite });
+        }
+      }
     }
 
     // ── Execute terminal steps ──────────────────────────────────────────────
@@ -2648,7 +2696,10 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
           if (!res.ok) return;
           const data = (await res.json()) as { content?: string };
           const found = parseObservations(data.content ?? '');
-          if (found.length) await remember(found);
+          if (found.length) {
+            await remember(found);
+            if (pipe.memfile) await saveMemoryFile(useWorkspace.getState().bridge, [...useWorkspace.getState().files.keys()]);
+          }
         } catch {
           // Noticing is a convenience; a failure must never touch the run.
         }

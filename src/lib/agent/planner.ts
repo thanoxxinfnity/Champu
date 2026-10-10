@@ -41,6 +41,8 @@ export interface Plan {
   suite?: string;
   tasks: Task[];
   createdAt: number;
+  /** What could go wrong, thought of before any file is written (at most four, one line each). */
+  edgeCases?: string[];
 }
 
 /** Kinds that cannot run without a live tunnel. */
@@ -53,7 +55,7 @@ export function requiresBridge(task: Task): boolean {
 export const PLANNER_PROMPT = `Decompose the user's request into atomic execution steps.
 
 Reply with ONE JSON object, no prose, no markdown fence:
-{"goal":"<one line>","tasks":[{"title":"<imperative, <=70 chars>","kind":"<kind>","detail":"<<=100 chars, optional>","dependsOn":["<index of an earlier task, 1-based, as string>"]}]}
+{"goal":"<one line>","tasks":[{"title":"<imperative, <=70 chars>","kind":"<kind>","detail":"<<=100 chars, optional>","dependsOn":["<index of an earlier task, 1-based, as string>"]}],"edgeCases":["<=100 chars: a way this could break"]}
 
 kind must be one of: analysis, codegen, terminal, build, package, deploy, export, research, verify
 
@@ -62,6 +64,7 @@ Rules:
 - Each task must be independently verifiable — "Write the Gradle module", not "Set up the project".
 - Use kind "terminal"/"build"/"package" ONLY for steps that must run a shell on the host machine.
 - The final task is normally "verify" or "export".
+- edgeCases: 0 to 4 concrete ways this could break (empty input, offline, missing file, a name that already exists). Only real ones.
 - Do not include "ask the user" steps. Assume sensible defaults and proceed.`;
 
 interface RawTask {
@@ -94,7 +97,7 @@ export function parsePlan(raw: string, fallbackGoal: string, suite?: string): Pl
   const match = /\{[\s\S]*\}/.exec(raw);
   if (!match) return null;
 
-  let parsed: { goal?: string; tasks?: RawTask[] };
+  let parsed: { goal?: string; tasks?: RawTask[]; edgeCases?: unknown };
   try {
     parsed = JSON.parse(match[0]);
   } catch {
@@ -124,12 +127,17 @@ export function parsePlan(raw: string, fallbackGoal: string, suite?: string): Pl
       .filter((d): d is string => Boolean(d) && d !== tasks[i].id);
   });
 
+  const edgeCases = Array.isArray(parsed.edgeCases)
+    ? parsed.edgeCases.filter((e): e is string => typeof e === 'string' && e.trim().length > 3).map((e) => e.trim().slice(0, 120)).slice(0, 4)
+    : [];
+
   return {
     id: newId('plan'),
     goal: (parsed.goal ?? fallbackGoal).slice(0, 200),
     suite,
     tasks,
     createdAt: Date.now(),
+    ...(edgeCases.length ? { edgeCases } : {}),
   };
 }
 

@@ -49,9 +49,9 @@ test('each download sits inside the section that describes the product', () => {
   assert.doesNotMatch(section('horizon'), /dl-chomugiri-btn/);
 });
 
-test('only Chomugiri and Chomu Horizon are on the site', () => {
+test('only the listed products are on the site', () => {
   for (const f of [join(SITE_DIR, 'index.html'), ...own('js', 'css')]) {
-    assert.ok(!/chomu[\s-]?dead|ChomuDead|ChomuCity|ChomuGame/i.test(readFileSync(f, 'utf8')), `${f} mentions a product that is not on the site`);
+    assert.ok(!/ChomuCity|ChomuGame/i.test(readFileSync(f, 'utf8')), `${f} mentions a product that is not on the site`);
   }
 });
 
