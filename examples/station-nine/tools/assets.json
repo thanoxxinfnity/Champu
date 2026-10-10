@@ -1,0 +1,31 @@
+{
+  "style": "single object, centered, plain white background, product photo, three quarter view",
+  "assets": {
+    "locker": "a rusty industrial steel storage locker",
+    "crate": "a battered grey metal cargo crate with yellow stencil markings",
+    "barrel": "a rusty blue industrial chemical drum",
+    "bunk_bed": "a metal double bunk bed with thin grey mattresses, industrial",
+    "desk": "a worn grey metal office desk with drawers",
+    "chair": "an old swivel office chair with torn upholstery",
+    "terminal": "a retro computer terminal with a green CRT monitor and keyboard",
+    "generator": "a heavy industrial diesel generator machine, grey and yellow",
+    "breaker_box": "a grey electrical breaker panel box with switches, door open",
+    "lab_bench": "a laboratory workbench with a microscope and glass flasks",
+    "specimen_tank": "a tall glass specimen tank filled with murky green liquid in a metal frame",
+    "diving_suit": "a vintage brass deep sea diving suit with a round helmet, standing",
+    "gurney": "a rusty medical gurney with a stained white sheet",
+    "oxygen_tank": "a scuffed yellow scuba oxygen tank cylinder",
+    "toolbox": "a red metal toolbox with a handle",
+    "radio": "an old military shortwave radio transceiver with dials",
+    "keycard": "an orange plastic security keycard with a magnetic stripe",
+    "fuse": "a large ceramic industrial cartridge fuse with metal caps",
+    "power_cell": "a glowing blue sci-fi power cell battery cylinder",
+    "battery": "a large cylindrical flashlight battery",
+    "escape_pod": "a round metal deep sea escape capsule with a porthole",
+    "pipes": "a bundle of thick rusty industrial pipes with valves",
+    "valve_wheel": "a red industrial gate valve handwheel on a short pipe",
+    "cart": "a rusty industrial trolley cart with wheels",
+    "submarine": "a small yellow research submarine",
+    "hollow": "a tall emaciated pale deep sea creature with very long arms, translucent skin and a glowing anglerfish lure on its head, standing full body, A-pose"
+  }
+}
