@@ -654,7 +654,16 @@ func _win() -> void:
 	player.frozen = true
 	ui.set_countdown("")
 	var mins := int(s.seconds / 60.0)
-	ui.show_win("Time %d:%02d  ·  Deaths %d" % [mins, int(s.seconds) % 60, s.deaths])
+	var found := 0
+	for id in Data.LORE:
+		if id in s.notes:
+			found += 1
+	var ending := "Somewhere in the factory, a music box starts to play."
+	if found >= Data.LORE.size():
+		ending = "You know his name now. As the gate opens, very softly over the old PA:\n\"Thank you for the light.\"\nThe music box stops."
+	elif found >= 4:
+		ending = "You found enough pages to guess at what he was. The music box plays on without you."
+	ui.show_win("Time %d:%02d  ·  Deaths %d  ·  Pages found %d of %d\n\n%s" % [mins, int(s.seconds) % 60, s.deaths, found, Data.LORE.size(), ending])
 	if FileAccess.file_exists(SAVE):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE))
 

@@ -543,7 +543,14 @@ func pickup(item: String, model: String, size: float, pos: Vector3, text: String
 	return u
 
 
+func _lore() -> void:
+	# Papers on the floor, one to a room, where somebody dropped them.
+	for it in [["lore_gas", Vector3(-5.0, 0.03, 2.0), 20.0], ["lore_ceo", Vector3(3.0, 0.03, -23.0), 100.0], ["lore_eng", Vector3(22.5, 0.03, -1.5), 60.0], ["lore_guard", Vector3(3.0, 0.03, 24.0), 140.0], ["lore_child", Vector3(-22.0, 0.03, 3.0), 10.0], ["lore_anya", Vector3(-31.0, 0.03, 3.5), 80.0], ["lore_last", Vector3(15.2, 0.03, -6.0), 30.0]]:
+		note(it[0], it[1], it[2])
+
+
 func _dressing() -> void:
+	_lore()
 	_airlock()
 	_hub()
 	_dorm()

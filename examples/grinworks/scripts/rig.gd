@@ -273,7 +273,7 @@ static func library() -> AnimationLibrary:
 
 ## Mr. Grin, rigged: a holder whose origin is the middle of his base, `size` metres tall, facing -Z.
 ## Returns null when the skinned mesh has not been baked (the caller falls back to the shader puppet).
-static func make_grin(size: float) -> Node3D:
+static func make_grin(size: float, statue := false) -> Node3D:
 	if not ResourceLoader.exists(MESH):
 		return null
 	var mesh := load(MESH) as ArrayMesh
@@ -300,11 +300,15 @@ static func make_grin(size: float) -> Node3D:
 	var src := Assets.original_material("mr_grin")
 	# Dirtied and drained: eleven years in the dark, and not a toy anyone would pick up now.
 	var skin_mat: Material = src.duplicate() if src != null else Assets.mat(Color(0.95, 0.85, 0.2), 0.7)
-	if skin_mat is BaseMaterial3D:
+	if skin_mat is BaseMaterial3D and statue:
+		# A plaster copy, left in the hall: grey, chalky, and cracked about the mouth.
+		(skin_mat as BaseMaterial3D).albedo_color = Color(0.42, 0.42, 0.44)
+		(skin_mat as BaseMaterial3D).roughness = 1.0
+	elif skin_mat is BaseMaterial3D:
 		(skin_mat as BaseMaterial3D).albedo_color = Color(0.66, 0.6, 0.46)
 		(skin_mat as BaseMaterial3D).roughness = 0.95
 	mi.material_override = skin_mat
-	_face(sk)
+	_face(sk, statue)
 	var player := AnimationPlayer.new()
 	player.name = "Anim"
 	inner.add_child(player)
@@ -317,7 +321,7 @@ static func make_grin(size: float) -> Node3D:
 
 ## What makes the mascot a monster: a mouth far too wide, full of teeth, and eyes that light up.
 ## Everything hangs on the head bone, so it turns, nods and thrashes with the head.
-static func _face(sk: Skeleton3D) -> void:
+static func _face(sk: Skeleton3D, statue := false) -> void:
 	var att := BoneAttachment3D.new()
 	att.name = "Face"
 	att.bone_name = "head"
@@ -380,6 +384,6 @@ static func _face(sk: Skeleton3D) -> void:
 		g.rings = 4
 		glint.mesh = g
 		glint.position = Vector3(side * 0.024, 0.080, 0.0905)
-		glint.material_override = Assets.mat(Color(1.0, 0.25, 0.1), 0.3, 0.0, 6.0)
+		glint.material_override = Assets.mat(Color(1.0, 0.25, 0.1), 0.3, 0.0, 6.0) if not statue else Assets.mat(Color(0.3, 0.3, 0.3), 0.9)
 		glint.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		att.add_child(glint)

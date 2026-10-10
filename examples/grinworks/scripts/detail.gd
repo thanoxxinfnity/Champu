@@ -31,6 +31,9 @@ func build() -> void:
 	_beacons()
 	_litter()
 	_wall_gear()
+	_ruin()
+	_statues()
+	_monitors()
 
 
 # ── ceilings ─────────────────────────────────────────────────────────────────
@@ -257,7 +260,7 @@ func _hanging() -> void:
 	# Toys hung from the ceiling by their ankles, turning very slowly.
 	var list := [
 		["teddy", 0.9, Vector3(-4.5, 0, -3.0)], ["plush_bunny", 0.8, Vector3(3.5, 0, 3.8)], ["robot_toy", 0.6, Vector3(-3.0, 0, 5.5)],
-		["teddy", 0.7, Vector3(5.0, 0, -5.5)], ["plush_bunny", 0.6, Vector3(0.0, 0, -13.0)], ["teddy", 0.7, Vector3(0.0, 0, 14.0)],
+		["teddy", 0.7, Vector3(5.0, 0, -5.5)], ["plush_bunny", 0.6, Vector3(1.0, 0, -13.0)], ["teddy", 0.7, Vector3(-1.0, 0, 14.0)],
 	]
 	for it in list:
 		var zone := lv.zone_at(it[2])
@@ -390,3 +393,197 @@ func _wall_gear() -> void:
 		vent.rotation_degrees.y = p[1]
 		for k in range(4):
 			lv._mesh_box(Vector3(0.62, 0.025, 0.02), Vector3(0, -0.12 + k * 0.08, 0.045), Assets.mat(Color(0.02, 0.02, 0.02), 0.8), vent)
+
+
+# ── ruin ─────────────────────────────────────────────────────────────────────
+# The factory did not close quietly. Things were broken here, and nobody mended them.
+
+func _make_crack() -> ImageTexture:
+	var img := Image.create(128, 128, false, Image.FORMAT_RGBA8)
+	var r := RandomNumberGenerator.new()
+	r.seed = 5
+	for branch in range(7):
+		var p := Vector2(64, 64) if branch == 0 else Vector2(r.randf_range(30, 98), r.randf_range(30, 98))
+		var ang := r.randf() * TAU
+		for step in range(r.randi_range(25, 60)):
+			ang += r.randf_range(-0.7, 0.7)
+			p += Vector2(cos(ang), sin(ang)) * 2.0
+			if p.x < 1 or p.y < 1 or p.x > 126 or p.y > 126:
+				break
+			var a := clampf(1.0 - float(step) / 60.0, 0.3, 1.0)
+			img.set_pixelv(Vector2i(p), Color(0.02, 0.02, 0.02, a))
+			img.set_pixelv(Vector2i(p) + Vector2i(1, 0), Color(0.04, 0.04, 0.04, a * 0.5))
+	return ImageTexture.create_from_image(img)
+
+
+func _make_hole() -> ImageTexture:
+	var img := Image.create(128, 128, false, Image.FORMAT_RGBA8)
+	var noise := FastNoiseLite.new()
+	noise.seed = 3
+	noise.frequency = 0.08
+	for y in range(128):
+		for x in range(128):
+			var d := Vector2(x - 64, y - 64).length() / 60.0
+			var edge := d + noise.get_noise_2d(x, y) * 0.45
+			img.set_pixel(x, y, Color(0.0, 0.0, 0.0, 1.0 if edge < 0.8 else 0.0))
+	return ImageTexture.create_from_image(img)
+
+
+func _decal(tex: Texture2D, pos: Vector3, yaw: float, size: Vector2, floor_flat := false, color := Color.WHITE) -> void:
+	var q := QuadMesh.new()
+	q.size = size
+	var mi := MeshInstance3D.new()
+	mi.mesh = q
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = tex
+	m.albedo_color = color
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mi.material_override = m
+	mi.position = pos
+	if floor_flat:
+		mi.rotation_degrees = Vector3(-90, yaw, 0)
+	else:
+		mi.rotation_degrees.y = yaw
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	lv.add_child(mi)
+
+
+func _rubble(at: Vector3, count: int, spread: float) -> void:
+	var concrete := Assets.mat(Color(0.22, 0.21, 0.2), 0.95)
+	var brick := Assets.mat(Color(0.32, 0.14, 0.1), 0.95)
+	for i in range(count):
+		var s := Vector3(rng.randf_range(0.08, 0.4), rng.randf_range(0.06, 0.22), rng.randf_range(0.08, 0.35))
+		var m := lv._mesh_box(s, at + Vector3(rng.randf_range(-spread, spread), s.y * 0.5, rng.randf_range(-spread, spread)), brick if i % 3 == 0 else concrete)
+		m.rotation_degrees = Vector3(rng.randf_range(-15, 15), rng.randf() * 360.0, rng.randf_range(-15, 15))
+
+
+func _ruin() -> void:
+	var crack := _make_crack()
+	var hole := _make_hole()
+	# Holes punched through the walls, rubble under each.
+	for p in [[Vector3(-9.84, 1.5, 6.5), 90.0], [Vector3(9.84, 2.2, -8.8), -90.0], [Vector3(-3.0, 1.4, 9.84), 180.0], [Vector3(-20.0, 1.8, -7.84), 0.0], [Vector3(26.0, 1.5, 7.84), 180.0], [Vector3(-3.0, 1.6, -27.84), 0.0], [Vector3(5.0, 1.6, 27.84), 180.0]]:
+		_decal(hole, p[0], p[1], Vector2(1.5, 1.5))
+		var inward := Vector3(sin(deg_to_rad(p[1])), 0, cos(deg_to_rad(p[1])))
+		_rubble(Vector3(p[0].x, 0.0, p[0].z) + inward * 0.5, 9, 0.7)
+	# Cracks in the plaster and across the floor tiles.
+	for p in [[Vector3(-9.84, 2.6, -3.0), 90.0], [Vector3(9.84, 2.0, 2.0), -90.0], [Vector3(3.0, 2.8, -9.84), 0.0], [Vector3(-26.0, 2.4, 7.84), 180.0], [Vector3(20.0, 2.5, -7.84), 0.0], [Vector3(-6.0, 2.2, 27.84), 180.0], [Vector3(6.0, 2.4, -27.84), 0.0], [Vector3(1.52, 2.0, -12.0), -90.0], [Vector3(-1.52, 1.8, 13.0), 90.0]]:
+		_decal(crack, p[0], p[1], Vector2(2.2, 2.2))
+	for p in [Vector3(1.0, 0.014, 1.5), Vector3(-5.5, 0.014, 5.0), Vector3(4.5, 0.014, -5.5), Vector3(24.0, 0.014, 2.0), Vector3(-24.5, 0.014, -2.0), Vector3(0.5, 0.014, 21.0), Vector3(-1.0, 0.014, -22.5)]:
+		_decal(crack, p, rng.randf() * 360.0, Vector2(2.8, 2.8), true)
+	# Ceiling tiles come down.
+	var tile := Assets.mat(Color(0.5, 0.48, 0.42), 0.95)
+	for p in [Vector3(-3.0, 4.5, -2.5), Vector3(4.0, 4.5, 5.5), Vector3(-5.5, 4.5, 3.0), Vector3(18.0, 3.4, -4.0), Vector3(-3.0, 3.4, 20.0)]:
+		var t := lv._mesh_box(Vector3(1.5, 0.05, 1.5), p + Vector3(0, -0.5, 0), tile)
+		t.rotation_degrees = Vector3(rng.randf_range(15, 35), rng.randf() * 360.0, rng.randf_range(-10, 10))
+		var hole_up := lv._mesh_box(Vector3(1.6, 0.02, 1.6), p + Vector3(0, 0.05, 0), Assets.mat(Color(0.0, 0.0, 0.0), 1.0))
+		hole_up.name = "ceiling_hole"
+	# Smashed glass: slivers that catch the torch.
+	var glass := StandardMaterial3D.new()
+	glass.albedo_color = Color(0.7, 0.85, 0.9, 0.55)
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass.roughness = 0.02
+	glass.metallic_specular = 1.0
+	for i in range(70):
+		var zone: String = ["hub", "lab", "control", "dorm"][i % 4]
+		var a: Array = Level.AREAS[zone]
+		var q := QuadMesh.new()
+		q.size = Vector2(rng.randf_range(0.03, 0.12), rng.randf_range(0.03, 0.09))
+		var mi := MeshInstance3D.new()
+		mi.mesh = q
+		mi.material_override = glass
+		mi.rotation_degrees = Vector3(-90, rng.randf() * 360.0, 0)
+		mi.position = Vector3(rng.randf_range(a[0] + 1.0, a[1] - 1.0), 0.013, rng.randf_range(a[2] + 1.0, a[3] - 1.0))
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		lv.add_child(mi)
+	# Wallpaper hanging off the walls in strips.
+	for i in range(14):
+		var side := i % 4
+		var pos := Vector3.ZERO
+		var yaw := 0.0
+		if side == 0:
+			pos = Vector3(-9.86, 3.7, rng.randf_range(-8.0, 8.0)); yaw = 90.0
+		elif side == 1:
+			pos = Vector3(9.86, 3.7, rng.randf_range(-8.0, 8.0)); yaw = -90.0
+		elif side == 2:
+			pos = Vector3(rng.randf_range(-8.0, 8.0), 3.7, -9.86); yaw = 0.0
+		else:
+			pos = Vector3(rng.randf_range(-8.0, 8.0), 3.7, 9.86); yaw = 180.0
+		var strip := lv._mesh_box(Vector3(0.35, rng.randf_range(0.8, 1.6), 0.015), pos + Vector3(0, -0.5, 0), Assets.mat(Color(0.1, 0.38, 0.42), 0.95))
+		strip.rotation_degrees = Vector3(0, yaw, rng.randf_range(-8, 8))
+	# Furniture thrown over.
+	for it in [["toy_shelf", 1.8, Vector3(6.0, 0.35, 5.5)], ["chair", 0.9, Vector3(-3.5, 0.3, -5.0)], ["desk", 0.8, Vector3(-18.0, 0.4, 2.5)], ["chair", 0.9, Vector3(24.0, 0.3, 3.0)], ["toy_shelf", 1.6, Vector3(3.0, 0.35, 19.5)], ["chair", 0.9, Vector3(-5.0, 0.3, -20.5)]]:
+		var m := lv.prop(it[0], it[1], it[2], rng.randf() * 360.0, false)
+		m.rotation_degrees.x = rng.randf_range(78.0, 95.0)
+	_trails()
+	_rubble(Vector3(0, 0, 0), 10, 6.0)
+	_rubble(Vector3(-13.5, 0, 0.0), 5, 1.0)
+	_rubble(Vector3(13.5, 0, 0.0), 5, 1.0)
+
+
+## Something was dragged: long dark smears along the floor, from each room towards the hub, with the marks of hands.
+func _trails() -> void:
+	var smear := Image.create(32, 128, false, Image.FORMAT_RGBA8)
+	var r := RandomNumberGenerator.new()
+	r.seed = 21
+	for y in range(128):
+		for x in range(32):
+			var edge := 1.0 - absf(float(x) - 16.0) / 16.0
+			var wob := r.randf_range(0.6, 1.0)
+			smear.set_pixel(x, y, Color(0.25, 0.0, 0.0, clampf(edge * wob * (0.8 - float(y) / 200.0), 0.0, 0.85)))
+	var tex := ImageTexture.create_from_image(smear)
+	for t in [[Vector3(-14.0, 0.016, 0.3), 90.0, 6.0], [Vector3(14.0, 0.016, -0.2), 90.0, 6.0], [Vector3(0.3, 0.016, -13.0), 0.0, 6.0], [Vector3(-0.2, 0.016, 13.0), 0.0, 6.0], [Vector3(-26.0, 0.016, 2.0), 90.0, 8.0], [Vector3(24.0, 0.016, -2.0), 90.0, 8.0], [Vector3(4.0, 0.016, -3.0), 40.0, 5.0]]:
+		_decal(tex, t[0], t[1], Vector2(0.8, t[2]), true)
+	# Handprints beside the first one: small red blots in two lines.
+	var hand := Image.create(32, 32, false, Image.FORMAT_RGBA8)
+	for y in range(32):
+		for x in range(32):
+			var d := Vector2(x - 16, y - 20).length()
+			var finger := false
+			for f in range(5):
+				var fx := 6.0 + f * 5.0
+				var fy := 9.0 - absf(float(f) - 2.0) * 1.8
+				if absf(x - fx) < 1.8 and y < 14 and y > fy:
+					finger = true
+			hand.set_pixel(x, y, Color(0.4, 0.0, 0.0, 0.85 if (d < 9.0 or finger) else 0.0))
+	var htex := ImageTexture.create_from_image(hand)
+	for i in range(14):
+		var side := -1.0 if i % 2 == 0 else 1.0
+		_decal(htex, Vector3(-11.0 + i * 0.9, 0.017, side * 0.5), 90.0 + side * 15.0, Vector2(0.28, 0.28), true)
+
+
+# ── things in the dark that are not him ──────────────────────────────────────
+
+func _statues() -> void:
+	for p in [[Vector3(8.6, 0.0, -2.9), 90.0], [Vector3(-8.6, 0.0, -6.8), -60.0], [Vector3(-2.6, 0.0, 8.6), 200.0], [Vector3(-6.2, 0.0, -17.6), 30.0]]:
+		var s := Rig.make_grin(2.4, true)
+		if s == null:
+			return
+		s.position = p[0]
+		s.rotation_degrees.y = p[1]
+		lv.add_child(s)
+		var anim := s.get_meta("anim") as AnimationPlayer
+		anim.play("peek" if int(p[1]) % 2 == 0 else "idle")
+		anim.seek(rng.randf() * 2.0, true)
+		anim.pause()
+		s.name = "statue"
+
+
+## A row of dead monitors in the hall, each one showing static, and sometimes a smile.
+func _monitors() -> void:
+	var frame := Assets.mat(Color(0.07, 0.07, 0.08), 0.6, 0.4)
+	for i in range(4):
+		var x := -7.2 + i * 1.25
+		var body := lv._mesh_box(Vector3(1.1, 0.85, 0.35), Vector3(x, 2.9 - (i % 2) * 0.35, -9.7), frame)
+		var screen := MeshInstance3D.new()
+		var q := QuadMesh.new()
+		q.size = Vector2(0.9, 0.65)
+		screen.mesh = q
+		var m := ShaderMaterial.new()
+		m.shader = load("res://shaders/tv.gdshader")
+		m.set_shader_parameter("seed", float(i) * 0.31)
+		screen.material_override = m
+		screen.position = Vector3(0, 0, 0.18)
+		screen.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		body.add_child(screen)
