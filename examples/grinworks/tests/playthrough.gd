@@ -9,6 +9,8 @@ var fails := 0
 var frames := 0
 var live := OS.get_environment("S9_LIVE") == "1"   # the Hollow is really hunting; the bot defends itself with the torch
 var deaths := 0
+var streak := 0            # frames spent defending in a row
+var ignore_until := 0
 
 
 func check(ok: bool, what: String) -> void:
@@ -36,6 +38,9 @@ func step(n := 1) -> void:
 	for i in range(n):
 		await physics_frame
 		frames += 1
+		if frames > 60 * 60 * 25:
+			print("  FAIL the bot ran for 25 game-minutes and did not finish")
+			quit(1)
 		if live and game.player.dead and game.playing:
 			await _recover()
 
@@ -52,16 +57,28 @@ func _recover() -> void:
 
 
 func threat() -> bool:
+	if frames < ignore_until:
+		return false
 	var h := game.hollow
 	if not live or h.state in [Hollow.S.DORMANT, Hollow.S.STUNNED, Hollow.S.FLEE, Hollow.S.CAUGHT]:
 		return false
 	var d := h.global_position.distance_to(game.player.global_position)
-	return d < 13.0 and not game.level.is_lit(game.level.zone_at(game.player.global_position))
+	# Something that is only wandering, far off, is not worth stopping for; something coming for you is.
+	var coming := h.state in [Hollow.S.HUNT, Hollow.S.INVESTIGATE, Hollow.S.LURK]
+	return (d < 13.0 and coming or d < 7.0) and not game.level.is_lit(game.level.zone_at(game.player.global_position))
 
 
 func defend() -> void:
 	var p := game.player
 	var h := game.hollow
+	streak += 1
+	if streak % 300 == 0:
+		print("  defending for %ds: state %d, dist %.1f, battery %.0f, zone %s, hollow zone %s" % [streak / 60, h.state, h.global_position.distance_to(p.global_position), p.battery, game.level.zone_at(p.global_position), game.level.zone_at(h.global_position)])
+	if streak > 60 * 20:
+		# Twenty seconds of holding a torch on something that is not going away: walk on regardless.
+		streak = 0
+		ignore_until = frames + 60 * 15
+		return
 	var to := h.global_position + Vector3(0, 1.3, 0) - p.cam.global_position
 	p.yaw = atan2(-to.x, -to.z)
 	p.pitch = asin(to.normalized().y)
@@ -109,6 +126,7 @@ func walk_to(node_id: String) -> bool:
 				defend()
 				await step()
 				continue
+			streak = 0
 			# Charging the torch when it is low and nothing is near (loud, and it takes a while).
 			if live and p.battery < 30.0:
 				p.move_input = Vector2.ZERO

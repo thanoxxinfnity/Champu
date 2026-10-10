@@ -16,6 +16,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     container:
       image: barichello/godot-ci:4.3
     # GitHub Actions forces HOME=/github/home inside a `container:` job, which hides this image's
@@ -59,7 +60,8 @@ jobs:
           godot --headless --fixed-fps 60 -s tests/playthrough.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
           grep -q 'ALL OK' /tmp/out.txt
 
-      - name: A bot plays it again with the Hollow really hunting
+      - name: A bot plays it again with Mr. Grin really hunting
+        timeout-minutes: 8
         run: |
           for seed in 1 4; do
             S9_LIVE=1 S9_SEED=$seed godot --headless --fixed-fps 60 -s tests/playthrough.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt

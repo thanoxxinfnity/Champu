@@ -20,7 +20,7 @@ mkdirSync(join(here, 'ref'), { recursive: true });
 async function make(name, subject) {
   const out = join(here, 'ref', `${name}.jpg`);
   if (existsSync(out)) return 'have';
-  const prompt = name === 'hollow' ? `${subject}, plain white background` : `${subject}, ${cfg.style}`;
+  const prompt = (name === 'hollow' || name === 'mr_grin') ? `${subject}, plain white background` : `${subject}, ${cfg.style}`;
   for (let attempt = 1; attempt <= 4; attempt++) {
     try {
       const res = await fetch('https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.1-dev', {
