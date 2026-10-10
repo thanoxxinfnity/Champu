@@ -1,0 +1,6 @@
+.godot/
+build/
+__pycache__/
+*.pyc
+raw/
+tools/raw_trellis/
