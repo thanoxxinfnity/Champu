@@ -43,6 +43,10 @@ var _toast_t := 0.0
 var _fear := 0.0
 var _hurt := 0.0
 var _focus_now := false
+var _card: Label
+var _card_sub: Label
+var _card_tw: Tween
+var _toast_tw: Tween
 
 # Touch bookkeeping.
 var _touches := {}          # index -> role
@@ -148,6 +152,20 @@ func _build_hud() -> void:
 	_toast.modulate.a = 0.0
 	_hud.add_child(_toast)
 
+	_card = _lbl("", 48, AMBER, HORIZONTAL_ALIGNMENT_CENTER)
+	_card.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_card.size = Vector2(900, 70)
+	_card.position = Vector2(-450, 190)
+	_card.pivot_offset = Vector2(450, 35)
+	_card.modulate.a = 0.0
+	_hud.add_child(_card)
+	_card_sub = _lbl("", 20, DIM, HORIZONTAL_ALIGNMENT_CENTER)
+	_card_sub.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_card_sub.size = Vector2(900, 30)
+	_card_sub.position = Vector2(-450, 258)
+	_card_sub.modulate.a = 0.0
+	_hud.add_child(_card_sub)
+
 	_prompt = _lbl("", 22, Color(1, 0.95, 0.6), HORIZONTAL_ALIGNMENT_CENTER)
 	_prompt.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	_prompt.size = Vector2(600, 30)
@@ -216,6 +234,54 @@ func toast(text: String, seconds := 4.0) -> void:
 	_toast.text = text
 	_toast_t = seconds
 	_toast.modulate.a = 1.0
+	if _toast_tw:
+		_toast_tw.kill()
+	_toast.position.y = 98.0
+	_toast_tw = _toast.create_tween().set_parallel(true)
+	_toast_tw.tween_property(_toast, "position:y", 84.0, 0.25).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_toast.visible_ratio = 0.0
+	_toast_tw.tween_property(_toast, "visible_ratio", 1.0, clampf(text.length() * 0.02, 0.2, 1.4))
+
+
+## Text that is typed out rather than dropped on the screen.
+func _type(l: Label, seconds := -1.0) -> void:
+	l.visible_ratio = 0.0
+	var secs := seconds if seconds > 0.0 else clampf(l.text.length() * 0.03, 0.4, 3.5)
+	l.create_tween().tween_property(l, "visible_ratio", 1.0, secs)
+
+
+## A big title that flickers in like a failing neon sign.
+func _glitch_in(l: Label, pop := 1.2) -> void:
+	l.pivot_offset = l.custom_minimum_size * 0.5 + Vector2(0, 30)
+	l.scale = Vector2.ONE * pop
+	var tw := l.create_tween()
+	tw.set_parallel(false)
+	for a in [0.0, 1.0, 0.15, 1.0, 0.5, 1.0]:
+		tw.tween_property(l, "modulate:a", a, 0.06)
+	l.create_tween().tween_property(l, "scale", Vector2.ONE, 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## A place name over the screen: typed in, held, faded.
+func card(title: String, sub := "") -> void:
+	if _card_tw:
+		_card_tw.kill()
+	_card.text = title
+	_card_sub.text = sub
+	_card.visible_ratio = 0.0
+	_card_sub.visible_ratio = 0.0
+	_card.modulate.a = 0.0
+	_card_sub.modulate.a = 0.0
+	_card.scale = Vector2.ONE * 1.15
+	_card_tw = create_tween().set_parallel(true)
+	_card_tw.tween_property(_card, "modulate:a", 1.0, 0.25)
+	_card_tw.tween_property(_card, "visible_ratio", 1.0, clampf(title.length() * 0.08, 0.5, 1.3))
+	_card_tw.tween_property(_card, "scale", Vector2.ONE, 0.9).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_card_tw.tween_property(_card_sub, "modulate:a", 1.0, 0.4).set_delay(0.5)
+	_card_tw.tween_property(_card_sub, "visible_ratio", 1.0, clampf(sub.length() * 0.04, 0.3, 1.6)).set_delay(0.5)
+	_card_tw.chain().tween_interval(2.0)
+	_card_tw.chain().set_parallel(true)
+	_card_tw.tween_property(_card, "modulate:a", 0.0, 1.2)
+	_card_tw.tween_property(_card_sub, "modulate:a", 0.0, 1.2)
 
 
 func set_prompt(text: String, has_focus: bool) -> void:
@@ -224,11 +290,22 @@ func set_prompt(text: String, has_focus: bool) -> void:
 
 
 func set_objective(text: String) -> void:
+	if text == _objective.text:
+		return
 	_objective.text = text
+	_type(_objective, 0.7)
+	_objective.modulate = Color(1.0, 0.9, 0.4)
+	_objective.create_tween().tween_property(_objective, "modulate", Color.WHITE, 1.2)
 
 
 func set_countdown(text: String) -> void:
+	if text == _count.text:
+		return
 	_count.text = text
+	if text != "":
+		_count.pivot_offset = Vector2(300, 30)
+		_count.scale = Vector2.ONE * 1.3
+		_count.create_tween().tween_property(_count, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func set_battery(f: float, torch_on: bool) -> void:
@@ -487,6 +564,11 @@ func _panel(width: float, height: float) -> VBoxContainer:
 	pc.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	pc.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_modal.add_child(pc)
+	pc.modulate.a = 0.0
+	dim.modulate.a = 0.0
+	var fade := pc.create_tween().set_parallel(true)
+	fade.tween_property(pc, "modulate:a", 1.0, 0.18)
+	fade.tween_property(dim, "modulate:a", 1.0, 0.18)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
 	pc.add_child(box)
@@ -536,6 +618,7 @@ func show_note(title: String, body: String) -> void:
 	b.custom_minimum_size = Vector2(570, 0)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(b)
+	_type(b, clampf(body.length() * 0.012, 0.5, 2.6))
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_child(row)
@@ -674,13 +757,15 @@ func _breaker_press(cell: int) -> void:
 
 # ── screens ──────────────────────────────────────────────────────────────────
 
-func _screen_box(title: String, sub: String, buttons: Array, title_color := INK) -> void:
+func _screen_box(title: String, sub: String, buttons: Array, title_color := INK, fx := "title") -> void:
 	_clear(_screen)
 	_screen.mouse_filter = Control.MOUSE_FILTER_STOP
 	var dim := ColorRect.new()
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dim.color = Color(0.0, 0.01, 0.015, 0.88)
 	_screen.add_child(dim)
+	dim.modulate.a = 0.0
+	dim.create_tween().tween_property(dim, "modulate:a", 1.0, 0.6)
 	var box := VBoxContainer.new()
 	box.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -695,11 +780,38 @@ func _screen_box(title: String, sub: String, buttons: Array, title_color := INK)
 	s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	s.custom_minimum_size = Vector2(760, 0)
 	box.add_child(s)
+	var n := 0
 	for b in buttons:
 		var row := HBoxContainer.new()
 		row.alignment = BoxContainer.ALIGNMENT_CENTER
 		row.add_child(_button(b[0], Vector2(300, 60), b[1]))
 		box.add_child(row)
+		row.modulate.a = 0.0
+		row.create_tween().tween_property(row, "modulate:a", 1.0, 0.4).set_delay(0.9 + 0.15 * n)
+		n += 1
+	# Each screen arrives its own way: the title flickers on and breathes, death shakes, the win rises slowly.
+	if fx == "title":
+		_glitch_in(t)
+		_type(s, 3.0)
+		var glow := t.create_tween().set_loops()
+		glow.tween_interval(1.6)
+		glow.tween_property(t, "modulate", Color(1, 1, 1, 0.7), 0.12)
+		glow.tween_property(t, "modulate", Color.WHITE, 0.2)
+	elif fx == "death":
+		_glitch_in(t, 1.6)
+		_type(s, 1.2)
+		t.pivot_offset = Vector2(450, 35)
+		var shake := t.create_tween().set_loops()
+		shake.tween_property(t, "rotation", 0.012, 0.05)
+		shake.tween_property(t, "rotation", -0.012, 0.05)
+	else:
+		t.modulate.a = 0.0
+		t.scale = Vector2.ONE * 0.8
+		t.pivot_offset = Vector2(450, 35)
+		var rise := t.create_tween().set_parallel(true)
+		rise.tween_property(t, "modulate:a", 1.0, 1.4)
+		rise.tween_property(t, "scale", Vector2.ONE, 1.4).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		_type(s, 4.5)
 
 
 func hide_all_screens() -> void:
@@ -741,7 +853,7 @@ func show_death(deaths: int) -> void:
 	playing = false
 	_pad.visible = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	_screen_box("IT FOUND YOU", "Deaths: %d. Your progress is kept — you wake at the last lit room." % deaths, [["TRY AGAIN", func(): retry_pressed.emit()]], RED)
+	_screen_box("IT FOUND YOU", "Deaths: %d. Your progress is kept — you wake at the last lit room." % deaths, [["TRY AGAIN", func(): retry_pressed.emit()]], RED, "death")
 
 
 func show_win(stats: String) -> void:
@@ -749,4 +861,4 @@ func show_win(stats: String) -> void:
 	_hud.visible = false
 	_pad.visible = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	_screen_box("YOU ESCAPED", "The gate groans open. Morning light on the street, and no one is smiling behind you.\n\n" + stats, [["PLAY AGAIN", func(): restart_pressed.emit()]], Color(0.6, 1.0, 0.7))
+	_screen_box("YOU ESCAPED", "The gate groans open. Morning light on the street, and no one is smiling behind you.\n\n" + stats, [["PLAY AGAIN", func(): restart_pressed.emit()]], Color(0.6, 1.0, 0.7), "win")

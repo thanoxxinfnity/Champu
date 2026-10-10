@@ -125,6 +125,7 @@ func _begin() -> void:
 	player.battery = maxf(player.battery, 60.0)
 	ui.set_playing(true)
 	if "intro" not in s.notes:
+		ui.card("GRINWORKS", "Eleven years after the lights went out")
 		call_deferred("read_note", null, "intro")
 	_hint_later("look", 2.5)
 
@@ -156,6 +157,7 @@ func _process(delta: float) -> void:
 	if not get_tree().paused and not s.won:
 		s.seconds += delta
 	hollow.frozen = ui.modal_open and not s.launching
+	_announce_zone()
 	_update_hud(delta)
 	if s.launching and not player.dead:
 		_launch_left -= delta
@@ -178,6 +180,31 @@ func _process(delta: float) -> void:
 		sfx.play("drip", -12.0, randf_range(0.8, 1.2))
 		if randf() < 0.4:
 			sfx.play("creak", -16.0)
+
+
+const ZONE_CARDS := {
+	"hub": ["THE FACTORY FLOOR", "Every road leads through here"],
+	"dorm": ["NAP ROOM", "Small beds. Someone kept the diary"],
+	"engine": ["BOILER ROOM", "The generator sleeps below the steam"],
+	"lab": ["TOY LAB", "Where Mr. Grin was made"],
+	"control": ["MASCOT OFFICE", "The intercom still has power"],
+	"pod": ["DELIVERY BAY", "The gate to the street"],
+}
+var _seen_zones: Array[String] = []
+var _zone_now := ""
+
+
+## A place's name types itself onto the screen the first time you walk in.
+func _announce_zone() -> void:
+	if player.dead or s.won:
+		return
+	var z := level.zone_at(player.global_position)
+	if z == _zone_now:
+		return
+	_zone_now = z
+	if ZONE_CARDS.has(z) and z not in _seen_zones and not ui.modal_open and s.started and z != "airlock":
+		_seen_zones.append(z)
+		ui.card(ZONE_CARDS[z][0], ZONE_CARDS[z][1])
 
 
 func _spawn_node() -> String:

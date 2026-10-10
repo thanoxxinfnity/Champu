@@ -27,6 +27,10 @@ uniform float speed = 0.0;      // 0 standing .. 1 full stride
 uniform float lean = 0.0;       // forward hunch
 uniform float arms_up = 0.0;    // 0 arms down .. 1 arms stretched forward
 uniform float limp = 0.0;       // one-sided drag
+uniform float recoil = 0.0;     // 0..1 flinching from light: hands up, torso thrown back
+uniform float scream = 0.0;     // 0..1 the kill: arms flung up, head back
+uniform float head_shake = 0.0; // 0..1 head thrashing
+uniform float head_tilt = 0.0;  // forward nod (+) / thrown back (-)
 uniform float flash = 0.0;      // hit flash 0..1
 uniform float dark = 0.0;       // 0..1 darkens (dying)
 uniform float roughness_v = 0.82;
@@ -79,13 +83,31 @@ void vertex() {
 	a = rot_x(a, sh, (side < 0.0 ? stride2 : stride) * 0.45 * (1.0 - arms_up));
 	a = rot_y(a, sh, -side * 1.45 * arms_up);
 	p = mix(p, a, arm_w);
+	// Hands thrown up: the flinch from the light, or the scream when it has you.
+	float up = clamp(recoil + scream, 0.0, 1.0);
+	p = mix(p, rot_x(p, sh, -(recoil * 1.8 + scream * 1.2)), arm_w * up);
 
 	// Torso: hunch forward from the hips (+Z is the front here), sway, bob.
 	float upper = smoothstep(0.45, 1.0, u.y);
-	p.z += upper * upper * lean * bsize.y * 0.16;
+	p.z += upper * upper * (lean - recoil * 0.55 + scream * 0.35) * bsize.y * 0.16;
 	p.x += sin(phase * 0.5) * upper * speed * 0.03 * bsize.y;
 	p.y += abs(sin(phase)) * speed * 0.012 * bsize.y;
 	p.y -= limp * abs(sin(phase)) * speed * 0.02 * bsize.y;
+
+	// Breathing, always, even standing still.
+	float breath = sin(TIME * 1.8);
+	p.y += upper * breath * 0.006 * bsize.y * (1.0 - speed);
+	p.z += upper * breath * 0.01 * bsize.y * (1.0 - speed);
+
+	// The head: slow looking about, now and then a sharp twitch, thrashing when hurt.
+	vec3 neck = bmin + vec3(0.5 * bsize.x, 0.82 * bsize.y, 0.5 * bsize.z);
+	float head_w = smoothstep(0.80, 0.86, u.y) * (1.0 - smoothstep(shoulder * 0.9, shoulder * 1.4, off));
+	float turn = sin(TIME * 1.3) * 0.25 + sin(TIME * 2.9) * 0.1;
+	float twitch = step(0.96, sin(TIME * 7.3)) * 0.5 * sin(TIME * 60.0);
+	float yaw_h = turn * (1.0 - speed * 0.7) + twitch * (1.0 + arms_up) + head_shake * sin(TIME * 42.0) * 0.4;
+	vec3 h = rot_y(p, neck, yaw_h);
+	h = rot_x(h, neck, head_tilt - scream * 0.6);
+	p = mix(p, h, head_w);
 
 	VERTEX = p;
 	v_ao = mix(0.55, 1.0, smoothstep(0.0, 0.25, u.y));

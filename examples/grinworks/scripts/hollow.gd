@@ -35,6 +35,10 @@ var _noise_cd := 0.0
 var _growl_t := 6.0
 var _step_t := 0.0
 var _flash := 0.0
+var _recoil := 0.0
+var _scream := 0.0
+var _shake := 0.0
+var _nod := 0.0
 var _locker_target: Use = null
 var speed_bonus := 0.0
 var grace := 0.0                  # seconds it will not notice you (after a respawn)
@@ -115,11 +119,20 @@ func _process(delta: float) -> void:
 	if state == S.DORMANT:
 		return
 	_phase += delta * _speed_now * 2.6
+	var k := clampf(delta * 8.0, 0.0, 1.0)
+	_recoil = lerpf(_recoil, 1.0 if state == S.STUNNED else (0.35 if state == S.FLEE else 0.0), k)
+	_scream = lerpf(_scream, 1.0 if state == S.CAUGHT else 0.0, k)
+	_shake = lerpf(_shake, 1.0 if state == S.STUNNED else (0.5 if state == S.FLEE else 0.0), k)
+	_nod = lerpf(_nod, 0.25 if state == S.HUNT else 0.0, k)
 	for m in _mats:
+		(m as ShaderMaterial).set_shader_parameter("recoil", _recoil)
+		(m as ShaderMaterial).set_shader_parameter("scream", _scream)
+		(m as ShaderMaterial).set_shader_parameter("head_shake", _shake)
+		(m as ShaderMaterial).set_shader_parameter("head_tilt", _nod)
 		(m as ShaderMaterial).set_shader_parameter("phase", _phase)
 		(m as ShaderMaterial).set_shader_parameter("speed", clampf(_speed_now / 3.5, 0.0, 1.0))
 		(m as ShaderMaterial).set_shader_parameter("lean", 0.4 if state == S.HUNT else 0.15)
-		(m as ShaderMaterial).set_shader_parameter("arms_up", 0.7 if state == S.HUNT else 0.0)
+		(m as ShaderMaterial).set_shader_parameter("arms_up", 0.7 if (state == S.HUNT or state == S.CAUGHT) else 0.0)
 		(m as ShaderMaterial).set_shader_parameter("limp", 0.5)
 		_flash = move_toward(_flash, 0.0, delta * 2.0)
 		(m as ShaderMaterial).set_shader_parameter("flash", _flash)

@@ -8,6 +8,7 @@ var game: Game
 var fails := 0
 var frames := 0
 var live := OS.get_environment("S9_LIVE") == "1"   # the Hollow is really hunting; the bot defends itself with the torch
+var film := OS.get_environment("S9_FILM") == "1"   # lingers on the title and win screens, for a recording
 var deaths := 0
 var streak := 0            # frames spent defending in a row
 var ignore_until := 0
@@ -139,7 +140,8 @@ func walk_to(node_id: String) -> bool:
 				continue
 			var d := target - p.global_position
 			d.y = 0
-			p.yaw = atan2(-d.x, -d.z)
+			p.yaw = lerp_angle(p.yaw, atan2(-d.x, -d.z), 0.3)
+			p.pitch = lerpf(p.pitch, -0.06, 0.08)
 			p.move_input = Vector2(0, -1)
 			p.sprint_held = false
 			await step()
@@ -242,6 +244,10 @@ func run() -> void:
 	var lv := game.level
 	var p := game.player
 	seed(int(OS.get_environment("S9_SEED")) if OS.get_environment("S9_SEED") != "" else 11)
+	if film:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.SAVE))
+		game.ui.show_title(false)
+		await step(60 * 5)   # the title screen, typed in
 	game._begin()
 	await step(5)
 	game.ui.close_modal()
@@ -336,6 +342,7 @@ func run() -> void:
 	check(await use_it("pod_console"), "use the pod console")
 	check(game.s.launching and game.s.cells_in == 3, "the launch starts with three cells in")
 	check(not lv.is_lit("pod"), "the pod bay lights fail")
+	game.ui.close_modal()   # the gate note: a player closes it and picks up the torch
 	await step(60 * 8)
 	if not live:
 		check(game.hollow.state != Hollow.S.DORMANT, "the Hollow comes")
@@ -348,6 +355,8 @@ func run() -> void:
 		await step()
 		guard += 1
 	check(game.s.won, "the pod launches and you escape")
+	if film:
+		await step(60 * 9)   # the win screen
 
 
 func _solve_breaker(board: Array) -> Array:
