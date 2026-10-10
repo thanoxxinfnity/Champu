@@ -521,15 +521,16 @@ func _draw_pad() -> void:
 	for k in l:
 		var d: Dictionary = l[k]
 		var down: bool = _held.get(k, false)
-		var col := Color(0.2, 0.5, 0.6, 0.35 if not down else 0.7)
-		if k == "use":
-			col = Color(0.95, 0.75, 0.25, 0.5 if _focus_now else 0.28)
-			if down:
-				col.a = 0.8
-		_pad.draw_circle(d.c, d.r, col)
-		_pad.draw_arc(d.c, d.r, 0, TAU, 40, Color(0.7, 0.9, 1.0, 0.5), 2.0)
-		var fs := 14 if d.r > 30 else 11
-		_pad.draw_string(ThemeDB.fallback_font, d.c + Vector2(-d.r, fs * 0.35), d.t, HORIZONTAL_ALIGNMENT_CENTER, d.r * 2, fs, Color(1, 1, 1, 0.9))
+		# White line-art on a smoked glass disc, the way a horror game does its buttons.
+		var fill := Color(0.0, 0.0, 0.0, 0.38)
+		var ink := Color(1, 1, 1, 0.92)
+		if k == "use" and _focus_now:
+			fill = Color(1.0, 0.85, 0.3, 0.30)
+		if down:
+			fill = Color(1, 1, 1, 0.30)
+		_pad.draw_circle(d.c, d.r, fill)
+		_pad.draw_arc(d.c, d.r, 0, TAU, 48, ink, 2.5, true)
+		_glyph(k, d.c, d.r, ink)
 	if _stick_index != -1:
 		_pad.draw_circle(_stick_origin, 70, Color(0.2, 0.5, 0.6, 0.22))
 		_pad.draw_arc(_stick_origin, 70, 0, TAU, 40, Color(0.7, 0.9, 1.0, 0.45), 2.0)
@@ -537,6 +538,50 @@ func _draw_pad() -> void:
 	else:
 		var vp := get_viewport().get_visible_rect().size
 		_pad.draw_arc(Vector2(130, vp.y - 120), 70, 0, TAU, 40, Color(0.7, 0.9, 1.0, 0.18), 2.0)
+
+
+## The picture on a button, drawn in white lines: no words to read in the middle of a chase.
+func _glyph(k: String, c: Vector2, r: float, ink: Color) -> void:
+	var u := r / 40.0
+	var w := maxf(2.5, 3.0 * u)
+	_pad.draw_set_transform(c, 0.0, Vector2(u, u))
+	match k:
+		"use":
+			# A hand reaching to press: a raised finger on a palm, with ripples above the fingertip.
+			var pts := PackedVector2Array([Vector2(-10, 4), Vector2(-10, -6), Vector2(-4, -6), Vector2(-4, -22), Vector2(4, -22), Vector2(4, -6), Vector2(10, -4), Vector2(10, 4), Vector2(14, 8), Vector2(10, 22), Vector2(-8, 22), Vector2(-14, 10), Vector2(-10, 4)])
+			_pad.draw_polyline(pts, ink, w / u, true)
+			_pad.draw_arc(Vector2(0, -22), 8, PI * 1.15, PI * 1.85, 10, ink, w / u * 0.7, true)
+			_pad.draw_arc(Vector2(0, -22), 14, PI * 1.15, PI * 1.85, 12, ink, w / u * 0.7, true)
+		"torch":
+			# A torch pointing up and to the right, with rays leaving the lens.
+			_pad.draw_set_transform(c, deg_to_rad(40.0), Vector2(u, u))
+			_pad.draw_rect(Rect2(-6, -2, 12, 26), ink, false, w / u)
+			_pad.draw_polyline(PackedVector2Array([Vector2(-6, -2), Vector2(-11, -14), Vector2(11, -14), Vector2(6, -2)]), ink, w / u, true)
+			_pad.draw_line(Vector2(0, -20), Vector2(0, -28), ink, w / u * 0.8, true)
+			_pad.draw_line(Vector2(-9, -19), Vector2(-15, -25), ink, w / u * 0.8, true)
+			_pad.draw_line(Vector2(9, -19), Vector2(15, -25), ink, w / u * 0.8, true)
+		"crank":
+			# A winding handle: a circle with an arrow, and a knob on a spoke.
+			_pad.draw_arc(Vector2.ZERO, 16, PI * 0.2, PI * 1.85, 24, ink, w / u, true)
+			_pad.draw_polyline(PackedVector2Array([Vector2(10, -16), Vector2(18, -12), Vector2(12, -6)]), ink, w / u, true)
+			_pad.draw_line(Vector2.ZERO, Vector2(-9, 9), ink, w / u, true)
+			_pad.draw_circle(Vector2(-11, 11), 4.0, ink)
+		"crouch":
+			# Someone ducking: head, a folded body, and a down arrow.
+			_pad.draw_arc(Vector2(-4, -14), 6, 0, TAU, 14, ink, w / u, true)
+			_pad.draw_polyline(PackedVector2Array([Vector2(-4, -7), Vector2(-6, 6), Vector2(4, 8), Vector2(4, 20)]), ink, w / u, true)
+			_pad.draw_polyline(PackedVector2Array([Vector2(-6, 6), Vector2(-14, 18)]), ink, w / u, true)
+			_pad.draw_polyline(PackedVector2Array([Vector2(16, -8), Vector2(16, 8), Vector2(11, 3), Vector2(16, 8), Vector2(21, 3)]), ink, w / u * 0.9, true)
+		"pause":
+			_pad.draw_rect(Rect2(-9, -12, 6, 24), ink)
+			_pad.draw_rect(Rect2(3, -12, 6, 24), ink)
+		"journal":
+			# A page with a folded corner and three lines of writing.
+			_pad.draw_polyline(PackedVector2Array([Vector2(-14, -20), Vector2(6, -20), Vector2(14, -12), Vector2(14, 20), Vector2(-14, 20), Vector2(-14, -20)]), ink, w / u * 0.9, true)
+			_pad.draw_polyline(PackedVector2Array([Vector2(6, -20), Vector2(6, -12), Vector2(14, -12)]), ink, w / u * 0.7, true)
+			for i in range(3):
+				_pad.draw_line(Vector2(-8, -3 + i * 8), Vector2(8, -3 + i * 8), ink, w / u * 0.7, true)
+	_pad.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 func _input(event: InputEvent) -> void:
