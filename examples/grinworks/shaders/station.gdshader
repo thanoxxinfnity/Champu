@@ -80,13 +80,17 @@ void fragment() {
 		col = mix(col, col * 0.4, grout * 0.7);
 		col *= 0.6 + n * 0.6;
 		col = mix(col, col * 0.4, smoothstep(0.55, 0.85, fbm(uv * 0.5 + 9.0)) * grime * 0.7);
-		rough_v = 0.5;
+		rough_v = 0.3 + n * 0.3;
 	} else {
 		col = base * 0.6 * (0.7 + n * 0.5);
 		float drip = smoothstep(0.6, 0.85, fbm(uv * 0.7 + 4.0));
 		col = mix(col, vec3(0.04, 0.05, 0.04), drip * 0.5);
 	}
 	col *= 0.9 + fine * 0.15;
+	// Relief without a normal map: the plaster is rough, the tiles sit proud of their grout.
+	float relief = mode == 1 ? (-(1.0 - smoothstep(0.0, 0.035, min(min(fract(uv.x), 1.0 - fract(uv.x)), min(fract(uv.y), 1.0 - fract(uv.y)))))) * 0.6 + n * 0.3 : n * 0.5 + fine * 0.25;
+	NORMAL = normalize(NORMAL + vec3(dFdx(relief), dFdy(relief), 0.0) * (mode == 1 ? 14.0 : 9.0));
 	ALBEDO = col;
 	ROUGHNESS = rough_v;
+	SPECULAR = mode == 1 ? 0.75 : 0.35;
 }

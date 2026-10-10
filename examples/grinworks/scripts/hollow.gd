@@ -17,6 +17,9 @@ var game: Game
 var state := S.DORMANT
 var model: Node3D
 var _mats: Array = []
+var _anim: AnimationPlayer
+var _skin_mat: BaseMaterial3D
+var _clip := ""
 var _path: Array = []             # node ids still to walk
 var _wait := 0.0
 var _target_node := ""
@@ -47,8 +50,14 @@ var frozen := false               # a note or a puzzle is open: the world holds 
 
 
 func _ready() -> void:
-	model = Assets.make("mr_grin", 2.4, false, true)
-	_mats = model.get_meta("puppet_mats", [])
+	# A real skeleton when the skinned mesh is there; the shader puppet is only the fallback.
+	model = Rig.make_grin(2.4)
+	if model != null:
+		_anim = model.get_meta("anim")
+		_skin_mat = ((model.get_meta("skeleton") as Skeleton3D).get_child(0) as MeshInstance3D).material_override as BaseMaterial3D
+	else:
+		model = Assets.make("mr_grin", 2.4, false, true)
+		_mats = model.get_meta("puppet_mats", [])
 	add_child(model)
 	var eye := OmniLight3D.new()
 	eye.light_color = Color(1.0, 0.7, 0.25)
@@ -124,6 +133,8 @@ func _process(delta: float) -> void:
 	_scream = lerpf(_scream, 1.0 if state == S.CAUGHT else 0.0, k)
 	_shake = lerpf(_shake, 1.0 if state == S.STUNNED else (0.5 if state == S.FLEE else 0.0), k)
 	_nod = lerpf(_nod, 0.25 if state == S.HUNT else 0.0, k)
+	if _anim != null:
+		_animate(delta)
 	for m in _mats:
 		(m as ShaderMaterial).set_shader_parameter("recoil", _recoil)
 		(m as ShaderMaterial).set_shader_parameter("scream", _scream)
@@ -140,6 +151,39 @@ func _process(delta: float) -> void:
 	# Its breathing follows it: louder when it is close and has not seen you.
 	var d := global_position.distance_to(game.player.global_position)
 	game.sfx.breath_at(global_position + Vector3(0, 1.8, 0), clampf(-4.0 - d * 1.6, -80.0, -4.0) if d < 22.0 else -80.0)
+
+
+## Picks the clip for what it is doing and plays it at the pace it is moving.
+func _animate(delta: float) -> void:
+	_flash = move_toward(_flash, 0.0, delta * 2.0)
+	if _skin_mat != null:
+		_skin_mat.emission_enabled = _flash > 0.01
+		_skin_mat.emission = Color(1.0, 0.12, 0.05)
+		_skin_mat.emission_energy_multiplier = _flash * 0.9
+	var moving := _speed_now > 0.35
+	var clip := "idle"
+	match state:
+		S.PATROL:
+			clip = "stalk" if moving else "idle"
+		S.INVESTIGATE:
+			clip = "walk" if moving else "peek"
+		S.HUNT:
+			var d := global_position.distance_to(game.player.global_position)
+			clip = "lunge" if d < 3.2 else ("run" if moving else "idle")
+		S.STUNNED:
+			clip = "recoil"
+		S.FLEE:
+			clip = "flee" if moving else "recoil"
+		S.LURK:
+			clip = "peek"
+		S.CAUGHT:
+			clip = "scream"
+	if clip != _clip:
+		_clip = clip
+		_anim.play(clip, 0.25)
+	# Footfalls keep to the pace: a slow stalk and a sprint are the same animation at different speeds.
+	var base := {"stalk": 1.5, "walk": 2.2, "run": 4.4, "flee": 5.0, "lunge": 4.4}
+	_anim.speed_scale = clampf(_speed_now / float(base[clip]), 0.5, 1.8) if base.has(clip) else 1.0
 
 
 func _physics_process(delta: float) -> void:

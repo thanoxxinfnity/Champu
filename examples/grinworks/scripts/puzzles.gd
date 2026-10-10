@@ -49,6 +49,19 @@ static func cipher_shift() -> int:
 	return int(bunk_solutions()[0]["Pip"])
 
 
+# ── 5. The gate lock (Delivery bay) ───────────────────────────────────────────
+# Four numbers the player counts with their own eyes in four rooms. The note at the intercom says what to count;
+# tests/map_test.gd counts the same things in the built world, so the code can never drift from the rooms.
+
+const GATE_ROBOTS_ON_BENCHES := 2
+const GATE_TERMINALS_IN_OFFICE := 2
+
+
+## beds in the nap room, steam valves, robots sitting on the lab benches, glowing terminals in the mascot office.
+static func gate_code() -> String:
+	return "%d%d%d%d" % [CREW.size(), VALVES.size(), GATE_ROBOTS_ON_BENCHES, GATE_TERMINALS_IN_OFFICE]
+
+
 # ── 2. The steam valves (Boiler room) ──────────────────────────────────────────────
 
 const VALVES: Array[String] = ["A", "B", "C", "D", "E"]

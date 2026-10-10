@@ -59,7 +59,7 @@ const NOTES := {
 	},
 	"control_note": {
 		"title": "Gate protocol",
-		"body": "Say the decoded test word on the intercom to unlock the delivery bay shutter and release the intercom's power cell.\n\nThen put all three cells into the gate controls. The gate takes 25 seconds to open. The lights fail while it charges. Keep your torch up.",
+		"body": "Say the decoded test word on the intercom to unlock the delivery bay shutter and release the intercom's power cell.\n\nThen put all three cells into the gate controls. The gate takes 25 seconds to open. The lights fail while it charges. Keep your torch up.\n\nThe gate lock wants the foreman's MORNING COUNT, four numbers, in this order:\n  1. the toy beds in the nap room\n  2. the steam valves in the boiler room\n  3. the robots sitting ON the lab benches\n  4. the terminals glowing in this office\n\nCount them yourself. Nobody wrote them down.",
 	},
 	"hub_scrawl": {
 		"title": "Painted on the main hall wall",

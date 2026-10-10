@@ -46,6 +46,13 @@ var _focus_now := false
 var _card: Label
 var _card_sub: Label
 var _card_tw: Tween
+var _whisper: Label
+var _sub: Label
+var _sub_tw: Tween
+var cinematic_active := false
+var _cine_skip := false
+var _dread := 0.0
+var _beat := 0.0
 var _toast_tw: Tween
 
 # Touch bookkeeping.
@@ -166,6 +173,22 @@ func _build_hud() -> void:
 	_card_sub.modulate.a = 0.0
 	_hud.add_child(_card_sub)
 
+	_whisper = _lbl("", 64, Color(0.75, 0.05, 0.05), HORIZONTAL_ALIGNMENT_CENTER)
+	_whisper.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	_whisper.size = Vector2(900, 90)
+	_whisper.position = Vector2(-450, -45)
+	_whisper.pivot_offset = Vector2(450, 45)
+	_whisper.modulate.a = 0.0
+	_hud.add_child(_whisper)
+
+	_sub = _lbl("", 22, Color(0.95, 0.9, 0.85), HORIZONTAL_ALIGNMENT_CENTER)
+	_sub.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_sub.size = Vector2(900, 70)
+	_sub.position = Vector2(-450, -150)
+	_sub.modulate.a = 0.0
+	_hud.add_child(_sub)
+
 	_prompt = _lbl("", 22, Color(1, 0.95, 0.6), HORIZONTAL_ALIGNMENT_CENTER)
 	_prompt.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	_prompt.size = Vector2(600, 30)
@@ -200,6 +223,11 @@ func _process(delta: float) -> void:
 	sm.set_shader_parameter("hurt", maxf(_hurt, 0.0))
 	sm.set_shader_parameter("low_hp", clampf(_fear * 0.9, 0.0, 1.0))
 	sm.set_shader_parameter("vignette", 0.5 + _fear * 0.3)
+	sm.set_shader_parameter("dread", _dread)
+	_beat = move_toward(_beat, 0.0, delta * 3.0)
+	if game and game.sfx.heart_rate > 0.0 and fmod(Time.get_ticks_msec() * 0.001 * game.sfx.heart_rate, 1.0) < delta * game.sfx.heart_rate:
+		_beat = 1.0
+	sm.set_shader_parameter("beat", _beat)
 	_flash.color.a = move_toward(_flash.color.a, 0.0, delta * 0.7)
 	if playing:
 		_bars.queue_redraw()
@@ -345,6 +373,85 @@ func flash_red() -> void:
 	_hurt = 1.0
 
 
+## A line on the glass, said by someone. The speaker's name first, in red; the words typed after it.
+func subtitle(text: String, who := "") -> void:
+	if _sub_tw:
+		_sub_tw.kill()
+	_sub.text = ("%s:  " % who if who != "" else "") + text
+	_sub.visible_ratio = 0.0
+	_sub.modulate.a = 1.0
+	_sub_tw = create_tween()
+	_sub_tw.tween_property(_sub, "visible_ratio", 1.0, clampf(text.length() * 0.04, 0.6, 3.5))
+	_sub_tw.tween_interval(2.2 + text.length() * 0.03)
+	_sub_tw.tween_property(_sub, "modulate:a", 0.0, 0.8)
+
+
+## The opening: white words on black, one line at a time, typed in. A touch or a key skips it.
+func cinematic(lines: Array) -> void:
+	cinematic_active = true
+	_cine_skip = false
+	var cover := ColorRect.new()
+	cover.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	cover.color = Color.BLACK
+	cover.mouse_filter = Control.MOUSE_FILTER_STOP
+	_root.add_child(cover)
+	var l := _lbl("", 30, Color(0.9, 0.92, 0.95), HORIZONTAL_ALIGNMENT_CENTER)
+	l.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(900, 0)
+	l.size = Vector2(900, 120)
+	l.position = Vector2(-450, -60)
+	cover.add_child(l)
+	var skip := _lbl("tap to skip", 14, DIM, HORIZONTAL_ALIGNMENT_RIGHT)
+	skip.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	skip.position = Vector2(-160, -40)
+	cover.add_child(skip)
+	var first := true
+	for line in lines:
+		if _cine_skip:
+			break
+		l.text = line
+		l.modulate = Color(1, 1, 1, 1) if not first else Color(1.0, 0.82, 0.25)
+		l.add_theme_font_size_override("font_size", 52 if first else 30)
+		l.visible_ratio = 0.0
+		first = false
+		game.sfx.play("note", -14.0, 0.6)
+		var tw := l.create_tween()
+		tw.tween_property(l, "visible_ratio", 1.0, clampf(line.length() * 0.045, 0.8, 3.2))
+		await _cine_wait(clampf(line.length() * 0.045, 0.8, 3.2) + 1.5)
+		var out := l.create_tween()
+		out.tween_property(l, "modulate:a", 0.0, 0.4)
+		await _cine_wait(0.5)
+	var fade := cover.create_tween()
+	fade.tween_property(cover, "modulate:a", 0.0, 1.0)
+	await _cine_wait(1.0)
+	cover.queue_free()
+	cinematic_active = false
+
+
+func _cine_wait(seconds: float) -> void:
+	var left := seconds
+	while left > 0.0 and not _cine_skip:
+		await get_tree().create_timer(0.05, true).timeout
+		left -= 0.05
+
+
+func set_dread(t: float) -> void:
+	_dread = t
+
+
+## A word on the glass for a blink: it shudders and is gone.
+func whisper(text: String) -> void:
+	_whisper.text = text
+	_whisper.modulate.a = 0.0
+	_whisper.scale = Vector2.ONE * 1.4
+	var tw := _whisper.create_tween().set_parallel(false)
+	for a in [0.9, 0.0, 0.7, 0.0, 0.5]:
+		tw.tween_property(_whisper, "modulate:a", a, 0.05)
+	tw.tween_property(_whisper, "modulate:a", 0.0, 0.5)
+	_whisper.create_tween().tween_property(_whisper, "scale", Vector2.ONE * 1.0, 0.7)
+
+
 func fade_to_black(on: bool) -> void:
 	_flash.color = Color(0, 0, 0, 1.0 if on else 0.0)
 
@@ -433,6 +540,9 @@ func _draw_pad() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if cinematic_active and ((event is InputEventScreenTouch and event.pressed) or (event is InputEventMouseButton and event.pressed) or (event is InputEventKey and event.pressed)):
+		_cine_skip = true
+		return
 	if not playing or modal_open or game == null or game.player == null:
 		return
 	var p := game.player

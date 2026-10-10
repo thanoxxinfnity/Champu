@@ -50,6 +50,10 @@ jobs:
         run: |
           godot --headless --fixed-fps 60 -s tests/hollow_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
           grep -q 'ALL OK' /tmp/out.txt
+      - name: The fear director and Mr. Grin's rig
+        run: |
+          godot --headless --fixed-fps 60 -s tests/dread_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
       - name: The launch can be won with the torch, and not by standing still
         run: |
           godot --headless --fixed-fps 60 -s tests/finale_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt

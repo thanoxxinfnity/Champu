@@ -49,6 +49,7 @@ var valve_labels := {}        # "A" -> Label3D
 var mat_door: ShaderMaterial
 var _wz := "hub"             # the zone whose paint the walls being built get
 var _tween_lights := {}
+var detail: Detail
 
 
 func build(g: Game) -> void:
@@ -65,6 +66,8 @@ func build(g: Game) -> void:
 	_dressing()
 	_signs()
 	_door_panels()
+	detail = Detail.new(self)
+	detail.build()
 	for zone in lit:
 		set_lit(zone, lit[zone], true)
 
@@ -396,7 +399,11 @@ func _lamp(zone: String, x: float, y: float, z: float, range_dark := 7.0, range_
 	l.shadow_enabled = false
 	add_child(l)
 	var fixture := _mesh_box(Vector3(0.7, 0.08, 0.25), Vector3(x, y, z), Assets.mat(Color(0.3, 0.3, 0.3), 0.5, 0.0, 0.0))
-	lights[zone].append({"light": l, "fixture": fixture, "dark": range_dark, "lit": range_lit})
+	# A cone of dust-light under the lamp.
+	var shaft := Detail.cone(Color(0.6, 0.75, 1.0), 0.10, 5.0, y - 0.05)
+	shaft.position = Vector3(x, y - 0.1 - (y - 0.05) * 0.5, z)
+	add_child(shaft)
+	lights[zone].append({"light": l, "fixture": fixture, "shaft": shaft, "dark": range_dark, "lit": range_lit})
 
 
 func _lamps() -> void:
@@ -424,6 +431,8 @@ func is_lit(zone: String) -> bool:
 
 func set_lit(zone: String, on: bool, instant := false) -> void:
 	lit[zone] = on
+	if detail != null:
+		detail.set_power(zone, on)
 	for entry in lights.get(zone, []):
 		var l: OmniLight3D = entry.light
 		var fix: MeshInstance3D = entry.fixture
@@ -437,6 +446,10 @@ func set_lit(zone: String, on: bool, instant := false) -> void:
 		fm.albedo_color = color
 		fm.emission = color
 		fm.emission_energy_multiplier = 2.0 if on else 0.5
+		var sm := (entry.shaft as MeshInstance3D).material_override as ShaderMaterial
+		sm.set_shader_parameter("tint", color)
+		sm.set_shader_parameter("strength", 0.11 if on else 0.07)
+		sm.set_shader_parameter("flicker", 0.0 if on else 0.35)
 		if instant:
 			l.light_energy = target_energy
 		else:

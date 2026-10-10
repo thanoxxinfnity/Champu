@@ -78,6 +78,15 @@ func _process(delta: float) -> void:
 			_heart.play()
 
 
+## Tension thickens the room tone and darkens the hum.
+func set_dread(t: float) -> void:
+	if not ready_ok:
+		return
+	_amb.volume_db = lerpf(-24.0, -10.0, t)
+	_hum.volume_db = lerpf(-20.0, -14.0, t)
+	_hum.pitch_scale = lerpf(1.0, 0.82, t)
+
+
 func start_ambience() -> void:
 	while not ready_ok:
 		await get_tree().create_timer(0.4).timeout

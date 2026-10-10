@@ -22,6 +22,21 @@ static func _scene(model: String) -> PackedScene:
 	return _scenes[model]
 
 
+## The material the generated model came with (its colour texture), for a mesh that was rebuilt from it.
+static func original_material(model: String) -> Material:
+	var pack := _scene(model)
+	if pack == null:
+		return null
+	var root := pack.instantiate()
+	var mis := root.find_children("*", "MeshInstance3D", true, false)
+	var found: Material = null
+	if not mis.is_empty():
+		var mi := mis[0] as MeshInstance3D
+		found = mi.material_override if mi.material_override != null else (mi.mesh.surface_get_material(0) if mi.mesh != null and mi.mesh.get_surface_count() > 0 else null)
+	root.free()
+	return found
+
+
 static func bounds(root: Node3D) -> AABB:
 	# Hand-built stand-ins carry their own bounds (also correct under the headless dummy renderer).
 	if root.has_meta("aabb"):
@@ -47,6 +62,7 @@ static func make(model: String, size: float, by_length := false, puppet := false
 	var info: Dictionary = Data.MODELS.get(model, {})
 	var holder := Node3D.new()
 	holder.name = model
+	holder.set_meta("model", model)
 	var pack := _scene(model)
 	var root: Node3D
 	if pack == null:

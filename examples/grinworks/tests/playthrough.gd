@@ -254,7 +254,11 @@ func run() -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.SAVE))
 		game.ui.show_title(false)
 		await step(60 * 5)   # the title screen, typed in
+	game.cinematic = film
 	game._begin()
+	await step(5)
+	while game.ui.cinematic_active:
+		await step()
 	await step(5)
 	game.ui.close_modal()
 	check(game.playing, "game begins")
@@ -347,7 +351,11 @@ func run() -> void:
 	print("-- the pod")
 	check(game.objective().contains("DELIVERY BAY"), "objective points to the delivery bay")
 	check(await use_it("pod_console"), "use the pod console")
-	check(game.s.launching and game.s.cells_in == 3, "the launch starts with three cells in")
+	check(game.s.cells_in == 3 and not game.s.launching and game.ui.modal_open, "three cells in, and the gate lock asks for the count")
+	await dial("0000", "digits")
+	check(not game.s.gate_ok, "a wrong count is refused")
+	await dial(Puzzles.gate_code(), "digits")
+	check(game.s.gate_ok and game.s.launching, "the right count opens the lock and the launch starts")
 	check(not lv.is_lit("pod"), "the pod bay lights fail")
 	game.ui.close_modal()   # the gate note: a player closes it and picks up the torch
 	await step(60 * 8)

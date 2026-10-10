@@ -15,6 +15,7 @@ class State:
 	var breaker: Array = []
 	var breaker_solved := false
 	var radio_solved := false
+	var gate_ok := false         # the gate lock is open
 	var launching := false
 	var won := false
 	var notes: Array = []
@@ -29,6 +30,7 @@ const SAVE := "user://station9.json"
 const LAUNCH_TIME := 25.0
 const SPAWN_YAW := -90.0
 static var autostart := false
+var cinematic := false         # the opening text, only when a player starts a new game (tests and shots skip it)
 
 var s := State.new()
 var level: Level
@@ -43,6 +45,7 @@ var _awake_t := 0.0
 var _death_t := 0.0
 var _hum_t := 5.0
 var headless_test := false
+var dread: Dread
 
 
 func _ready() -> void:
@@ -81,6 +84,11 @@ func _ready() -> void:
 	add_child(hollow)
 	hollow.caught_player.connect(_on_caught)
 
+	dread = Dread.new()
+	dread.name = "Dread"
+	dread.game = self
+	add_child(dread)
+
 	ui = Ui.new()
 	ui.name = "Ui"
 	ui.game = self
@@ -97,6 +105,7 @@ func _ready() -> void:
 	sfx.start_ambience()
 	if autostart:
 		autostart = false
+		cinematic = not headless_test or OS.get_environment("S9_FILM") == "1"
 		call_deferred("_begin")
 
 
@@ -115,11 +124,26 @@ func continue_game() -> void:
 	_begin()
 
 
+const INTRO := [
+	"GRINWORKS TOY COMPANY",
+	"Every child in the country kept one of his smiles on a shelf.",
+	"Eleven years ago the night shift clocked out and never came back.",
+	"The company said it was a gas leak.\nThe company said a lot of things.",
+	"Tonight you are the last name on the payroll.",
+	"The power is out. The doors are shut.",
+	"And somewhere in the dark, something is still smiling.",
+]
+
+
 func _begin() -> void:
 	playing = true
 	s.started = true
 	ui.hide_all_screens()
 	player.frozen = false
+	if cinematic and "intro" not in s.notes:
+		player.frozen = true
+		await ui.cinematic(INTRO)
+		player.frozen = false
 	var node: String = s.checkpoint
 	player.respawn(level.nodes[node].pos + Vector3(0, 0, 0.3), SPAWN_YAW)
 	player.battery = maxf(player.battery, 60.0)
@@ -158,6 +182,7 @@ func _process(delta: float) -> void:
 		s.seconds += delta
 	hollow.frozen = ui.modal_open and not s.launching
 	_announce_zone()
+	dread.update(delta)
 	_update_hud(delta)
 	if s.launching and not player.dead:
 		_launch_left -= delta
@@ -171,6 +196,7 @@ func _process(delta: float) -> void:
 			hollow.wake(_spawn_node())
 			hollow.speed_bonus = float(_progress())
 			hollow.grace = 4.0
+			pa("Good evening, little one. It is long past your bedtime.", 3.0)
 			_hint_later("torch", 4.0)
 			_hint_later("hide", 40.0)
 	# Light flicker in dark zones, harder when it is close.
@@ -295,6 +321,16 @@ func far_dark_node(from: Vector3, avoid: Vector3) -> String:
 	return cands[randi() % mini(3, cands.size())].id
 
 
+## Mr. Grin, on the old public-address system. Said on the glass, and heard as a low voice.
+func pa(text: String, wait := 0.0) -> void:
+	if wait > 0.0:
+		await get_tree().create_timer(wait).timeout
+	if player.dead or s.won:
+		return
+	sfx.play("growl", -12.0, 0.55)
+	ui.subtitle(text, "MR. GRIN")
+
+
 func light_zone(zone: String) -> void:
 	level.set_lit(zone, true)
 	sfx.play("poweron", -4.0)
@@ -403,6 +439,7 @@ func crew_locker(u: Use) -> void:
 			light_zone("dorm")
 			light_zone("corW")
 			_note_after("locker_note", 1.2)
+			pa("That cubby was not yours to open.", 4.0)
 			u.enabled = false
 			_save()
 			return true
@@ -506,6 +543,7 @@ func _open_breaker_ui() -> void:
 			light_zone("corE")
 			sfx.play("win", -4.0)
 			ui.toast("Power restored to the toy lab. A cell and a keycard drop from the charger.")
+			pa("That is MY laboratory. Wipe your feet.", 3.0)
 			_spawn_lab_rewards()
 			_save()
 		return s.breaker
@@ -534,6 +572,7 @@ func radio_use(_u: Use) -> void:
 			level.doors["pod_door"].set_open(true)
 			level.pickup("cell_control", "power_cell", 0.3, Vector3(1.8, 0.45, -26.0), "Take power cell", Color(0.3, 0.7, 1.0))
 			_note_after("control_note", 1.5)
+			pa("You found my voice. Do you like it?", 6.0)
 			_save()
 			return true
 		sfx.play("error", -2.0)
@@ -564,7 +603,21 @@ func pod_console(_u: Use) -> void:
 		sfx.play("pickup", 0.0)
 		ui.toast("%d of 3 cells in." % s.cells_in)
 		_save()
-	if s.cells_in >= 3:
+	if s.cells_in >= 3 and not s.gate_ok:
+		ui.show_dial("GATE LOCK", "The foreman's morning count: beds, valves, robots on the benches, terminals in the office.", 4, "digits", func(code: String):
+			if code == Puzzles.gate_code():
+				s.gate_ok = true
+				sfx.play("win", -4.0)
+				ui.close_modal()
+				_save()
+				_start_launch()
+				return true
+			sfx.play("error", -4.0)
+			noise(player.global_position, 6.0, "dial")
+			ui.toast("The lock buzzes. Wrong count.")
+			return false
+		)
+	elif s.cells_in >= 3:
 		_start_launch()
 	else:
 		ui.toast("The gate needs three cells: Boiler room, Toy lab, Mascot office.")
@@ -579,6 +632,7 @@ func _start_launch() -> void:
 	sfx.play("launch", 0.0)
 	sfx.play("beep", -2.0)
 	ui.toast("GATE OPENING. Power diverted — the lights are failing.")
+	pa("The gate is opening. Do stay for the party. There is always cake.", 2.5)
 	level.pickup("battery_pod1", "battery", 0.18, Vector3(15.2, 0.35, -4.4), "Take battery", Color(0.4, 1.0, 0.5))
 	level.pickup("battery_pod2", "battery", 0.18, Vector3(11.3, 0.35, -9.0), "Take battery", Color(0.4, 1.0, 0.5))
 	_save()
@@ -613,7 +667,7 @@ func _save() -> void:
 	var d := {
 		"has_fuse": s.has_fuse, "has_keycard": s.has_keycard, "cells": s.cells, "cells_in": s.cells_in,
 		"locker_open": s.locker_open, "valves": s.valves, "gen_on": s.gen_on, "breaker_open": s.breaker_open,
-		"breaker": s.breaker, "breaker_solved": s.breaker_solved, "radio_solved": s.radio_solved,
+		"breaker": s.breaker, "breaker_solved": s.breaker_solved, "radio_solved": s.radio_solved, "gate_ok": s.gate_ok,
 		"notes": s.notes, "picked": s.picked, "hints": s.hints, "deaths": s.deaths, "checkpoint": s.checkpoint, "seconds": s.seconds,
 	}
 	var f := FileAccess.open(SAVE, FileAccess.WRITE)
@@ -642,6 +696,7 @@ func _load() -> void:
 	s.breaker = d.get("breaker", Puzzles.breaker_start())
 	s.breaker_solved = d.get("breaker_solved", false)
 	s.radio_solved = d.get("radio_solved", false)
+	s.gate_ok = d.get("gate_ok", false)
 	s.notes = d.get("notes", [])
 	s.picked = d.get("picked", [])
 	s.hints = d.get("hints", [])

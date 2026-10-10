@@ -109,5 +109,24 @@ func _init() -> void:
 		var z := level.zone_at(Vector3(u.hide_pos.x, 0, u.hide_pos.z))
 		check(z != "", "%s is inside a zone" % u.id)
 
+	print("-- the gate code is what the rooms really hold")
+	var beds := 0
+	var robots := 0
+	var terminals := 0
+	for n in level.get_children():
+		var nm: String = n.get_meta("model", "")
+		var pos: Vector3 = (n as Node3D).position if n is Node3D else Vector3.ZERO
+		if nm == "bunk_bed":
+			beds += 1
+		elif nm == "robot_toy" and level.zone_at(pos) == "lab" and pos.y > 0.9:
+			robots += 1
+		elif nm == "terminal" and level.zone_at(pos) == "control":
+			terminals += 1
+	check(beds == Puzzles.CREW.size(), "%d beds in the nap room" % beds)
+	check(level.valve_labels.size() == Puzzles.VALVES.size(), "%d valves" % level.valve_labels.size())
+	check(robots == Puzzles.GATE_ROBOTS_ON_BENCHES, "%d robots on the lab benches" % robots)
+	check(terminals == Puzzles.GATE_TERMINALS_IN_OFFICE, "%d terminals in the mascot office" % terminals)
+	check(Puzzles.gate_code() == "4522", "the code is 4522 (it is %s)" % Puzzles.gate_code())
+
 	print("-- %s" % ("ALL OK" if fails == 0 else "%d FAILED" % fails))
 	quit(0 if fails == 0 else 1)
