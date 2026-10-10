@@ -10,6 +10,7 @@ var frames := 0
 var live := OS.get_environment("S9_LIVE") == "1"   # the Hollow is really hunting; the bot defends itself with the torch
 var film := OS.get_environment("S9_FILM") == "1"   # lingers on the title and win screens, for a recording
 var deaths := 0
+var modal_t := 0
 var streak := 0            # frames spent defending in a row
 var ignore_until := 0
 
@@ -39,6 +40,11 @@ func step(n := 1) -> void:
 	for i in range(n):
 		await physics_frame
 		frames += 1
+		# A note left open is read for a few seconds and closed, as a player would.
+		modal_t = modal_t + 1 if game.ui.modal_open else 0
+		if modal_t > 60 * 4:
+			game.ui.close_modal()
+			modal_t = 0
 		if frames > 60 * 60 * 25:
 			print("  FAIL the bot ran for 25 game-minutes and did not finish")
 			quit(1)
@@ -335,6 +341,7 @@ func run() -> void:
 	check(lv.doors["pod_door"].open and lv.is_lit("control"), "pod shutter open, control lit")
 	game.ui.close_modal()
 	await pick("cell_control")
+	game.ui.close_modal()   # the gate note opens with it; a player reads it and closes it
 	check(game.s.cells == 3, "three power cells")
 
 	print("-- the pod")
