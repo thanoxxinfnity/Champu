@@ -246,6 +246,16 @@ func dial(value: String, charset: String) -> void:
 	await step(3)
 
 
+## In a recording the bot also reads the story tapes it passes, the way a player who wanted the whole story would.
+func lore(ids: Array) -> void:
+	if not film:
+		return
+	for id in ids:
+		if await use_it("note_" + id):
+			await step(60 * 4)
+			game.ui.close_modal()
+
+
 func run() -> void:
 	var lv := game.level
 	var p := game.player
@@ -276,6 +286,7 @@ func run() -> void:
 		game.hollow.sleep()
 		game._awake_t = -1e9
 
+	await lore(["lore_gas"])
 	print("-- dormitory: the crew locker")
 	check(game.objective().begins_with("NAP ROOM"), "objective points to the nap room")
 	check(await use_it("note_dorm_diary"), "read Anya's diary")
@@ -295,6 +306,7 @@ func run() -> void:
 	game.ui.close_modal()
 	check("locker_note" in game.s.notes, "the note in the locker is in the journal")
 
+	await lore(["lore_child", "lore_anya"])
 	print("-- engine room: the valves")
 	for letter in ["A", "B", "C", "D", "E"]:
 		pass
@@ -315,6 +327,7 @@ func run() -> void:
 	await pick("cell_engine")
 	check(game.s.cells == 1, "one power cell carried")
 
+	await lore(["lore_guard"])
 	print("-- laboratory: the breakers")
 	check(await use_it("lab_board"), "read the whiteboard")
 	game.ui.close_modal()
@@ -333,6 +346,7 @@ func run() -> void:
 	await pick("keycard")
 	check(game.s.cells == 2 and game.s.has_keycard, "second cell and the keycard")
 
+	await lore(["lore_eng"])
 	print("-- control room: the radio")
 	check(await use_it("door_control"), "swipe the keycard")
 	check(lv.doors["control_door"].open, "the control door opens")
@@ -348,6 +362,7 @@ func run() -> void:
 	game.ui.close_modal()   # the gate note opens with it; a player reads it and closes it
 	check(game.s.cells == 3, "three power cells")
 
+	await lore(["lore_ceo"])
 	print("-- the pod")
 	check(game.objective().contains("DELIVERY BAY"), "objective points to the delivery bay")
 	check(await use_it("pod_console"), "use the pod console")

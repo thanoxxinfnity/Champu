@@ -149,7 +149,7 @@ func _begin() -> void:
 	player.battery = maxf(player.battery, 60.0)
 	ui.set_playing(true)
 	if "intro" not in s.notes:
-		ui.card("GRINWORKS", "Eleven years after the lights went out")
+		ui.card("CHAPTER ONE", "The Dark Floor")
 		call_deferred("read_note", null, "intro")
 	_hint_later("look", 2.5)
 
@@ -387,7 +387,12 @@ func read_note(_u: Use, id: String) -> void:
 	if id not in s.notes:
 		s.notes.append(id)
 		_save()
-	ui.show_note(n.title, Data.note_body(id))
+	# The story pages play as tapes, with a hiss; the puzzle notes stay plain paper.
+	if id in Data.LORE:
+		sfx.play("click", -6.0, 0.5)
+		ui.show_tape(n.title, Data.note_body(id))
+	else:
+		ui.show_note(n.title, Data.note_body(id))
 
 
 func pick_up(u: Use, item: String, holder: Node3D) -> void:
@@ -541,6 +546,7 @@ func _open_breaker_ui() -> void:
 			s.checkpoint = "lb_in"
 			light_zone("lab")
 			light_zone("corE")
+			ui.card("CHAPTER TWO", "The Laboratory")
 			sfx.play("win", -4.0)
 			ui.toast("Power restored to the toy lab. A cell and a keycard drop from the charger.")
 			pa("That is MY laboratory. Wipe your feet.", 3.0)
@@ -573,6 +579,7 @@ func radio_use(_u: Use) -> void:
 			level.pickup("cell_control", "power_cell", 0.3, Vector3(1.8, 0.45, -26.0), "Take power cell", Color(0.3, 0.7, 1.0))
 			_note_after("control_note", 1.5)
 			pa("You found my voice. Do you like it?", 6.0)
+			ui.card("CHAPTER THREE", "The Foreman's Count")
 			_save()
 			return true
 		sfx.play("error", -2.0)
@@ -633,6 +640,7 @@ func _start_launch() -> void:
 	sfx.play("beep", -2.0)
 	ui.toast("GATE OPENING. Power diverted — the lights are failing.")
 	pa("The gate is opening. Do stay for the party. There is always cake.", 2.5)
+	ui.card("FINAL CHAPTER", "The Party")
 	level.pickup("battery_pod1", "battery", 0.18, Vector3(15.2, 0.35, -4.4), "Take battery", Color(0.4, 1.0, 0.5))
 	level.pickup("battery_pod2", "battery", 0.18, Vector3(11.3, 0.35, -9.0), "Take battery", Color(0.4, 1.0, 0.5))
 	_save()

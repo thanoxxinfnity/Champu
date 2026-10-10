@@ -780,6 +780,58 @@ func show_note(title: String, body: String) -> void:
 	row.add_child(_button("CLOSE", Vector2(180, 54), close_modal))
 
 
+## A tape from the factory: green-grey glass with scanlines, a REC light, a date, and the voice typed out slowly.
+func show_tape(title: String, body: String) -> void:
+	_clear(_modal)
+	modal_open = true
+	if game and game.player:
+		game.player.move_input = Vector2.ZERO
+		game.player.crank_held = false
+		game.player.sprint_held = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_modal.mouse_filter = Control.MOUSE_FILTER_STOP
+	var glass := ColorRect.new()
+	glass.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var m := ShaderMaterial.new()
+	m.shader = load("res://shaders/vhs.gdshader")
+	glass.material = m
+	_modal.add_child(glass)
+	var green := Color(0.7, 1.0, 0.8)
+	var rec := _lbl("●  REC", 22, Color(1.0, 0.2, 0.2))
+	rec.position = Vector2(34, 26)
+	glass.add_child(rec)
+	var blink := rec.create_tween().set_loops()
+	blink.tween_property(rec, "modulate:a", 0.15, 0.5)
+	blink.tween_property(rec, "modulate:a", 1.0, 0.5)
+	var play := _lbl("PLAY  ▶", 20, green, HORIZONTAL_ALIGNMENT_RIGHT)
+	play.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	play.position = Vector2(-170, 28)
+	glass.add_child(play)
+	var date := _lbl("%02d/%02d/%d  02:%02d AM" % [3 + (title.length() % 9), 7 + (body.length() % 20), 1996 + (title.length() % 4), 10 + (body.length() % 49)], 18, green)
+	date.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	date.position = Vector2(34, -54)
+	glass.add_child(date)
+	var box := VBoxContainer.new()
+	box.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	box.grow_vertical = Control.GROW_DIRECTION_BOTH
+	box.custom_minimum_size = Vector2(760, 0)
+	box.add_theme_constant_override("separation", 14)
+	glass.add_child(box)
+	box.add_child(_lbl(title, 24, Color(1.0, 0.85, 0.4), HORIZONTAL_ALIGNMENT_CENTER))
+	var t := _lbl(body, 19, green)
+	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	t.custom_minimum_size = Vector2(740, 0)
+	box.add_child(t)
+	_type(t, clampf(body.length() * 0.02, 1.0, 5.0))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_child(row)
+	row.add_child(_button("STOP TAPE", Vector2(200, 54), close_modal))
+	glass.modulate.a = 0.0
+	glass.create_tween().tween_property(glass, "modulate:a", 1.0, 0.25)
+
+
 func show_journal() -> void:
 	if game == null or modal_open:
 		return
