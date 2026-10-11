@@ -40,7 +40,15 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - uses: android-actions/setup-android@v3
+      # android-actions/setup-android@v3 shells out to `sdkmanager tools`, a package Google dropped
+      # from the repository years ago — it now fails outright on every runner. Installing only the three
+      # packages the build actually needs sidesteps it.
+      - name: Install the Android SDK pieces this build needs
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
       # No gradlew wrapper is committed; this installs a real Gradle (RELEASE.md's local flow uses the
       # same system `gradle`) and exposes it as `gradle` on PATH.
