@@ -130,6 +130,18 @@ func _ready() -> void:
 	_root.add_child(_screen)
 
 
+## A dim strip behind words that float over the picture, so a sign on the wall behind them cannot be mistaken for them.
+func _backed(l: Label) -> void:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.0, 0.0, 0.0, 0.5)
+	sb.set_corner_radius_all(6)
+	sb.content_margin_left = 12.0
+	sb.content_margin_right = 12.0
+	sb.content_margin_top = 3.0
+	sb.content_margin_bottom = 3.0
+	l.add_theme_stylebox_override("normal", sb)
+
+
 func _vp() -> Vector2:
 	return screen_override if screen_override != Vector2.ZERO else get_viewport().get_visible_rect().size
 
@@ -162,6 +174,7 @@ func _build_hud() -> void:
 	_toast.size = Vector2(900, 40)
 	_toast.position.x = -450
 	_toast.modulate.a = 0.0
+	_backed(_toast)
 	_hud.add_child(_toast)
 
 	_card = _lbl("", 48, AMBER, HORIZONTAL_ALIGNMENT_CENTER)
@@ -192,6 +205,7 @@ func _build_hud() -> void:
 	_sub.size = Vector2(700, 70)
 	_sub.position = Vector2(-350, -150)
 	_sub.modulate.a = 0.0
+	_backed(_sub)
 	_hud.add_child(_sub)
 
 	_prompt = _lbl("", 22, Color(1, 0.95, 0.6), HORIZONTAL_ALIGNMENT_CENTER)
@@ -204,6 +218,8 @@ func _build_hud() -> void:
 	_count.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	_count.size = Vector2(600, 60)
 	_count.position = Vector2(-300, 205)
+	_backed(_count)
+	_count.visible = false
 	_hud.add_child(_count)
 
 	_items = _lbl("", 16, AMBER, HORIZONTAL_ALIGNMENT_RIGHT)
@@ -335,6 +351,7 @@ func set_countdown(text: String) -> void:
 	if text == _count.text:
 		return
 	_count.text = text
+	_count.visible = text != ""
 	if text != "":
 		_count.pivot_offset = Vector2(300, 30)
 		_count.scale = Vector2.ONE * 1.3
