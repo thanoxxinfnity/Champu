@@ -39,7 +39,7 @@ jobs:
         run: |
           godot --headless --fixed-fps 60 -s tests/puzzles_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
           grep -q 'ALL OK' /tmp/out.txt
-      - name: The map is not broken: doorways, navmesh, reach
+      - name: "The map is not broken: doorways, navmesh, reach"
         run: |
           godot --headless --fixed-fps 60 -s tests/map_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
           grep -q 'ALL OK' /tmp/out.txt
@@ -47,7 +47,7 @@ jobs:
         run: |
           godot --headless --fixed-fps 60 -s tests/stream_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
           grep -q 'ALL OK' /tmp/out.txt
-      - name: The creatures: hearing, sight, stun, hiding, the Warden
+      - name: "The creatures: hearing, sight, stun, hiding, the Warden"
         run: |
           godot --headless --fixed-fps 60 -s tests/enemy_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
           grep -q 'ALL OK' /tmp/out.txt
@@ -55,7 +55,7 @@ jobs:
         run: |
           godot --headless --fixed-fps 60 -s tests/ui_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
           grep -q 'ALL OK' /tmp/out.txt
-      - name: The things in the world: fuse box, levers, water, belts, falling pipes, the bomb
+      - name: "The things in the world: fuse box, levers, water, belts, falling pipes, the bomb"
         run: |
           godot --headless --fixed-fps 60 -s tests/game_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
           grep -q 'ALL OK' /tmp/out.txt
