@@ -1,0 +1,96 @@
+name: OVERRIDE APK
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - claude/chomugiri-workspace-design-09sxwa
+    paths:
+      - "examples/override/**"
+      - "examples/sideload.keystore"
+      - ".github/workflows/override-apk.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: barichello/godot-ci:4.3
+    # GitHub Actions forces HOME=/github/home inside a `container:` job, which hides this image's
+    # baked-in export templates and Java SDK config (both live under /root). Point HOME back.
+    env:
+      HOME: /root
+    defaults:
+      run:
+        working-directory: examples/override
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import the project
+        run: godot --headless --import || true
+
+      # The game is only built if it can actually be finished. These are the same checks that were run
+      # while it was made: every puzzle has one answer, the map is not broken, the creature behaves, and
+      # a bot plays from the airlock to the escape pod with the real controls.
+      - name: Puzzles have exactly one answer
+        run: |
+          godot --headless --fixed-fps 60 -s tests/puzzles_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: The map is not broken: doorways, navmesh, reach
+        run: |
+          godot --headless --fixed-fps 60 -s tests/map_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: Rooms stream in and out, and the doorway triggers move the focus
+        run: |
+          godot --headless --fixed-fps 60 -s tests/stream_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: The creatures: hearing, sight, stun, hiding, the Warden
+        run: |
+          godot --headless --fixed-fps 60 -s tests/enemy_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: Words stay on paper, the pack crafts, buttons fit the glass
+        run: |
+          godot --headless --fixed-fps 60 -s tests/ui_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: The things in the world: fuse box, levers, water, belts, falling pipes, the bomb
+        run: |
+          godot --headless --fixed-fps 60 -s tests/game_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: A bot plays the whole game, task by task, with the real controls
+        # A script that fails to load prints errors and still exits 0, so the verdict line is checked as well.
+        run: |
+          godot --headless --fixed-fps 60 -s tests/playthrough.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+
+      - name: Give this build a higher version number than the last
+        run: |
+          sed -i "s/^version\/code=.*/version\/code=$((1000 + GITHUB_RUN_NUMBER))/" export_presets.cfg
+          grep -n "^version/" export_presets.cfg
+
+      - name: Export Android APK
+        env:
+          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/examples/sideload.keystore
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: chomugames
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: chomugames
+        run: |
+          mkdir -pv build
+          godot --headless --export-release "Android" build/Override.apk
+          ls -la build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Override-apk
+          path: examples/override/build/Override.apk
+          retention-days: 60
+
+      - name: Publish a download release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: override-apk
+          name: Project OVERRIDE (latest build)
+          body: Auto-built from ${{ github.sha }}. Sideload APK — enable "install from unknown sources" to install.
+          files: examples/override/build/Override.apk

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="24" fill="#080406"/>
+  <path d="M0 98 L128 70 L128 128 L0 128 Z" fill="#14070a"/>
+  <circle cx="64" cy="58" r="38" fill="none" stroke="#7a1410" stroke-width="5"/>
+  <circle cx="64" cy="58" r="28" fill="#1a0707"/>
+  <path d="M64 24 L64 92 M30 58 L98 58" stroke="#3a0d0b" stroke-width="3"/>
+  <circle cx="64" cy="58" r="12" fill="#ff2a1a"/>
+  <circle cx="64" cy="58" r="5" fill="#ffd7cf"/>
+  <path d="M26 104 Q64 90 102 104" fill="none" stroke="#7a1410" stroke-width="4"/>
+  <text x="64" y="120" font-family="monospace" font-size="13" font-weight="bold" fill="#d6463a" text-anchor="middle">OVERRIDE</text>
+</svg>
