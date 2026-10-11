@@ -210,10 +210,14 @@ func _layout() -> Dictionary:
 	return {
 		"emp": {"c": Vector2(vp.x - 120.0 * k, vp.y - 120.0 * k), "r": 56.0 * k},
 		"torch": {"c": Vector2(vp.x - 250.0 * k, vp.y - 70.0 * k), "r": 38.0 * k},
-		"crouch": {"c": Vector2(vp.x - 250.0 * k, vp.y - 170.0 * k), "r": 38.0 * k},
-		"pack": {"c": Vector2(vp.x - 120.0 * k, vp.y - 240.0 * k), "r": 36.0 * k},
+		# A little further from the button under it than its own radius needs, so the two fuzzy tap
+		# zones (radius + 10px) stop just short of touching even at the smallest hud_scale (0.62, a
+		# short screen on LOW quality) instead of only the nearest-centre rule in _hit() keeping a tap
+		# from landing on the wrong one.
+		"crouch": {"c": Vector2(vp.x - 250.0 * k, vp.y - 190.0 * k), "r": 38.0 * k},
+		"pack": {"c": Vector2(vp.x - 120.0 * k, vp.y - 250.0 * k), "r": 36.0 * k},
 		"throw": {"c": Vector2(vp.x - 390.0 * k, vp.y - 100.0 * k), "r": 36.0 * k},
-		"gadget": {"c": Vector2(vp.x - 390.0 * k, vp.y - 200.0 * k), "r": 36.0 * k},
+		"gadget": {"c": Vector2(vp.x - 390.0 * k, vp.y - 215.0 * k), "r": 36.0 * k},
 		"pause": {"c": Vector2(vp.x - 44.0, 40.0), "r": 26.0},
 	}
 
@@ -232,11 +236,20 @@ func _hit(pos: Vector2) -> String:
 	if _focus_now and pos.distance_to(_hand_center()) < 52.0 * hud_scale():
 		return "hand"
 	var l := _layout()
+	# Two buttons' fuzzy tap zones (radius + 10px of slop) overlap by a few pixels at the small end of
+	# hud_scale — a short screen on LOW quality, exactly the phones this is tuned for. The first one
+	# checked used to win outright, so a tap aimed at the second could land on its neighbour instead.
+	# Picking whichever centre the tap is actually closest to fixes that regardless of how the layout
+	# is tuned, rather than only moving the problem to a different pair of buttons.
+	var best := ""
+	var best_d := INF
 	for k in l:
 		var d: Dictionary = l[k]
-		if pos.distance_to(d.c) < d.r + 10.0:
-			return k
-	return ""
+		var dist := pos.distance_to(d.c)
+		if dist < d.r + 10.0 and dist < best_d:
+			best = k
+			best_d = dist
+	return best
 
 
 func _draw_pad() -> void:

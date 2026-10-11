@@ -180,6 +180,18 @@ func _init() -> void:
 			if hand.distance_to(d.c) < 46.0 * ui.hud_scale() + d.r + 4.0:
 				apart = false
 		check(apart, "at %dx%d no button touches another, nor the hand icon" % [size.x, size.y])
+		# _hit() gives each button an extra 10px of forgiving tap slop on top of its drawn radius — the
+		# real test of "does a tap land on the right button" is whether those two fuzzy zones stay apart,
+		# not just the drawn circles (a gap that looked fine here once still let a tap near the boundary
+		# resolve to the wrong button).
+		var tap_apart := true
+		for i in range(keys.size()):
+			for j in range(i + 1, keys.size()):
+				var a: Dictionary = lay[keys[i]]
+				var b: Dictionary = lay[keys[j]]
+				if a.c.distance_to(b.c) < a.r + 10.0 + b.r + 10.0:
+					tap_apart = false
+		check(tap_apart, "at %dx%d no button's tap zone (its radius + 10px of slop) reaches another's" % [size.x, size.y])
 
 	print("-- %s" % ("ALL OK" if fails == 0 else "%d FAILED" % fails))
 	quit(0 if fails == 0 else 1)
