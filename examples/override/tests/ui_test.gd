@@ -25,7 +25,7 @@ func _init() -> void:
 		await process_frame
 	var ui := game.ui
 
-	for size in [Vector2(1280, 720), Vector2(960, 540)]:
+	for size in [Vector2(1280, 720), Vector2(854, 480)]:
 		ui.screen_override = size
 		ui._root.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		ui._root.size = size
@@ -96,6 +96,26 @@ func _init() -> void:
 						opaque += 1
 			check(img.get_pixel(0, 0).a == 0.0 and img.get_pixel(img.get_width() - 1, img.get_height() - 1).a == 0.0 and opaque > 20, "%s: transparent corners, a solid middle (%d samples)" % [item, opaque])
 
+	print("-- the pack on the low-quality screen (854 x 480)")
+	ui.screen_override = Vector2(854, 480)
+	ui._root.size = Vector2(854, 480)
+	game.s.inv = ["fuse", "gel"]
+	for i in range(20):
+		await process_frame
+	ui.show_pack()
+	await process_frame
+	var g2 := ui._modal.get_node("Grid") as GridContainer
+	check(Rect2(Vector2.ZERO, Vector2(854, 480)).encloses(Rect2(g2.position, g2.size)), "the grid fits 854 x 480")
+	check(Rect2(Vector2.ZERO, Vector2(854, 480)).encloses(Rect2(ui._dropzone.position, ui._dropzone.size)), "so does the drop button")
+	var cell_small := true
+	for sl in ui._slots:
+		if (sl as Control).custom_minimum_size.x < 56.0:
+			cell_small = false
+	check(cell_small, "cells are still big enough to hit (>= 56 px)")
+	ui.close_modal()
+	ui.screen_override = Vector2(1280, 720)
+	ui._root.size = Vector2(1280, 720)
+
 	print("-- dropping from the pack")
 	game.s.inv = ["fuse", "gel"]
 	game.player.yaw = 0.0
@@ -137,7 +157,7 @@ func _init() -> void:
 	game.s.inv = []
 
 	print("-- the buttons")
-	for size in [Vector2(1280, 720), Vector2(960, 540), Vector2(1600, 720)]:
+	for size in [Vector2(1280, 720), Vector2(960, 540), Vector2(1600, 720), Vector2(854, 480), Vector2(1040, 480)]:
 		ui.screen_override = size
 		var lay := ui._layout()
 		var keys := lay.keys()
@@ -157,7 +177,7 @@ func _init() -> void:
 		var hand := ui._hand_center()
 		for k in keys:
 			var d: Dictionary = lay[k]
-			if hand.distance_to(d.c) < 46.0 + d.r + 4.0:
+			if hand.distance_to(d.c) < 46.0 * ui.hud_scale() + d.r + 4.0:
 				apart = false
 		check(apart, "at %dx%d no button touches another, nor the hand icon" % [size.x, size.y])
 

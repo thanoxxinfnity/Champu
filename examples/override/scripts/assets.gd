@@ -189,6 +189,56 @@ static func _ball(root: Node3D, r: float, pos: Vector3, color: Color, rough := 0
 	_part(root, sm, pos, color, rough, metal, glow)
 
 
+## A stand-in built from many little primitives is one mesh with a surface per material: a belt was seven draw calls, now it is three.
+static func _merge(root: Node3D) -> Node3D:
+	var groups := {}
+	var count := 0
+	for c in root.get_children():
+		var mi := c as MeshInstance3D
+		if mi == null or mi.mesh == null:
+			continue
+		count += 1
+		if not groups.has(mi.material_override):
+			groups[mi.material_override] = []
+		groups[mi.material_override].append(mi)
+	if count < 2 or groups.size() >= count:
+		return root
+	var merged := ArrayMesh.new()
+	for mat in groups:
+		var verts := PackedVector3Array()
+		var normals := PackedVector3Array()
+		var uvs := PackedVector2Array()
+		var indices := PackedInt32Array()
+		for mi in groups[mat]:
+			var arr: Array = (mi.mesh as PrimitiveMesh).get_mesh_arrays()
+			var base := verts.size()
+			var xf: Transform3D = (mi as MeshInstance3D).transform
+			for v in (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+				verts.append(xf * v)
+			for nv in (arr[Mesh.ARRAY_NORMAL] as PackedVector3Array):
+				normals.append((xf.basis * nv).normalized())
+			uvs.append_array(arr[Mesh.ARRAY_TEX_UV])
+			for ix in (arr[Mesh.ARRAY_INDEX] as PackedInt32Array):
+				indices.append(base + ix)
+		var out := []
+		out.resize(Mesh.ARRAY_MAX)
+		out[Mesh.ARRAY_VERTEX] = verts
+		out[Mesh.ARRAY_NORMAL] = normals
+		out[Mesh.ARRAY_TEX_UV] = uvs
+		out[Mesh.ARRAY_INDEX] = indices
+		merged.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+		merged.surface_set_material(merged.get_surface_count() - 1, mat)
+	for c in root.get_children():
+		if c is MeshInstance3D:
+			root.remove_child(c)
+			c.free()
+	var one := MeshInstance3D.new()
+	one.name = "Merged"
+	one.mesh = merged
+	root.add_child(one)
+	return root
+
+
 static func _stand_in(model: String) -> Node3D:
 	var n := Node3D.new()
 	var steel := Color(0.34, 0.37, 0.4)
@@ -242,4 +292,4 @@ static func _stand_in(model: String) -> Node3D:
 			_cyl(n, 0.12, 2.0, Vector3(0, 0.12, 0), Color(0.42, 0.26, 0.18), 0.6, 0.5, 0.0, Vector3(90, 0, 0))
 		_:
 			_box(n, Vector3(0.6, 0.6, 0.6), Vector3(0, 0.3, 0), Color(0.45, 0.45, 0.5), 0.6, 0.3)
-	return n
+	return _merge(n)

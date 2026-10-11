@@ -106,6 +106,8 @@ func _ready() -> void:
 	player.frozen = true
 	ui.show_title(FileAccess.file_exists(SAVE))
 	sfx.start_ambience()
+	if not headless_test:
+		Quality.apply(self, Quality.load_level())
 	# The first room is built behind the title so the first frame of play is not a hitch.
 	world.start_at(Rooms.CHAPTERS[1].room)
 	player.global_position = Rooms.CHAPTERS[1].spawn
@@ -621,7 +623,7 @@ func sparks_at(pos: Vector3) -> void:
 	if headless_test:
 		return
 	var p := GPUParticles3D.new()
-	p.amount = 20
+	p.amount = maxi(6, int(20.0 * Quality.particle_scale))
 	p.lifetime = 0.6
 	p.one_shot = true
 	p.explosiveness = 1.0

@@ -3,7 +3,7 @@ extends SceneTree
 ## A proxy for the 60 FPS mandate that can be measured without a phone: for every room the draw calls, primitives and lights the renderer is
 ## asked for in one frame must stay inside a budget. (Frame time itself depends on the phone; these counts do not.)
 
-const MAX_DRAW_CALLS := 420
+const MAX_DRAW_CALLS := 260
 const MAX_PRIMITIVES := 450_000
 const MAX_ROOMS_LOADED := 6
 

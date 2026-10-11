@@ -173,6 +173,7 @@ func _materials(pal: String) -> Dictionary:
 		for mode in [0, 1, 2]:
 			var sm := ShaderMaterial.new()
 			sm.shader = load("res://shaders/station.gdshader") as Shader
+			sm.set_shader_parameter("noise_tex", load("res://assets/noise.png"))
 			sm.set_shader_parameter("mode", mode)
 			if mode == 0:
 				sm.set_shader_parameter("base", Vector3(c[0].r, c[0].g, c[0].b))
@@ -311,6 +312,7 @@ func _door_mat() -> Material:
 	if not _mats.has("door"):
 		var sm := ShaderMaterial.new()
 		sm.shader = load("res://shaders/station.gdshader") as Shader
+		sm.set_shader_parameter("noise_tex", load("res://assets/noise.png"))
 		sm.set_shader_parameter("mode", 0)
 		sm.set_shader_parameter("base", Vector3(0.3, 0.32, 0.34))
 		sm.set_shader_parameter("trim", Vector3(0.9, 0.7, 0.1))
@@ -380,5 +382,7 @@ func lamp(parent: Node, pos: Vector3, white := false, rng_m := 7.0) -> OmniLight
 	shaft.material_override = sm
 	shaft.position = Vector3(pos.x, pos.y - 0.1 - cm.height * 0.5, pos.z)
 	shaft.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	shaft.add_to_group("shaft")
+	shaft.visible = Quality.shafts
 	parent.add_child(shaft)
 	return l

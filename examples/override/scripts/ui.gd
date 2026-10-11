@@ -38,6 +38,8 @@ var _selected := -1
 var _slots: Array = []
 var _dropzone: Control
 var _gore: Control
+var _low_fx := false
+var _pad_t := 0.0
 var _pack_open := false
 var _after_paper := Callable()
 
@@ -108,11 +110,20 @@ func _process(delta: float) -> void:
 		_beat = 1.0
 	sm.set_shader_parameter("beat", _beat)
 	_flash.color.a = move_toward(_flash.color.a, 0.0, delta * 0.8)
-	if playing:
+	_pad_t += delta
+	if playing and (not _low_fx or _pad_t >= 0.05):
+		_pad_t = 0.0
 		_pad.queue_redraw()
 
 
 # ── what the game tells the glass ────────────────────────────────────────────
+
+## The weak-phone picture: no film grain (it is a hash for every pixel of the screen) and the buttons redraw 20 times a second.
+func set_low_fx(on: bool) -> void:
+	_low_fx = on
+	var sm := _post.material as ShaderMaterial
+	sm.set_shader_parameter("lite", on)
+
 
 func set_playing(on: bool) -> void:
 	playing = on
@@ -194,23 +205,29 @@ func blood_on_screen(heavy := false) -> void:
 
 func _layout() -> Dictionary:
 	var vp := _vp()
+	var k := hud_scale()
 	return {
-		"emp": {"c": Vector2(vp.x - 120, vp.y - 120), "r": 56.0},
-		"torch": {"c": Vector2(vp.x - 250, vp.y - 70), "r": 38.0},
-		"crouch": {"c": Vector2(vp.x - 250, vp.y - 170), "r": 38.0},
-		"pack": {"c": Vector2(vp.x - 120, vp.y - 240), "r": 36.0},
-		"throw": {"c": Vector2(vp.x - 390, vp.y - 100), "r": 36.0},
-		"pause": {"c": Vector2(vp.x - 44, 40), "r": 26.0},
+		"emp": {"c": Vector2(vp.x - 120.0 * k, vp.y - 120.0 * k), "r": 56.0 * k},
+		"torch": {"c": Vector2(vp.x - 250.0 * k, vp.y - 70.0 * k), "r": 38.0 * k},
+		"crouch": {"c": Vector2(vp.x - 250.0 * k, vp.y - 170.0 * k), "r": 38.0 * k},
+		"pack": {"c": Vector2(vp.x - 120.0 * k, vp.y - 240.0 * k), "r": 36.0 * k},
+		"throw": {"c": Vector2(vp.x - 390.0 * k, vp.y - 100.0 * k), "r": 36.0 * k},
+		"pause": {"c": Vector2(vp.x - 44.0, 40.0), "r": 26.0},
 	}
+
+
+## The HUD shrinks on a short screen (the 854 x 480 low-quality picture) so the buttons keep clear of each other and of the hand icon.
+func hud_scale() -> float:
+	return clampf(_vp().y / 720.0, 0.62, 1.0)
 
 
 func _hand_center() -> Vector2:
 	var vp := _vp()
-	return Vector2(vp.x * 0.5, vp.y * 0.5 + 74.0)
+	return Vector2(vp.x * 0.5, vp.y * 0.5 + 74.0 * hud_scale())
 
 
 func _hit(pos: Vector2) -> String:
-	if _focus_now and pos.distance_to(_hand_center()) < 52.0:
+	if _focus_now and pos.distance_to(_hand_center()) < 52.0 * hud_scale():
 		return "hand"
 	var l := _layout()
 	for k in l:
@@ -253,9 +270,10 @@ func _draw_pad() -> void:
 	if _focus_now:
 		var c := _hand_center()
 		var down2: bool = _held.get("hand", false)
-		_pad.draw_circle(c, 46.0, Color(1, 1, 1, 0.3) if down2 else Color(0, 0, 0, 0.4))
-		_pad.draw_arc(c, 46.0, 0, TAU, 48, Color(1, 1, 1, 0.95), 3.0, true)
-		_glyph("use", c, 46.0, Color(1, 1, 1, 0.95))
+		var hr := 46.0 * hud_scale()
+		_pad.draw_circle(c, hr, Color(1, 1, 1, 0.3) if down2 else Color(0, 0, 0, 0.4))
+		_pad.draw_arc(c, hr, 0, TAU, 48, Color(1, 1, 1, 0.95), 3.0, true)
+		_glyph("use", c, hr, Color(1, 1, 1, 0.95))
 	if _count >= 0.0:
 		var c2 := Vector2(vp.x * 0.5, 44.0)
 		var pulse := 0.65 + 0.35 * sin(Time.get_ticks_msec() * (0.006 if _count > 0.2 else 0.016))
@@ -604,6 +622,16 @@ func _close_glyph(pos: Vector2, kind := "close", cb := Callable()) -> Control:
 			b.draw_polyline(PackedVector2Array([Vector2(10, -20), Vector2(18, -10), Vector2(6, -8)]), Color.WHITE, 3.0, true)
 		elif kind == "play":
 			b.draw_colored_polygon(PackedVector2Array([Vector2(-8, -14), Vector2(14, 0), Vector2(-8, 14)]), Color.WHITE)
+		elif kind == "gauge":
+			# Picture quality: three bars that grow, as many lit as the level (low 1, medium 2, high 3).
+			for i in range(3):
+				var lit: bool = i <= Quality.level
+				var hgt := 10.0 + 9.0 * i
+				var bar := Rect2(Vector2(-18.0 + i * 14.0, 14.0 - hgt), Vector2(9.0, hgt))
+				if lit:
+					b.draw_rect(bar, Color(1, 1, 1, 0.95), true)
+				else:
+					b.draw_rect(bar, Color(1, 1, 1, 0.3), false, 2.0)
 		b.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE))
 	b.gui_input.connect(func(e: InputEvent):
 		if (e is InputEventMouseButton or e is InputEventScreenTouch) and e.pressed:
@@ -656,6 +684,11 @@ func show_pack() -> void:
 	_dropzone.size = Vector2(68, 68)
 	_dropzone.position = Vector2(vp.x * 0.5 - 34.0, grid.position.y + side + 24.0)
 	_modal.add_child(_dropzone)
+	var gauge: Control
+	gauge = _close_glyph(Vector2(vp.x * 0.5 + 90.0, grid.position.y + side + 24.0 + 34.0), "gauge", func():
+		Quality.apply(game, (Quality.level + 1) % 3)
+		Quality.save_level(Quality.level)
+		gauge.queue_redraw())
 	refresh_pack()
 	_close_glyph(Vector2(vp.x - 56, 56))
 	glass.modulate.a = 0.0

@@ -13,29 +13,13 @@ uniform float grime = 0.55;
 varying vec3 wp;
 varying vec3 wn;
 
-float hash(vec2 p) {
-	p = fract(p * vec2(123.34, 456.21));
-	p += dot(p, p + 45.32);
-	return fract(p.x * p.y);
-}
+// The noise is read from a baked sheet (assets/noise.png), not computed per pixel: on a phone GPU the old
+// hash-and-mix noise (dozens of ALU ops per noise call, several calls per pixel) was most of the frame.
+uniform sampler2D noise_tex : repeat_enable, filter_linear_mipmap;
 
-float vnoise(vec2 p) {
-	vec2 i = floor(p);
-	vec2 f = fract(p);
-	f = f * f * (3.0 - 2.0 * f);
-	return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
-}
-
-float fbm(vec2 p) {
-	float v = 0.0;
-	float a = 0.5;
-	for (int i = 0; i < 3; i++) {
-		v += a * vnoise(p);
-		p = p * 2.03 + 7.1;
-		a *= 0.5;
-	}
-	return v;
-}
+float cloud(vec2 p) { return texture(noise_tex, p * 0.0625).r * 0.9; }
+float grain_n(vec2 p) { return texture(noise_tex, p * 0.0625).g; }
+float streak_n(vec2 p) { return texture(noise_tex, p * 0.0625).b; }
 
 void vertex() {
 	wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -45,8 +29,8 @@ void vertex() {
 void fragment() {
 	bool horizontal = abs(wn.y) > 0.6;
 	vec2 uv = horizontal ? wp.xz : vec2(wp.x + wp.z, wp.y);
-	float n = fbm(uv * 0.9);
-	float fine = vnoise(uv * 14.0);
+	float n = cloud(uv * 0.9);
+	float fine = grain_n(uv * 14.0);
 	vec3 col = base;
 	float rough_v = 0.8;
 
@@ -69,7 +53,7 @@ void fragment() {
 		col = mix(col, col * 0.4, smoothstep(0.12, 0.0, wp.y));
 		// Years of damp: darker patches, and streaks running down from the ceiling.
 		col *= 0.62 + n * 0.55;
-		float streak = smoothstep(0.58, 0.9, vnoise(vec2(along * 3.5, wp.y * 0.5 + 3.0)) * (1.0 - wp.y * 0.16) + n * 0.25);
+		float streak = smoothstep(0.58, 0.9, streak_n(vec2(along * 3.5, wp.y * 0.5 + 3.0)) * (1.0 - wp.y * 0.16) + n * 0.25);
 		col = mix(col, col * 0.35, streak * grime * 0.7);
 	} else if (mode == 1) {
 		// Checkerboard, a metre a square, scuffed.
@@ -79,11 +63,11 @@ void fragment() {
 		float grout = 1.0 - smoothstep(0.0, 0.03, min(min(g.x, 1.0 - g.x), min(g.y, 1.0 - g.y)));
 		col = mix(col, col * 0.4, grout * 0.7);
 		col *= 0.6 + n * 0.6;
-		col = mix(col, col * 0.4, smoothstep(0.55, 0.85, fbm(uv * 0.5 + 9.0)) * grime * 0.7);
+		col = mix(col, col * 0.4, smoothstep(0.55, 0.85, cloud(uv * 0.5 + 9.0)) * grime * 0.7);
 		rough_v = 0.3 + n * 0.3;
 	} else {
 		col = base * 0.6 * (0.7 + n * 0.5);
-		float drip = smoothstep(0.6, 0.85, fbm(uv * 0.7 + 4.0));
+		float drip = smoothstep(0.6, 0.85, cloud(uv * 0.7 + 4.0));
 		col = mix(col, vec3(0.04, 0.05, 0.04), drip * 0.5);
 	}
 	col *= 0.9 + fine * 0.15;

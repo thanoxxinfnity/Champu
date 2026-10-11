@@ -117,7 +117,7 @@ static func _ceiling(w: World, n: Node3D, r: Array, h: float) -> void:
 
 static func _sparks(n: Node3D, pos: Vector3) -> void:
 	var p := GPUParticles3D.new()
-	p.amount = 24
+	p.amount = maxi(6, int(24.0 * Quality.particle_scale))
 	p.lifetime = 0.8
 	p.explosiveness = 0.15
 	p.visibility_aabb = AABB(Vector3(-3, -3, -3), Vector3(6, 6, 6))
@@ -172,6 +172,8 @@ static func _pickup(w: World, n: Node3D, id: String, model: String, size: float,
 	l.light_energy = 0.5
 	l.omni_range = 2.2
 	l.position = Vector3(0, size + 0.15, 0)
+	l.add_to_group("pickup_light")
+	l.visible = Quality.pickup_lights
 	holder.add_child(l)
 	var u := w.use(n, id, Vector3(0.6, maxf(size, 0.3) + 0.3, 0.6), pos + Vector3(0, size * 0.5, 0), w.game.pick_up.bind(id, holder))
 	u.far = true
@@ -383,8 +385,10 @@ static func _c3_floor(w: World, n: Node3D) -> void:
 	for b in BELTS:
 		var cx: float = (b[0] + b[1]) * 0.5
 		var cz: float = (b[2] + b[3]) * 0.5
-		for k in range(int((b[1] - b[0]) / 2.4)):
-			w.prop(n, "conveyor", 2.4, Vector3(b[0] + 1.2 + k * 2.4, 0.0, cz), 0.0, false, true)
+		# Five metres a piece (the stand-in stretches), so a belt is four draws, not twenty-four.
+		var seg := 5.0
+		for k in range(int((b[1] - b[0]) / seg)):
+			w.prop(n, "conveyor", seg, Vector3(b[0] + seg * 0.5 + k * seg, 0.0, cz), 0.0, false, true)
 		w.solid(Vector3(b[1] - b[0], 0.8, 1.0), Vector3(cx, 0.4, cz), n)
 		for k in range(3):
 			w.prop(n, "crate", 0.5, Vector3(b[0] + 3.0 + k * 6.0, 0.8, cz), randf() * 30.0, false)
