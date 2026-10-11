@@ -25,6 +25,8 @@ var loaded := {}            # room id -> Node3D
 var doors := {}             # door id -> Door  (only of loaded rooms)
 var uses: Array[Use] = []   # everything usable in the loaded rooms
 var nav_region: NavigationRegion3D
+var enemy_map: RID
+var _enemy_region: RID
 var _mats := {}             # pal -> {wall, floor, ceil}
 var _cells := {}            # Vector2i -> true : every walkable metre cell on the map
 var auto_follow := true     # follow the player by position as well as by doorway triggers (a test turns it off to prove the triggers)
@@ -42,7 +44,6 @@ const NAV_MARGIN := 0.5     # how far from a wall the walkable cells start, so a
 
 
 func _build_nav() -> void:
-	var half := int(1.0 / NAV)
 	# Cells are keyed by their lower corner in NAV units. A room contributes the cells whose whole square lies at least NAV_MARGIN
 	# inside it; a doorway contributes the strip through the wall, joining the cells either side.
 	var rects: Array = []
@@ -55,6 +56,7 @@ func _build_nav() -> void:
 			rects.append([d.at - NAV_MARGIN, d.at + Data.WALL + NAV_MARGIN, sp[0] + NAV_MARGIN, sp[1] - NAV_MARGIN])
 		else:
 			rects.append([sp[0] + NAV_MARGIN, sp[1] - NAV_MARGIN, d.at - NAV_MARGIN, d.at + Data.WALL + NAV_MARGIN])
+	var enemy_cells := {}
 	for rc in rects:
 		var x0 := int(round(rc[0] / NAV))
 		var x1 := int(round(rc[1] / NAV))
@@ -63,10 +65,30 @@ func _build_nav() -> void:
 		for x in range(x0, x1):
 			for z in range(z0, z1):
 				_cells[Vector2i(x, z)] = true
+				# The creatures' map has a hole where a safe station's spray reaches: their paths go round it, and a target inside it
+				# is reached at its edge. The player's map (the one the bot and the tests walk) has no hole.
+				if not Safe.in_barrier(Vector3((x + 0.5) * NAV, 0.0, (z + 0.5) * NAV)):
+					enemy_cells[Vector2i(x, z)] = true
+	nav_region = NavigationRegion3D.new()
+	nav_region.navigation_mesh = _nav_mesh(_cells)
+	add_child(nav_region)
+	# a second map, for the creatures
+	enemy_map = NavigationServer3D.map_create()
+	NavigationServer3D.map_set_cell_size(enemy_map, 0.25)
+	NavigationServer3D.map_set_cell_height(enemy_map, 0.25)
+	NavigationServer3D.map_set_active(enemy_map, true)
+	var rg := NavigationServer3D.region_create()
+	NavigationServer3D.region_set_map(rg, enemy_map)
+	NavigationServer3D.region_set_navigation_mesh(rg, _nav_mesh(enemy_cells))
+	NavigationServer3D.region_set_enabled(rg, true)
+	_enemy_region = rg
+
+
+func _nav_mesh(cells: Dictionary) -> NavigationMesh:
 	var verts := PackedVector3Array()
 	var index := {}
 	var polys: Array = []
-	for c in _cells:
+	for c in cells:
 		var corners: Array[Vector2i] = [c, c + Vector2i(1, 0), c + Vector2i(1, 1), c + Vector2i(0, 1)]
 		var ids := PackedInt32Array()
 		for q in corners:
@@ -75,16 +97,25 @@ func _build_nav() -> void:
 				verts.append(Vector3(q.x * NAV, 0.0, q.y * NAV))
 			ids.append(index[q])
 		polys.append(ids)
-	half = half
 	var nm := NavigationMesh.new()
 	nm.vertices = verts
 	for p in polys:
 		nm.add_polygon(p)
 	nm.cell_size = 0.25
 	nm.agent_radius = 0.35
-	nav_region = NavigationRegion3D.new()
-	nav_region.navigation_mesh = nm
-	add_child(nav_region)
+	return nm
+
+
+func _exit_tree() -> void:
+	if _enemy_region.is_valid():
+		NavigationServer3D.free_rid(_enemy_region)
+	if enemy_map.is_valid():
+		NavigationServer3D.free_rid(enemy_map)
+
+
+## The same, on the creatures' map (it has the hole round each safe station).
+func snap_enemy(p: Vector3) -> Vector3:
+	return NavigationServer3D.map_get_closest_point(enemy_map, p)
 
 
 ## A point on the walkable map nearest to `p` (so a creature always has somewhere legal to stand).

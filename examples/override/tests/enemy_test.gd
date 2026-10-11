@@ -1,7 +1,7 @@
 extends SceneTree
 ## godot --headless --path . --fixed-fps 60 -s tests/enemy_test.gd
 ## The creatures. A hunter is blind and goes to a sound through the navigation mesh; a crawler that sees you chases and hurts you; the EMP
-## stunner freezes any of them for five seconds; the Warden cannot be hurt; hiding works; the Warden's footsteps shake the screen.
+## stunner freezes any of them for 25 seconds; the Warden cannot be hurt; hiding works; the Warden's footsteps shake the screen.
 
 var fails := 0
 var game: Game
@@ -171,7 +171,7 @@ func _init() -> void:
 	await steps(60 * 8)
 	check(game.player.health < 3 or game.player.dead, "and it hurts (health %d)" % game.player.health)
 
-	print("-- the stunner holds anything for five seconds")
+	print("-- the stunner holds anything for 25 seconds")
 	game.player.health = 3
 	game.player.dead = false
 	game.player.global_position = Vector3(25, 0, 4)
@@ -188,8 +188,10 @@ func _init() -> void:
 	var p0 := crawler.global_position
 	await steps(60 * 3)
 	check(crawler.global_position.distance_to(p0) < 0.2, "it does not move while stunned")
-	await steps(60 * 3)
-	check(crawler.state != Enemy.S.STUNNED, "and is itself again after five seconds")
+	await steps(60 * 20)
+	check(crawler.state == Enemy.S.STUNNED, "still frozen after 23 seconds")
+	await steps(60 * 4)
+	check(crawler.state != Enemy.S.STUNNED, "and is itself again after 25 seconds")
 	check(game.player.emp_charges == 5, "a shot costs a charge (%d left)" % game.player.emp_charges)
 	await clear()
 
@@ -276,7 +278,7 @@ func _init() -> void:
 	warden._step_t = 0.0
 	warden._step(0.01, 2.0)
 	check(game.player.shake_amount() > before, "its footsteps shake the screen near the player (%.2f)" % game.player.shake_amount())
-	warden.stun(5.0)
+	warden.stun(Data.STUN_SECONDS)
 	await steps(5)
 	check(warden.state == Enemy.S.STUNNED, "the stunner holds even the Warden")
 	await clear()

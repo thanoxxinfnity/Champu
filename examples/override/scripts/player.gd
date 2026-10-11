@@ -40,6 +40,8 @@ var emp_charges := 0
 var health := MAX_HEALTH
 var focus: Use = null
 var push := Vector3.ZERO           # conveyor belts and the like
+var shield_t := 0.0                # an energy shield is up while this is > 0
+var hush_t := 0.0                  # soft soles while this is > 0
 var noise_level := 0.0             # 0..1: how loud you are right now (the HUD's sound meter reads it)
 var _noise_target := 0.0
 var _throw_cd := 0.0
@@ -117,7 +119,7 @@ func toggle_torch() -> void:
 	game.sfx.play("torch", -6.0)
 
 
-## The EMP stunner: a ray from the eye. Whatever walks and is hit freezes for five seconds.
+## The EMP stunner: a ray from the eye. Whatever walks and is hit freezes for Data.STUN_SECONDS (25) seconds.
 func fire_emp() -> bool:
 	if dead or frozen or hidden or not has_emp or _emp_cd > 0.0:
 		return false
@@ -134,7 +136,7 @@ func fire_emp() -> bool:
 	game.emp_bolt(cam.global_position + cam.global_transform.basis * Vector3(0.2, -0.18, -0.4), end)
 	var target: Enemy = hit.collider as Enemy if (not hit.is_empty() and hit.collider is Enemy) else _assist(end)
 	if target != null:
-		target.stun(5.0)
+		target.stun(Data.STUN_SECONDS)
 	return true
 
 
@@ -184,7 +186,7 @@ func throw_scrap() -> Vector3:
 
 
 func hurt(amount := 1) -> void:
-	if dead:
+	if dead or shield_t > 0.0:
 		return
 	health = maxi(0, health - amount)
 	_shake = 1.0
@@ -210,6 +212,8 @@ func _physics_process(delta: float) -> void:
 	head.rotation.x = pitch
 	_emp_cd = maxf(0.0, _emp_cd - delta)
 	_throw_cd = maxf(0.0, _throw_cd - delta)
+	shield_t = maxf(0.0, shield_t - delta)
+	hush_t = maxf(0.0, hush_t - delta)
 	_noise_target = 0.0
 	# Hurt, and then left alone for a while: you get better.
 	if not dead and health < MAX_HEALTH:
@@ -255,6 +259,8 @@ func _physics_process(delta: float) -> void:
 		if _step_t <= 0.0:
 			_step_t = 0.6
 			var radius := NOISE_CROUCH if crouching else (NOISE_RUN if running else NOISE_WALK)
+			if hush_t > 0.0:
+				radius *= 0.25
 			if in_water:
 				radius = maxf(radius * 2.2, 9.0)
 			game.noise(global_position, radius, "step")

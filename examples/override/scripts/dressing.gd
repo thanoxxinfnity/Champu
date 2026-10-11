@@ -51,6 +51,10 @@ static func build(w: World, id: String, n: Node3D) -> void:
 		"c4_exit": _lift(w, n, id)
 	if DRY.has(id):
 		_water(w, n, id)
+	var st := Safe.station_in(id)
+	if not st.is_empty():
+		Safe.build(w, n, st)
+	_scatter(w, n, id)
 	Blood.dress(w, n, id)
 	for rec in w.game.s.dropped:
 		if rec.room == id:
@@ -194,6 +198,93 @@ static func _locker(w: World, n: Node3D, pos: Vector3, yaw: float) -> void:
 	u.hide_yaw = yaw
 
 
+## A gadget lying on the floor: a pick-up whose picture is its own model.
+static func _gadget(w: World, n: Node3D, id: String, item: String, pos: Vector3) -> void:
+	var m: Array = Data.ITEM_MODEL[item]
+	_pickup(w, n, id, m[0], float(m[1]), pos, Data.ITEMS[item])
+
+
+## Fill a room: crates, barrels, desks, chairs and carts along the walls (never in a doorway, on a pick-up, or in a safe station's water),
+## placed from a seed so a room is the same every time it is built. Narrow rooms and lifts stay clear.
+const SCATTER := {
+	"clean": [["lab_bench", 0.9], ["chair", 0.95], ["crate", 0.8], ["toolbox", 0.35], ["cart", 0.9]],
+	"dark": [["crate", 0.85], ["barrel", 0.95], ["cart", 0.9], ["chair", 0.95], ["desk", 0.8]],
+	"wet": [["barrel", 0.95], ["crate", 0.85], ["pipes", 0.8], ["cart", 0.9]],
+	"factory": [["crate", 0.9], ["barrel", 0.95], ["cart", 1.0], ["toolbox", 0.35], ["desk", 0.8]],
+	"core": [["barrel", 0.95], ["crate", 0.9], ["pipes", 0.8], ["toolbox", 0.35]],
+}
+
+
+static func _scatter(w: World, n: Node3D, id: String) -> void:
+	var spec: Dictionary = Rooms.LIST[id]
+	var pal: String = spec.pal
+	if not SCATTER.has(pal) or id == "c2_pipe":
+		return
+	var r: Array = spec.r
+	var wd: float = r[1] - r[0]
+	var dp: float = r[3] - r[2]
+	if minf(wd, dp) < 5.0:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("scatter_" + id)
+	var occupied: Array = []
+	for c in n.get_children():
+		if c is Node3D and not (c is Light3D) and c.name != "Blood":
+			occupied.append(Vector2((c as Node3D).position.x, (c as Node3D).position.z))
+	for u in w.uses:
+		if is_instance_valid(u) and u.get_parent() == n:
+			occupied.append(Vector2(u.position.x, u.position.z))
+	var doors: Array = []
+	for d in Rooms.DOORS:
+		if d.a != id and d.b != id:
+			continue
+		var mid := (float(d.span[0]) + float(d.span[1]) + 1.0) * 0.5
+		doors.append(Vector2(float(d.at) + 0.5, mid) if d.axis == "x" else Vector2(mid, float(d.at) + 0.5))
+	var want := clampi(int(wd * dp / 14.0), 2, 9)
+	var models: Array = SCATTER[pal]
+	var placed := 0
+	for attempt in range(120):
+		if placed >= want:
+			break
+		var side := rng.randi_range(0, 3)
+		var off := rng.randf_range(0.8, 1.3)
+		var p := Vector2.ZERO
+		var yaw := 0.0
+		match side:
+			0:
+				p = Vector2(r[0] + off, rng.randf_range(r[2] + 1.0, r[3] - 1.0))
+				yaw = 90.0
+			1:
+				p = Vector2(r[1] - off, rng.randf_range(r[2] + 1.0, r[3] - 1.0))
+				yaw = -90.0
+			2:
+				p = Vector2(rng.randf_range(r[0] + 1.0, r[1] - 1.0), r[2] + off)
+				yaw = 0.0
+			_:
+				p = Vector2(rng.randf_range(r[0] + 1.0, r[1] - 1.0), r[3] - off)
+				yaw = 180.0
+		var ok := true
+		for o in occupied:
+			if p.distance_to(o) < 1.9:
+				ok = false
+		for dpos in doors:
+			if p.distance_to(dpos) < 6.5:
+				ok = false
+		if Safe.in_barrier(Vector3(p.x, 0, p.y)) and not Safe.station_in(id).is_empty():
+			ok = false
+		if Dressing.in_water(id, Vector3(p.x, 0, p.y)):
+			ok = false
+		for b in BELTS:
+			if id == "c3_floor" and p.x >= b[0] - 0.8 and p.x <= b[1] + 0.8 and p.y >= b[2] - 1.2 and p.y <= b[3] + 1.2:
+				ok = false
+		if not ok:
+			continue
+		var m: Array = models[rng.randi_range(0, models.size() - 1)]
+		w.prop(n, m[0], float(m[1]), Vector3(p.x, 0.0, p.y), yaw + rng.randf_range(-12.0, 12.0), true)
+		occupied.append(p)
+		placed += 1
+
+
 static func _enemy(w: World, n: Node3D, kind: String, pos: Vector3, patrol: Array) -> void:
 	var e := Enemy.new()
 	e.name = "%s_%d" % [kind, n.get_child_count()]
@@ -265,6 +356,7 @@ static func _c1_cryo(w: World, n: Node3D) -> void:
 	_pickup(w, n, "scrap_a", "scrap", 0.18, Vector3(3.5, 0.0, 6.9), Color(0.8, 0.85, 1.0))
 	w.prop(n, "terminal", 0.5, Vector3(1.5, 0.0, 4.0), 90.0, false)
 	w.prop(n, "chair", 0.95, Vector3(2.4, 0.0, 6.4), 200.0, false)
+	_gadget(w, n, "medkit_i", "medkit", Vector3(9.0, 0.0, 4.4))
 
 
 static func _c1_hall(w: World, n: Node3D) -> void:
@@ -277,6 +369,7 @@ static func _c1_hall(w: World, n: Node3D) -> void:
 	_sparks(n, Vector3(16.0, 2.7, 2.4))
 	_skeleton(w, n, Vector3(15.0, 0.0, 4.6), 20.0)
 	w.prop(n, "crate", 0.8, Vector3(12.0, 0.0, 5.4), 15.0)
+	_gadget(w, n, "shield_a", "shield", Vector3(24.5, 0.0, 4.2))
 	_paper(w, n, "p_fusebox", Vector3(22.0, 1.65, 2.45), 0.0)
 	if w.game.s.chapter == 1:
 		_enemy(w, n, "crawler", Vector3(16.0, 0.0, 4.0), [Vector3(14, 0, 3), Vector3(24, 0, 4.5), Vector3(19, 0, 3.5)])
@@ -292,8 +385,8 @@ static func _c1_server(w: World, n: Node3D) -> void:
 	_paper(w, n, "p_ch1_log", Vector3(17.0, 0.86, 13.5), -20.0)
 	_sparks(n, Vector3(15.5, 2.8, 8.0))
 	_locker(w, n, Vector3(14.0, 0.0, 14.6), 0.0)
-	if w.game.s.chapter == 1:
-		_enemy(w, n, "crawler", Vector3(16.0, 0.0, 10.5), [Vector3(15, 0, 9), Vector3(17, 0, 12), Vector3(16, 0, 14)])
+	_gadget(w, n, "beeper_a", "beeper", Vector3(18.0, 0.0, 8.3))
+	_gadget(w, n, "medkit_a", "medkit", Vector3(13.0, 0.0, 13.4))
 
 
 static func _c1_store(w: World, n: Node3D) -> void:
@@ -307,8 +400,7 @@ static func _c1_store(w: World, n: Node3D) -> void:
 	_pickup(w, n, "cell_store", "battery", 0.18, Vector3(12.0, 0.0, -2.5), Color(0.4, 0.8, 1.0))
 	_pickup(w, n, "scrap_b", "scrap", 0.18, Vector3(13.4, 0.0, -2.2), Color(0.8, 0.85, 1.0))
 	_skeleton(w, n, Vector3(15.0, 0.0, -1.0), 70.0)
-	if w.game.s.chapter == 1:
-		_enemy(w, n, "crawler", Vector3(16.0, 0.0, -4.0), [Vector3(13, 0, -2), Vector3(19, 0, -2), Vector3(16, 0, -5)])
+	_gadget(w, n, "hush_a", "hush", Vector3(19.5, 0.0, -1.5))
 
 
 static func _lift(w: World, n: Node3D, id: String) -> void:
@@ -336,9 +428,9 @@ static func _c2_lobby(w: World, n: Node3D) -> void:
 	_skeleton(w, n, Vector3(107.0, 0.08, 5.8), 100.0)
 	_pickup(w, n, "cell_lobby", "battery", 0.18, Vector3(106.5, 0.08, 6.2), Color(0.4, 0.8, 1.0))
 	_pickup(w, n, "scrap_c", "scrap", 0.18, Vector3(108.6, 0.08, 6.4), Color(0.8, 0.85, 1.0))
+	_gadget(w, n, "shield_b", "shield", Vector3(112.5, 0.1, 6.2))
 	if w.game.s.chapter == 2:
-		_enemy(w, n, "hunter", Vector3(104.0, 0.0, 11.0), [Vector3(103, 0, 10), Vector3(110, 0, 10), Vector3(108, 0, 2), Vector3(102, 0, 2)])
-		_enemy(w, n, "hunter", Vector3(111.0, 0.0, 2.0), [Vector3(111, 0, 10), Vector3(106, 0, 8), Vector3(111, 0, 1)])
+		_enemy(w, n, "hunter", Vector3(111.0, 0.0, 10.0), [Vector3(111, 0, 10), Vector3(108, 0, 2), Vector3(112, 0, 2), Vector3(109, 0, 8)])
 
 
 static func _c2_pipe(w: World, n: Node3D) -> void:
@@ -346,8 +438,7 @@ static func _c2_pipe(w: World, n: Node3D) -> void:
 	_sparks(n, Vector3(122.0, 2.7, 6.0))
 	_skeleton(w, n, Vector3(124.0, 0.3, 6.0), 10.0)
 	_debris(w, n, "c2_pipe", Vector3(123.0, 1.5, 6.0), Vector3(3.0, 3.0, 3.0))
-	if w.game.s.chapter == 2:
-		_enemy(w, n, "hunter", Vector3(126.0, 0.0, 6.0), [Vector3(117, 0, 6), Vector3(127, 0, 6)])
+	_gadget(w, n, "hush_b", "hush", Vector3(121.0, 0.1, 6.0))
 
 
 static func _c2_ctrl(w: World, n: Node3D) -> void:
@@ -358,6 +449,7 @@ static func _c2_ctrl(w: World, n: Node3D) -> void:
 	_pickup(w, n, "cell_ctrl", "battery", 0.18, Vector3(116.0, 0.0, 10.5), Color(0.4, 0.8, 1.0))
 	_pickup(w, n, "scrap_d", "scrap", 0.18, Vector3(117.6, 0.0, 10.9), Color(0.8, 0.85, 1.0))
 	_locker(w, n, Vector3(124.4, 0.0, 12.0), 90.0)
+	_gadget(w, n, "medkit_c", "medkit", Vector3(123.0, 0.0, 10.4))
 
 
 static func _c2_pump(w: World, n: Node3D) -> void:
@@ -377,6 +469,7 @@ static func _c2_pump(w: World, n: Node3D) -> void:
 	_debris(w, n, "c2_pump", Vector3(136.0, 1.5, 4.5), Vector3(4.0, 3.0, 4.0))
 	_sparks(n, Vector3(134.0, 3.2, 5.0))
 	_locker(w, n, Vector3(131.0, 0.0, 1.0), 180.0)
+	_gadget(w, n, "beeper_b", "beeper", Vector3(140.5, 0.0, 6.0))
 
 
 # ── chapter 3 ────────────────────────────────────────────────────────────────
@@ -405,6 +498,8 @@ static func _c3_floor(w: World, n: Node3D) -> void:
 	_skeleton(w, n, Vector3(216.0, 0.0, 14.0), 160.0)
 	_pickup(w, n, "cell_floor", "battery", 0.18, Vector3(225.0, 0.0, 9.0), Color(0.4, 0.8, 1.0))
 	_pickup(w, n, "scrap_f", "scrap", 0.18, Vector3(226.6, 0.0, 9.6), Color(0.8, 0.85, 1.0))
+	_gadget(w, n, "shield_c", "shield", Vector3(202.0, 0.0, 14.2))
+	_gadget(w, n, "medkit_d", "medkit", Vector3(222.5, 0.0, 15.0))
 
 
 static func _c3_lockers(w: World, n: Node3D) -> void:
@@ -415,6 +510,7 @@ static func _c3_lockers(w: World, n: Node3D) -> void:
 	w.mesh_box(Vector3(0.12, 0.5, 0.35), Vector3(209.7, 1.2, 20.0), Assets.mat(Color(0.2, 0.9, 0.5), 0.3, 0.0, 1.6), n)
 	_sparks(n, Vector3(205.0, 2.9, 20.0))
 	_skeleton(w, n, Vector3(206.0, 0.0, 19.5), 80.0)
+	_gadget(w, n, "hush_c", "hush", Vector3(203.5, 0.0, 18.4))
 
 
 static func _c3_office(w: World, n: Node3D) -> void:
@@ -425,6 +521,7 @@ static func _c3_office(w: World, n: Node3D) -> void:
 	_locker(w, n, Vector3(212.6, 0.0, 22.0), -90.0)
 	_pickup(w, n, "cell_office", "battery", 0.18, Vector3(224.5, 0.0, 18.5), Color(0.4, 0.8, 1.0))
 	_pickup(w, n, "scrap_g", "scrap", 0.18, Vector3(223.0, 0.0, 19.0), Color(0.8, 0.85, 1.0))
+	_gadget(w, n, "shield_d", "shield", Vector3(216.5, 0.0, 18.5))
 
 
 static func _c3_work(w: World, n: Node3D) -> void:
@@ -433,6 +530,8 @@ static func _c3_work(w: World, n: Node3D) -> void:
 	_pickup(w, n, "gel", "gel", 0.3, Vector3(238.5, 0.95, 10.5), Color(0.4, 1.0, 0.45))
 	_pickup(w, n, "cell_work", "battery", 0.18, Vector3(231.0, 0.0, 3.2), Color(0.4, 0.8, 1.0))
 	_pickup(w, n, "scrap_h", "scrap", 0.18, Vector3(232.4, 0.0, 3.7), Color(0.8, 0.85, 1.0))
+	_gadget(w, n, "medkit_e", "medkit", Vector3(233.0, 0.0, 10.4))
+	_gadget(w, n, "beeper_c", "beeper", Vector3(239.0, 0.0, 4.5))
 	var panel := w.use(n, "door_panel_lift3", Vector3(0.5, 0.6, 0.8), Vector3(240.5, 1.3, 7.8), w.game.door_panel.bind("lift3"))
 	panel.prompt = "keypanel"
 	w.mesh_box(Vector3(0.12, 0.4, 0.3), Vector3(240.7, 1.3, 7.8), Assets.mat(Color(0.2, 0.9, 0.5), 0.3, 0.0, 1.6), n)
@@ -444,14 +543,14 @@ static func _c3_work(w: World, n: Node3D) -> void:
 static func _c4_lobby(w: World, n: Node3D) -> void:
 	_paper(w, n, "p_core", Vector3(301.5, 0.86, 7.0), 0.0)
 	w.prop(n, "crate", 0.85, Vector3(304.5, 0.0, 3.0), 20.0)
+	_gadget(w, n, "medkit_f", "medkit", Vector3(304.2, 0.0, 6.6))
 
 
 static func _c4_corr(w: World, n: Node3D) -> void:
 	_debris(w, n, "c4_corr", Vector3(314.0, 1.5, 5.5), Vector3(3.0, 3.0, 3.0))
 	_sparks(n, Vector3(311.0, 2.7, 5.5))
 	_skeleton(w, n, Vector3(318.0, 0.0, 5.0), 120.0)
-	if w.game.s.chapter == 4:
-		_enemy(w, n, "crawler", Vector3(316.0, 0.0, 5.5), [Vector3(309, 0, 5.5), Vector3(319, 0, 5.5)])
+	_gadget(w, n, "shield_e", "shield", Vector3(310.5, 0.0, 6.2))
 
 
 static func _c4_reactor(w: World, n: Node3D) -> void:
@@ -472,8 +571,8 @@ static func _c4_reactor(w: World, n: Node3D) -> void:
 	_locker(w, n, Vector3(322.7, 0.0, 10.5), -90.0)
 	_locker(w, n, Vector3(339.3, 0.0, 0.5), 90.0)
 	_debris(w, n, "c4_reactor", Vector3(327.0, 3.0, 5.0), Vector3(3.0, 5.0, 4.0))
-	if w.game.s.chapter == 4:
-		_enemy(w, n, "hunter", Vector3(336.0, 0.0, 9.0), [Vector3(336, 0, 9), Vector3(326, 0, 9), Vector3(326, 0, 1), Vector3(336, 0, 1)])
+	_gadget(w, n, "hush_d", "hush", Vector3(324.0, 0.0, 10.5))
+	_gadget(w, n, "medkit_g", "medkit", Vector3(338.0, 0.0, 1.5))
 
 
 static func _c4_waste(w: World, n: Node3D) -> void:
@@ -483,14 +582,12 @@ static func _c4_waste(w: World, n: Node3D) -> void:
 	_skeleton(w, n, Vector3(328.0, 0.0, 18.0), 10.0)
 	_skeleton(w, n, Vector3(334.0, 0.0, 16.0), 100.0)
 	_locker(w, n, Vector3(339.3, 0.0, 17.0), 90.0)
-	if w.game.s.chapter == 4:
-		_enemy(w, n, "crawler", Vector3(328.0, 0.0, 17.0), [Vector3(325, 0, 15), Vector3(337, 0, 19), Vector3(330, 0, 15)])
-		_enemy(w, n, "crawler", Vector3(335.0, 0.0, 18.0), [Vector3(337, 0, 15), Vector3(326, 0, 20)])
+	_gadget(w, n, "shield_f", "shield", Vector3(338.5, 0.0, 19.5))
+	_gadget(w, n, "beeper_d", "beeper", Vector3(324.0, 0.0, 14.5))
 
 
 static func _c4_return(w: World, n: Node3D) -> void:
 	_debris(w, n, "c4_return", Vector3(314.0, 1.5, 17.0), Vector3(3.0, 3.0, 3.0))
 	_sparks(n, Vector3(310.0, 2.7, 16.0))
 	_skeleton(w, n, Vector3(318.0, 0.0, 16.0), 30.0)
-	if w.game.s.chapter == 4:
-		_enemy(w, n, "hunter", Vector3(313.0, 0.0, 17.0), [Vector3(309, 0, 16), Vector3(319, 0, 18)])
+	_gadget(w, n, "medkit_h", "medkit", Vector3(312.0, 0.0, 17.5))

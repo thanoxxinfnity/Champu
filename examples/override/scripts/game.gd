@@ -196,7 +196,7 @@ func _spawn_warden(ch: int) -> void:
 	w.rage = 1.0 if ch == 3 else 1.3
 	if ch == 3:
 		w.position = Vector3(214, 0, 8)
-		w.patrol = [Vector3(206, 0, 3), Vector3(224, 0, 6), Vector3(214, 0, 14), Vector3(206, 0, 11), Vector3(222, 0, 13), Vector3(235, 0, 7)]
+		w.patrol = [Vector3(206, 0, 3), Vector3(224, 0, 6), Vector3(214, 0, 14), Vector3(210, 0, 12), Vector3(222, 0, 13), Vector3(235, 0, 7)]
 	else:
 		w.position = Vector3(335, 0, 5)
 		w.patrol = [Vector3(326, 0, 2), Vector3(336, 0, 9), Vector3(331, 0, 15), Vector3(312, 0, 5), Vector3(326, 0, 9)]
@@ -400,6 +400,75 @@ func _drop_spot() -> Vector3:
 	return Vector3(at.x, (down.position as Vector3).y if not down.is_empty() else player.global_position.y, at.z)
 
 
+## The EMP charger at a safe station: the stunner is full again.
+func use_charger(_u: Use) -> void:
+	if not player.has_emp or player.emp_charges >= 6:
+		sfx.play("error", -6.0)
+		return
+	player.emp_charges = 6
+	sfx.play("poweron", -4.0)
+	sparks_at(player.global_position + player.aim_dir() * 0.8 + Vector3(0, 1.1, 0))
+	noise(player.global_position, 3.0, "charger")
+
+
+## The first gadget in the pack (shield, medkit, hush, beeper), or "".
+func gadget_item() -> String:
+	for g in Data.GADGETS:
+		if g in s.inv:
+			return g
+	return ""
+
+
+## Use it: a shield for 12 s, a medkit for two points, soft soles for 30 s, or a beeper put down as a decoy.
+func use_gadget() -> bool:
+	var g := gadget_item()
+	if g == "" or player.dead or player.hidden:
+		return false
+	match g:
+		"shield":
+			player.shield_t = Data.SHIELD_SECONDS
+			sfx.play("poweron", -3.0)
+		"medkit":
+			if player.health >= Player.MAX_HEALTH:
+				sfx.play("error", -6.0)
+				return false
+			player.health = mini(Player.MAX_HEALTH, player.health + 2)
+			ui.set_health(player.health)
+			sfx.play("win", -6.0)
+		"hush":
+			player.hush_t = Data.HUSH_SECONDS
+			sfx.play("soft", -4.0)
+		"beeper":
+			_place_beeper(player.global_position - player.global_transform.basis.z * 0.9)
+	take_item(g)
+	_save()
+	return true
+
+
+## A beeper on the floor: every second for fourteen seconds it beeps and everything that listens goes to it.
+func _place_beeper(pos: Vector3) -> void:
+	var holder := Node3D.new()
+	holder.position = pos
+	add_child(holder)
+	holder.add_child(Assets.make("beeper", 0.2))
+	var l := OmniLight3D.new()
+	l.light_color = Color(1.0, 0.25, 0.2)
+	l.omni_range = 3.0
+	l.position = Vector3(0, 0.3, 0)
+	holder.add_child(l)
+	var t := Timer.new()
+	t.wait_time = 1.0
+	t.autostart = true
+	holder.add_child(t)
+	var beep := func() -> void:
+		noise(pos, 18.0, "beep")
+		sfx.play_at("beep", pos + Vector3(0, 0.2, 0), 0.0, 1.4)
+		l.visible = not l.visible
+	t.timeout.connect(beep)
+	beep.call()
+	get_tree().create_timer(Data.BEEPER_SECONDS).timeout.connect(holder.queue_free)
+
+
 func has_item(item: String) -> bool:
 	return item in s.inv
 
@@ -443,7 +512,7 @@ func fusebox(_u: Use) -> void:
 		s.fuses_in += 1
 		sfx.play("click", -2.0)
 		sfx.play("zap", -8.0)
-		if s.fuses_in >= 3:
+		if s.fuses_in >= Data.FUSES_NEEDED:
 			world.unlock("lift1")
 			sfx.play("poweron", -2.0)
 			for light in world.loaded["c1_hall"].find_children("*", "OmniLight3D", true, false):
@@ -548,6 +617,12 @@ func pull_from_hide(e: Enemy) -> void:
 
 func hurt_player(amount: int, from: Vector3) -> void:
 	if player.dead:
+		return
+	if player.shield_t > 0.0:
+		# The shield takes the blow: a flash of blue sparks and a crackle, no harm.
+		sfx.play("zap", -3.0)
+		sparks_at(player.global_position + Vector3(0, 1.2, 0))
+		player.shake(0.3)
 		return
 	player.hurt(amount)
 	sfx.play("hit", 0.0)

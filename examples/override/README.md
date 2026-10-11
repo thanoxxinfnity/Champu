@@ -6,7 +6,7 @@ cannot be killed, to plant a bomb on the reactor core and get out in three minut
 
 | chapter | place | enemy | task |
 |---|---|---|---|
-| 1 The Safe Room | cryo chamber, dark corridor, server closet, store | **crawlers** (broken maintenance robots, crawl towards sound) | cable + 3 fuses → fuse box → lift |
+| 1 The Safe Room | cryo chamber, dark corridor, server closet, store | **crawlers** (broken maintenance robots, crawl towards sound) | cable + 2 fuses → fuse box → lift |
 | 2 Sparking Corridors | flooded lobby (the water is live), pipe tunnel, pump room | **blind hunters** (hear everything, see nothing) | cross on the dry planks, find the timer and wiring, throw three levers in the one right order |
 | 3 The Factory | assembly floor with conveyor belts, locker room, foreman's office, workshop | **the Warden** (cannot be hurt; hide in lockers) | office switch → keycard, gel, craft the detonator, lift |
 | 4 The Core Escape | descent, reactor, waste hall, return tunnel | the Warden, enraged, and everything else | craft the mega-bomb, plant it, **3 minutes**, run |
@@ -23,7 +23,7 @@ is a vertical slice, not four hours.
 | No useless UI text; only a **hand icon** that appears when you look at something usable | `ui.gd` (`_hit`, `_draw_pad`); the HUD is stick, swipe area, line-art buttons, the hand | the only text anywhere is the title and the papers |
 | Enemies: `NavigationAgent3D` + NavMesh, states Patrol / Investigate (sound) / Chase | `scripts/enemy.gd`, navmesh built in `world.gd` | `enemy_test` |
 | The Warden: cannot be killed, heavy steps shake the screen, hide in lockers/vents | `enemy.gd`, `player.gd` (`shake`), `dressing.gd` (lockers) | `enemy_test` (footstep shake, hiding, no damage API) |
-| EMP stunner: `RayCast3D`, 5 s stun, battery to find | `player.gd` (`fire_emp`), `cell_*` pick-ups | `enemy_test`, `game_test` |
+| EMP stunner: `RayCast3D`, 25 s stun, battery to find | `player.gd` (`fire_emp`), `cell_*` pick-ups | `enemy_test`, `game_test` |
 | Mega-bomb crafting from parts, inventory | `data.gd` (recipes), `game.gd` (`craft`), `ui.gd` (pack) | `puzzles_test`, `ui_test`, `playthrough` |
 | Falling debris: `Area3D` triggers, `RigidBody3D`, layers right, slides off the player | `dressing.gd` (`_debris`), `game.gd` (`drop_debris`) | `game_test` |
 | No health bar: camera shake, red edges (shader), heartbeat when low | `player.gd`, `shaders/post.gdshader`, `sfx.gd` | `showcase` frame 05 |
@@ -63,6 +63,13 @@ racks and the bomb are built from primitives. Everything else (sounds, textures,
 * **Blood**: every room has splatters on the floor, a blood trail dragged to a doorway, bloody hand prints on the walls (some with a smear running down), and in big rooms a pane of observation glass with hands slid down it and drips from the top. All of a room's blood is one mesh (one draw call) from a single atlas (`assets/blood/atlas.png`, drawn by `tools/make_blood.gd`); nothing is painted across a doorway. When you are hurt, blood is thrown across the screen too (splatters and drips that slide down and fade). Tests: `blood_test`; the draw-call budget (`perf.gd`) stays at 349 of 420.
 * **Smarter creatures**: walls muffle sound (a noise with no clear line carries about half as far); a creature that can see leads its target (runs to where you are going) and a crawler in a pack takes a side; a hunter led to two scrap clangs stops believing them and also searches where the throw came from; the Warden and crawlers remember the lockers you hid in, go to them first, hammer on the door for a second (the tell: get out) and then open it; after each death they are 3 % keener (max 15 %).
 * **Devil moves**: on locking on, a creature stops and screams before it comes (0.45 s crawler, 0.7 hunter, 1 s Warden); crawlers skitter (freeze and burst forward); idle creatures glitch now and then (a flinch, the glow stutters, a crackle); the glow burns brighter when it hunts.
+
+## v2: easier start, safe water, gadgets
+
+* **Fewer, fairer robots**: one crawler in chapter 1, one hunter in chapter 2; the first mission needs only two fuses and the cable. Rooms are furnished (`Dressing._scatter`: benches, crates, barrels, carts along the walls, never in a doorway, on a belt or in the water).
+* **Stunner holds 25 s** (`Data.STUN_SECONDS`).
+* **Safe stations** (`scripts/safe.gd`, one at each chapter's arrival point): a pool of clean water with a green lamp and a dripping pipe. Creatures cannot cross it: an enemy-only collision layer (`L_BLOCK`) plus a hole in a second navigation map used only by creatures (`World.enemy_map`; the player and the bot test keep the full map), and a creature gives up on anyone standing in the water. The **charger** at the pool refills the stunner to six. Tests: `tests/safe_test.gd`.
+* **Gadgets** lying in the rooms: **shield** (12 s, blocks all hits, blue frame), **medkit** (+2 health), **hush** (30 s, quiet steps), **beeper** (a decoy that beeps for 14 s). A round gadget button (key `X`) uses the first one in the pack.
 
 ## Speed on a weak phone (Redmi Note 8 class: Adreno 610, 4 GB)
 

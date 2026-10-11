@@ -9,10 +9,11 @@ const OUT := 192
 const ITEMS := {
 	"fuse": "fuse", "wiring": "wiring", "timer": "timer", "gel": "gel", "detonator": "detonator", "keycard": "keycard", "mega_bomb": "mega_bomb",
 	"cable": "cable", "scrap": "scrap",
+	"shield": "shield", "medkit": "medkit", "hush": "hush", "beeper": "beeper",
 }
 ## items whose in-game model was generated again under another name
 const RAW := {"fuse": "fuse2", "wiring": "wiring2"}
-const SPIN := {"keycard": 20.0, "gel": 25.0, "mega_bomb": 25.0, "timer": 15.0, "detonator": 25.0, "fuse": 30.0, "wiring": 25.0, "cable": 25.0, "scrap": 35.0}
+const SPIN := {"keycard": 20.0, "gel": 25.0, "mega_bomb": 25.0, "timer": 15.0, "detonator": 25.0, "fuse": 30.0, "wiring": 25.0, "cable": 25.0, "scrap": 35.0, "shield": 75.0, "medkit": 20.0, "hush": 25.0, "beeper": 25.0}
 
 
 func _init() -> void:

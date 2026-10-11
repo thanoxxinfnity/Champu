@@ -73,7 +73,7 @@ var _check_t := 0.0
 func _ready() -> void:
 	_cfg = KINDS[kind]
 	collision_layer = Data.L_ENEMY
-	collision_mask = Data.L_WORLD
+	collision_mask = Data.L_WORLD | Data.L_BLOCK      # the barrier round a safe station stops them
 	var cs := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = _cfg.radius
@@ -87,6 +87,7 @@ func _ready() -> void:
 	agent.radius = _cfg.radius
 	agent.avoidance_enabled = false
 	add_child(agent)
+	agent.set_navigation_map(game.world.enemy_map)
 	model = Rig.make(kind, _cfg.size)
 	if model != null:
 		_anim = model.get_meta("anim")
@@ -112,7 +113,7 @@ func _exit_tree() -> void:
 
 ## Is this noise the player's own doing (so a blind creature may kill by it), or a decoy?
 static func is_player_noise(what: String) -> bool:
-	return what != "clang" and what != "pack"
+	return what != "clang" and what != "pack" and what != "beep"
 
 
 ## Something made a noise at `pos`, audible `radius` metres away (scaled by how well this kind hears).
@@ -132,6 +133,8 @@ func hear(pos: Vector3, radius: float, what: String) -> void:
 		_decoy_t = 50.0
 	# Only what the player does at the player's own spot counts as the player (a fake bang across the room is just a sound).
 	var by_player := is_player_noise(what) and pos.distance_to(game.player.global_position) < 3.5
+	if by_player and Safe.inside(game.player.global_position):
+		by_player = false      # it cannot reach them: it only goes and looks
 	if by_player:
 		_heard_player_t = 0.0
 	if state == S.CHASE:
@@ -265,7 +268,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _enter_chase(p: Player) -> void:
-	if state == S.CHASE:
+	if state == S.CHASE or Safe.inside(p.global_position):
 		return
 	_set_state(S.CHASE)
 	_lost = 0.0
@@ -432,6 +435,12 @@ func _search(delta: float) -> void:
 
 
 func _chase(delta: float, p: Player) -> void:
+	# Someone in the water of a safe station cannot be reached: it gives up and goes to look at the edge.
+	if _drag == null and Safe.inside(p.global_position):
+		_last_known = p.global_position
+		_set_state(S.INVESTIGATE)
+		_go(_last_known)
+		return
 	if _drag != null:
 		_target = Vector3(_drag.hide_pos.x, 0.0, _drag.hide_pos.z)
 		if global_position.distance_to(_target) < 1.5:
@@ -553,8 +562,8 @@ func _go(pos: Vector3) -> void:
 	_stuck_t = 0.0
 	_prog_t = 0.0
 	_prog_pos = global_position
-	var synced := NavigationServer3D.map_get_iteration_id(game.world.get_world_3d().navigation_map) > 0
-	agent.target_position = game.world.snap(pos) if synced else pos
+	var synced := NavigationServer3D.map_get_iteration_id(game.world.enemy_map) > 0
+	agent.target_position = game.world.snap_enemy(pos) if synced else pos
 
 
 func _move(delta: float, speed: float, clip: String) -> void:

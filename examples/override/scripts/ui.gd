@@ -212,6 +212,7 @@ func _layout() -> Dictionary:
 		"crouch": {"c": Vector2(vp.x - 250.0 * k, vp.y - 170.0 * k), "r": 38.0 * k},
 		"pack": {"c": Vector2(vp.x - 120.0 * k, vp.y - 240.0 * k), "r": 36.0 * k},
 		"throw": {"c": Vector2(vp.x - 390.0 * k, vp.y - 100.0 * k), "r": 36.0 * k},
+		"gadget": {"c": Vector2(vp.x - 390.0 * k, vp.y - 200.0 * k), "r": 36.0 * k},
 		"pause": {"c": Vector2(vp.x - 44.0, 40.0), "r": 26.0},
 	}
 
@@ -244,6 +245,8 @@ func _draw_pad() -> void:
 			continue
 		if k == "throw" and not _scrap_count():
 			continue
+		if k == "gadget" and (game == null or game.gadget_item() == ""):
+			continue
 		var d: Dictionary = l[k]
 		var down: bool = _held.get(k, false)
 		var fill := Color(0.0, 0.0, 0.0, 0.34)
@@ -254,7 +257,12 @@ func _draw_pad() -> void:
 			fill = Color(1, 1, 1, 0.28)
 		_pad.draw_circle(d.c, d.r, fill)
 		_pad.draw_arc(d.c, d.r, 0, TAU, 48, ink, 2.5, true)
-		_glyph(k, d.c, d.r, ink)
+		if k == "gadget":
+			draw_item(_pad, game.gadget_item(), d.c, d.r * 0.62)
+			if game.player and game.player.shield_t > 0.0:
+				_pad.draw_arc(d.c, d.r + 6.0, -PI * 0.5, -PI * 0.5 + TAU * game.player.shield_t / Data.SHIELD_SECONDS, 32, Color(0.4, 0.75, 1.0, 0.95), 4.0, true)
+		else:
+			_glyph(k, d.c, d.r, ink)
 		if k == "throw":
 			for i in range(mini(_scrap_count(), 6)):
 				_pad.draw_circle(d.c + Vector2(-d.r + 6.0 + i * 11.0, d.r + 8.0), 3.5, Color(0.85, 0.88, 1.0, 0.95))
@@ -264,6 +272,16 @@ func _draw_pad() -> void:
 				var a0 := -PI * 0.5 + i * TAU / 6.0 + 0.1
 				_pad.draw_arc(d.c, d.r + 8.0, a0, a0 + TAU / 6.0 - 0.2, 8, Color(0.4, 0.8, 1.0, 0.95) if i < _emp_charges else Color(1, 1, 1, 0.18), 4.0, true)
 	var vp := _vp()
+	if game and game.player and game.player.shield_t > 0.0:
+		# the shield: a pale blue frame round the picture, blinking in its last two seconds
+		var st: float = game.player.shield_t
+		var a := 0.32 if st > 2.0 else 0.32 * (0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.02))
+		var edge := Color(0.35, 0.7, 1.0, a)
+		var th := 14.0
+		_pad.draw_rect(Rect2(0, 0, vp.x, th), edge)
+		_pad.draw_rect(Rect2(0, vp.y - th, vp.x, th), edge)
+		_pad.draw_rect(Rect2(0, 0, th, vp.y), edge)
+		_pad.draw_rect(Rect2(vp.x - th, 0, th, vp.y), edge)
 	_draw_sound_meter(Vector2(vp.x * 0.5, vp.y - 40.0))
 	# A dot to aim with; the hand under it appears only when there is something to use.
 	_pad.draw_circle(vp * 0.5, 2.5 if not _focus_now else 3.5, Color(1, 1, 1, 0.5 if not _focus_now else 0.9))
@@ -425,6 +443,8 @@ func _press(b: String) -> void:
 			p.crouching = not p.crouching
 		"throw":
 			p.throw_scrap()
+		"gadget":
+			game.use_gadget()
 		"pack":
 			show_pack()
 		"pause":
@@ -447,6 +467,9 @@ func _key(event: InputEventKey) -> void:
 		KEY_G:
 			if down:
 				p.throw_scrap()
+		KEY_X:
+			if down:
+				game.use_gadget()
 		KEY_C:
 			if down:
 				p.crouching = not p.crouching
