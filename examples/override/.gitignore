@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 raw/
 tools/raw_trellis/
+assets/rigger/*.import
+assets/rigger/*_0.png
+assets/rigger/*_0.png.import

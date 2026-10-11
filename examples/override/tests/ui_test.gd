@@ -83,6 +83,19 @@ func _init() -> void:
 	ui.close_modal()
 	check(Engine.time_scale == 1.0 and not ui.modal_open, "closing the pack starts the world again")
 
+	print("-- item pictures")
+	for item in Data.ITEMS:
+		var tex := Ui.item_icon(item)
+		check(tex != null, "%s has a picture" % item)
+		if tex != null:
+			var img := tex.get_image()
+			var opaque := 0
+			for y in range(0, img.get_height(), 8):
+				for x in range(0, img.get_width(), 8):
+					if img.get_pixel(x, y).a > 0.9:
+						opaque += 1
+			check(img.get_pixel(0, 0).a == 0.0 and img.get_pixel(img.get_width() - 1, img.get_height() - 1).a == 0.0 and opaque > 20, "%s: transparent corners, a solid middle (%d samples)" % [item, opaque])
+
 	print("-- dropping from the pack")
 	game.s.inv = ["fuse", "gel"]
 	game.player.yaw = 0.0

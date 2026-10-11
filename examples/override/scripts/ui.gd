@@ -738,9 +738,25 @@ class InvSlot extends Control:
 		ui.slot_combine(data.slot, index)
 
 
-## Each item as a small drawing: no names anywhere.
+static var _icons := {}
+
+
+## An item's picture: its 3D model rendered on a transparent background (tools/render_icons.gd). Null if there is none.
+static func item_icon(item: String) -> Texture2D:
+	if not _icons.has(item):
+		var path := "res://assets/icons/%s.png" % item
+		_icons[item] = load(path) if ResourceLoader.exists(path) else null
+	return _icons[item]
+
+
+## Each item as a picture (its rendered model, background removed); the line drawings below are the fallback. No names anywhere.
 func draw_item(c: CanvasItem, item: String, at: Vector2, r: float) -> void:
 	var col: Color = Data.ITEMS.get(item, Color.WHITE)
+	var tex := item_icon(item)
+	if tex != null:
+		var box := r * 2.9
+		c.draw_texture_rect(tex, Rect2(at - Vector2(box, box) * 0.5, Vector2(box, box)), false)
+		return
 	var line := 2.5
 	match item:
 		"fuse":

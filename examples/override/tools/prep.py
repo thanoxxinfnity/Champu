@@ -25,13 +25,14 @@ from prep_trellis import load_mesh, write_glb  # noqa: E402
 
 # A generator sometimes stands its subject on a round ground plate; the station has its own floor, so the
 # plate has to go (strip_plate does nothing when there is none).
-PLATED = {"warden", "crawler", "hunter", "skeleton", "wiring", "timer", "gel", "detonator", "emp_stunner", "mega_bomb", "cryo_pod", "server_rack",
+PLATED = {"cable", "scrap", "fuse2", "wiring2", "warden", "crawler", "hunter", "skeleton", "wiring", "timer", "gel", "detonator", "emp_stunner", "mega_bomb", "cryo_pod", "server_rack",
           "conveyor", "reactor_core", "ceiling_pipe", "monitor", "lab_table", "forklift"}
 
 # name -> (triangle budget, texture px). Anything not listed gets DEFAULT.
 DEFAULT = (1800, 512)
 BUDGET = {
     "warden": (7000, 1024), "crawler": (5500, 1024), "hunter": (5500, 1024), "skeleton": (3500, 512),
+    "cable": (700, 256), "scrap": (900, 256), "fuse2": (700, 256), "wiring2": (900, 256),
     "wiring": (700, 256), "timer": (700, 256), "gel": (700, 256), "detonator": (700, 256), "emp_stunner": (1500, 512), "mega_bomb": (2200, 512),
     "cryo_pod": (3500, 1024), "server_rack": (2200, 512), "conveyor": (2500, 512), "reactor_core": (3500, 1024), "ceiling_pipe": (900, 256),
     "monitor": (1500, 512), "lab_table": (2200, 512), "forklift": (3500, 512),

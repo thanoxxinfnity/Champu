@@ -25,6 +25,10 @@ const ASSETS = {
   // -- parts and gadgets --
   wiring: 'a coil of colored electrical wire',
   timer: 'a digital countdown timer device with wires',
+  fuse2: 'a large industrial cartridge fuse, a glass tube with metal end caps and a glowing yellow filament',
+  wiring2: 'a thick coil of insulated red electrical cable with exposed copper ends',
+  cable: 'a coiled thick blue electrical power cable with a plug',
+  scrap: 'a lump of twisted scrap metal with bolts',
   gel: 'a glowing green canister of explosive gel',
   detonator: 'a detonator device with a red button',
   emp_stunner: 'a handheld sci-fi stun gun device',

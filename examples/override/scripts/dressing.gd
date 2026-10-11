@@ -259,7 +259,7 @@ static func _c1_cryo(w: World, n: Node3D) -> void:
 	_pickup(w, n, "emp", "emp_stunner", 0.32, Vector3(8.2, 0.85, 6.6), Color(0.4, 0.7, 1.0))
 	_paper(w, n, "p_wake", Vector3(8.9, 0.86, 6.5), 12.0)
 	_pickup(w, n, "cell_cryo", "battery", 0.18, Vector3(1.6, 0.0, 6.8), Color(0.4, 0.8, 1.0))
-	_pickup(w, n, "scrap_a", "toolbox", 0.18, Vector3(3.5, 0.0, 6.9), Color(0.8, 0.85, 1.0))
+	_pickup(w, n, "scrap_a", "scrap", 0.18, Vector3(3.5, 0.0, 6.9), Color(0.8, 0.85, 1.0))
 	w.prop(n, "terminal", 0.5, Vector3(1.5, 0.0, 4.0), 90.0, false)
 	w.prop(n, "chair", 0.95, Vector3(2.4, 0.0, 6.4), 200.0, false)
 
@@ -300,9 +300,9 @@ static func _c1_store(w: World, n: Node3D) -> void:
 	w.prop(n, "barrel", 0.95, Vector3(17.2, 0.0, -6.2), 0.0)
 	_pickup(w, n, "fuse_2", "fuse", 0.12, Vector3(14.0, 0.86, -6.2), Color(1.0, 0.8, 0.3))
 	_pickup(w, n, "fuse_3", "fuse", 0.12, Vector3(20.3, 0.86, -3.0), Color(1.0, 0.8, 0.3))
-	_pickup(w, n, "cable", "wiring", 0.22, Vector3(16.0, 0.0, -3.5), Color(1.0, 0.5, 0.3))
+	_pickup(w, n, "cable", "cable", 0.22, Vector3(16.0, 0.0, -3.5), Color(1.0, 0.5, 0.3))
 	_pickup(w, n, "cell_store", "battery", 0.18, Vector3(12.0, 0.0, -2.5), Color(0.4, 0.8, 1.0))
-	_pickup(w, n, "scrap_b", "toolbox", 0.18, Vector3(13.4, 0.0, -2.2), Color(0.8, 0.85, 1.0))
+	_pickup(w, n, "scrap_b", "scrap", 0.18, Vector3(13.4, 0.0, -2.2), Color(0.8, 0.85, 1.0))
 	_skeleton(w, n, Vector3(15.0, 0.0, -1.0), 70.0)
 	if w.game.s.chapter == 1:
 		_enemy(w, n, "crawler", Vector3(16.0, 0.0, -4.0), [Vector3(13, 0, -2), Vector3(19, 0, -2), Vector3(16, 0, -5)])
@@ -332,7 +332,7 @@ static func _c2_lobby(w: World, n: Node3D) -> void:
 	_sparks(n, Vector3(110.5, 3.6, 2.5))
 	_skeleton(w, n, Vector3(107.0, 0.08, 5.8), 100.0)
 	_pickup(w, n, "cell_lobby", "battery", 0.18, Vector3(106.5, 0.08, 6.2), Color(0.4, 0.8, 1.0))
-	_pickup(w, n, "scrap_c", "toolbox", 0.18, Vector3(108.6, 0.08, 6.4), Color(0.8, 0.85, 1.0))
+	_pickup(w, n, "scrap_c", "scrap", 0.18, Vector3(108.6, 0.08, 6.4), Color(0.8, 0.85, 1.0))
 	if w.game.s.chapter == 2:
 		_enemy(w, n, "hunter", Vector3(104.0, 0.0, 11.0), [Vector3(103, 0, 10), Vector3(110, 0, 10), Vector3(108, 0, 2), Vector3(102, 0, 2)])
 		_enemy(w, n, "hunter", Vector3(111.0, 0.0, 2.0), [Vector3(111, 0, 10), Vector3(106, 0, 8), Vector3(111, 0, 1)])
@@ -353,7 +353,7 @@ static func _c2_ctrl(w: World, n: Node3D) -> void:
 	w.prop(n, "terminal", 0.5, Vector3(118.4, 0.86, 15.8), 180.0, false)
 	_paper(w, n, "p_ch2_log", Vector3(121.4, 0.86, 15.6), -15.0)
 	_pickup(w, n, "cell_ctrl", "battery", 0.18, Vector3(116.0, 0.0, 10.5), Color(0.4, 0.8, 1.0))
-	_pickup(w, n, "scrap_d", "toolbox", 0.18, Vector3(117.6, 0.0, 10.9), Color(0.8, 0.85, 1.0))
+	_pickup(w, n, "scrap_d", "scrap", 0.18, Vector3(117.6, 0.0, 10.9), Color(0.8, 0.85, 1.0))
 	_locker(w, n, Vector3(124.4, 0.0, 12.0), 90.0)
 
 
@@ -370,7 +370,7 @@ static func _c2_pump(w: World, n: Node3D) -> void:
 	w.prop(n, "desk", 0.8, Vector3(140.4, 0.0, 6.0), 90.0, true, false, "z")
 	_pickup(w, n, "wiring", "wiring", 0.22, Vector3(140.4, 0.86, 6.0), Color(1.0, 0.5, 0.3))
 	_pickup(w, n, "cell_pump", "battery", 0.18, Vector3(131.2, 0.0, 8.8), Color(0.4, 0.8, 1.0))
-	_pickup(w, n, "scrap_e", "toolbox", 0.18, Vector3(132.6, 0.0, 9.4), Color(0.8, 0.85, 1.0))
+	_pickup(w, n, "scrap_e", "scrap", 0.18, Vector3(132.6, 0.0, 9.4), Color(0.8, 0.85, 1.0))
 	_debris(w, n, "c2_pump", Vector3(136.0, 1.5, 4.5), Vector3(4.0, 3.0, 4.0))
 	_sparks(n, Vector3(134.0, 3.2, 5.0))
 	_locker(w, n, Vector3(131.0, 0.0, 1.0), 180.0)
@@ -399,7 +399,7 @@ static func _c3_floor(w: World, n: Node3D) -> void:
 	_skeleton(w, n, Vector3(208.0, 0.0, 10.0), 40.0)
 	_skeleton(w, n, Vector3(216.0, 0.0, 14.0), 160.0)
 	_pickup(w, n, "cell_floor", "battery", 0.18, Vector3(225.0, 0.0, 9.0), Color(0.4, 0.8, 1.0))
-	_pickup(w, n, "scrap_f", "toolbox", 0.18, Vector3(226.6, 0.0, 9.6), Color(0.8, 0.85, 1.0))
+	_pickup(w, n, "scrap_f", "scrap", 0.18, Vector3(226.6, 0.0, 9.6), Color(0.8, 0.85, 1.0))
 
 
 static func _c3_lockers(w: World, n: Node3D) -> void:
@@ -419,7 +419,7 @@ static func _c3_office(w: World, n: Node3D) -> void:
 	_paper(w, n, "p_ch3_log", Vector3(220.4, 0.86, 23.4), 10.0)
 	_locker(w, n, Vector3(212.6, 0.0, 22.0), -90.0)
 	_pickup(w, n, "cell_office", "battery", 0.18, Vector3(224.5, 0.0, 18.5), Color(0.4, 0.8, 1.0))
-	_pickup(w, n, "scrap_g", "toolbox", 0.18, Vector3(223.0, 0.0, 19.0), Color(0.8, 0.85, 1.0))
+	_pickup(w, n, "scrap_g", "scrap", 0.18, Vector3(223.0, 0.0, 19.0), Color(0.8, 0.85, 1.0))
 
 
 static func _c3_work(w: World, n: Node3D) -> void:
@@ -427,7 +427,7 @@ static func _c3_work(w: World, n: Node3D) -> void:
 	w.prop(n, "barrel", 0.95, Vector3(238.5, 0.0, 10.5), 0.0)
 	_pickup(w, n, "gel", "gel", 0.3, Vector3(238.5, 0.95, 10.5), Color(0.4, 1.0, 0.45))
 	_pickup(w, n, "cell_work", "battery", 0.18, Vector3(231.0, 0.0, 3.2), Color(0.4, 0.8, 1.0))
-	_pickup(w, n, "scrap_h", "toolbox", 0.18, Vector3(232.4, 0.0, 3.7), Color(0.8, 0.85, 1.0))
+	_pickup(w, n, "scrap_h", "scrap", 0.18, Vector3(232.4, 0.0, 3.7), Color(0.8, 0.85, 1.0))
 	var panel := w.use(n, "door_panel_lift3", Vector3(0.5, 0.6, 0.8), Vector3(240.5, 1.3, 7.8), w.game.door_panel.bind("lift3"))
 	panel.prompt = "keypanel"
 	w.mesh_box(Vector3(0.12, 0.4, 0.3), Vector3(240.7, 1.3, 7.8), Assets.mat(Color(0.2, 0.9, 0.5), 0.3, 0.0, 1.6), n)

@@ -30,8 +30,8 @@ const ITEMS := {
 
 ## item -> [model, size]: what a dropped item looks like lying on the floor.
 const ITEM_MODEL := {
-	"fuse": ["fuse", 0.12], "cable": ["wiring", 0.22], "wiring": ["wiring", 0.22], "timer": ["timer", 0.22], "gel": ["gel", 0.3],
-	"detonator": ["detonator", 0.2], "keycard": ["keycard", 0.12], "mega_bomb": ["mega_bomb", 0.3], "scrap": ["toolbox", 0.18],
+	"fuse": ["fuse", 0.12], "cable": ["cable", 0.22], "wiring": ["wiring", 0.22], "timer": ["timer", 0.22], "gel": ["gel", 0.3],
+	"detonator": ["detonator", 0.2], "keycard": ["keycard", 0.12], "mega_bomb": ["mega_bomb", 0.3], "scrap": ["scrap", 0.18],
 }
 
 ## Two things combined make a third. Order does not matter.
