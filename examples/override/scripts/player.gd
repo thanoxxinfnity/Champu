@@ -15,6 +15,13 @@ const REACH := 2.8
 const MAX_HEALTH := 3
 const EMP_RANGE := 15.0
 const EMP_COOLDOWN := 1.3
+const THROW_COOLDOWN := 0.7
+const THROW_RANGE := 16.0
+## How far each thing you do carries, in metres (a creature's own ears scale it). Standing still carries nowhere.
+const NOISE_CROUCH := 0.8
+const NOISE_WALK := 4.2
+const NOISE_RUN := 10.0
+const NOISE_CLANG := 20.0
 
 var game: Game
 var yaw := 0.0
@@ -33,6 +40,9 @@ var emp_charges := 0
 var health := MAX_HEALTH
 var focus: Use = null
 var push := Vector3.ZERO           # conveyor belts and the like
+var noise_level := 0.0             # 0..1: how loud you are right now (the HUD's sound meter reads it)
+var _noise_target := 0.0
+var _throw_cd := 0.0
 
 var head: Node3D
 var cam: Camera3D
@@ -150,6 +160,29 @@ func _assist(end: Vector3) -> Enemy:
 	return best
 
 
+## Throw a lump of scrap where you are looking. It clangs where it lands, and everything that listens goes there.
+## Returns the landing spot, or ZERO if there was nothing to throw.
+func throw_scrap() -> Vector3:
+	if dead or frozen or hidden or _throw_cd > 0.0 or not game.take_item("scrap"):
+		return Vector3.ZERO
+	_throw_cd = THROW_COOLDOWN
+	game.sfx.play("toss", -4.0)
+	var from := cam.global_position
+	var q := PhysicsRayQueryParameters3D.create(from, from + aim_dir() * THROW_RANGE, Data.L_WORLD)
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	var spot: Vector3
+	if hit.is_empty():
+		spot = from + aim_dir() * THROW_RANGE
+	else:
+		spot = (hit.position as Vector3) + (hit.normal as Vector3) * 0.15
+	# It comes down on the floor under that point (a thing thrown at a wall drops to the base of it).
+	var down := PhysicsRayQueryParameters3D.create(spot + Vector3(0, 0.2, 0), spot + Vector3(0, -6.0, 0), Data.L_WORLD)
+	var floor_hit := get_world_3d().direct_space_state.intersect_ray(down)
+	spot = Vector3(spot.x, (floor_hit.position as Vector3).y if not floor_hit.is_empty() else 0.0, spot.z)
+	game.scrap_flies(from + cam.global_transform.basis * Vector3(0.15, -0.2, -0.4), spot)
+	return spot
+
+
 func hurt(amount := 1) -> void:
 	if dead:
 		return
@@ -176,6 +209,8 @@ func _physics_process(delta: float) -> void:
 	rotation.y = yaw
 	head.rotation.x = pitch
 	_emp_cd = maxf(0.0, _emp_cd - delta)
+	_throw_cd = maxf(0.0, _throw_cd - delta)
+	_noise_target = 0.0
 	# Hurt, and then left alone for a while: you get better.
 	if not dead and health < MAX_HEALTH:
 		_regen -= delta
@@ -219,11 +254,13 @@ func _physics_process(delta: float) -> void:
 		_bob += delta * flat * 2.4
 		if _step_t <= 0.0:
 			_step_t = 0.6
-			var radius := 1.4 if crouching else (10.0 if running else 4.2)
+			var radius := NOISE_CROUCH if crouching else (NOISE_RUN if running else NOISE_WALK)
 			if in_water:
 				radius = maxf(radius * 2.2, 9.0)
 			game.noise(global_position, radius, "step")
+			_noise_target = radius / NOISE_RUN
 			game.sfx.play("splash" if in_water else ("run" if running else ("soft" if crouching else ("step" if int(_bob) % 2 == 0 else "step2"))), -10.0 if crouching else (-3.0 if running else -8.0))
+	noise_level = move_toward(noise_level, maxf(_noise_target, 0.0), delta * (6.0 if _noise_target > noise_level else 1.1))
 	_camera(delta, flat)
 	_find_focus()
 	if use_edge:

@@ -59,9 +59,104 @@ func _init() -> void:
 	game.noise(Vector3(24, 0, 4), 12.0, "bang")
 	await steps(5)
 	check(hunter.state == Enemy.S.INVESTIGATE or hunter.state == Enemy.S.CHASE, "a bang in the next room brings it to investigate (state %d)" % hunter.state)
-	await steps(60 * 12)
-	var d := hunter.global_position.distance_to(Vector3(24, 0, 4))
-	check(d < 3.0, "and it walked to the sound along the navigation mesh (%.1f m away)" % d)
+	var d := 99.0
+	for i in range(60 * 12):
+		d = minf(d, hunter.global_position.distance_to(Vector3(24, 0, 4)))
+		await physics_frame
+	check(d < 3.0, "and it walked to the sound along the navigation mesh (got within %.1f m)" % d)
+	await clear()
+
+	print("-- the blind kill by sound, and only by sound")
+	game.player.global_position = Vector3(16, 0, 4)
+	game.player.health = 3
+	game.player.dead = false
+	var blind := spawn("hunter", Vector3(13.5, 0, 4))
+	await steps(10)
+	blind.hear(Vector3(16, 0, 4), 9.0, "step")         # a step it hears
+	await steps(60 * 2)
+	check(blind.state == Enemy.S.CHASE or blind.state == Enemy.S.SEARCH, "a footstep it hears sets it hunting (state %d)" % blind.state)
+	var quiet_hp := game.player.health
+	await steps(60 * 8)      # ... and the player now stands perfectly still, a metre from it
+	check(game.player.health == quiet_hp, "a player who stands still while it is on top of them is not hurt (health %d)" % game.player.health)
+	check(blind.state != Enemy.S.CHASE, "it gives up the hunt when it hears nothing more (state %d)" % blind.state)
+	game.player.global_position = Vector3(16, 0, 4)
+	blind.global_position = Vector3(13.5, 0, 4)
+	blind._set_state(Enemy.S.PATROL)
+	blind._hit_cd = 0.0
+	for i in range(60 * 6):
+		if i % 20 == 0:
+			game.noise(game.player.global_position, Player.NOISE_RUN, "step")      # running on the spot
+		await physics_frame
+	check(game.player.health < quiet_hp, "a player who keeps making noise is killed by it (health %d)" % game.player.health)
+	check(blind._glow.size() > 0 and (blind._glow[0] as StandardMaterial3D).albedo_color.r > 0.9, "and its band shows red while it hunts")
+	await clear()
+	game.player.health = 3
+	game.player.dead = false
+	game.player.global_position = Vector3(16, 0, 4)
+	var crouch_h := spawn("hunter", Vector3(13, 0, 4))
+	await steps(10)
+	game.noise(game.player.global_position, Player.NOISE_CROUCH, "step")
+	await steps(30)
+	check(crouch_h.state == Enemy.S.PATROL, "a crouched step three metres away is below its hearing (state %d)" % crouch_h.state)
+	game.noise(game.player.global_position, Player.NOISE_WALK, "step")
+	await steps(5)
+	check(crouch_h.state == Enemy.S.CHASE, "an ordinary step the same distance is heard (state %d)" % crouch_h.state)
+	await clear()
+
+	print("-- a thrown scrap is a decoy")
+	game.player.global_position = Vector3(25, 0, 4)
+	game.player.health = 3
+	game.player.dead = false
+	var dh := spawn("hunter", Vector3(13, 0, 4), [Vector3(13, 0, 4), Vector3(13, 0, 6)])
+	await steps(10)
+	game.noise(Vector3(16, 0, 4), Player.NOISE_CLANG, "clang")
+	await steps(5)
+	check(dh.state == Enemy.S.INVESTIGATE, "it goes to see about the clang (state %d)" % dh.state)
+	var dd := 99.0
+	for i in range(60 * 7):
+		dd = minf(dd, dh.global_position.distance_to(Vector3(16, 0, 4)))
+		await physics_frame
+	check(dd < 3.0, "it walked to where the scrap landed, not to the player (got within %.1f m)" % dd)
+	check(game.player.health == 3, "the player, silent in the next room, is untouched")
+	var saw_search := false
+	for i in range(60 * 45):
+		if dh.state == Enemy.S.SEARCH:
+			saw_search = true
+		if saw_search and dh.state == Enemy.S.PATROL:
+			break
+		await physics_frame
+	check(saw_search, "then it stood and searched round the spot")
+	check(dh.state == Enemy.S.PATROL, "and went back to its round (state %d)" % dh.state)
+	game.s.inv = ["scrap", "fuse"]
+	game.player.global_position = Vector3(25, 0, 4)
+	game.player.yaw = deg_to_rad(90.0)
+	game.player.pitch = 0.0
+	await steps(2)
+	var spot := game.player.throw_scrap()
+	check(spot != Vector3.ZERO and not game.s.inv.has("scrap") and game.s.inv.has("fuse"), "throwing uses up one scrap and lands somewhere (%s)" % str(spot))
+	check(game.player.throw_scrap() == Vector3.ZERO, "with none left there is nothing to throw")
+	await clear()
+
+	print("-- crawlers hunt as a pack and pounce after a tell")
+	game.player.global_position = Vector3(25, 0, 4)
+	game.player.health = 3
+	game.player.dead = false
+	var ca := spawn("crawler", Vector3(21.5, 0, 4))
+	ca.rotation.y = PI * 1.5
+	var cb := spawn("crawler", Vector3(14, 0, 4))
+	cb.rotation.y = PI * 0.5
+	var tell := false
+	var cb_called := false
+	for i in range(60 * 10):
+		if ca._windup > 0.0 or ca._pounce_t > 0.0:
+			tell = true
+		if cb.state == Enemy.S.INVESTIGATE or cb.state == Enemy.S.CHASE:
+			cb_called = true
+		if game.player.health < 3 and tell and cb_called:
+			break
+		await physics_frame
+	check(cb_called, "the crawler that did not see you is called by the one that did")
+	check(tell, "the leap is preceded by a wind-up the player can see")
 	await clear()
 
 	print("-- a crawler sees, chases and hurts")

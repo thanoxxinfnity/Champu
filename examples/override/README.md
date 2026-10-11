@@ -49,3 +49,12 @@ racks and the bomb are built from primitives. Everything else (sounds, textures,
 ## Rigs
 
 `Rig.make(model, size)` builds a `Skeleton3D` with the 49 Rigger bones, a baked skinned mesh and the clips. `assets/rigger/*.glb` are the same characters in Rigger's export layout (`Character > Rig + Mesh`, clip `Take`), written by `tools/export_rigger_glb.gd`; `tests/rig_test.gd` and `tests/rigger_glb_test.gd` check them. `tests/rigshot.gd` and `tests/handshot.gd` render the poses and the hands.
+
+## Sound, the creatures and the pack
+
+* **The pack holds 25 things** (5 x 5 frosted-glass grid, tap or drag to combine, a full pack refuses a 26th pick-up).
+* **Everything you do has a loudness** (metres it carries): standing still 0, crouch-walking 0.8, walking 4.2, running 10, a pick-up 2.5, a switch 8, the EMP 9, a thrown scrap's clang 20. The sound meter at the bottom of the screen (a speaker with up to three waves, white, amber, red) shows how loud you are right now.
+* **Blind hunters kill by sound only.** A noise you make hears it come; while you keep making noise it kills; stand still or crouch and it only listens, even a metre away. Its strike has a half-second wind-up and only lands if it hears you *again* during it. A thrown **scrap** (found in eight places, button or `G`) is a decoy: it goes to the clang, not to you. Its sensor band shows blue (calm), amber (heard something), red (hunting).
+* **Crawlers hunt as a pack** (the one that sees you screeches and the others near it come), and **leap after a visible crouch** you can dodge.
+* **Every creature searches** after a sound (it stands and listens, then checks three spots around it; the Warden also walks up to the lockers near it), re-plans if it gets stuck, and can't be EMP-chained (a short immunity after a stun).
+* Tests: `enemy_test` (silent player on top of a hunter is not hurt, a noisy one is, crouched step below hearing, scrap decoy, pack call, wind-up tell), `ui_test` (25 cells, full pack), `game_test`.

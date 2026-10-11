@@ -11,6 +11,7 @@ const L_USE := 8
 const CELL := 1.0           # navmesh cell, metres
 const WALL := 1.0           # thickness of the concrete between two rooms
 const DOOR_W := 3
+const PACK_SLOTS := 25        # a 5 x 5 pack
 
 # ── items ────────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,7 @@ const ITEMS := {
 	"detonator": Color(1.0, 0.25, 0.2),
 	"keycard": Color(0.95, 0.95, 0.4),
 	"mega_bomb": Color(1.0, 0.55, 0.15),
+	"scrap": Color(0.75, 0.78, 0.85),   # a bolt-and-bracket lump: thrown, it clangs where it lands
 }
 
 ## Two things combined make a third. Order does not matter.

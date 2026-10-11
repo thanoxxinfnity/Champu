@@ -55,6 +55,7 @@ Recipe proven on a TRELLIS T-pose mascot (`reference/rigging.md`):
 ## 5. Enemy AI
 
 State machine: Dormant → Patrol → Investigate (a sound) → Chase → Stunned → Flee/Lurk. Use `NavigationAgent3D` on a `CharacterBody3D`; build the navmesh in code from a grid of quads so it works headless. Sound is the main sense (footsteps, sprint, interaction, gadget); sight is a ray test. Fairness rules that made Grinworks playable: a grace period after respawn, escalating stun threshold, never kill from out of view in the first second, one tell before every attack (sound or animation), hiding must work.
+Blind creatures (sound-only): give every player action a loudness, show it on a HUD meter, make "player noise" (at the player's own spot) different from a decoy (a thrown object), strike only if the creature hears the player *again during its wind-up*, and test the three cases: standing still next to it is safe, running on the spot is not, a decoy draws it away. Every attack gets a visible tell; packs share alerts; searches visit a few spots around the last sound; stuck creatures re-plan.
 Test: `hollow_test`-style headless script that asserts each transition and that the creature reaches a target through the navmesh.
 
 ## 6. Streaming and physics

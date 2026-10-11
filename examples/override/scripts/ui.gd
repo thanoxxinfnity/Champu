@@ -163,6 +163,7 @@ func _layout() -> Dictionary:
 		"torch": {"c": Vector2(vp.x - 250, vp.y - 70), "r": 38.0},
 		"crouch": {"c": Vector2(vp.x - 250, vp.y - 170), "r": 38.0},
 		"pack": {"c": Vector2(vp.x - 120, vp.y - 240), "r": 36.0},
+		"throw": {"c": Vector2(vp.x - 390, vp.y - 100), "r": 36.0},
 		"pause": {"c": Vector2(vp.x - 44, 40), "r": 26.0},
 	}
 
@@ -188,6 +189,8 @@ func _draw_pad() -> void:
 	for k in l:
 		if k == "emp" and not _emp_has:
 			continue
+		if k == "throw" and not _scrap_count():
+			continue
 		var d: Dictionary = l[k]
 		var down: bool = _held.get(k, false)
 		var fill := Color(0.0, 0.0, 0.0, 0.34)
@@ -199,12 +202,16 @@ func _draw_pad() -> void:
 		_pad.draw_circle(d.c, d.r, fill)
 		_pad.draw_arc(d.c, d.r, 0, TAU, 48, ink, 2.5, true)
 		_glyph(k, d.c, d.r, ink)
+		if k == "throw":
+			for i in range(mini(_scrap_count(), 6)):
+				_pad.draw_circle(d.c + Vector2(-d.r + 6.0 + i * 11.0, d.r + 8.0), 3.5, Color(0.85, 0.88, 1.0, 0.95))
 		if k == "emp":
 			# The stunner's charge: a ring of segments, no numbers.
 			for i in range(6):
 				var a0 := -PI * 0.5 + i * TAU / 6.0 + 0.1
 				_pad.draw_arc(d.c, d.r + 8.0, a0, a0 + TAU / 6.0 - 0.2, 8, Color(0.4, 0.8, 1.0, 0.95) if i < _emp_charges else Color(1, 1, 1, 0.18), 4.0, true)
 	var vp := _vp()
+	_draw_sound_meter(Vector2(vp.x * 0.5, vp.y - 40.0))
 	# A dot to aim with; the hand under it appears only when there is something to use.
 	_pad.draw_circle(vp * 0.5, 2.5 if not _focus_now else 3.5, Color(1, 1, 1, 0.5 if not _focus_now else 0.9))
 	if _focus_now:
@@ -225,6 +232,27 @@ func _draw_pad() -> void:
 		_pad.draw_circle(_stick_pos, 30, Color(1, 1, 1, 0.45))
 	else:
 		_pad.draw_arc(Vector2(130, vp.y - 120), 70, 0, TAU, 40, Color(1, 1, 1, 0.15), 2.0)
+
+
+func _scrap_count() -> int:
+	return game.s.inv.count("scrap") if game != null else 0
+
+
+## How loud you are: a speaker with waves. Still, it is a lone dot; as you get louder more waves light and they turn amber, then red.
+func _draw_sound_meter(c: Vector2) -> void:
+	var level := game.player.noise_level if game != null and game.player != null else 0.0
+	var lit := 0 if level < 0.02 else (1 if level < 0.2 else (2 if level < 0.55 else 3))
+	var col := Color(1, 1, 1, 0.55) if lit < 3 else Color(1.0, 0.35, 0.25, 0.95)
+	if lit == 2:
+		col = Color(1.0, 0.8, 0.3, 0.9)
+	_pad.draw_rect(Rect2(c + Vector2(-26, -6), Vector2(6, 12)), Color(1, 1, 1, 0.55))
+	_pad.draw_polyline(PackedVector2Array([c + Vector2(-20, -6), c + Vector2(-12, -13), c + Vector2(-12, 13), c + Vector2(-20, 6)]), Color(1, 1, 1, 0.55), 2.0, true)
+	for i in range(3):
+		var r := 10.0 + i * 8.0
+		var on := i < lit
+		_pad.draw_arc(c + Vector2(-10, 0), r, -0.6, 0.6, 10, col if on else Color(1, 1, 1, 0.14), 2.5, true)
+	if lit == 0:
+		_pad.draw_line(c + Vector2(-6, -12), c + Vector2(18, 12), Color(1, 1, 1, 0.3), 2.0, true)
 
 
 ## The picture on a button, drawn in white lines.
@@ -259,6 +287,13 @@ func _glyph(k: String, c: Vector2, r: float, ink: Color) -> void:
 			_pad.draw_line(Vector2(-14, -2), Vector2(14, -2), ink, w / u * 0.8, true)
 			_pad.draw_rect(Rect2(-8, 6, 16, 9), ink, false, w / u * 0.8)
 			_pad.draw_arc(Vector2(0, -20), 5, PI, TAU, 8, ink, w / u * 0.8, true)
+		"throw":
+			# A hex nut thrown along a dotted arc.
+			_pad.draw_polyline(PackedVector2Array([Vector2(-8, -12), Vector2(0, -16), Vector2(8, -12), Vector2(8, -4), Vector2(0, 0), Vector2(-8, -4), Vector2(-8, -12)]), ink, w / u, true)
+			_pad.draw_circle(Vector2(0, -8), 3.0, ink)
+			for i in range(4):
+				_pad.draw_circle(Vector2(-14 + i * 9.0, 8.0 + absf(i - 1.5) * 4.0 - 6.0), 1.8, ink)
+			_pad.draw_line(Vector2(12, 14), Vector2(20, 20), ink, w / u * 0.8, true)
 		"pause":
 			_pad.draw_rect(Rect2(-9, -12, 6, 24), ink)
 			_pad.draw_rect(Rect2(3, -12, 6, 24), ink)
@@ -334,6 +369,8 @@ func _press(b: String) -> void:
 			p.fire_emp()
 		"crouch":
 			p.crouching = not p.crouching
+		"throw":
+			p.throw_scrap()
 		"pack":
 			show_pack()
 		"pause":
@@ -353,6 +390,9 @@ func _key(event: InputEventKey) -> void:
 		KEY_Q:
 			if down:
 				p.fire_emp()
+		KEY_G:
+			if down:
+				p.throw_scrap()
 		KEY_C:
 			if down:
 				p.crouching = not p.crouching
@@ -539,7 +579,7 @@ func _close_glyph(pos: Vector2, kind := "close", cb := Callable()) -> Control:
 	return b
 
 
-# ── the pack: nine slots on frosted glass ────────────────────────────────────
+# ── the pack: twenty-five slots on frosted glass ────────────────────────────────────
 
 func show_pack() -> void:
 	if game == null or modal_open:
@@ -554,19 +594,20 @@ func show_pack() -> void:
 	glass.mouse_filter = Control.MOUSE_FILTER_STOP
 	_modal.add_child(glass)
 	var vp := _vp()
-	var cell := 96.0
-	var gap := 12.0
-	var side := cell * 3.0 + gap * 2.0
+	var cols := 5
+	var gap := 8.0
+	var cell := minf(78.0, (minf(vp.x, vp.y) * 0.84 - gap * float(cols - 1)) / float(cols))
+	var side := cell * float(cols) + gap * float(cols - 1)
 	var grid := GridContainer.new()
 	grid.name = "Grid"
-	grid.columns = 3
+	grid.columns = cols
 	grid.add_theme_constant_override("h_separation", int(gap))
 	grid.add_theme_constant_override("v_separation", int(gap))
 	grid.position = (vp - Vector2(side, side)) * 0.5
 	grid.size = Vector2(side, side)
 	_modal.add_child(grid)
 	_slots.clear()
-	for i in range(9):
+	for i in range(Data.PACK_SLOTS):
 		var slot := InvSlot.new()
 		slot.ui = self
 		slot.index = i
@@ -689,6 +730,9 @@ func draw_item(c: CanvasItem, item: String, at: Vector2, r: float) -> void:
 			c.draw_rect(Rect2(at + Vector2(-r * 0.9, -r * 0.55), Vector2(r * 1.8, r * 1.1)), col, false, line)
 			c.draw_rect(Rect2(at + Vector2(-r * 0.7, -r * 0.3), Vector2(r * 0.5, r * 0.4)), col)
 			c.draw_line(at + Vector2(-r * 0.1, r * 0.3), at + Vector2(r * 0.7, r * 0.3), col, line)
+		"scrap":
+			c.draw_polyline(PackedVector2Array([at + Vector2(-r * 0.7, -r * 0.2), at + Vector2(-r * 0.2, -r * 0.8), at + Vector2(r * 0.6, -r * 0.5), at + Vector2(r * 0.8, r * 0.3), at + Vector2(0, r * 0.8), at + Vector2(-r * 0.7, r * 0.5), at + Vector2(-r * 0.7, -r * 0.2)]), col, line, true)
+			c.draw_circle(at + Vector2(-r * 0.05, 0), r * 0.22, col)
 		"mega_bomb":
 			for i in range(3):
 				c.draw_rect(Rect2(at + Vector2(-r * 0.8 + i * r * 0.55, -r * 0.2), Vector2(r * 0.4, r * 0.95)), Color(0.4, 1.0, 0.45), false, line)

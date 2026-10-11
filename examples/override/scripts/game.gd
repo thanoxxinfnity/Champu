@@ -5,7 +5,7 @@ extends Node3D
 
 class State:
 	var chapter := 1
-	var inv: Array = []              # item ids carried (nine slots)
+	var inv: Array = []              # item ids carried (25 slots)
 	var taken := {}                  # pick-up id -> true
 	var unlocked := {}               # door key -> true
 	var sprung := {}                 # debris trap id -> true
@@ -258,6 +258,34 @@ func _belts() -> void:
 			player.push = Vector3(b[4], 0.0, 0.0)
 
 
+## The scrap's flight: a short arc, then the clang (the noise is made at the moment it lands).
+func scrap_flies(from: Vector3, to: Vector3) -> void:
+	var t_fly := clampf(from.distance_to(to) / 22.0, 0.2, 0.8)
+	var lump := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.14, 0.09, 0.1)
+	lump.mesh = bm
+	lump.material_override = Assets.mat(Color(0.6, 0.62, 0.68), 0.5, 0.8)
+	add_child(lump)
+	lump.global_position = from
+	var land := func() -> void:
+		if is_instance_valid(lump):
+			lump.queue_free()
+		noise(to, Player.NOISE_CLANG, "clang")
+		sfx.play_at("clang", to + Vector3(0, 0.2, 0), 2.0)
+		sparks_at(to + Vector3(0, 0.15, 0))
+	if headless_test:
+		land.call()
+		return
+	var fly := func(k: float) -> void:
+		if is_instance_valid(lump):
+			lump.global_position = from.lerp(to, k) + Vector3(0, sin(k * PI) * 0.9, 0)
+			lump.rotation += Vector3(0.3, 0.2, 0.1)
+	var tw := create_tween()
+	tw.tween_method(fly, 0.0, 1.0, t_fly)
+	tw.tween_callback(land)
+
+
 func noise(pos: Vector3, radius: float, what: String) -> void:
 	for e in enemies:
 		if is_instance_valid(e):
@@ -302,11 +330,12 @@ func pick_up(u: Use, id: String, holder: Node3D) -> void:
 	elif id.begins_with("cell_"):
 		player.emp_charges = mini(6, player.emp_charges + 2)
 	else:
-		if s.inv.size() >= 9:
+		if s.inv.size() >= Data.PACK_SLOTS:
 			sfx.play("error", -6.0)
 			return
 		s.inv.append(item)
 	sfx.play("pickup", -2.0)
+	noise(player.global_position, 2.5, "pickup")
 	s.taken[id] = true
 	world.uses.erase(u)
 	holder.queue_free()

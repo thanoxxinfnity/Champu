@@ -504,19 +504,21 @@ static func make(model: String, size: float, tint := Color(1, 1, 1)) -> Node3D:
 	holder.set_meta("skeleton", sk)
 	holder.set_meta("body_mat", m)
 	holder.set_meta("scaled_size", b.size * k)
-	_dress(model, sk, k)
+	holder.set_meta("glow_mats", _dress(model, sk, k))
 	return holder
 
 
 ## What marks each kind apart on the head bone: the Warden's red eyes, the hunters' blank sensor band, the crawlers' one cracked lens.
-static func _dress(model: String, sk: Skeleton3D, _k: float) -> void:
+static func _dress(model: String, sk: Skeleton3D, _k: float) -> Array:
 	var b := box(model)
 	var att := BoneAttachment3D.new()
 	att.name = "Face"
 	att.bone_name = "head"
 	sk.add_child(att)
 	var u := b.size.y * 0.05
-	var glow := Assets.mat(Color(1.0, 0.08, 0.04), 0.3, 0.0, 6.0)
+	var mats: Array = []
+	var glow := _glow_mat(Color(1.0, 0.08, 0.04), 6.0)
+	mats.append(glow)
 	if model == "warden":
 		for s in [-1.0, 1.0]:
 			var e := MeshInstance3D.new()
@@ -543,7 +545,9 @@ static func _dress(model: String, sk: Skeleton3D, _k: float) -> void:
 		sm.radial_segments = 8
 		sm.rings = 4
 		e.mesh = sm
-		e.material_override = Assets.mat(Color(1.0, 0.45, 0.1), 0.3, 0.0, 4.0)
+		var lens := _glow_mat(Color(1.0, 0.45, 0.1), 4.0)
+		mats.append(lens)
+		e.material_override = lens
 		e.position = Vector3(u * 0.3, u * 0.3, b.size.z * 0.35)
 		att.add_child(e)
 	elif model == "hunter":
@@ -551,6 +555,20 @@ static func _dress(model: String, sk: Skeleton3D, _k: float) -> void:
 		var bm := BoxMesh.new()
 		bm.size = Vector3(u * 1.6, u * 0.18, u * 0.3)
 		band.mesh = bm
-		band.material_override = Assets.mat(Color(0.2, 0.5, 1.0), 0.3, 0.0, 2.5)
+		var bandm := _glow_mat(Color(0.2, 0.5, 1.0), 2.5)
+		mats.append(bandm)
+		band.material_override = bandm
 		band.position = Vector3(0, u * 0.3, b.size.z * 0.4)
 		att.add_child(band)
+	return mats
+
+
+## A glow of its own (the shared material cache would recolour every creature at once): the state of a creature shows in it.
+static func _glow_mat(color: Color, energy: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = color
+	m.emission_enabled = true
+	m.emission = color
+	m.emission_energy_multiplier = energy
+	m.roughness = 0.3
+	return m

@@ -1,7 +1,7 @@
 extends SceneTree
 ## godot --headless --path . -s tests/ui_test.gd
 ## Words stay on their paper: every quest paper is laid out at the smallest and the usual screen, the text lies inside the sheet with
-## 20 px of margin, wraps by word and clips. The pack is a 3x3 grid on the screen, crafts by tap and by drag, and freezes the world.
+## 20 px of margin, wraps by word and clips. The pack is a 5x5 grid (25 slots) on the screen, crafts by tap and by drag, and freezes the world.
 ## Buttons stay on the screen and off each other.
 
 var fails := 0
@@ -61,10 +61,15 @@ func _init() -> void:
 	ui.show_pack()
 	await process_frame
 	check(Engine.time_scale == 0.0, "opening the pack freezes the world (time_scale 0)")
-	check(ui._slots.size() == 9, "nine slots")
+	check(ui._slots.size() == 25, "twenty-five slots")
 	var grid := ui._modal.get_node("Grid") as GridContainer
-	check(grid.columns == 3, "three columns")
+	check(grid.columns == 5, "five columns")
 	check(Rect2(Vector2.ZERO, Vector2(1280, 720)).encloses(Rect2(grid.position, grid.size)), "the grid is on the screen")
+	var cell_ok := true
+	for sl in ui._slots:
+		if (sl as Control).custom_minimum_size.x < 56.0:
+			cell_ok = false
+	check(cell_ok, "every cell is big enough to hit with a thumb")
 	check(ui._modal.get_child(0).material is ShaderMaterial, "behind it is the frosted-glass shader")
 	ui.slot_tap(0)
 	ui.slot_tap(1)
@@ -76,6 +81,31 @@ func _init() -> void:
 	check(game.s.inv == before, "two things that do not go together are left alone")
 	ui.close_modal()
 	check(Engine.time_scale == 1.0 and not ui.modal_open, "closing the pack starts the world again")
+
+	print("-- the pack takes 25 things and no more")
+	game.s.inv = []
+	for i in range(Data.PACK_SLOTS):
+		game.s.inv.append("scrap")
+	ui.show_pack()
+	await process_frame
+	var all_filled := true
+	for i in range(25):
+		if ui.slot_item(i) != "scrap":
+			all_filled = false
+	check(all_filled, "all 25 cells show what they hold")
+	var tap_ok := true
+	ui.slot_tap(24)
+	tap_ok = ui._selected == 24
+	ui.slot_tap(24)
+	check(tap_ok and ui._selected == -1, "the last cell can be picked and put back")
+	ui.close_modal()
+	var full_before := game.s.inv.size()
+	var u := Use.new()
+	var holder := Node3D.new()
+	game.add_child(holder)
+	game.pick_up(u, "fuse_x", holder)
+	check(game.s.inv.size() == full_before, "a full pack refuses a 26th thing")
+	game.s.inv = []
 
 	print("-- the buttons")
 	for size in [Vector2(1280, 720), Vector2(960, 540), Vector2(1600, 720)]:

@@ -178,6 +178,8 @@ func _build_all() -> void:
 	_streams["crash"] = _crash(1.1)
 	_streams["boom"] = _boom(2.6)
 	_streams["hit"] = _thud(0.25, 60.0, 1.1, 0.9)
+	_streams["clang"] = _clang(1.1)
+	_streams["toss"] = _thud(0.12, 380.0, 0.25, 0.9)
 
 
 func _buf(seconds: float) -> PackedFloat32Array:
@@ -215,6 +217,16 @@ func _thud(dur: float, hz: float, amp: float, grit: float) -> AudioStreamWAV:
 		var t := float(i) / RATE
 		lp += (_noise() - lp) * 0.2
 		b[i] = (sin(TAU * hz * t * exp(-t * 9.0)) * 0.9 + lp * grit) * exp(-t * (8.0 / dur)) * amp
+	return _stream(b)
+
+
+## A lump of metal hitting a floor: a click, then a few inharmonic rings that die away. The one sound that is meant to carry.
+func _clang(dur: float) -> AudioStreamWAV:
+	var b := _buf(dur)
+	for i in range(b.size()):
+		var t := float(i) / RATE
+		var ring := sin(TAU * 612.0 * t) * 0.5 * exp(-t * 7.0) + sin(TAU * 1337.0 * t) * 0.35 * exp(-t * 11.0) + sin(TAU * 2410.0 * t) * 0.2 * exp(-t * 16.0) + sin(TAU * 3720.0 * t) * 0.1 * exp(-t * 24.0)
+		b[i] = (ring + _noise() * exp(-t * 120.0) * 0.8) * 0.9
 	return _stream(b)
 
 

@@ -73,6 +73,13 @@ func _init() -> void:
 	w.queue_free()
 	game.enemies.clear()
 
+	# The sound meter and the scrap button: loud, then still.
+	game.s.inv = ["scrap", "scrap", "scrap", "fuse"]
+	game.player.noise_level = 0.9
+	await shot("04b_hud_loud", 3)
+	game.player.noise_level = 0.0
+	await shot("04c_hud_still", 3)
+
 	# Hurt: the shaken picture with red edges and the heartbeat's pulse.
 	game.player.health = 1
 	game.ui.set_health(1)
@@ -88,7 +95,7 @@ func _init() -> void:
 	game.ui.close_modal()
 
 	# The pack.
-	game.s.inv = ["fuse", "wiring", "timer", "gel", "keycard", "fuse", "cable"]
+	game.s.inv = ["fuse", "wiring", "timer", "gel", "keycard", "fuse", "cable", "scrap", "scrap", "scrap", "fuse", "scrap", "wiring"]
 	game.ui.show_pack()
 	await shot("07_pack", 40)
 	game.ui.slot_tap(1)
