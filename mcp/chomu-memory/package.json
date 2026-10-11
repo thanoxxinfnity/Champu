@@ -1,0 +1,13 @@
+{
+  "name": "chomu-memory",
+  "version": "1.0.0",
+  "description": "A local memory and code-map MCP server: semantic code index, symbol graph, verified facts, bug tracing, checkpoints and a private on-disk archive. No network, no dependencies.",
+  "type": "module",
+  "bin": { "chomu-mcp": "bin/chomu-mcp.mjs" },
+  "scripts": {
+    "serve": "node --disable-warning=ExperimentalWarning bin/chomu-mcp.mjs serve",
+    "test": "node --disable-warning=ExperimentalWarning --test test/memory.test.mjs"
+  },
+  "engines": { "node": ">=22.5.0" },
+  "license": "MIT"
+}

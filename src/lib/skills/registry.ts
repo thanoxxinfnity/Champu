@@ -102,6 +102,29 @@ Read the actual pages, not just search snippets, and say which page each fact ca
     template: `/memory {{input}}`,
   },
   {
+    command: 'codemap',
+    name: 'Code map (MCP)',
+    description: 'A private, local code map and memory for Claude (an MCP server on your machine): meaning search, symbol graph, verified facts, bug tracing, checkpoints. "/codemap setup", "/codemap index", "/codemap status".',
+    lane: 'B',
+    icon: 'search',
+    argHint: 'setup | index | status | connect',
+    bare: true,
+    template: `Set up or use the local code map (the chomu-memory MCP server in mcp/chomu-memory).
+
+Request: {{input}}
+
+Do this on the bridge, and report only what the commands actually printed:
+1. Check the machine: \`node --version\` must be 22.5 or newer (the server uses Node's built-in SQLite and needs nothing else installed). If it is older, say so and stop.
+2. Index the project: \`node --disable-warning=ExperimentalWarning mcp/chomu-memory/bin/chomu-mcp.mjs index --root .\` and show the counts it prints.
+3. Show the privacy check: \`... doctor --root .\` (the archive is the .chomu-memory folder inside the project; nothing leaves the machine).
+4. For "connect": give the exact command for the user's tool, with the absolute path to this project:
+   - Claude Code: \`claude mcp add chomu-memory -- node <abs path>/mcp/chomu-memory/bin/chomu-mcp.mjs serve --root <abs path>\` (this repo also ships a .mcp.json that Claude Code offers to approve).
+   - Claude Desktop: the same command and args under "mcpServers" in claude_desktop_config.json.
+5. Explain in three lines how to use it: start a chat with resume_context, search with search_code before reading files, trace_bug for errors, remember_fact (needs evidence) to keep what was learned, save_compaction when the chat is long.
+
+If the bridge is offline, give the commands and mark steps 1-3 as not run. Do not invent output.`,
+  },
+  {
     command: 'review',
     name: 'Review',
     description: 'Five reviewers (bugs, security, fit, style, comments) check the files in the workspace and show only what they are 80%+ sure of.',

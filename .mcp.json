@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "chomu-memory": {
+      "command": "node",
+      "args": [
+        "--disable-warning=ExperimentalWarning",
+        "mcp/chomu-memory/bin/chomu-mcp.mjs",
+        "serve",
+        "--root",
+        "."
+      ]
+    }
+  }
+}

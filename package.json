@@ -2,7 +2,7 @@
   "name": "chomugiri",
   "version": "1.0.0",
   "private": true,
-  "description": "Chomugiri — autonomous developer workspace. NVIDIA NIM + Pollinations + universal OpenAI-compatible gateway + terminal tunnel bridge.",
+  "description": "Chomugiri \u2014 autonomous developer workspace. NVIDIA NIM + Pollinations + universal OpenAI-compatible gateway + terminal tunnel bridge.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,7 +10,9 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "agent": "node agent/chomugiri-agent.mjs",
-    "test": "node --experimental-strip-types --test scripts/test-*.mjs"
+    "test": "node --experimental-strip-types --test scripts/test-*.mjs",
+    "mcp": "node --disable-warning=ExperimentalWarning mcp/chomu-memory/bin/chomu-mcp.mjs serve --root .",
+    "mcp:test": "node --disable-warning=ExperimentalWarning --test mcp/chomu-memory/test/memory.test.mjs"
   },
   "dependencies": {
     "dexie": "4.4.5",
