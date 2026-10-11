@@ -16,20 +16,21 @@ func _init() -> void:
 	var box := mi.get_aabb()
 	print("box ", box)
 	var segs: Array = []   # [bone index, from, to, side]
-	for i in range(Rig.JOINTS.size()):
-		var name: String = Rig.JOINTS[i][0]
-		if name.ends_with("_end"):
-			continue
-		var end_name := _end_of(i)
-		var a := Rig.to_mesh(Rig.JOINTS[i][2])
-		var b := Rig.to_mesh(Rig.JOINTS[Rig.index_of(end_name)][2])
-		segs.append({"i": i, "a": a, "b": b, "side": 0 if not (name.ends_with("_l") or name.ends_with("_r")) else (-1 if name.ends_with("_l") else 1), "name": name})
+	var P := Rig.positions()
+	var j := Rig.joints()
+	for i in range(j.size()):
+		var name: String = j[i][0]
+		var side := 0
+		if name.ends_with("L"):
+			side = -1
+		elif name.ends_with("R"):
+			side = 1
+		segs.append({"i": i, "a": P[name], "b": Rig.tip(name, P), "side": side, "name": name})
 	var bones := PackedInt32Array()
 	var weights := PackedFloat32Array()
 	bones.resize(verts.size() * 4)
 	weights.resize(verts.size() * 4)
 	var cx := Rig.to_mesh(Vector3(0.5, 0.5, 0.5)).x
-	var arm_x := 0.075 * box.size.x
 	for vi in range(verts.size()):
 		var p := verts[vi]
 		var side := 0
@@ -44,14 +45,10 @@ func _init() -> void:
 			var limb: bool = s.side != 0
 			if limb and s.side != side:
 				continue
-			# Arms start out beside the chest, legs below the pelvis: do not let a leg grab the torso or an arm grab the head.
-			if nm.begins_with("arm_") or nm.begins_with("fore_") or nm.begins_with("hand_"):
-				if absf(p.x - cx) < arm_x * 0.5 and p.y < Rig.to_mesh(Vector3(0, 0.80, 0)).y:
-					pass
-			if nm.begins_with("thigh_") or nm.begins_with("shin_") or nm.begins_with("foot_"):
-				if p.y > Rig.to_mesh(Vector3(0, 0.56, 0)).y:
-					continue
-			if (nm.begins_with("arm_") or nm.begins_with("fore_") or nm.begins_with("hand_")) and p.y < Rig.to_mesh(Vector3(0, 0.52, 0)).y:
+			var leg: bool = nm.begins_with("thigh") or nm.begins_with("shin") or nm.begins_with("foot") or nm.begins_with("toe")
+			if leg and p.y > Rig.to_mesh(Vector3(0, 0.56, 0)).y:
+				continue
+			if limb and not leg and p.y < Rig.to_mesh(Vector3(0, 0.52, 0)).y:
 				continue
 			var d := _dist(p, s.a, s.b)
 			cand.append([d, s.i])
@@ -74,15 +71,6 @@ func _init() -> void:
 	var err := ResourceSaver.save(out, Rig.MESH)
 	print("saved ", Rig.MESH, " err ", err, " verts ", verts.size())
 	quit()
-
-
-func _end_of(i: int) -> String:
-	# The bone's tip is its first child; a chain's last bone has an explicit *_end joint.
-	var name: String = Rig.JOINTS[i][0]
-	for j in Rig.JOINTS:
-		if j[1] == name and not (name == "chest" and (j[0] as String).begins_with("arm_")) and not (name == "pelvis" and (j[0] as String).begins_with("thigh_")) and not (name == "chest" and (j[0] as String) == "neck" and false):
-			return j[0]
-	return name
 
 
 func _dist(p: Vector3, a: Vector3, b: Vector3) -> float:

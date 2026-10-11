@@ -35,39 +35,88 @@ static func box(model: String) -> AABB:
 	return PROFILES[model].box
 
 
-## name -> [parent, position in the model's box]
-static func joints(model: String) -> Array:
+## Rigger's bone contract (rigger/GAME_BRIEF.md): 49 bones, parents before children. Game code finds bones by these names.
+const FINGERS := ["thumb", "index", "middle", "ring", "pinky"]
+const FINGER_Z := [0.45, 0.22, 0.0, -0.22, -0.4]   # across the hand, in hand lengths
+const FINGER_SEG := [0.45, 0.3, 0.25]               # share of a finger's length per bone
+
+
+static func spec() -> Array:
+	var out: Array = [["hips", ""], ["spine", "hips"], ["chest", "spine"], ["neck", "chest"], ["head", "neck"]]
+	for k in ["L", "R"]:
+		out.append(["thigh" + k, "hips"])
+		out.append(["shin" + k, "thigh" + k])
+		out.append(["foot" + k, "shin" + k])
+		out.append(["toe" + k, "foot" + k])
+		out.append(["upperArm" + k, "chest"])
+		out.append(["foreArm" + k, "upperArm" + k])
+		out.append(["hand" + k, "foreArm" + k])
+		for f in FINGERS:
+			for i in range(1, 4):
+				out.append(["%s%d%s" % [f, i, k], ("hand" + k) if i == 1 else "%s%d%s" % [f, i - 1, k]])
+	return out
+
+
+## name -> position in the model's own space (metres), measured from the profile.
+static func positions(model: String) -> Dictionary:
 	var p: Dictionary = PROFILES[model]
 	var z: float = p.z
-	var sx: float = p.shoulder_x
-	var ex: float = p.elbow_x
-	var wx: float = p.wrist_x
-	var lx: float = p.leg_x
+	var P := {}
+	P["hips"] = to_mesh(model, Vector3(0.5, p.hip, z))
+	P["spine"] = to_mesh(model, Vector3(0.5, p.spine, z))
+	P["chest"] = to_mesh(model, Vector3(0.5, p.chest, z + 0.02))
+	P["neck"] = to_mesh(model, Vector3(0.5, p.neck, z + 0.06))
+	P["head"] = to_mesh(model, Vector3(0.5, p.head, z + 0.1))
 	var sy: float = p.shoulder_y
-	return [
-		["pelvis", "", Vector3(0.5, p.hip, z)],
-		["spine", "pelvis", Vector3(0.5, p.spine, z)],
-		["chest", "spine", Vector3(0.5, p.chest, z + 0.02)],
-		["neck", "chest", Vector3(0.5, p.neck, z + 0.06)],
-		["head", "neck", Vector3(0.5, p.head, z + 0.1)],
-		["head_end", "head", Vector3(0.5, 1.0, z + 0.1)],
-		["arm_l", "chest", Vector3(0.5 - sx, sy, z)],
-		["fore_l", "arm_l", Vector3(0.5 - ex, sy - 0.01, z)],
-		["hand_l", "fore_l", Vector3(0.5 - wx, sy - 0.02, z)],
-		["hand_l_end", "hand_l", Vector3(0.0, sy - 0.03, z)],
-		["arm_r", "chest", Vector3(0.5 + sx, sy, z)],
-		["fore_r", "arm_r", Vector3(0.5 + ex, sy - 0.01, z)],
-		["hand_r", "fore_r", Vector3(0.5 + wx, sy - 0.02, z)],
-		["hand_r_end", "hand_r", Vector3(1.0, sy - 0.03, z)],
-		["thigh_l", "pelvis", Vector3(0.5 - lx, p.hip, z)],
-		["shin_l", "thigh_l", Vector3(0.5 - lx, p.knee, z)],
-		["foot_l", "shin_l", Vector3(0.5 - lx, p.ankle, z)],
-		["foot_l_end", "foot_l", Vector3(0.5 - lx, 0.03, p.toe_z)],
-		["thigh_r", "pelvis", Vector3(0.5 + lx, p.hip, z)],
-		["shin_r", "thigh_r", Vector3(0.5 + lx, p.knee, z)],
-		["foot_r", "shin_r", Vector3(0.5 + lx, p.ankle, z)],
-		["foot_r_end", "foot_r", Vector3(0.5 + lx, 0.03, p.toe_z)],
-	]
+	for s in [-1.0, 1.0]:
+		var k := "L" if s < 0.0 else "R"
+		P["thigh" + k] = to_mesh(model, Vector3(0.5 + s * p.leg_x, p.hip, z))
+		P["shin" + k] = to_mesh(model, Vector3(0.5 + s * p.leg_x, p.knee, z))
+		P["foot" + k] = to_mesh(model, Vector3(0.5 + s * p.leg_x, p.ankle, z))
+		P["toe" + k] = to_mesh(model, Vector3(0.5 + s * p.leg_x, 0.03, p.toe_z))
+		P["upperArm" + k] = to_mesh(model, Vector3(0.5 + s * p.shoulder_x, sy, z))
+		P["foreArm" + k] = to_mesh(model, Vector3(0.5 + s * p.elbow_x, sy - 0.01, z))
+		var wr := to_mesh(model, Vector3(0.5 + s * p.wrist_x, sy - 0.02, z))
+		P["hand" + k] = wr
+		var hl: float = (0.5 - float(p.wrist_x)) * box(model).size.x / 0.85   # wrist to the tip of the longest finger
+		for fi in range(5):
+			var flen := hl * (0.6 if fi == 0 else 0.8)
+			var fz: float = wr.z + float(FINGER_Z[fi]) * hl * 0.5
+			var j0 := Vector3(wr.x + s * hl * 0.25, wr.y, fz)
+			var j1: Vector3 = j0 + Vector3(s * float(FINGER_SEG[0]) * flen, 0, 0)
+			var j2: Vector3 = j1 + Vector3(s * float(FINGER_SEG[1]) * flen, 0, 0)
+			P["%s1%s" % [FINGERS[fi], k]] = j0
+			P["%s2%s" % [FINGERS[fi], k]] = j1
+			P["%s3%s" % [FINGERS[fi], k]] = j2
+	return P
+
+
+## Where a bone's segment ends (its first child; leaves get a short stub), for weighting and the Rigger export.
+static func tip(model: String, bone: String, P: Dictionary) -> Vector3:
+	var b := box(model)
+	var sd := -1.0 if bone.ends_with("L") else 1.0
+	if bone == "head":
+		return P["head"] + Vector3(0, 0.1 * b.size.y, 0)
+	if bone.begins_with("toe"):
+		return P[bone] + Vector3(0, 0, 0.05 * b.size.y)
+	if bone.begins_with("hand"):
+		return P[bone] + Vector3(sd * (P["index1" + bone.right(1)] - P[bone]).length() * 0.9, 0, 0)
+	if bone.ends_with("3L") or bone.ends_with("3R"):
+		var f1: String = bone.left(bone.length() - 2) + "1" + bone.right(1)
+		return P[bone] + Vector3(sd * (P[bone] - P[f1]).length() / 3.0, 0, 0)
+	for e in spec():
+		if e[1] == bone:
+			return P[e[0]]
+	return P[bone]
+
+
+## [name, parent, position] in spec() order.
+static func joints(model: String) -> Array:
+	var P := positions(model)
+	var out: Array = []
+	for e in spec():
+		out.append([e[0], e[1], P[e[0]]])
+	return out
 
 
 static func to_mesh(model: String, u: Vector3) -> Vector3:
@@ -92,11 +141,11 @@ static func build_skeleton(model: String) -> Skeleton3D:
 		sk.add_bone(e[0])
 	for i in range(j.size()):
 		var parent: String = j[i][1]
-		var global := to_mesh(model, j[i][2])
+		var global: Vector3 = j[i][2]
 		var rest := global
 		if parent != "":
 			var pi := index_of(model, parent)
-			rest = global - to_mesh(model, j[pi][2])
+			rest = global - (j[pi][2] as Vector3)
 			sk.set_bone_parent(i, pi)
 		sk.set_bone_rest(i, Transform3D(Basis.IDENTITY, rest))
 	sk.reset_bone_poses()
@@ -107,7 +156,7 @@ static func build_skin(model: String) -> Skin:
 	var j := joints(model)
 	var skin := Skin.new()
 	for i in range(j.size()):
-		skin.add_bind(i, Transform3D(Basis.IDENTITY, -to_mesh(model, j[i][2])))
+		skin.add_bind(i, Transform3D(Basis.IDENTITY, -(j[i][2] as Vector3)))
 		skin.set_bind_name(i, j[i][0])
 	return skin
 
@@ -135,7 +184,38 @@ static func arm(s: float, down: float, fwd: float, reach := 0.0, lift := 0.0) ->
 	return rx(-fwd - lift) * ry(-s * reach * PI * 0.5) * rz(-s * down)
 
 
-## Every pose is a Dictionary: bone -> Quaternion, plus "hips" (a position offset) and "scale_<bone>" (Vector3).
+## The short names the clips below are written in -> Rigger's bone names.
+const SHORT := {
+	"pelvis": "hips", "thigh_l": "thighL", "thigh_r": "thighR", "shin_l": "shinL", "shin_r": "shinR", "foot_l": "footL", "foot_r": "footR",
+	"toe_l": "toeL", "toe_r": "toeR", "arm_l": "upperArmL", "arm_r": "upperArmR", "fore_l": "foreArmL", "fore_r": "foreArmR", "hand_l": "handL", "hand_r": "handR",
+}
+
+
+static func bone_name(key: String) -> String:
+	return SHORT.get(key, key)
+
+
+## Curl one hand: `c` radians at the middle knuckle (negative opens the hand back). Every finger joint gets its own key,
+## so the fingers move in the clip like any other bone. Left fingers curl about +z, right ones about -z.
+static func _fingers(p: Dictionary, c_l: float, c_r: float, t: float) -> void:
+	for side in [-1.0, 1.0]:
+		var c := c_l if side < 0.0 else c_r
+		var k := "L" if side < 0.0 else "R"
+		var sg := 1.0 if side < 0.0 else -1.0
+		for fi in range(5):
+			var f: String = FINGERS[fi]
+			var amt := c * (0.55 if fi == 0 else 0.9 + 0.08 * fi)
+			amt += 0.06 * sin(t * TAU * 2.0 + float(fi) * 1.3 + side)   # no two fingers sit still together
+			var jf := [0.8, 1.0, 0.7]
+			for ji in range(3):
+				var q := rz(sg * amt * jf[ji])
+				if fi == 0 and ji == 0:
+					q = ry(-side * amt * 0.5) * q
+				p["%s%d%s" % [f, ji + 1, k]] = q
+
+
+## Every pose is a Dictionary: bone -> Quaternion, plus "hips" (a position offset), "scale_<bone>" (Vector3)
+## and "fing_l" / "fing_r" (finger curl, expanded to the 15 finger bones of that hand).
 static func _cycle(len: float, steps: int, fn: Callable) -> Animation:
 	var an := Animation.new()
 	an.length = len
@@ -144,10 +224,14 @@ static func _cycle(len: float, steps: int, fn: Callable) -> Animation:
 	for k in range(steps + 1):
 		var t01 := float(k) / steps
 		var pose: Dictionary = fn.call(t01 if k < steps else 0.0)
+		if pose.has("fing_l") or pose.has("fing_r"):
+			_fingers(pose, float(pose.get("fing_l", 0.0)), float(pose.get("fing_r", 0.0)), t01 if k < steps else 0.0)
+			pose.erase("fing_l")
+			pose.erase("fing_r")
 		for key in pose:
 			var is_hips: bool = key == "hips"
 			var is_scale := (key as String).begins_with("scale_")
-			var bone: String = "pelvis" if is_hips else ((key as String).trim_prefix("scale_") if is_scale else key)
+			var bone: String = "hips" if is_hips else bone_name((key as String).trim_prefix("scale_") if is_scale else key)
 			var id := "%s/%s" % [key, "p" if is_hips else ("s" if is_scale else "r")]
 			if not tracks.has(id):
 				var tr := an.add_track(Animation.TYPE_POSITION_3D if is_hips else (Animation.TYPE_SCALE_3D if is_scale else Animation.TYPE_ROTATION_3D))
@@ -155,7 +239,7 @@ static func _cycle(len: float, steps: int, fn: Callable) -> Animation:
 				tracks[id] = tr
 			var v = pose[key]
 			if is_hips:
-				v = to_mesh(_model, joints(_model)[0][2]) + (v as Vector3) * box(_model).size.y
+				v = (joints(_model)[0][2] as Vector3) + (v as Vector3) * box(_model).size.y
 			an.track_insert_key(tracks[id], len * float(k) / steps, v)
 	return an
 
@@ -188,6 +272,11 @@ static func _gait(len: float, a: float, knee: float, lean: float, arms: float, d
 		p["arm_r"] = arm(1, down, -s * arms, reach, lift)
 		p["fore_l"] = rx(-0.25 - maxf(0.0, -s) * 0.3 * arms)
 		p["fore_r"] = rx(-0.25 - maxf(0.0, s) * 0.3 * arms)
+		p["toe_l"] = rx(-0.55 * maxf(0.0, -s) * (a / 0.5))
+		p["toe_r"] = rx(-0.55 * maxf(0.0, s) * (a / 0.5))
+		var fist := clampf(0.25 + (1.0 if a > 0.6 or arms == 0.0 else 0.0) * 0.5 + 0.3 * reach, 0.0, 1.1)
+		p["fing_l"] = fist + 0.15 * s
+		p["fing_r"] = fist - 0.15 * s
 		return p)
 
 
@@ -207,6 +296,8 @@ static func _idle() -> Animation:
 		p["fore_r"] = rx(-0.3)
 		p["thigh_l"] = rx(0.02)
 		p["thigh_r"] = rx(-0.02)
+		p["fing_l"] = 0.45 + 0.1 * br
+		p["fing_r"] = 0.4 - 0.1 * br
 		return p)
 
 
@@ -228,6 +319,8 @@ static func _recoil() -> Animation:
 		p["thigh_r"] = rx(-0.1)
 		p["shin_l"] = rx(0.3)
 		p["shin_r"] = rx(0.15)
+		p["fing_l"] = -0.25 + 0.2 * sin(ph * 2.0)
+		p["fing_r"] = -0.25 - 0.2 * sin(ph * 2.0)
 		return p)
 
 
@@ -250,6 +343,8 @@ static func _scream() -> Animation:
 		p["thigh_r"] = rx(0.15)
 		p["scale_fore_l"] = Vector3(1.25, 1, 1)
 		p["scale_fore_r"] = Vector3(1.25, 1, 1)
+		p["fing_l"] = -0.3 + sh * 6.0
+		p["fing_r"] = -0.3 - sh * 6.0
 		return p)
 
 
@@ -276,6 +371,8 @@ static func _lunge() -> Animation:
 		p["thigh_r"] = rx(s * 0.85)
 		p["shin_l"] = rx(maxf(0.0, cos(ph)) * 1.2 + 0.1)
 		p["shin_r"] = rx(maxf(0.0, -cos(ph)) * 1.2 + 0.1)
+		p["fing_l"] = 0.6 + 0.5 * s
+		p["fing_r"] = 0.6 - 0.5 * s
 		return p)
 
 
@@ -292,6 +389,8 @@ static func _peek() -> Animation:
 		p["arm_r"] = arm(1, 1.3, -0.1, 0.0)
 		p["fore_l"] = rx(-0.5)
 		p["fore_r"] = rx(-0.5)
+		p["fing_l"] = 0.7 + 0.2 * sin(ph * 3.0)
+		p["fing_r"] = 0.5
 		return p)
 
 
@@ -333,6 +432,10 @@ static func _sweep() -> Animation:
 		p["thigh_r"] = rx(s * 0.32)
 		p["shin_l"] = rx(maxf(0.0, c) * 0.6 + 0.05)
 		p["shin_r"] = rx(maxf(0.0, -c) * 0.6 + 0.05)
+		p["fing_l"] = -0.1 + 0.25 * s
+		p["fing_r"] = -0.1 - 0.25 * s
+		p["toe_l"] = rx(-0.4 * maxf(0.0, s))
+		p["toe_r"] = rx(-0.4 * maxf(0.0, -s))
 		return p)
 
 
@@ -356,6 +459,8 @@ static func _crawl() -> Animation:
 		p["thigh_r"] = rx(0.3 * s)
 		p["shin_l"] = rx(0.3)
 		p["shin_r"] = rx(0.3)
+		p["fing_l"] = 0.15 + 0.3 * maxf(0.0, s)
+		p["fing_r"] = 0.15 + 0.3 * maxf(0.0, -s)
 		return p)
 
 

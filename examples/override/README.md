@@ -43,5 +43,9 @@ is a vertical slice, not four hours.
 ## Assets
 
 Creatures and props: NVIDIA NIM TRELLIS (`tools/gen_trellis.mjs`), reduced with `tools/prep.py`. The three robots are skinned to a real
-skeleton by `tools/bake_rig.gd` and animated by `scripts/rig.gd` (idle, walk, stomp, run, lunge, recoil, sweep, crawl). Conveyors, server
+skeleton (Rigger's 49-bone humanoid contract, 30 finger bones included) by `tools/bake_rig.gd` and animated by `scripts/rig.gd` (idle, walk, stomp, run, lunge, recoil, sweep, crawl). Conveyors, server
 racks and the bomb are built from primitives. Everything else (sounds, textures, icons) is generated in code.
+
+## Rigs
+
+`Rig.make(model, size)` builds a `Skeleton3D` with the 49 Rigger bones, a baked skinned mesh and the clips. `assets/rigger/*.glb` are the same characters in Rigger's export layout (`Character > Rig + Mesh`, clip `Take`), written by `tools/export_rigger_glb.gd`; `tests/rig_test.gd` and `tests/rigger_glb_test.gd` check them. `tests/rigshot.gd` and `tests/handshot.gd` render the poses and the hands.

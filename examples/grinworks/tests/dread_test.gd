@@ -33,8 +33,8 @@ func _init() -> void:
 	for clip in ["idle", "walk", "stalk", "run", "flee", "recoil", "scream", "lunge", "peek"]:
 		check(anim.has_animation(clip), "clip %s exists" % clip)
 	var sk := grin.get_meta("skeleton") as Skeleton3D
-	check(sk.get_bone_count() == Rig.JOINTS.size(), "the skeleton has %d bones" % Rig.JOINTS.size())
-	check(sk.find_bone("head") >= 0 and sk.find_bone("thigh_l") >= 0 and sk.find_bone("fore_r") >= 0, "head, thigh and forearm bones are there")
+	check(sk.get_bone_count() == 49, "the skeleton has %d bones (Rigger contract)" % 49)
+	check(sk.find_bone("head") >= 0 and sk.find_bone("thighL") >= 0 and sk.find_bone("foreArmR") >= 0 and sk.find_bone("pinky3L") >= 0, "head, thigh and forearm bones are there")
 	var tracks_ok := true
 	for clip in anim.get_animation_list():
 		var a := anim.get_animation(clip)

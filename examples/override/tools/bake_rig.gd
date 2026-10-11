@@ -26,21 +26,17 @@ func bake(model: String) -> void:
 		print("  (no profile yet: add one to Rig.PROFILES with the box above)")
 		return
 	var box: AABB = Rig.box(model)
+	var P := Rig.positions(model)
 	var j := Rig.joints(model)
 	var segs: Array = []
 	for i in range(j.size()):
 		var name: String = j[i][0]
-		if name.ends_with("_end"):
-			continue
-		var tip := _tip_of(j, i)
-		var a := Rig.to_mesh(model, j[i][2])
-		var b := Rig.to_mesh(model, tip)
 		var side := 0
-		if name.ends_with("_l"):
+		if name.ends_with("L"):
 			side = -1
-		elif name.ends_with("_r"):
+		elif name.ends_with("R"):
 			side = 1
-		segs.append({"i": i, "a": a, "b": b, "side": side, "name": name})
+		segs.append({"i": i, "a": P[name], "b": Rig.tip(model, name, P), "side": side, "name": name})
 	var bones := PackedInt32Array()
 	var weights := PackedFloat32Array()
 	bones.resize(verts.size() * 4)
@@ -60,9 +56,10 @@ func bake(model: String) -> void:
 			var nm: String = s.name
 			if s.side != 0 and s.side != side:
 				continue
-			if (nm.begins_with("thigh_") or nm.begins_with("shin_") or nm.begins_with("foot_")) and p.y > hip_y:
+			var leg: bool = nm.begins_with("thigh") or nm.begins_with("shin") or nm.begins_with("foot") or nm.begins_with("toe")
+			if leg and p.y > hip_y:
 				continue
-			if (nm.begins_with("arm_") or nm.begins_with("fore_") or nm.begins_with("hand_")) and p.y < arm_floor:
+			if s.side != 0 and not leg and p.y < arm_floor:
 				continue
 			cand.append([_dist(p, s.a, s.b), s.i])
 		cand.sort_custom(func(x, y): return x[0] < y[0])
@@ -83,15 +80,6 @@ func bake(model: String) -> void:
 	out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var path := "%s%s_skin.res" % [Rig.DIR, model]
 	print("  saved ", path, " err ", ResourceSaver.save(out, path), " verts ", verts.size())
-
-
-## A bone's tip is its first child.
-func _tip_of(j: Array, i: int) -> Vector3:
-	var name: String = j[i][0]
-	for e in j:
-		if e[1] == name and not (name == "chest" and (e[0] as String).begins_with("arm_")) and not (name == "pelvis" and (e[0] as String).begins_with("thigh_")):
-			return e[2]
-	return j[i][2]
 
 
 func _dist(p: Vector3, a: Vector3, b: Vector3) -> float:
