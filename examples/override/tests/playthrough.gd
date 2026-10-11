@@ -259,10 +259,13 @@ func read_paper_at(id: String, via: Array = []) -> bool:
 
 
 func take(id: String, via: Array = []) -> bool:
-	var ok := await use_it(id, via)
-	if ok:
-		await step(10)
-	return ok
+	# A creature may knock the bot off its mark: try again until the thing is really in the pack.
+	for attempt in range(4):
+		if game.s.taken.has(id):
+			return true
+		if await use_it(id, via):
+			await step(10)
+	return game.s.taken.has(id)
 
 
 func craft_in_pack(a_item: String, b_item: String) -> bool:
@@ -285,6 +288,7 @@ func craft_in_pack(a_item: String, b_item: String) -> bool:
 
 func run() -> void:
 	var p := game.player
+	seed(11)
 	if film:
 		game.ui.show_title(false)
 		await step(60 * 4)
@@ -305,7 +309,9 @@ func run() -> void:
 	check(await take("fuse_1", [Vector3(15, 0, 4)]) or await take("fuse_1"), "fuse from the server desk")
 	check(await take("fuse_2") and await take("fuse_3") and await take("cable") and await take("cell_store"), "two fuses, the cable and a cell from the store room")
 	check(game.s.inv.count("fuse") == 3 and game.s.inv.has("cable"), "the pack holds three fuses and the cable")
-	for i in range(4):
+	for i in range(8):
+		if game.s.unlocked.has("lift1"):
+			break
 		await use_it("fusebox")
 	check(game.s.unlocked.has("lift1"), "the fuse box is wired and the lift unlocks (%d fuses in)" % game.s.fuses_in)
 	check(await use_it("lift_1"), "ride the lift down")
@@ -323,8 +329,11 @@ func run() -> void:
 	check(await walk_via([Vector3(120, 0, 8.5), Vector3(124, 0, 6.0), Vector3(128, 0, 5.5), Vector3(131, 0, 5.5)]), "on to the pump room")
 	check(await take("wiring"), "the wiring")
 	check(await take("cell_pump"), "a cell")
-	for lever in ["blue", "red", "green"]:
-		await use_it("lever_" + lever)
+	for attempt in range(3):
+		if game.s.gen_on:
+			break
+		for lever in ["blue", "red", "green"]:
+			await use_it("lever_" + lever)
 	check(game.s.gen_on and game.s.unlocked.has("lift2"), "the levers in the right order start the generator")
 	check(await use_it("lift_2", [Vector3(137, 0, 5), Vector3(141, 0, 4.5)]), "ride the lift down")
 	await step(20)

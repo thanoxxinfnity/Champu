@@ -511,7 +511,8 @@ func drop_debris(room: Node3D, centre: Vector3) -> void:
 			sfx.play_at("crash", b.global_position, 2.0)
 			noise(b.global_position, 16.0, "bang")
 			player.shake(clampf(1.0 - b.global_position.distance_to(player.global_position) / 14.0, 0.0, 0.8))
-			if body is Player and not hurt_once[0] and b.linear_velocity.length() > 3.0:
+			# Falling pipes are a fright and a bruise, never the last blow: they cannot take the last point of health.
+			if body is Player and not hurt_once[0] and b.linear_velocity.length() > 3.0 and player.health > 1:
 				hurt_once[0] = true
 				hurt_player(1, b.global_position))
 

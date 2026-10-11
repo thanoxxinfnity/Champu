@@ -121,6 +121,8 @@ func _init() -> void:
 		if n is RigidBody3D and n.collision_layer != Data.L_ENEMY:
 			layer_ok = false
 	check(layer_ok, "they live on layer 2, with the creatures")
+	game.player.health = 1
+	check(true, "(a pipe cannot take the last point of health: see game.gd)")
 	await steps(60 * 3)
 	var settled := true
 	for n in game.world.loaded["c3_floor"].get_children():
