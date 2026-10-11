@@ -100,3 +100,19 @@ jobs:
           name: Project OVERRIDE (latest build)
           body: Auto-built from ${{ github.sha }}. Sideload APK — enable "install from unknown sources" to install.
           files: examples/override/build/Override.apk
+
+      # The same game as a web page (single-threaded, so any static host works without special headers).
+      - name: Export the web build
+        run: |
+          mkdir -pv build/web
+          godot --headless --export-release "Web" build/web/index.html
+          ls -la build/web
+          cd build/web && zip -r ../override-web.zip . && ls -la ../override-web.zip
+
+      - name: Publish the web build
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: override-web
+          name: Project OVERRIDE (web build)
+          body: Auto-built from ${{ github.sha }}. Unzip and serve the folder (or open it from any static host); index.html is the entry.
+          files: examples/override/build/override-web.zip

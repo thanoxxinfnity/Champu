@@ -46,8 +46,13 @@ func _ready() -> void:
 	_breath.max_distance = 30.0
 	for p in [_hum, _amb, _heart, _breath]:
 		add_child(p)
-	_thread = Thread.new()
-	_thread.start(_build_all)
+	if OS.has_feature("web"):
+		# A browser build has no threads: make the sounds now (a couple of seconds behind the title).
+		_build_all()
+		_finish_build()
+	else:
+		_thread = Thread.new()
+		_thread.start(_build_all)
 
 
 func _exit_tree() -> void:
@@ -56,19 +61,23 @@ func _exit_tree() -> void:
 		_thread = null
 
 
+func _finish_build() -> void:
+	ready_ok = true
+	_hum.stream = _streams["hum"]
+	_hum.volume_db = -20.0
+	_amb.stream = _streams["amb"]
+	_amb.volume_db = -22.0
+	_breath.stream = _streams["breath"]
+	_breath.volume_db = -80.0
+	_box.stream = _streams["musicbox"]
+	_box.volume_db = -80.0
+
+
 func _process(delta: float) -> void:
 	if not ready_ok and _thread != null and not _thread.is_alive():
 		_thread.wait_to_finish()
 		_thread = null
-		ready_ok = true
-		_hum.stream = _streams["hum"]
-		_hum.volume_db = -20.0
-		_amb.stream = _streams["amb"]
-		_amb.volume_db = -22.0
-		_breath.stream = _streams["breath"]
-		_breath.volume_db = -80.0
-		_box.stream = _streams["musicbox"]
-		_box.volume_db = -80.0
+		_finish_build()
 	if heart_rate > 0.0 and ready_ok:
 		_heart_t += delta * heart_rate
 		if _heart_t >= 1.0:
