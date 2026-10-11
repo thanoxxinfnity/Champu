@@ -129,14 +129,14 @@ func _posters() -> void:
 func _writing() -> void:
 	# Painted by someone who did not have long. Dark red, drying down the wall.
 	var items := [
-		["HE HATES\nTHE LIGHT", Vector3(-9.83, 1.8, 2.5), 90.0, 0.014],
-		["DON'T\nLET HIM\nHEAR YOU", Vector3(9.83, 1.7, -2.4), -90.0, 0.012],
+		["HE HATES\nTHE LIGHT", Vector3(-9.83, 1.4, -3.2), 90.0, 0.010],
+		["DON'T\nLET HIM\nHEAR YOU", Vector3(9.83, 1.3, 2.8), -90.0, 0.010],
 		["CUBBY 7", Vector3(-17.2, 1.9, 4.0), 90.0, 0.012],
 		["RUN", Vector3(1.8, 1.6, 13.0), 90.0, 0.03],
-		["HE SMILES\nWHEN YOU\nHIDE", Vector3(-1.52, 1.8, -12.0), -90.0, 0.012],
-		["STILL HERE", Vector3(-6.0, 2.0, -27.8), 0.0, 0.014],
+		["HE SMILES\nWHEN YOU\nHIDE", Vector3(-1.52, 1.8, -12.0), -90.0, 0.0085],
+		["STILL HERE", Vector3(1.5, 2.6, -27.8), 0.0, 0.012],
 		["I SEE\nYOU", Vector3(32.8, 1.8, -3.0), -90.0, 0.018],
-		["THE GATE\nIS REAL", Vector3(10.2, 1.8, -8.8), 90.0, 0.011],
+		["THE GATE\nIS REAL", Vector3(10.2, 1.0, -8.0), 90.0, 0.008],
 		["COUNT THE\nPIPES", Vector3(3.0, 1.9, 27.8), 180.0, 0.011],
 	]
 	for it in items:

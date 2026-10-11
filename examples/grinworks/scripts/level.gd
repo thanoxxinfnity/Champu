@@ -466,7 +466,13 @@ func set_lit(zone: String, on: bool, instant := false) -> void:
 
 # ── things in the world ──────────────────────────────────────────────────────
 
-func _label(text: String, pos: Vector3, yaw_deg: float, size := 0.012, color := Color(0.85, 0.9, 0.95), emissive := true) -> Label3D:
+## Writing on a wall. `max_w` (metres) shrinks it until it fits the stretch of wall it was put on.
+func _label(text: String, pos: Vector3, yaw_deg: float, size := 0.012, color := Color(0.85, 0.9, 0.95), emissive := true, max_w := 0.0) -> Label3D:
+	if max_w > 0.0:
+		var widest := 0.0
+		for line in text.split("\n"):
+			widest = maxf(widest, ThemeDB.fallback_font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, 48).x)
+		size = minf(size, max_w / maxf(widest, 1.0))
 	var l := Label3D.new()
 	l.text = text
 	l.position = pos
@@ -567,7 +573,7 @@ func _airlock() -> void:
 	prop("blocks", 1.1, Vector3(-15.2, 0.0, 5.7), 10.0, true, false, "", 0.8)
 	prop("desk", 0.8, Vector3(-12.2, 0.0, 4.4), 0.0, true, false, "x")
 	note("intro", Vector3(-12.2, 0.82, 4.4), 10.0)
-	_label("LOADING DOCK", Vector3(-10.2, 2.6, 6.5), -90.0, 0.012)
+	_label("LOADING DOCK", Vector3(-10.2, 2.6, 6.5), -90.0, 0.012, Color(0.85, 0.9, 0.95), true, 2.8)
 
 
 func _hub() -> void:
@@ -586,7 +592,7 @@ func _hub() -> void:
 	note("hub_scrawl", Vector3(2.4, 1.4, -9.8), 0.0)
 	pickup("battery_hub1", "battery", 0.18, Vector3(-8.2, 0.82, -9.3), "Take battery", Color(0.4, 1.0, 0.5))
 	pickup("battery_hub2", "battery", 0.18, Vector3(5.5, 0.0, 9.3), "Take battery", Color(0.4, 1.0, 0.5))
-	_label("SMILE!  WELCOME TO GRINWORKS", Vector3(0.0, 4.0, 9.8), 180.0, 0.02, Color(1.0, 0.9, 0.45))
+	_label("SMILE!  WELCOME TO GRINWORKS", Vector3(0.0, 4.05, 9.8), 180.0, 0.02, Color(1.0, 0.9, 0.45), true, 14.0)
 
 
 func _dorm() -> void:
@@ -612,7 +618,7 @@ func _dorm() -> void:
 	prop("toy_drum", 0.5, Vector3(-24.5, 0.0, 7.0), 0.0, true, false, "", 0.6)
 	prop("rocking_horse", 1.0, Vector3(-18.2, 0.0, -6.6), 120.0, true, false, "", 0.9)
 	pickup("battery_dorm", "battery", 0.18, Vector3(-28.5, 0.82, 6.9), "Take battery", Color(0.4, 1.0, 0.5))
-	_label("NAP ROOM", Vector3(-17.2, 2.6, 0.0), 90.0, 0.012)
+	_label("NAP ROOM", Vector3(-16.8, 2.6, 0.0), 90.0, 0.012, Color(0.85, 0.9, 0.95), true, 2.7)
 
 
 func _engine() -> void:
@@ -653,7 +659,7 @@ func _engine() -> void:
 	prop("gift_box", 0.8, Vector3(-6.4, 0.0, 17.5), 30.0)
 	prop("jack_box", 0.7, Vector3(-3.0, 0.0, 26.0), 190.0, true, false, "", 0.7)
 	pickup("battery_engine", "battery", 0.18, Vector3(-6.4, 0.8, 17.5), "Take battery", Color(0.4, 1.0, 0.5))
-	_label("BOILER ROOM", Vector3(0.0, 2.8, 16.2), 180.0, 0.012)
+	_label("BOILER ROOM", Vector3(0.0, 2.8, 15.8), 180.0, 0.012, Color(0.85, 0.9, 0.95), true, 2.7)
 
 
 func _lab() -> void:
@@ -680,7 +686,7 @@ func _lab() -> void:
 	locker_hide(Vector3(32.4, 0.0, 3.2), FNX)
 	prop("cart", 1.1, Vector3(19.5, 0.0, 3.5), 70.0, true, true)
 	pickup("battery_lab", "battery", 0.18, Vector3(28.0, 0.95, 7.0), "Take battery", Color(0.4, 1.0, 0.5))
-	_label("TOY LAB", Vector3(16.8, 2.6, 0.0), -90.0, 0.012)
+	_label("TOY LAB", Vector3(16.8, 2.6, 0.0), -90.0, 0.012, Color(0.85, 0.9, 0.95), true, 2.7)
 
 
 func _control() -> void:
@@ -701,7 +707,7 @@ func _control() -> void:
 	prop("terminal", 0.5, Vector3(-7.4, 0.8, -24.5), FPX, false)
 	prop("xylophone", 0.5, Vector3(3.0, 0.0, -26.9), 0.0, true, false, "", 1.0)
 	pickup("battery_control", "battery", 0.18, Vector3(5.5, 0.82, -26.8), "Take battery", Color(0.4, 1.0, 0.5))
-	_label("MASCOT OFFICE", Vector3(0.0, 2.8, -16.2), 0.0, 0.012)
+	_label("MASCOT OFFICE", Vector3(0.0, 2.8, -15.8), 0.0, 0.012, Color(0.85, 0.9, 0.95), true, 2.7)
 
 
 func _pod() -> void:
@@ -712,7 +718,7 @@ func _pod() -> void:
 	prop("breaker_box", 1.3, Vector3(12.8, 0.0, -3.9), FNZ, true, false, "", 0.9)
 	var c := use("pod_console", "Gate controls", Vector3(1.0, 1.3, 0.8), Vector3(12.8, 0.9, -4.1), game.pod_console)
 	c.prompt_fn = func(): return game.pod_prompt()
-	_label("DELIVERY BAY", Vector3(10.2, 2.6, -6.5), 90.0, 0.012)
+	_label("DELIVERY BAY", Vector3(10.2, 2.6, -6.5), 90.0, 0.012, Color(0.85, 0.9, 0.95), true, 2.8)
 
 
 func _door_panels() -> void:
@@ -726,9 +732,9 @@ func _door_panels() -> void:
 
 func _signs() -> void:
 	# Names over the doorways, on the hub side, so nobody is lost.
-	_label("MASCOT OFFICE", Vector3(0.0, 3.4, -9.8), 0.0, 0.02, Color(1.0, 0.85, 0.4))
-	_label("TOY LAB", Vector3(9.8, 3.4, 0.0), -90.0, 0.02, Color(1.0, 0.85, 0.4))
-	_label("BOILER ROOM", Vector3(0.0, 3.4, 9.8), 180.0, 0.02, Color(1.0, 0.85, 0.4))
-	_label("NAP ROOM", Vector3(-9.8, 3.4, 0.0), 90.0, 0.02, Color(1.0, 0.85, 0.4))
-	_label("DELIVERY BAY", Vector3(9.8, 3.0, -6.5), -90.0, 0.02, Color(1.0, 0.85, 0.4))
-	_label("LOADING DOCK", Vector3(-9.8, 3.0, 6.5), 90.0, 0.02, Color(1.0, 0.85, 0.4))
+	_label("MASCOT OFFICE", Vector3(0.0, 3.1, -9.8), 0.0, 0.02, Color(1.0, 0.85, 0.4), true, 5.0)
+	_label("TOY LAB", Vector3(9.8, 3.1, 0.0), -90.0, 0.02, Color(1.0, 0.85, 0.4), true, 4.0)
+	_label("BOILER ROOM", Vector3(0.0, 3.1, 9.8), 180.0, 0.02, Color(1.0, 0.85, 0.4), true, 5.0)
+	_label("NAP ROOM", Vector3(-9.8, 3.1, 0.0), 90.0, 0.02, Color(1.0, 0.85, 0.4), true, 4.0)
+	_label("DELIVERY BAY", Vector3(9.8, 3.1, -6.5), -90.0, 0.02, Color(1.0, 0.85, 0.4), true, 5.0)
+	_label("LOADING DOCK", Vector3(-9.8, 3.1, 6.5), 90.0, 0.02, Color(1.0, 0.85, 0.4), true, 5.0)

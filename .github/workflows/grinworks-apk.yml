@@ -50,6 +50,12 @@ jobs:
         run: |
           godot --headless --fixed-fps 60 -s tests/hollow_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
           grep -q 'ALL OK' /tmp/out.txt
+      - name: Words fit their walls and the glass
+        run: |
+          for t in signs_test ui_test; do
+            godot --headless --fixed-fps 60 -s tests/$t.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+            grep -q 'ALL OK' /tmp/out.txt
+          done
       - name: The fear director and Mr. Grin's rig
         run: |
           godot --headless --fixed-fps 60 -s tests/dread_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt

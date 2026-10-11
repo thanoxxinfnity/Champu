@@ -43,6 +43,7 @@ var _toast_t := 0.0
 var _fear := 0.0
 var _hurt := 0.0
 var _focus_now := false
+var screen_override := Vector2.ZERO   # tests lay the glass out at a chosen size
 var _card: Label
 var _card_sub: Label
 var _card_tw: Tween
@@ -129,6 +130,10 @@ func _ready() -> void:
 	_root.add_child(_screen)
 
 
+func _vp() -> Vector2:
+	return screen_override if screen_override != Vector2.ZERO else get_viewport().get_visible_rect().size
+
+
 func _lbl(text: String, size: int, color := INK, align := HORIZONTAL_ALIGNMENT_LEFT) -> Label:
 	var l := Label.new()
 	l.text = text
@@ -144,32 +149,32 @@ func _lbl(text: String, size: int, color := INK, align := HORIZONTAL_ALIGNMENT_L
 func _build_hud() -> void:
 	_objective = _lbl("", 15, INK)
 	_objective.position = Vector2(18, 14)
-	_objective.custom_minimum_size = Vector2(420, 0)
+	_objective.custom_minimum_size = Vector2(360, 0)
 	_objective.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_objective.size = Vector2(420, 60)
+	_objective.size = Vector2(360, 60)
 	_hud.add_child(_objective)
 
 	_toast = _lbl("", 20, AMBER, HORIZONTAL_ALIGNMENT_CENTER)
 	_toast.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	_toast.position.y = 84
-	_toast.custom_minimum_size = Vector2(760, 0)
+	_toast.position.y = 300
+	_toast.custom_minimum_size = Vector2(900, 0)
 	_toast.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_toast.size = Vector2(760, 40)
-	_toast.position.x = -380
+	_toast.size = Vector2(900, 40)
+	_toast.position.x = -450
 	_toast.modulate.a = 0.0
 	_hud.add_child(_toast)
 
 	_card = _lbl("", 48, AMBER, HORIZONTAL_ALIGNMENT_CENTER)
 	_card.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	_card.size = Vector2(900, 70)
-	_card.position = Vector2(-450, 190)
+	_card.position = Vector2(-450, 40)
 	_card.pivot_offset = Vector2(450, 35)
 	_card.modulate.a = 0.0
 	_hud.add_child(_card)
 	_card_sub = _lbl("", 20, DIM, HORIZONTAL_ALIGNMENT_CENTER)
 	_card_sub.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	_card_sub.size = Vector2(900, 30)
-	_card_sub.position = Vector2(-450, 258)
+	_card_sub.position = Vector2(-450, 140)
 	_card_sub.modulate.a = 0.0
 	_hud.add_child(_card_sub)
 
@@ -184,8 +189,8 @@ func _build_hud() -> void:
 	_sub = _lbl("", 22, Color(0.95, 0.9, 0.85), HORIZONTAL_ALIGNMENT_CENTER)
 	_sub.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_sub.size = Vector2(900, 70)
-	_sub.position = Vector2(-450, -150)
+	_sub.size = Vector2(700, 70)
+	_sub.position = Vector2(-350, -150)
 	_sub.modulate.a = 0.0
 	_hud.add_child(_sub)
 
@@ -198,7 +203,7 @@ func _build_hud() -> void:
 	_count = _lbl("", 44, RED, HORIZONTAL_ALIGNMENT_CENTER)
 	_count.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	_count.size = Vector2(600, 60)
-	_count.position = Vector2(-300, 120)
+	_count.position = Vector2(-300, 205)
 	_hud.add_child(_count)
 
 	_items = _lbl("", 16, AMBER, HORIZONTAL_ALIGNMENT_RIGHT)
@@ -213,7 +218,7 @@ func _build_hud() -> void:
 
 
 func _process(delta: float) -> void:
-	var vp := get_viewport().get_visible_rect().size
+	var vp := _vp()
 	_items.position = Vector2(vp.x - 330, 76)
 	if _toast_t > 0.0:
 		_toast_t -= delta
@@ -264,9 +269,9 @@ func toast(text: String, seconds := 4.0) -> void:
 	_toast.modulate.a = 1.0
 	if _toast_tw:
 		_toast_tw.kill()
-	_toast.position.y = 98.0
+	_toast.position.y = 314.0
 	_toast_tw = _toast.create_tween().set_parallel(true)
-	_toast_tw.tween_property(_toast, "position:y", 84.0, 0.25).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_toast_tw.tween_property(_toast, "position:y", 300.0, 0.25).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	_toast.visible_ratio = 0.0
 	_toast_tw.tween_property(_toast, "visible_ratio", 1.0, clampf(text.length() * 0.02, 0.2, 1.4))
 
@@ -473,12 +478,12 @@ func _draw_bars() -> void:
 	_bars.draw_rect(Rect2(x, y + 60, 150, 6), Color(0, 0, 0, 0.55))
 	_bars.draw_rect(Rect2(x, y + 60, 150 * _noise, 6), Color(1.0, 0.45, 0.25) if _noise > 0.5 else Color(0.9, 0.8, 0.4))
 	# Crosshair.
-	var c := get_viewport().get_visible_rect().size * 0.5
+	var c := _vp() * 0.5
 	_bars.draw_circle(c, 2.5 if not _focus_now else 4.5, Color(1, 1, 1, 0.55 if not _focus_now else 0.95))
 
 
 func _draw_slats() -> void:
-	var vp := get_viewport().get_visible_rect().size
+	var vp := _vp()
 	_slats.draw_rect(Rect2(0, 0, vp.x, vp.y), Color(0, 0, 0, 0.55))
 	var n := 9
 	var gap := vp.x * 0.5 / n
@@ -495,7 +500,7 @@ func _draw_slats() -> void:
 # ── touch controls ───────────────────────────────────────────────────────────
 
 func _layout() -> Dictionary:
-	var vp := get_viewport().get_visible_rect().size
+	var vp := _vp()
 	return {
 		"use": {"c": Vector2(vp.x - 120, vp.y - 120), "r": 58.0, "t": "USE"},
 		"torch": {"c": Vector2(vp.x - 250, vp.y - 70), "r": 38.0, "t": "TORCH"},
@@ -536,7 +541,7 @@ func _draw_pad() -> void:
 		_pad.draw_arc(_stick_origin, 70, 0, TAU, 40, Color(0.7, 0.9, 1.0, 0.45), 2.0)
 		_pad.draw_circle(_stick_pos, 30, Color(0.7, 0.9, 1.0, 0.5))
 	else:
-		var vp := get_viewport().get_visible_rect().size
+		var vp := _vp()
 		_pad.draw_arc(Vector2(130, vp.y - 120), 70, 0, TAU, 40, Color(0.7, 0.9, 1.0, 0.18), 2.0)
 
 
@@ -592,7 +597,7 @@ func _input(event: InputEvent) -> void:
 		return
 	var p := game.player
 	if event is InputEventScreenTouch:
-		var vp := get_viewport().get_visible_rect().size
+		var vp := _vp()
 		if event.pressed:
 			var b := _hit(event.position)
 			if b != "":
