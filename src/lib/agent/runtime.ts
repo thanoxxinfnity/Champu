@@ -21,6 +21,7 @@ import { planBrief, planGame, planSummary, playerParts } from '@/lib/suites/godo
 import { threejsSkillsPrompt } from '@/lib/skills/threejs/select';
 import { browserIo, libraryIo, loadLibIndex, loadOdIndex, motionIo } from '@/lib/skills/opendesign/io';
 import { motionContext, wantsMotion } from '@/lib/suites/web/motion';
+import { designAuditContext, wantsDesignAudit } from '@/lib/suites/web/design-audit';
 import { parseSkillsCommand, renderSkillsOverview, renderSkillsSearch, skillLibraryContext, type SkillsCommand } from '@/lib/skills/library/context';
 import type { LibIndex } from '@/lib/skills/library/types';
 import { CAPTURE_SYSTEM, MEMORY_HELP, captureInput, findToForget, formatMemory, looksSecret, makeMemory, memoryNote, parseMemory, parseObservations, recall, renderList, worthCapturing, type MemoryCommand } from '@/lib/memory/memory';
@@ -1202,6 +1203,16 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       }
     }
 
+    // ── Design audit, for a website request that complains about the look ──────
+    let designAudit: string | undefined;
+    if (lane === 'B' && !classification.ops && wantsSite(modelInput) && wantsDesignAudit(modelInput)) {
+      const d = designAuditContext();
+      designAudit = d.text;
+      const note = { id: uid('msg'), role: 'system' as const, content: d.summary, createdAt: Math.max(0, startedAt - 1) };
+      if (isCurrent()) useWorkspace.getState().insertMessageBefore(assistantId, note);
+      void appendMessage({ ...note, sessionId, suite });
+    }
+
     // ── Memory: what earlier sessions left that this request needs ─────────────
     const pipe = await pipelineState();
     // The project's own memory file, once per page load: a fresh browser on a known project starts knowing it.
@@ -1248,6 +1259,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       ...(openDesign ? { openDesign } : {}),
       ...(skillLibrary ? { skillLibrary } : {}),
       ...(motionGuide ? { motionGuide } : {}),
+      ...(designAudit ? { designAudit } : {}),
       ...(classification.browse ? { browse: true } : {}),
       ...(memoryText ? { memory: memoryText } : {}),
       ...(lane === 'B' && pipe.ponytail && wantsPonytail(modelInput, useWorkspace.getState().files.size) ? { ponytail: PONYTAIL_RULE } : {}),

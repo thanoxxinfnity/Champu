@@ -24,6 +24,7 @@ import {
   type CanvasScreen,
   type Device,
 } from '@/lib/suites/canvas/board';
+import { STORE_SPECS, storeFrameEntries, storeReadme, type StoreTarget } from '@/lib/suites/canvas/store';
 
 const KEY = 'canvas.board.v1';
 const MIN_Z = 0.1;
@@ -60,6 +61,7 @@ export function CanvasBoard() {
   const [od, setOd] = useState<OdIndex | null>(null);
 
   const [device, setDevice] = useState<Device>('phone');
+  const [storeTarget, setStoreTarget] = useState<StoreTarget>('iphone');
   const [name, setName] = useState('');
   const [brief, setBrief] = useState('');
   const [change, setChange] = useState('');
@@ -171,6 +173,13 @@ export function CanvasBoard() {
   const exportZip = () => board.screens.length && downloadZip(exportEntries(board), `${fileBase}.zip`);
   const exportOne = () => selected && downloadText(selected.html, `${slug(selected.name)}.html`, 'text/html;charset=utf-8');
   const copyHtml = () => selected && navigator.clipboard?.writeText(selected.html).catch(() => undefined);
+  const storeCandidates = board.screens.filter((s) => s.device === STORE_SPECS[storeTarget].device);
+  const exportStoreShots = () => {
+    if (!storeCandidates.length) return;
+    const entries = storeFrameEntries(board, { target: storeTarget });
+    entries.push({ path: 'README.md', content: storeReadme(storeTarget, entries.length) });
+    downloadZip(entries, `${fileBase}-store-${storeTarget}.zip`);
+  };
 
   // ── Pan, zoom, move ───────────────────────────────────────────────────────
   const zoomAt = (factor: number, cx: number, cy: number) =>
@@ -259,6 +268,19 @@ export function CanvasBoard() {
           <Btn onClick={fit} title="Fit all screens">Fit</Btn>
           <Btn onClick={exportZip} disabled={!board.screens.length} primary title="Screens + design tokens + overview, as a zip">
             <SkillIcon name="package" size={13} /> Export zip
+          </Btn>
+          <select
+            value={storeTarget}
+            onChange={(e) => setStoreTarget(e.target.value as StoreTarget)}
+            aria-label="Store screenshot target"
+            className={inputCls}
+            style={{ ...inputStyle, background: 'var(--panel)' }}
+            title="Which store's screenshot size to frame the matching screens for"
+          >
+            {(Object.keys(STORE_SPECS) as StoreTarget[]).map((k) => <option key={k} value={k}>{STORE_SPECS[k].label}</option>)}
+          </select>
+          <Btn onClick={exportStoreShots} disabled={!storeCandidates.length} title={storeCandidates.length ? `Frame ${storeCandidates.length} ${STORE_SPECS[storeTarget].device} screen(s) as ${STORE_SPECS[storeTarget].label} marketing shots` : `No ${STORE_SPECS[storeTarget].device} screens on the board yet`}>
+            <SkillIcon name="phone" size={13} /> Store shots
           </Btn>
         </div>
       </div>

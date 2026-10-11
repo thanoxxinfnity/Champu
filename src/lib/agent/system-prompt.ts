@@ -733,6 +733,8 @@ export interface PromptContext {
   skillLibrary?: string;
   /** Motion-design guidance for a website that moves (see suites/web/motion). */
   motionGuide?: string;
+  /** A still-layout checklist for a website called generic/boring/AI-made (see suites/web/design-audit). */
+  designAudit?: string;
   /** The job uses the bridge's browser: how to drive it. */
   browse?: boolean;
   /** What was remembered from earlier work, already filtered for this request (see memory/). */
@@ -775,6 +777,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
   if (ctx.openDesign) parts.push(ctx.openDesign);
   if (ctx.skillLibrary) parts.push(ctx.skillLibrary);
   if (ctx.motionGuide) parts.push(ctx.motionGuide);
+  if (ctx.designAudit) parts.push(ctx.designAudit);
   if (ctx.browse) parts.push(BROWSER_GUIDE);
   if (ctx.memory) parts.push(ctx.memory);
   if (ctx.ponytail) parts.push(ctx.ponytail);
