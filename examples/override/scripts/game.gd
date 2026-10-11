@@ -37,6 +37,8 @@ var env: Environment
 var enemies: Array[Enemy] = []
 var warden: Enemy
 var headless_test := false
+var hid_spots: Array = []            # where the player has hidden (newest first): the creatures remember
+var last_throw_from := Vector3.ZERO
 var enemies_off := false           # a test can switch the creatures off to check the rest of the game on its own
 var playing := false
 var _lamps_flicker := 0.0
@@ -262,6 +264,7 @@ func _belts() -> void:
 
 ## The scrap's flight: a short arc, then the clang (the noise is made at the moment it lands).
 func scrap_flies(from: Vector3, to: Vector3) -> void:
+	last_throw_from = player.global_position
 	var t_fly := clampf(from.distance_to(to) / 22.0, 0.2, 0.8)
 	var lump := MeshInstance3D.new()
 	var bm := BoxMesh.new()
@@ -286,6 +289,15 @@ func scrap_flies(from: Vector3, to: Vector3) -> void:
 	var tw := create_tween()
 	tw.tween_method(fly, 0.0, 1.0, t_fly)
 	tw.tween_callback(land)
+
+
+func remember_hide(spot: Vector3) -> void:
+	for i in range(hid_spots.size() - 1, -1, -1):
+		if (hid_spots[i] as Vector3).distance_to(spot) < 0.5:
+			hid_spots.remove_at(i)
+	hid_spots.push_front(spot)
+	if hid_spots.size() > 4:
+		hid_spots.pop_back()
 
 
 func noise(pos: Vector3, radius: float, what: String) -> void:

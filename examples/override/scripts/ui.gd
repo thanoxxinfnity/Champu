@@ -37,6 +37,7 @@ var _paper_tex: ImageTexture
 var _selected := -1
 var _slots: Array = []
 var _dropzone: Control
+var _gore: Control
 var _pack_open := false
 var _after_paper := Callable()
 
@@ -73,6 +74,10 @@ func _ready() -> void:
 	_pad.draw.connect(_draw_pad)
 	_pad.visible = false
 	_root.add_child(_pad)
+	_gore = Control.new()
+	_gore.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_gore.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_gore)
 	_flash = ColorRect.new()
 	_flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -153,6 +158,36 @@ func set_countdown(frac: float) -> void:
 func flash_red() -> void:
 	_flash.color = Color(0.6, 0.0, 0.0, 0.5)
 	_hurt = 1.0
+	blood_on_screen(_health <= 1)
+
+
+## Blood thrown across the glass of the screen when you are hurt: splatters, and drips that slide down and fade over a few seconds.
+func blood_on_screen(heavy := false) -> void:
+	if _gore == null:
+		return
+	var vp := _vp()
+	while _gore.get_child_count() > 16:
+		_gore.get_child(0).queue_free()
+		_gore.remove_child(_gore.get_child(0))
+	for i in range(5 if heavy else 3):
+		var drip := randf() < 0.35
+		var tr := TextureRect.new()
+		tr.texture = Blood.texture("drip_%d" % randi_range(0, 1) if drip else "splat_%d" % randi_range(0, 5))
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_SCALE
+		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var sz := Vector2(randf_range(vp.x * 0.25, vp.x * 0.4), randf_range(vp.y * 0.35, vp.y * 0.6)) if drip else Vector2.ONE * randf_range(vp.y * 0.3, vp.y * 0.6)
+		tr.size = sz
+		tr.position = Vector2(randf_range(0.0, vp.x - sz.x), 0.0 if drip else randf_range(0.0, vp.y - sz.y))
+		tr.pivot_offset = sz * 0.5
+		if not drip:
+			tr.rotation = randf() * TAU
+		tr.modulate = Color(1, 1, 1, 0.0)
+		_gore.add_child(tr)
+		_to(tr, "modulate:a", 0.85, 0.1)
+		_rt.append([tr, "modulate:a", 0.85, 0.0, Time.get_ticks_msec() + 3500, 5500, false])
+		_to(tr, "position:y", tr.position.y + (vp.y * 0.18), 9.0)
+		get_tree().create_timer(9.5, true, false, true).timeout.connect(tr.queue_free)
 
 
 # ── the HUD ──────────────────────────────────────────────────────────────────

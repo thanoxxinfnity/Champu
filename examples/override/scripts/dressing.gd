@@ -51,6 +51,7 @@ static func build(w: World, id: String, n: Node3D) -> void:
 		"c4_exit": _lift(w, n, id)
 	if DRY.has(id):
 		_water(w, n, id)
+	Blood.dress(w, n, id)
 	for rec in w.game.s.dropped:
 		if rec.room == id:
 			spawn_dropped(w, n, rec)

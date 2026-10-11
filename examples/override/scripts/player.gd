@@ -288,7 +288,13 @@ func _find_focus() -> void:
 		focus = hit.collider as Use
 
 
+func hiding_in() -> Use:
+	return _hide_use if hidden else null
+
+
 func enter_hide(u: Use) -> void:
+	game.remember_hide(u.hide_pos)
+	game.noise(global_position, 2.0, "locker")
 	hidden = true
 	torch_on = false
 	_hide_use = u

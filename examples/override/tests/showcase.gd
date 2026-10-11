@@ -73,6 +73,36 @@ func _init() -> void:
 	w.queue_free()
 	game.enemies.clear()
 
+	# Blood: the first observation glass of the hall, and a wall with hand prints.
+	game.world.focus("c1_hall")
+	for i in range(6):
+		await process_frame
+	for room in ["c1_hall", "c1_server", "c1_store", "c1_cryo"]:
+		if not game.world.loaded.has(room):
+			continue
+		var holder: Node = game.world.loaded[room].get_node_or_null("Blood")
+		if holder == null:
+			continue
+		for c in holder.get_children():
+			if c is Node3D and not c is MeshInstance3D:
+				var nrm: Vector3 = c.global_transform.basis.z
+				game.player.global_position = c.global_position + nrm * 2.6 - Vector3(0, c.global_position.y, 0)
+				game.player.yaw = atan2(nrm.x, nrm.z) * -1.0 + PI
+				game.player.pitch = 0.0
+				game.player.rotation.y = game.player.yaw
+				await shot("04e_glass_" + room, 25)
+				break
+	game.world.focus("c1_cryo")
+	for i in range(6):
+		await process_frame
+	game.player.global_position = Vector3(5, 0, 5.2)
+	game.player.yaw = 0.0
+	game.player.rotation.y = 0.0
+	game.player.pitch = 0.0
+	await shot("04f_pods", 25)
+	game.player.global_position = Vector3(12.5, 0, 4)
+	game.player.yaw = deg_to_rad(-90)
+
 	# Putting something down: it lies in the torch where it was left.
 	game.player.global_position = Vector3(12.5, 0, 4)
 	game.player.yaw = deg_to_rad(-90)
@@ -93,8 +123,9 @@ func _init() -> void:
 	game.player.health = 1
 	game.ui.set_health(1)
 	game.ui.flash_red()
+	game.ui.blood_on_screen(true)
 	game.player.shake(0.8)
-	await shot("05_hurt", 4)
+	await shot("05_hurt", 12)
 	game.player.health = 3
 	game.ui.set_health(3)
 

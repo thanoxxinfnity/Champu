@@ -53,6 +53,10 @@ jobs:
           grep -q 'ALL OK' /tmp/out.txt
           godot --headless --fixed-fps 60 -s tests/rigger_glb_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
           grep -q 'ALL OK' /tmp/out.txt
+      - name: "Blood, hand prints and glass are in every room, none across a doorway"
+        run: |
+          godot --headless --fixed-fps 60 -s tests/blood_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
       - name: "The creatures: hearing, sight, stun, hiding, the Warden"
         run: |
           godot --headless --fixed-fps 60 -s tests/enemy_test.gd 2>&1 | grep -v mesh_get_surface_count | grep -v 'Parameter "m" is null' | tee /tmp/out.txt

@@ -13,7 +13,7 @@ enum S { PATROL, INVESTIGATE, CHASE, STUNNED, SEARCH }
 const KINDS := {
 	"crawler": {"size": 1.7, "walk": 1.1, "chase": 2.6, "hear": 0.7, "sight": 5.0, "radius": 0.4, "height": 1.0, "damage": 1, "gravity": true, "windup": 0.45, "reach": 1.5, "search": 2},
 	"hunter": {"size": 2.0, "walk": 1.6, "chase": 3.4, "hear": 1.5, "sight": 0.0, "radius": 0.4, "height": 1.9, "damage": 1, "gravity": true, "windup": 0.5, "reach": 1.7, "search": 3},
-	"warden": {"size": 3.2, "walk": 1.8, "chase": 4.2, "hear": 1.3, "sight": 16.0, "radius": 0.7, "height": 3.0, "damage": 2, "gravity": false, "windup": 0.6, "reach": 2.0, "search": 3},
+	"warden": {"size": 3.2, "walk": 1.8, "chase": 4.2, "hear": 1.3, "sight": 16.0, "radius": 0.45, "height": 3.0, "damage": 2, "gravity": false, "windup": 0.6, "reach": 2.0, "search": 3},
 }
 
 ## A blind creature only strikes while it has heard the player this recently.
@@ -52,9 +52,22 @@ var _search_pts: Array = []
 var _search_i := -1
 var _search_moving := false
 var _stuck_t := 0.0
+var _prog_t := 0.0
+var _prog_pos := Vector3.ZERO
+var _stuck_n := 0
+var _nudge_t := 0.0
+var _nudge_dir := 1.0
 var _stun_immune := 0.0
 var _look_state := -1
 var _glow: Array = []
+var _glow_base: Array = []       # each glow material's normal brightness (for the flicker)
+var _decoys := 0                 # clangs it has been led to: after two it stops believing them
+var _decoy_t := 0.0
+var _roar_t := 0.0               # lock-on roar: it stops and screams before it comes
+var _twitch_t := 6.0
+var _flicker := 0.0
+var _check_u: Use = null         # the locker it is banging on
+var _check_t := 0.0
 
 
 func _ready() -> void:
@@ -78,6 +91,8 @@ func _ready() -> void:
 	if model != null:
 		_anim = model.get_meta("anim")
 		_glow = model.get_meta("glow_mats", [])
+		for m in _glow:
+			_glow_base.append((m as StandardMaterial3D).emission_energy_multiplier)
 	else:
 		model = Assets.make(kind, _cfg.size)
 	add_child(model)
@@ -104,8 +119,17 @@ static func is_player_noise(what: String) -> bool:
 func hear(pos: Vector3, radius: float, what: String) -> void:
 	if state == S.STUNNED or not is_inside_tree():
 		return
-	if global_position.distance_to(pos) > radius * _cfg.hear:
+	var reach: float = radius * float(_cfg.hear)
+	if global_position.distance_to(pos) > reach:
 		return
+	# Walls muffle it: a sound with no clear line to the creature carries little more than half as far.
+	var from := global_position + Vector3(0, float(_cfg.height) * 0.6, 0)
+	var q := PhysicsRayQueryParameters3D.create(from, pos + Vector3(0, 0.6, 0), Data.L_WORLD)
+	if not get_world_3d().direct_space_state.intersect_ray(q).is_empty() and global_position.distance_to(pos) > reach * 0.55:
+		return
+	if what == "clang":
+		_decoys += 1
+		_decoy_t = 50.0
 	# Only what the player does at the player's own spot counts as the player (a fake bang across the room is just a sound).
 	var by_player := is_player_noise(what) and pos.distance_to(game.player.global_position) < 3.5
 	if by_player:
@@ -211,6 +235,10 @@ func _physics_process(delta: float) -> void:
 	_alert_cd = maxf(0.0, _alert_cd - delta)
 	_stun_immune = maxf(0.0, _stun_immune - delta)
 	_heard_player_t += delta
+	_decoy_t = maxf(0.0, _decoy_t - delta)
+	if _decoy_t <= 0.0:
+		_decoys = 0
+	_devil(delta)
 	var p := game.player
 	match state:
 		S.STUNNED:
@@ -242,6 +270,7 @@ func _enter_chase(p: Player) -> void:
 	_set_state(S.CHASE)
 	_lost = 0.0
 	_last_known = p.global_position
+	_roar_t = {"crawler": 0.45, "hunter": 0.7, "warden": 1.0}[kind]
 	game.sfx.play_at("growl", global_position + Vector3(0, 1.2, 0), -2.0, 0.6 if kind == "warden" else (0.8 if kind == "hunter" else 1.0))
 	p.shake(0.4)
 	if kind == "crawler":
@@ -258,6 +287,51 @@ func _call_pack(pos: Vector3) -> void:
 		if is_instance_valid(e) and e != self and e.kind == kind and e.global_position.distance_to(global_position) < 16.0:
 			if e.state == S.PATROL or e.state == S.SEARCH:
 				e.hear(pos, 999.0, "pack")
+
+
+## The unsettling bits: now and then, while it is not hunting, it glitches (a flinch, the eyes stutter, a crackle), and the
+## glow flickers like bad wiring. These are tells that something is near, never a way to hurt you.
+func _devil(delta: float) -> void:
+	_flicker = maxf(0.0, _flicker - delta)
+	if not _glow.is_empty():
+		for i in range(_glow.size()):
+			var m := _glow[i] as StandardMaterial3D
+			var base: float = _glow_base[i]
+			if _flicker > 0.0:
+				m.emission_energy_multiplier = base * (0.0 if randf() < 0.5 else randf_range(0.5, 1.8))
+			elif state == S.CHASE:
+				m.emission_energy_multiplier = base * (1.4 + 0.3 * sin(_state_t * 14.0))
+			else:
+				m.emission_energy_multiplier = base
+	if state == S.PATROL or state == S.SEARCH:
+		_twitch_t -= delta
+		if _twitch_t <= 0.0:
+			_twitch_t = randf_range(4.0, 9.0)
+			_flicker = 0.5
+			_clip = ""
+			_play("recoil")
+			if kind != "warden":
+				game.sfx.play_at("zap", global_position + Vector3(0, 1.0, 0), -14.0, randf_range(1.2, 1.8))
+
+
+func _locker_near() -> Use:
+	for u in game.world.uses:
+		if is_instance_valid(u) and u.id == "hide" and Vector2(u.hide_pos.x - global_position.x, u.hide_pos.z - global_position.z).length() < 3.4:
+			return u
+	return null
+
+
+## The longer you survive and the more you die, the keener they get (up to 15 % faster).
+func _adapt() -> float:
+	return 1.0 + minf(0.15, float(game.s.deaths) * 0.03)
+
+
+func _pack_mates() -> int:
+	var n := 0
+	for e in game.enemies:
+		if is_instance_valid(e) and e != self and e.kind == kind and e.state == S.CHASE and e.global_position.distance_to(global_position) < 9.0:
+			n += 1
+	return n
 
 
 func _walk_clip() -> String:
@@ -286,7 +360,7 @@ func _investigate(delta: float) -> void:
 	if agent.is_navigation_finished() or global_position.distance_to(_target) < 1.2:
 		_begin_search()
 		return
-	_move(delta, _cfg.walk * 1.5 * rage, _walk_clip())
+	_move(delta, float(_cfg.walk) * 1.5 * rage * _adapt(), _walk_clip())
 
 
 ## After a sound, it does not give up at once: it stands and listens, then checks a few places around the spot.
@@ -300,11 +374,19 @@ func _begin_search() -> void:
 	for i in range(int(_cfg.search)):
 		var off := Vector3(randf_range(-6.0, 6.0), 0.0, randf_range(-6.0, 6.0))
 		_search_pts.append(_last_known + off)
-	if kind == "warden":
-		for u in game.world.uses:
-			if is_instance_valid(u) and u.id == "hide" and u.hide_pos.distance_to(_last_known) < 9.0:
-				_search_pts.push_front(Vector3(u.hide_pos.x, 0.0, u.hide_pos.z) + Vector3(-sin(deg_to_rad(u.hide_yaw)), 0, -cos(deg_to_rad(u.hide_yaw))) * 1.6)
-				break
+	# Fooled twice by thrown scrap, it stops believing it: it also goes to where the throw came from.
+	if _decoys >= 2 and game.last_throw_from != Vector3.ZERO:
+		_search_pts.push_front(game.last_throw_from)
+	# It remembers the lockers you have hidden in, and goes to bang on them (a creature that can see; the blind cannot know).
+	if _cfg.sight > 0.0:
+		var asked := 0
+		for spot in game.hid_spots:
+			if asked < 2 and (spot as Vector3).distance_to(_last_known) < 14.0:
+				for u in game.world.uses:
+					if is_instance_valid(u) and u.id == "hide" and u.hide_pos.distance_to(spot) < 0.5:
+						_search_pts.push_front(Vector3(u.hide_pos.x, 0.0, u.hide_pos.z) + Vector3(-sin(deg_to_rad(u.hide_yaw)), 0, -cos(deg_to_rad(u.hide_yaw))) * 1.6)
+						asked += 1
+						break
 
 
 func _search(delta: float) -> void:
@@ -313,10 +395,28 @@ func _search(delta: float) -> void:
 		_apply(delta, 0.0)
 		_play("sweep" if kind != "crawler" else "idle")
 		return
+	if _check_u != null:
+		_check_t -= delta
+		_apply(delta, 0.0)
+		_play("lunge")
+		if _check_t <= 0.0:
+			var u := _check_u
+			_check_u = null
+			if game.player.hiding_in() == u:
+				drag_from(u)
+		return
 	if _search_moving:
 		if agent.is_navigation_finished() or global_position.distance_to(_target) < 1.3 or _state_t > 40.0:
 			_search_moving = false
 			_wait = 1.4
+			var lk := _locker_near() if _cfg.sight > 0.0 else null
+			if lk != null:
+				# It hammers on the door before it opens it: the way out is the next second.
+				_check_u = lk
+				_check_t = 1.1
+				_wait = 0.0
+				game.sfx.play_at("crash", lk.global_position + Vector3(0, 1.0, 0), -3.0, 1.3)
+				game.player.shake(0.5 if kind == "warden" else 0.25)
 			return
 		_move(delta, _cfg.walk, _walk_clip())
 		return
@@ -344,6 +444,16 @@ func _chase(delta: float, p: Player) -> void:
 	var dist := global_position.distance_to(p.global_position)
 	var blind: bool = _cfg.sight <= 0.0
 	var seen := _can_see(p)
+	# The lock-on roar: it stops, turns to you and screams. A beat to run, or to freeze.
+	if _roar_t > 0.0:
+		_roar_t -= delta
+		_apply(delta, 0.0)
+		var face := p.global_position - global_position
+		face.y = 0.0
+		if face.length() > 0.1:
+			rotation.y = lerp_angle(rotation.y, atan2(-face.x, -face.z), clampf(delta * 10.0, 0.0, 1.0))
+		_play("scream")
+		return
 	if seen:
 		_lost = 0.0
 		_last_known = p.global_position
@@ -381,6 +491,14 @@ func _chase(delta: float, p: Player) -> void:
 			_hit_cd = 1.6
 		return
 	var tgt := _last_known
+	if seen and kind != "hunter":
+		# It does not run to where you are but to where you are going; a crawler in a pack takes a side.
+		var lead := 0.7 if kind == "warden" else 0.4
+		tgt = p.global_position + Vector3(p.velocity.x, 0.0, p.velocity.z) * lead
+		if kind == "crawler" and dist > 4.0 and _pack_mates() > 0:
+			var side := 1.0 if get_instance_id() % 2 == 0 else -1.0
+			var across := Vector3(-(p.global_position - global_position).z, 0.0, (p.global_position - global_position).x).normalized()
+			tgt += across * side * 2.4
 	if agent.target_position.distance_to(tgt) > 0.8:
 		_go(tgt)
 	var heard_now := _heard_player_t < HEARD_WINDOW
@@ -403,7 +521,11 @@ func _chase(delta: float, p: Player) -> void:
 		_play("sweep")
 		return
 	var clip := "lunge" if (dist < 3.0 and kind != "crawler") else ("crawl" if kind == "crawler" else "run")
-	_move(delta, _cfg.chase * rage, clip)
+	var sp: float = float(_cfg.chase) * rage * _adapt()
+	if kind == "crawler":
+		# Skittering: it freezes and bursts forward, never at an even pace.
+		sp *= 0.3 + 1.5 * clampf(sin(_state_t * 7.0) * 1.7, 0.0, 1.0)
+	_move(delta, sp, clip)
 
 
 ## The wind-up has run out: it hits whatever is still in reach (a crawler leaps instead).
@@ -429,6 +551,8 @@ func _strike(p: Player, dist: float) -> void:
 func _go(pos: Vector3) -> void:
 	_target = pos
 	_stuck_t = 0.0
+	_prog_t = 0.0
+	_prog_pos = global_position
 	var synced := NavigationServer3D.map_get_iteration_id(game.world.get_world_3d().navigation_map) > 0
 	agent.target_position = game.world.snap(pos) if synced else pos
 
@@ -443,6 +567,10 @@ func _move(delta: float, speed: float, clip: String) -> void:
 	var dir := to.normalized()
 	velocity.x = dir.x * speed
 	velocity.z = dir.z * speed
+	if _nudge_t > 0.0:
+		_nudge_t -= delta
+		velocity.x += -dir.z * _nudge_dir * speed * 0.9
+		velocity.z += dir.x * _nudge_dir * speed * 0.9
 	rotation.y = lerp_angle(rotation.y, atan2(-dir.x, -dir.z), clampf(delta * 6.0, 0.0, 1.0))
 	_play(clip)
 	if _anim != null:
@@ -450,24 +578,32 @@ func _move(delta: float, speed: float, clip: String) -> void:
 		_anim.speed_scale = clampf(speed / float(base.get(clip, 2.0)), 0.5, 2.0)
 	_step(delta, speed)
 	_apply(delta, speed)
-	# Stuck on a corner or a prop: ask the navigation mesh again, and after a while give the errand up.
-	var moved := Vector2(get_real_velocity().x, get_real_velocity().z).length()
-	if moved < speed * 0.2:
-		_stuck_t += delta
-		if _stuck_t > 1.5 and _stuck_t - delta <= 1.5:
-			_go(_target)
-		elif _stuck_t > 4.0:
-			_stuck_t = 0.0
-			if state == S.INVESTIGATE:
-				_begin_search()
-			elif state == S.SEARCH:
-				_search_moving = false
-				_wait = 0.1
-			elif state == S.PATROL and not patrol.is_empty():
-				_wp = (_wp + 1) % patrol.size()
-				_go(patrol[_wp])
-	else:
-		_stuck_t = 0.0
+	# Stuck on a corner or a prop (the navigation mesh does not know about furniture): every two seconds, has it got anywhere?
+	# First it asks the mesh again and sidesteps; if that does not free it either, it gives the errand up.
+	_prog_t += delta
+	if _prog_t >= 2.0:
+		_prog_t = 0.0
+		if global_position.distance_to(_prog_pos) < 0.45:
+			_stuck_n += 1
+			if _stuck_n == 1:
+				_go(_target)
+				_nudge_t = 0.7
+				_nudge_dir = (1.0 if randf() < 0.5 else -1.0)
+			else:
+				_stuck_n = 0
+				match state:
+					S.INVESTIGATE:
+						_begin_search()
+					S.SEARCH:
+						_search_moving = false
+						_wait = 0.1
+					S.PATROL:
+						if not patrol.is_empty():
+							_wp = (_wp + 1) % patrol.size()
+							_go(patrol[_wp])
+		else:
+			_stuck_n = 0
+		_prog_pos = global_position
 
 
 func _apply(delta: float, speed: float) -> void:
