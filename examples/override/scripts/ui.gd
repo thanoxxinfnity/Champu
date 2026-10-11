@@ -36,6 +36,7 @@ var _hurt := 0.0
 var _paper_tex: ImageTexture
 var _selected := -1
 var _slots: Array = []
+var _dropzone: Control
 var _pack_open := false
 var _after_paper := Callable()
 
@@ -596,14 +597,15 @@ func show_pack() -> void:
 	var vp := _vp()
 	var cols := 5
 	var gap := 8.0
-	var cell := minf(78.0, (minf(vp.x, vp.y) * 0.84 - gap * float(cols - 1)) / float(cols))
+	var cell := minf(78.0, (minf(vp.x, vp.y) * 0.72 - gap * float(cols - 1)) / float(cols))
 	var side := cell * float(cols) + gap * float(cols - 1)
+	var total_h := side + 24.0 + 68.0       # the grid, a gap, and the drop button under it
 	var grid := GridContainer.new()
 	grid.name = "Grid"
 	grid.columns = cols
 	grid.add_theme_constant_override("h_separation", int(gap))
 	grid.add_theme_constant_override("v_separation", int(gap))
-	grid.position = (vp - Vector2(side, side)) * 0.5
+	grid.position = Vector2((vp.x - side) * 0.5, (vp.y - total_h) * 0.5)
 	grid.size = Vector2(side, side)
 	_modal.add_child(grid)
 	_slots.clear()
@@ -614,6 +616,11 @@ func show_pack() -> void:
 		slot.custom_minimum_size = Vector2(cell, cell)
 		grid.add_child(slot)
 		_slots.append(slot)
+	_dropzone = DropZone.new()
+	_dropzone.ui = self
+	_dropzone.size = Vector2(68, 68)
+	_dropzone.position = Vector2(vp.x * 0.5 - 34.0, grid.position.y + side + 24.0)
+	_modal.add_child(_dropzone)
 	refresh_pack()
 	_close_glyph(Vector2(vp.x - 56, 56))
 	glass.modulate.a = 0.0
@@ -623,6 +630,17 @@ func show_pack() -> void:
 func refresh_pack() -> void:
 	for s in _slots:
 		(s as InvSlot).queue_redraw()
+	if _dropzone != null and is_instance_valid(_dropzone):
+		_dropzone.queue_redraw()
+
+
+## Put the item in slot `i` down on the floor (the button under the grid: tap it with an item picked, or drag an item onto it).
+func slot_drop(i: int) -> void:
+	if slot_item(i) == "":
+		return
+	game.drop_item(i)
+	_selected = -1
+	refresh_pack()
 
 
 func slot_item(i: int) -> String:
@@ -660,6 +678,31 @@ func slot_combine(a: int, b: int) -> void:
 			_to(sl, "position:x", x0 + 7.0, 0.05)
 			_to(sl, "position:x", x0 - 7.0, 0.08, 0.05)
 			_to(sl, "position:x", x0, 0.05, 0.13)
+
+
+## The drop button under the pack: a tray with an arrow going down into it. Lit while something is picked.
+class DropZone extends Control:
+	var ui: Ui
+
+	func _draw() -> void:
+		var on := ui._selected != -1
+		var c := size * 0.5
+		var ink := Color(1, 1, 1, 0.95 if on else 0.4)
+		draw_circle(c, 32.0, Color(0.2, 0.45, 0.55, 0.6) if on else Color(0, 0, 0, 0.4))
+		draw_arc(c, 32.0, 0, TAU, 40, ink, 2.5, true)
+		draw_line(c + Vector2(0, -18), c + Vector2(0, 4), ink, 3.0, true)
+		draw_polyline(PackedVector2Array([c + Vector2(-8, -4), c + Vector2(0, 5), c + Vector2(8, -4)]), ink, 3.0, true)
+		draw_polyline(PackedVector2Array([c + Vector2(-15, 2), c + Vector2(-15, 15), c + Vector2(15, 15), c + Vector2(15, 2)]), ink, 3.0, true)
+
+	func _gui_input(e: InputEvent) -> void:
+		if ((e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT) or e is InputEventScreenTouch) and e.pressed and ui._selected != -1:
+			ui.slot_drop(ui._selected)
+
+	func _can_drop_data(_at: Vector2, data: Variant) -> bool:
+		return typeof(data) == TYPE_DICTIONARY and data.has("slot")
+
+	func _drop_data(_at: Vector2, data: Variant) -> void:
+		ui.slot_drop(data.slot)
 
 
 ## One cell of the pack. It draws the item as a little white-and-colour picture, and takes taps and drags.

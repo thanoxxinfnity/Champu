@@ -73,6 +73,15 @@ func _init() -> void:
 	w.queue_free()
 	game.enemies.clear()
 
+	# Putting something down: it lies in the torch where it was left.
+	game.player.global_position = Vector3(12.5, 0, 4)
+	game.player.yaw = deg_to_rad(-90)
+	game.s.inv = ["keycard", "gel"]
+	game.drop_item(1)
+	game.player.pitch = deg_to_rad(-38)
+	await shot("04a_dropped", 20)
+	game.player.pitch = deg_to_rad(-3)
+
 	# The sound meter and the scrap button: loud, then still.
 	game.s.inv = ["scrap", "scrap", "scrap", "fuse"]
 	game.player.noise_level = 0.9

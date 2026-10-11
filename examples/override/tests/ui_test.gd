@@ -70,6 +70,7 @@ func _init() -> void:
 		if (sl as Control).custom_minimum_size.x < 56.0:
 			cell_ok = false
 	check(cell_ok, "every cell is big enough to hit with a thumb")
+	check(Rect2(Vector2.ZERO, Vector2(1280, 720)).encloses(Rect2(ui._dropzone.position, ui._dropzone.size)) and ui._dropzone.position.y >= grid.position.y + grid.size.y, "the drop button is on the screen, under the grid")
 	check(ui._modal.get_child(0).material is ShaderMaterial, "behind it is the frosted-glass shader")
 	ui.slot_tap(0)
 	ui.slot_tap(1)
@@ -81,6 +82,19 @@ func _init() -> void:
 	check(game.s.inv == before, "two things that do not go together are left alone")
 	ui.close_modal()
 	check(Engine.time_scale == 1.0 and not ui.modal_open, "closing the pack starts the world again")
+
+	print("-- dropping from the pack")
+	game.s.inv = ["fuse", "gel"]
+	game.player.yaw = 0.0
+	ui.show_pack()
+	await process_frame
+	ui.slot_tap(1)
+	check(ui._selected == 1, "a picked item lights the drop button")
+	ui._dropzone._drop_data(Vector2.ZERO, {"slot": 1})
+	check(game.s.inv == ["fuse"] and game.s.dropped.size() == 1 and game.s.dropped[0].item == "gel", "dropping the gel takes it out of the pack (%s)" % str(game.s.inv))
+	check(ui._selected == -1 and ui.slot_item(1) == "", "and the cell is empty again")
+	ui.close_modal()
+	game.s.dropped.clear()
 
 	print("-- the pack takes 25 things and no more")
 	game.s.inv = []
@@ -105,6 +119,8 @@ func _init() -> void:
 	game.add_child(holder)
 	game.pick_up(u, "fuse_x", holder)
 	check(game.s.inv.size() == full_before, "a full pack refuses a 26th thing")
+	u.free()
+	holder.free()
 	game.s.inv = []
 
 	print("-- the buttons")

@@ -51,6 +51,15 @@ static func build(w: World, id: String, n: Node3D) -> void:
 		"c4_exit": _lift(w, n, id)
 	if DRY.has(id):
 		_water(w, n, id)
+	for rec in w.game.s.dropped:
+		if rec.room == id:
+			spawn_dropped(w, n, rec)
+
+
+## A thing the player put down: a pick-up like any other, where they left it.
+static func spawn_dropped(w: World, n: Node3D, rec: Dictionary) -> void:
+	var m: Array = Data.ITEM_MODEL.get(rec.item, ["toolbox", 0.18])
+	_pickup(w, n, rec.id, m[0], float(m[1]), Vector3(float(rec.x), float(rec.y), float(rec.z)), Color(0.8, 0.9, 1.0))
 
 
 # ── common pieces ────────────────────────────────────────────────────────────

@@ -7,6 +7,8 @@ class State:
 	var chapter := 1
 	var inv: Array = []              # item ids carried (25 slots)
 	var taken := {}                  # pick-up id -> true
+	var dropped: Array = []          # things the player put down: {id, item, room, x, y, z}
+	var drop_n := 0
 	var unlocked := {}               # door key -> true
 	var sprung := {}                 # debris trap id -> true
 	var fuses_in := 0
@@ -324,6 +326,8 @@ func read_paper(_u: Use, paper: String) -> void:
 
 func pick_up(u: Use, id: String, holder: Node3D) -> void:
 	var item := id.split("_")[0]
+	if id.begins_with("drop_"):
+		item = "_".join(id.split("_").slice(2))     # drop_<n>_<item>, and an item's own name may hold an underscore
 	if id == "emp":
 		player.equip_emp()
 		player.emp_charges = maxi(player.emp_charges, 3)
@@ -337,6 +341,9 @@ func pick_up(u: Use, id: String, holder: Node3D) -> void:
 	sfx.play("pickup", -2.0)
 	noise(player.global_position, 2.5, "pickup")
 	s.taken[id] = true
+	for i in range(s.dropped.size() - 1, -1, -1):
+		if s.dropped[i].id == id:
+			s.dropped.remove_at(i)
 	world.uses.erase(u)
 	holder.queue_free()
 	u.queue_free()
@@ -346,6 +353,37 @@ func pick_up(u: Use, id: String, holder: Node3D) -> void:
 ## The radius a footstep carries in water (the test reads it).
 func noise_radius_in_water() -> float:
 	return maxf(4.2 * 2.2, 9.0)
+
+
+## Put the item in `slot` down on the floor in front of the player. It stays there (through room streaming and saves)
+## until it is picked up again, and it makes a small noise.
+func drop_item(slot: int) -> bool:
+	if player == null or player.dead or player.hidden or world.current == "" or slot < 0 or slot >= s.inv.size():
+		return false
+	var item: String = s.inv[slot]
+	var pos := _drop_spot()
+	s.inv.remove_at(slot)
+	s.drop_n += 1
+	var rec := {"id": "drop_%d_%s" % [s.drop_n, item], "item": item, "room": world.current, "x": pos.x, "y": pos.y, "z": pos.z}
+	s.dropped.append(rec)
+	Dressing.spawn_dropped(world, world.loaded[world.current], rec)
+	sfx.play("toss", -2.0)
+	noise(player.global_position, 3.0, "drop")
+	_save()
+	return true
+
+
+## About a metre in front of the feet, stopped short by a wall, down on the floor.
+func _drop_spot() -> Vector3:
+	var space := player.get_world_3d().direct_space_state
+	var from := player.global_position + Vector3(0, 1.0, 0)
+	var fwd := -player.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, from + fwd * 1.6, Data.L_WORLD))
+	var at := from + fwd * 1.3 if hit.is_empty() else (hit.position as Vector3) - fwd * 0.4
+	var down := space.intersect_ray(PhysicsRayQueryParameters3D.create(at, at + Vector3(0, -3.0, 0), Data.L_WORLD))
+	return Vector3(at.x, (down.position as Vector3).y if not down.is_empty() else player.global_position.y, at.z)
 
 
 func has_item(item: String) -> bool:
@@ -621,7 +659,7 @@ func _win() -> void:
 func _save() -> void:
 	if headless_test:
 		return
-	var d := {"chapter": s.chapter, "inv": s.inv, "taken": s.taken, "unlocked": s.unlocked, "fuses_in": s.fuses_in, "cable_in": s.cable_in,
+	var d := {"chapter": s.chapter, "inv": s.inv, "taken": s.taken, "dropped": s.dropped, "drop_n": s.drop_n, "unlocked": s.unlocked, "fuses_in": s.fuses_in, "cable_in": s.cable_in,
 		"gen_on": s.gen_on, "has_emp": player.has_emp, "emp": player.emp_charges, "deaths": s.deaths, "seconds": s.seconds}
 	var f := FileAccess.open(SAVE, FileAccess.WRITE)
 	if f != null:
@@ -638,6 +676,8 @@ func _load() -> void:
 	s.chapter = int(d.get("chapter", 1))
 	s.inv = d.get("inv", [])
 	s.taken = d.get("taken", {})
+	s.dropped = d.get("dropped", [])
+	s.drop_n = int(d.get("drop_n", 0))
 	s.unlocked = d.get("unlocked", {})
 	s.fuses_in = int(d.get("fuses_in", 0))
 	s.cable_in = d.get("cable_in", false)

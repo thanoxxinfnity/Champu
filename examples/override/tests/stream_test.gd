@@ -76,6 +76,32 @@ func _init() -> void:
 			still = true
 	check(not still and game.s.inv.has("fuse"), "a fuse taken stays taken after the room is rebuilt")
 
+	print("-- what the player puts down stays put")
+	await goto(Vector3(5, 0, 4))
+	game.s.inv = ["fuse", "timer"]
+	game.player.yaw = 0.0
+	check(game.drop_item(1), "the timer can be dropped")
+	check(game.s.inv == ["fuse"] and game.s.dropped.size() == 1, "it left the pack and was written down (%s)" % str(game.s.dropped))
+	var dropped_id: String = game.s.dropped[0].id
+	var lying := false
+	for u in w.uses:
+		if u.id == dropped_id:
+			lying = true
+	check(lying, "and it lies on the floor as a pick-up")
+	await goto(Vector3(30, 0, 4), 6)
+	await goto(Vector3(30, 0, 4), 6)
+	check(not w.loaded.has("c1_cryo"), "the cryo chamber is freed with the timer in it")
+	await goto(Vector3(5, 0, 4))
+	var back: Use = null
+	for u in w.uses:
+		if u.id == dropped_id:
+			back = u
+	check(back != null, "built again, the timer is still where it was left")
+	game.pick_up(back, dropped_id, back.get_meta("holder"))
+	check(game.s.inv == ["fuse", "timer"] and game.s.dropped.is_empty(), "picked up again it is back in the pack (%s)" % str(game.s.inv))
+	check(not game.drop_item(7), "an empty slot drops nothing")
+	game.s.inv = []
+
 	print("-- the doorway triggers do the moving")
 	w.auto_follow = false
 	await goto(Vector3(14, 0, 4), 8)
