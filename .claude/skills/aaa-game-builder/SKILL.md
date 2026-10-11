@@ -90,6 +90,20 @@ Bot rules: close notes like a player (4 s), aim with eased yaw/pitch, never rely
 
 Workflow: import project → every test gate → export APK with `barichello/godot-ci:4.3` (set `HOME=/root`) → bump version → publish a release tag. Keep the debug/sideload keystore for sideload builds only; a Play-signed build needs the owner's release keystore, which must never be generated silently. Never commit tokens; keys live in an env file outside the repo. Do not open a PR unless asked.
 
+## 11b. Pitfalls found building Project OVERRIDE (each cost a debugging round)
+
+* `Tween.set_ignore_time_scale` does not exist in 4.3. If the world is frozen with `Engine.time_scale = 0` (pack, paper), animate the UI by wall clock (`Time.get_ticks_msec()`) instead of tweens.
+* A hand-made navigation mesh must keep a margin from walls (inset room cells by 0.5 m) or paths graze door jambs and the bot/creatures stick. Doorways are strips through the wall that join the inset cells either side.
+* Two rooms that share a doorway both build a trigger for it: make the handler idempotent (decide by player position/heading, not "the other room").
+* A node freed with `queue_free()` still owns its name for a frame: a room rebuilt at once gets an auto-generated `@Node3D@n` name. Keep ids in `set_meta`, never parse names.
+* Anything raised more than ~0.1 m off the floor (planks over water) is a wall to a `CharacterBody3D` without step logic: lay boards at 0.07 m.
+* Objects spawned "from the ceiling" must start below it, or the physics body is born inside the ceiling collider and sleeps there.
+* Do not `queue_free()` a node a game field still points at (`warden`): guard with `is_instance_valid`.
+* `await create_timer` inside a bot loop runs at the fixed physics rate in headless, so a bot that "waits 3 s" costs 180 frames; keep film-only lingering behind a flag.
+* A hearing-and-sight bot that plays with creatures live needs real tactics (stun, sprint, creep) and is slow to tune; gate CI on the creatures-off bot plus targeted creature tests, and record the live run with a clearly labelled safety net.
+* GitHub workflow step names containing `: ` must be quoted, or the whole file is invalid and no job even starts.
+* GDScript `:=` cannot infer from an untyped `Array`/`Dictionary` element: annotate (`var x: float = r[0]`).
+
 ## 12. Reporting
 
 Short, in the user's language. Say: what was built, what the tests prove, what the video shows, what is *not* done. List limits plainly (hours of content, renderer substitutes, anything unverified on a real phone).
