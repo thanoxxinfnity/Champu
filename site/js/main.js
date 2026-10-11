@@ -91,6 +91,28 @@ function chip(domain) {
   whenVisible($('#hz-hero'), () => { rot(); setInterval(rot, 4800); }, { once: true });
 }
 
+/* ---------- OVERRIDE hero ---------- */
+{
+  const imgs = $$('#ov-hero img');
+  const lines = ['> crawler detected · 4.2m · hold still', '> stunner charged · 25s hold', '> wiring + timer + gel → mega-bomb', '> nothing here can be killed'];
+  let i = 0;
+  const label = $('#ov-type');
+  const rot = () => {
+    imgs.forEach((im, k) => im.classList.toggle('on', k === i % imgs.length));
+    typeInto(label, lines[i % lines.length], { speed: 34 });
+    i += 1;
+  };
+  const hero = $('#ov-hero');
+  if (hero) whenVisible(hero, () => { rot(); setInterval(rot, 5200); }, { once: true });
+}
+
+/* ---------- Chomu Surfers hero: the stage name types out as the gradient cycles under it ---------- */
+{
+  const stages = ['Sunset Yard', 'Neon District', 'Frost Line', 'Ember Deep', 'The Void'];
+  const label = $('#sf-type');
+  if (label) whenVisible($('#sf-hero'), () => loopPhrases(label, stages, { hold: 3800, speed: 55 }), { once: true });
+}
+
 /* ---------- the three voices, with a transcript that types as it plays ---------- */
 const TRACKS = [
   ['narration', 'Narration', 'The long-form workspace voice.'],

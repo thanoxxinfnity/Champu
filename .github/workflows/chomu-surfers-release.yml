@@ -1,0 +1,38 @@
+name: Chomu Surfers release
+
+# Chomu Surfers has no Android export preset yet (see examples/chomu-surfers/README.md: open it in the
+# Godot editor and press Play), so this packages the project itself as a zip — the actual, honest way
+# to hand it to someone right now — rather than pretending there is an APK.
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - claude/chomugiri-workspace-design-09sxwa
+    paths:
+      - "examples/chomu-surfers/**"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Zip the project
+        run: |
+          cd examples
+          zip -r -q ../ChomuSurfers.zip chomu-surfers -x "*.import/*" -x "*.godot/*"
+          cd ..
+          ls -la ChomuSurfers.zip
+
+      - name: Publish the download release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: chomu-surfers-latest
+          name: Chomu Surfers (latest project)
+          body: |
+            The Chomu Surfers Godot project, built from ${{ github.sha }}. Open it in Godot Engine 4.3+
+            and press Play — see examples/chomu-surfers/README.md for the phone-import steps.
+          files: ChomuSurfers.zip
