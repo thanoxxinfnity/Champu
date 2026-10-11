@@ -37,6 +37,7 @@ var _paper_tex: ImageTexture
 var _selected := -1
 var _slots: Array = []
 var _dropzone: Control
+var _case: Control
 var _gore: Control
 var _low_fx := false
 var _pad_t := 0.0
@@ -707,6 +708,13 @@ func show_pack() -> void:
 	_dropzone.size = Vector2(68, 68)
 	_dropzone.position = Vector2(vp.x * 0.5 - 34.0, grid.position.y + side + 24.0)
 	_modal.add_child(_dropzone)
+	# The bomb case: never one of the 25 slots. It fills itself in as the parts for the mega-bomb turn up —
+	# nothing to tap or combine, it is already built by the time it matters.
+	_case = CaseStrip.new()
+	_case.ui = self
+	_case.size = Vector2(minf(220.0, vp.x - 32.0), 64.0)
+	_case.position = Vector2(grid.position.x, maxf(16.0, grid.position.y - 80.0))
+	_modal.add_child(_case)
 	var gauge: Control
 	gauge = _close_glyph(Vector2(vp.x * 0.5 + 90.0, grid.position.y + side + 24.0 + 34.0), "gauge", func():
 		Quality.apply(game, (Quality.level + 1) % 3)
@@ -723,6 +731,8 @@ func refresh_pack() -> void:
 		(s as InvSlot).queue_redraw()
 	if _dropzone != null and is_instance_valid(_dropzone):
 		_dropzone.queue_redraw()
+	if _case != null and is_instance_valid(_case):
+		_case.queue_redraw()
 
 
 ## Put the item in slot `i` down on the floor (the button under the grid: tap it with an item picked, or drag an item onto it).
@@ -769,6 +779,29 @@ func slot_combine(a: int, b: int) -> void:
 			_to(sl, "position:x", x0 + 7.0, 0.05)
 			_to(sl, "position:x", x0 - 7.0, 0.08, 0.05)
 			_to(sl, "position:x", x0, 0.05, 0.13)
+
+
+## The bomb case: a drawn briefcase with whatever parts are in it so far laid inside, in order found. It is not a
+## slot — nothing can be tapped, dragged or dropped here; Game._case_add already combined anything that could be.
+## Empty, it is still drawn (a closed case, a reminder the chain exists) so it is never a surprise once it fills.
+class CaseStrip extends Control:
+	var ui: Ui
+
+	func _draw() -> void:
+		var items: Array = ui.game.s.briefcase if ui.game != null else []
+		var body := Rect2(Vector2(4, 14), size - Vector2(8, 22))
+		var done: bool = items.size() == 1 and items[0] == "mega_bomb"
+		var fill := Color(0.25, 0.55, 0.3, 0.55) if done else Color(0.08, 0.08, 0.1, 0.6)
+		draw_rect(body, fill, true)
+		draw_rect(body, Color(1, 1, 1, 0.85 if done else 0.4), false, 2.0)
+		draw_rect(Rect2(body.position.x + body.size.x * 0.5 - 11.0, body.position.y - 9.0, 22.0, 9.0), Color(1, 1, 1, 0.4), false, 2.0)
+		if items.is_empty():
+			return
+		var pad := 10.0
+		var cell := (body.size.x - pad * 2.0) / float(maxi(items.size(), 1))
+		for i in range(items.size()):
+			var at := body.position + Vector2(pad + cell * (float(i) + 0.5), body.size.y * 0.52)
+			ui.draw_item(self, items[i], at, minf(cell, body.size.y) * 0.4)
 
 
 ## The drop button under the pack: a tray with an arrow going down into it. Lit while something is picked.

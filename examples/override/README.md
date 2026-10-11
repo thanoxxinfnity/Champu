@@ -52,7 +52,7 @@ racks and the bomb are built from primitives. Everything else (sounds, textures,
 
 ## Sound, the creatures and the pack
 
-* **The pack holds 25 things** (5 x 5 frosted-glass grid, tap or drag to combine, a full pack refuses a 26th pick-up).
+* **The pack holds 25 things** (5 x 5 frosted-glass grid, tap or drag to combine, a full pack refuses a 26th pick-up). The bomb chain — wiring, a timer, gel, the detonator, the mega-bomb — never takes one of those slots: it has its own case, drawn above the grid, and builds itself (wiring + timer → detonator → + gel → mega-bomb) the moment the right parts are both in it, in whatever order they were found.
 * **Everything you do has a loudness** (metres it carries): standing still 0, crouch-walking 0.8, walking 4.2, running 10, a pick-up 2.5, a switch 8, the EMP 9, a thrown scrap's clang 20. The sound meter at the bottom of the screen (a speaker with up to three waves, white, amber, red) shows how loud you are right now.
 * **Blind hunters kill by sound only.** A noise you make hears it come; while you keep making noise it kills; stand still or crouch and it only listens, even a metre away. Its strike has a half-second wind-up and only lands if it hears you *again* during it. A thrown **scrap** (found in eight places, button or `G`) is a decoy: it goes to the clang, not to you. Its sensor band shows blue (calm), amber (heard something), red (hunting).
 * **Crawlers hunt as a pack** (the one that sees you screeches and the others near it come), and **leap after a visible crouch** you can dodge.
@@ -78,3 +78,17 @@ It ran at 3 to 4 frames a second. What was wrong, and what was done (the numbers
 * The wall/floor shader computed noise for every pixel (dozens of operations, several times). It now reads a baked sheet (`assets/noise.png`, `tools/make_noise.gd`).
 * The assembly floor had 168 draw calls for its belts alone. A stand-in built from many primitives is now merged into one mesh with a surface per material, and the belts use five-metre pieces. Worst view: 415 draw calls before, 216 now (`perf.gd` now fails above 260).
 * Project settings: MSAA off, at most 4 lights per object.
+
+## v3: solid creatures, a quieter synth, a fallback for aiming at a pick-up
+
+* **The player and a creature are now solid to each other** (`player.gd`, `enemy.gd`): before this they shared a
+  collision layer with nothing on each other's mask, so a robot and the player could walk straight through one
+  another. Fixed by adding each to the other's `collision_mask`.
+* **Aiming** (`player.gd` `_find_focus`): the straight centre-of-screen ray still does the normal case; when it
+  grazes a nearby piece of room clutter instead of the thing you are actually looking at, a fallback checks every
+  usable point within reach and a ~30° cone of where the camera is pointed, confirmed clear by its own ray — so a
+  pick-up beside a crate is still reachable, and a real wall still blocks what is behind it. Tests: `focus_test.gd`.
+* **The synth is cleaner** (`sfx.gd`): the sample rate is 32 kHz (was 16 kHz), a one-shot fades its first/last few
+  ms instead of starting or ending on a click, the voice pool prefers an idle player over cutting an active sound
+  short, and the growl/screech/jumpscare formant filter is clamped against the self-oscillating buzz a high
+  formant could reach.

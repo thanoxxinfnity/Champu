@@ -140,9 +140,22 @@ func _init() -> void:
 	await goto(Vector3(331, 0, 9.5), 10)
 	game.plant_bomb(null)
 	check(not s.planted, "the core refuses without a bomb")
-	s.inv = ["wiring", "timer", "gel"]
-	check(game.craft(0, 1) and s.inv == ["gel", "detonator"], "wiring and timer make a detonator")
-	check(game.craft(0, 1) and s.inv == ["mega_bomb"], "and the detonator with the gel a mega-bomb")
+	print("-- the bomb case: parts build themselves, in their own case, never a pack slot")
+	s.inv = []
+	s.briefcase = []
+	game._case_add("gel")
+	check(s.briefcase == ["gel"] and s.inv.is_empty(), "a part waits in the case, not the pack")
+	game._case_add("wiring")
+	check(s.briefcase == ["gel", "wiring"], "a second part with no match yet just sits beside it")
+	game._case_add("timer")
+	check(s.briefcase == ["mega_bomb"], "the third part completes the whole chain in one go, however it arrived (%s)" % [s.briefcase])
+	check(not game.take_item("fuse") and s.inv.is_empty(), "nothing leaked into the ordinary pack along the way")
+	s.briefcase = []
+	game._case_add("timer")
+	game._case_add("detonator")   # found already combined, dropped by a creature that had one
+	check(s.briefcase == ["timer", "detonator"], "an unrelated spare does not combine with a part that is not its match")
+	game._case_add("gel")
+	check(s.briefcase == ["timer", "mega_bomb"], "and the chain still finishes once the right part turns up (%s)" % [s.briefcase])
 	game.plant_bomb(null)
 	check(s.planted and s.countdown > 170.0 and s.unlocked.has("exit"), "planted: the clock starts and the exit lift unlocks")
 	if game.warden != null and is_instance_valid(game.warden):

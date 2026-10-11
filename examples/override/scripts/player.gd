@@ -61,7 +61,7 @@ var _viewmodel: Node3D
 
 func _ready() -> void:
 	collision_layer = Data.L_PLAYER
-	collision_mask = Data.L_WORLD
+	collision_mask = Data.L_WORLD | Data.L_ENEMY  # a creature (or a piece of debris, which shares the layer) is a solid thing, not a ghost
 	var cs := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = 0.3
@@ -286,12 +286,40 @@ func _camera(delta: float, flat: float) -> void:
 
 
 func _find_focus() -> void:
-	var q := PhysicsRayQueryParameters3D.create(cam.global_position, cam.global_position + aim_dir() * REACH, Data.L_WORLD | Data.L_USE)
+	var from := cam.global_position
+	var fwd := aim_dir()
+	var q := PhysicsRayQueryParameters3D.create(from, from + fwd * REACH, Data.L_WORLD | Data.L_USE)
 	q.collide_with_areas = false
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)
 	focus = null
 	if not hit.is_empty() and hit.collider is Use and (hit.collider as Use).enabled:
 		focus = hit.collider as Use
+		return
+	# The straight centre-of-screen ray found nothing usable — missed, or a piece of room clutter (a crate, a
+	# bench) stood in front of the real target. Before giving up, check every usable point actually close to
+	# where you are looking: aimed at it directly, within a wide-enough cone that this is clearly the thing
+	# meant, and not blocked by real architecture. A pick-up you are standing next to and facing should never
+	# read as "cannot reach this" just because the one exact centre pixel grazed something beside it.
+	var best: Use = null
+	var best_d := INF
+	for u in game.world.uses:
+		if not is_instance_valid(u) or not u.enabled:
+			continue
+		var to_u: Vector3 = u.global_position - from
+		var dist := to_u.length()
+		var limit := REACH * (1.5 if u.far else 1.0)
+		if dist > limit or dist < 0.05:
+			continue
+		if fwd.dot(to_u / dist) < 0.86:   # roughly a 30° cone around where the camera is pointed
+			continue
+		var clear_q := PhysicsRayQueryParameters3D.create(from, u.global_position, Data.L_WORLD)
+		clear_q.collide_with_areas = false
+		if not get_world_3d().direct_space_state.intersect_ray(clear_q).is_empty():
+			continue   # a wall or another piece of the room is genuinely in the way — this one stays out of reach
+		if dist < best_d:
+			best_d = dist
+			best = u
+	focus = best
 
 
 func hiding_in() -> Use:

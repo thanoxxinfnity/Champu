@@ -98,7 +98,7 @@ func _init() -> void:
 			back = u
 	check(back != null, "built again, the timer is still where it was left")
 	game.pick_up(back, dropped_id, back.get_meta("holder"))
-	check(game.s.inv == ["fuse", "timer"] and game.s.dropped.is_empty(), "picked up again it is back in the pack (%s)" % str(game.s.inv))
+	check(game.s.inv == ["fuse"] and game.s.briefcase == ["timer"] and game.s.dropped.is_empty(), "picked up again, a bomb part goes to its own case, not the pack (inv %s, case %s)" % [str(game.s.inv), str(game.s.briefcase)])
 	check(not game.drop_item(7), "an empty slot drops nothing")
 	game.s.inv = []
 

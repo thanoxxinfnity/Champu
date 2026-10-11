@@ -113,20 +113,35 @@ func walk_to(target: Vector3, tol := 0.7) -> bool:
 	var guard := 0
 	var last := here()
 	var still := 0
+	var sidesteps := 0
+	var side_t := 0
+	var side_dir := 1.0
+	var side_yaw := 0.0
 	while Vector2(here().x - target.x, here().z - target.z).length() > tol:
 		if p.dead:
 			return false
-		var path := game.world.path(here(), game.world.snap(target))
-		var next := target
-		for pt in path:
-			if Vector2(pt.x - here().x, pt.z - here().z).length() > 0.9:
-				next = pt
-				break
-		var d := next - here()
-		d.y = 0
-		p.yaw = lerp_angle(p.yaw, atan2(-d.x, -d.z), 0.35)
-		p.pitch = lerpf(p.pitch, -0.05, 0.1)
-		p.move_input = Vector2(0, -1)
+		# The navigation mesh knows nothing about a creature standing still in the corridor (it is a real, solid
+		# body now, not a ghost the player walks through) — a push straight at it makes no progress at all, the
+		# same way a prop can block the enemies' own navigation. Step directly sideways for a moment, the way
+		# they recover from that, holding one facing the whole time: re-aiming at the path's next point every
+		# frame (as the normal branch below does) would just turn the "sideways" push back toward the thing
+		# blocking it, frame by frame, and cancel itself out.
+		if side_t > 0:
+			side_t -= 1
+			p.yaw = side_yaw
+			p.move_input = Vector2(side_dir, 0)
+		else:
+			var path := game.world.path(here(), game.world.snap(target))
+			var next := target
+			for pt in path:
+				if Vector2(pt.x - here().x, pt.z - here().z).length() > 0.9:
+					next = pt
+					break
+			var d := next - here()
+			d.y = 0
+			p.yaw = lerp_angle(p.yaw, atan2(-d.x, -d.z), 0.35)
+			p.pitch = lerpf(p.pitch, -0.05, 0.1)
+			p.move_input = Vector2(0, -1)
 		p.sprint_held = threatened()
 		p.crouching = creeping() and not p.sprint_held
 		await step()
@@ -137,9 +152,15 @@ func walk_to(target: Vector3, tol := 0.7) -> bool:
 			else:
 				still = 0
 			last = here()
-			if still >= 4:
+			if still >= 2 and side_t <= 0 and sidesteps < 3:
+				sidesteps += 1
+				side_dir = 1.0 if sidesteps % 2 == 1 else -1.0
+				side_yaw = p.yaw
+				side_t = 70
+				still = 0
+			elif still >= 4:
 				if stuck_msgs < 8:
-					print("  STUCK at ", here(), " heading for ", target, " path points ", path.size())
+					print("  STUCK at ", here(), " heading for ", target, " path points ", game.world.path(here(), game.world.snap(target)).size())
 					stuck_msgs += 1
 				p.move_input = Vector2.ZERO
 				return false
@@ -268,24 +289,6 @@ func take(id: String, via: Array = []) -> bool:
 	return game.s.taken.has(id)
 
 
-func craft_in_pack(a_item: String, b_item: String) -> bool:
-	var ui := game.ui
-	ui.show_pack()
-	await step(30 if film else 5)
-	var a: int = game.s.inv.find(a_item)
-	var b: int = game.s.inv.find(b_item)
-	if a < 0 or b < 0:
-		ui.close_modal()
-		return false
-	ui.slot_tap(a)
-	await step(20 if film else 3)
-	ui.slot_tap(b)
-	await step(60 if film else 5)
-	ui.close_modal()
-	await step(5)
-	return true
-
-
 func run() -> void:
 	var p := game.player
 	seed(11)
@@ -349,10 +352,8 @@ func run() -> void:
 	check(await take("keycard"), "the keycard")
 	check(await walk_via([Vector3(217.5, 0, 15.2), Vector3(227, 0, 6.5)]), "back across the floor to the workshop door")
 	check(await take("gel", [Vector3(231, 0, 6.5)]), "the gel from the workshop")
-	check(await craft_in_pack("wiring", "timer"), "open the pack and combine the wiring and the timer")
-	check(game.s.inv.has("detonator"), "a detonator")
-	check(await craft_in_pack("detonator", "gel"), "and the detonator with the gel")
-	check(game.s.inv.has("mega_bomb"), "a mega-bomb is in the pack")
+	check(game.s.briefcase == ["mega_bomb"], "the wiring, the timer and the gel built the mega-bomb in their own case as they came in (%s)" % [game.s.briefcase])
+	check(not game.s.inv.has("detonator") and not game.s.inv.has("mega_bomb"), "none of it ever sat in the pack")
 	check(await use_it("door_panel_lift3"), "swipe the keycard at the lift")
 	check(game.s.unlocked.has("lift3"), "the lift is unlocked")
 	check(await use_it("lift_3", [Vector3(239, 0, 6)]), "ride the lift down")

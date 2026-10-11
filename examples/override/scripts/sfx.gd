@@ -3,7 +3,7 @@ extends Node
 ## Every sound in the game, synthesised at startup — no audio files. Built on a thread while the
 ## title screen is up; a sound asked for before it is ready is skipped.
 
-const RATE := 16000
+const RATE := 32000  # higher than the old 16 kHz: the growl/screech resonators ring cleaner and footsteps lose their lo-fi, aliased edge
 
 var ready_ok := false
 var _streams := {}
@@ -23,11 +23,11 @@ var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
-	for i in range(8):
+	for i in range(14):
 		var p := AudioStreamPlayer.new()
 		add_child(p)
 		_flat.append(p)
-	for i in range(8):
+	for i in range(14):
 		var q := AudioStreamPlayer3D.new()
 		q.unit_size = 5.0
 		q.max_distance = 60.0
@@ -123,11 +123,23 @@ func breath_at(pos: Vector3, db: float) -> void:
 		_breath.stop()
 
 
+## The next player to use: one that has gone quiet, so a sound in full ring is never cut off and swapped mid-note for
+## an unrelated one (the thing that made overlapping sounds feel broken). Only when every voice is busy does it fall
+## back to round robin, stealing the one that has been playing longest.
+func _free_voice(pool: Array, i_ref: Array) -> Node:
+	for p in pool:
+		if not p.playing:
+			return p
+	i_ref[0] = (i_ref[0] + 1) % pool.size()
+	return pool[i_ref[0]]
+
+
 func play(sound: String, db := 0.0, pitch := 1.0) -> void:
 	if not ready_ok or not _streams.has(sound):
 		return
-	_flat_i = (_flat_i + 1) % _flat.size()
-	var p := _flat[_flat_i]
+	var ref := [_flat_i]
+	var p: AudioStreamPlayer = _free_voice(_flat, ref)
+	_flat_i = ref[0]
 	p.stream = _streams[sound]
 	p.volume_db = db
 	p.pitch_scale = pitch
@@ -137,8 +149,9 @@ func play(sound: String, db := 0.0, pitch := 1.0) -> void:
 func play_at(sound: String, pos: Vector3, db := 0.0, pitch := 1.0) -> void:
 	if not ready_ok or not _streams.has(sound):
 		return
-	_spatial_i = (_spatial_i + 1) % _spatial.size()
-	var p := _spatial[_spatial_i]
+	var ref := [_spatial_i]
+	var p: AudioStreamPlayer3D = _free_voice(_spatial, ref)
+	_spatial_i = ref[0]
 	p.stream = _streams[sound]
 	p.global_position = pos
 	p.volume_db = db
@@ -198,6 +211,15 @@ func _buf(seconds: float) -> PackedFloat32Array:
 
 
 func _stream(b: PackedFloat32Array, loop := false) -> AudioStreamWAV:
+	# A one-shot that does not start and end at (near) zero clicks on every play — the thing that read as a short,
+	# broken "tick" buried in the real sound. A looping stream is left alone: each loop function already shapes its
+	# own seam to meet itself, and fading it here would instead put an audible dip at every repeat.
+	if not loop and b.size() > 8:
+		var fade := mini(int(0.003 * RATE), b.size() / 2)
+		for i in range(fade):
+			var k := float(i) / float(fade)
+			b[i] *= k
+			b[b.size() - 1 - i] *= k
 	var data := PackedByteArray()
 	data.resize(b.size() * 2)
 	for i in range(b.size()):
@@ -382,8 +404,11 @@ func _vocal(b: PackedFloat32Array, f0: float, f1: float, vib: float, breath: flo
 	var s2 := 0.0
 	var d1 := 0.0
 	var d2 := 0.0
-	var ca := 2.0 * sin(PI * f_a / RATE)
-	var cb := 2.0 * sin(PI * f_b / RATE)
+	# Clamped: a formant above roughly a sixth of the sample rate pushes this resonator past the point where its own
+	# damping (0.35 / 0.5 below) can hold it, and it rings itself into a harsh, buzzing self-oscillation instead of
+	# a voice — the "ajeeb awaaz" a jumpscare's high formant (3000 Hz) could reach even at the new, higher RATE.
+	var ca := minf(2.0 * sin(PI * f_a / RATE), 1.5)
+	var cb := minf(2.0 * sin(PI * f_b / RATE), 1.5)
 	for i in range(n):
 		var t := float(i) / float(n)
 		var f := lerpf(f0, f1, t) * (1.0 + vib * sin(TAU * 5.5 * float(i) / RATE))

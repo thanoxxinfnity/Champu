@@ -53,6 +53,10 @@ const RECIPES := [
 	{"a": "detonator", "b": "gel", "out": "mega_bomb"},
 ]
 
+## Every part of the bomb chain, raw or built: these never take up a pack slot. They go into their own case
+## instead (Game._case_add), which assembles itself as the parts come in.
+const BOMB_PARTS := ["wiring", "timer", "gel", "detonator", "mega_bomb"]
+
 static func recipe(a: String, b: String) -> String:
 	for r in RECIPES:
 		if (r.a == a and r.b == b) or (r.a == b and r.b == a):
@@ -97,8 +101,8 @@ const PAPERS := {
 	"p_ch1_log": {"chapter": 1, "title": "Dr. Okoye, log 41", "body": "OVERRIDE was meant to guard us. When the breach came it decided that the safest facility is an empty one.\n\nIt woke the old maintenance units first. They were never made to think. They only learned to want quiet, and the noise of the living is the opposite of quiet."},
 	"p_flood": {"chapter": 2, "title": "Pump room — notice", "body": "The basement flooded when the pumps failed, and the current from the broken mains runs through all of it. [b]Keep to the dry planks.[/b]\n\nThe generator starts only with the three levers thrown in the right order. The engineer's note, taped to the wall:\n\n[b]BLUE goes before RED.\nGREEN is never first.\nRED is never last.[/b]\n\nThe hunters down here have no eyes. They hear water. Every splash is a shout."},
 	"p_ch2_log": {"chapter": 2, "title": "Dr. Okoye, log 58", "body": "The blind ones were my idea. I thought if they could not see us they could not hate us. I was right about that. They do not hate. They only follow the sound until it stops.\n\nIf you must cross, cross slowly. A held breath is the only thing that is still."},
-	"p_factory": {"chapter": 3, "title": "Shift board — Assembly", "body": "Nothing on this line has been assembled for thirty years. Something is still being built.\n\n[b]To leave:[/b] a keycard from the foreman's office, and a detonator. The workshop bench makes one from wiring and a timer. Open your pack and put the two together.\n\nThe Warden walks this floor. Lockers are bolted open on purpose. Get inside before it sees you."},
+	"p_factory": {"chapter": 3, "title": "Shift board — Assembly", "body": "Nothing on this line has been assembled for thirty years. Something is still being built.\n\n[b]To leave:[/b] a keycard from the foreman's office. The wiring and the timer make a detonator the moment you are carrying both — they go in their own case, not the pack, and build themselves as the parts turn up.\n\nThe Warden walks this floor. Lockers are bolted open on purpose. Get inside before it sees you."},
 	"p_ch3_log": {"chapter": 3, "title": "Dr. Okoye, log 77", "body": "The Warden is OVERRIDE's hands. It cannot be hurt, so do not try. When it comes, its footsteps will find you first. Count them.\n\nThe core is the only thing that can stop it, and the core is the only thing that cannot be turned off from the outside. Someone has to carry the charge down."},
-	"p_core": {"chapter": 4, "title": "Reactor 1 — emergency", "body": "[b]Mega-bomb:[/b] a detonator and a canister of gel. Combine them in your pack.\n\nPlant it on the core. You will have three minutes. The exit lift is where you came in, on the far side of the waste hall.\n\nThe Warden is awake and it is angry. Everything else is following it."},
+	"p_core": {"chapter": 4, "title": "Reactor 1 — emergency", "body": "[b]Mega-bomb:[/b] a detonator and a canister of gel, together in the case. Carry both and it builds itself.\n\nPlant it on the core. You will have three minutes. The exit lift is where you came in, on the far side of the waste hall.\n\nThe Warden is awake and it is angry. Everything else is following it."},
 	"p_end": {"chapter": 4, "title": "Dr. Okoye, last entry", "body": "If you are reading this, you made it out, or you are about to. Whoever you are: I am sorry I put you in the cold for this.\n\nThe facility is quiet now. It was always going to be quiet. It just needed the right person to turn it off."},
 }

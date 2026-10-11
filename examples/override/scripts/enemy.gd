@@ -73,7 +73,7 @@ var _check_t := 0.0
 func _ready() -> void:
 	_cfg = KINDS[kind]
 	collision_layer = Data.L_ENEMY
-	collision_mask = Data.L_WORLD | Data.L_BLOCK      # the barrier round a safe station stops them
+	collision_mask = Data.L_WORLD | Data.L_BLOCK | Data.L_PLAYER      # the barrier round a safe station stops them; the player is solid, not a ghost it walks through
 	var cs := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = _cfg.radius

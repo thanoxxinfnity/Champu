@@ -6,6 +6,7 @@ extends Node3D
 class State:
 	var chapter := 1
 	var inv: Array = []              # item ids carried (25 slots)
+	var briefcase: Array = []        # the bomb parts, in their own case — never one of the 25 slots
 	var taken := {}                  # pick-up id -> true
 	var dropped: Array = []          # things the player put down: {id, item, room, x, y, z}
 	var drop_n := 0
@@ -347,6 +348,8 @@ func pick_up(u: Use, id: String, holder: Node3D) -> void:
 		player.emp_charges = maxi(player.emp_charges, 3)
 	elif id.begins_with("cell_"):
 		player.emp_charges = mini(6, player.emp_charges + 2)
+	elif item in Data.BOMB_PARTS:
+		_case_add(item)
 	else:
 		if s.inv.size() >= Data.PACK_SLOTS:
 			sfx.play("error", -6.0)
@@ -475,10 +478,39 @@ func has_item(item: String) -> bool:
 
 func take_item(item: String) -> bool:
 	var i := s.inv.find(item)
-	if i < 0:
-		return false
-	s.inv.remove_at(i)
-	return true
+	if i >= 0:
+		s.inv.remove_at(i)
+		return true
+	var j := s.briefcase.find(item)
+	if j >= 0:
+		s.briefcase.remove_at(j)
+		return true
+	return false
+
+
+## Add a bomb part to the case and build whatever it makes, as many times as the parts allow: wiring and the
+## timer become the detonator the moment both are in, and the detonator does the same with the gel, with no
+## manual combining in the pack — "jitna bhi samaan hoga last mein laga ke jaayega", the whole chain assembles
+## itself as the pieces come in, however they are found.
+func _case_add(item: String) -> void:
+	s.briefcase.append(item)
+	var combined := true
+	while combined:
+		combined = false
+		for a in range(s.briefcase.size()):
+			for b in range(a + 1, s.briefcase.size()):
+				var out := Data.recipe(s.briefcase[a], s.briefcase[b])
+				if out != "":
+					s.briefcase.remove_at(b)
+					s.briefcase.remove_at(a)
+					s.briefcase.append(out)
+					sfx.play("win", -6.0)
+					combined = true
+					break
+			if combined:
+				break
+	if ui != null:
+		ui.refresh_pack()
 
 
 func craft(a: int, b: int) -> bool:
@@ -748,7 +780,7 @@ func _win() -> void:
 func _save() -> void:
 	if headless_test:
 		return
-	var d := {"chapter": s.chapter, "inv": s.inv, "taken": s.taken, "dropped": s.dropped, "drop_n": s.drop_n, "unlocked": s.unlocked, "fuses_in": s.fuses_in, "cable_in": s.cable_in,
+	var d := {"chapter": s.chapter, "inv": s.inv, "briefcase": s.briefcase, "taken": s.taken, "dropped": s.dropped, "drop_n": s.drop_n, "unlocked": s.unlocked, "fuses_in": s.fuses_in, "cable_in": s.cable_in,
 		"gen_on": s.gen_on, "has_emp": player.has_emp, "emp": player.emp_charges, "deaths": s.deaths, "seconds": s.seconds}
 	var f := FileAccess.open(SAVE, FileAccess.WRITE)
 	if f != null:
@@ -764,6 +796,7 @@ func _load() -> void:
 		return
 	s.chapter = int(d.get("chapter", 1))
 	s.inv = d.get("inv", [])
+	s.briefcase = d.get("briefcase", [])
 	s.taken = d.get("taken", {})
 	s.dropped = d.get("dropped", [])
 	s.drop_n = int(d.get("drop_n", 0))
