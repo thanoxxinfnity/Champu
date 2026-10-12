@@ -130,6 +130,8 @@ export interface MotionLayer {
   groupId: string | null;
   /** Clipped to the alpha of the layer directly below it in the same group/top level. */
   clipToBelow: boolean;
+  /** How much of the camera's pan this layer follows: 1 = moves fully with the camera (normal), <1 = a background that pans less (further away), >1 = a foreground that pans more (closer) — zoom/rotation/shake stay shared across every layer regardless. */
+  parallax: number;
 }
 
 export interface MotionProject {
@@ -199,7 +201,7 @@ export function normalizeProject(raw: unknown): MotionProject {
     duration: typeof p.duration === 'number' ? p.duration : 4,
     background: typeof p.background === 'string' ? p.background : '#111318',
     layers: rawLayers.map((l) => ({
-      blendMode: 'normal' as BlendMode, visible: true, groupId: null, clipToBelow: false, motionBlur: defaultMotionBlur(), ...l,
+      blendMode: 'normal' as BlendMode, visible: true, groupId: null, clipToBelow: false, motionBlur: defaultMotionBlur(), parallax: 1, ...l,
     }) as MotionLayer),
     groups: Array.isArray(p.groups) ? (p.groups as LayerGroup[]) : [],
     camera: camera.length > 0 ? camera : defaultCamera(),
@@ -242,6 +244,7 @@ export function newLayer(kind: LayerKind, project: MotionProject, name?: string)
     visible: true,
     groupId: null,
     clipToBelow: false,
+    parallax: 1,
     motionBlur: defaultMotionBlur(),
     ...(kind === 'particles' ? { particles: newParticleConfig('aura', Math.floor(Math.random() * 1e6)) } : {}),
     ...(kind === 'rig' ? { rig: newRig() } : {}),

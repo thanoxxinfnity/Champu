@@ -60,39 +60,38 @@ export function drawFrame(ctx: CanvasRenderingContext2D, project: MotionProject,
   const cam = applyCamera ? cameraAt(project.camera, t) : { x: 0, y: 0, zoom: 1, rotation: 0 };
   const shake = applyCamera ? shakeOffsetAt(project.shakes, t) : { x: 0, y: 0, rotation: 0 };
 
-  ctx.save();
-  ctx.translate(width / 2, height / 2);
-  ctx.rotate(((cam.rotation + shake.rotation) * Math.PI) / 180);
-  ctx.scale(cam.zoom, cam.zoom);
-  ctx.translate(-width / 2 - cam.x - shake.x, -height / 2 - cam.y - shake.y);
-
   if (impact?.style === 'bw') ctx.filter = 'grayscale(1) contrast(1.6) brightness(1.15)';
 
   const onion = project.onionSkin;
   const onionOn = opts.onionSkin ?? onion.enabled;
   if (onionOn) {
     for (let i = 1; i <= onion.beforeCount; i++) {
-      drawGhost(ctx, project, t - onion.frameStep * i, onion.opacity / i, onion.beforeColor, opts);
+      drawGhost(ctx, project, t - onion.frameStep * i, onion.opacity / i, onion.beforeColor, opts, width, height, cam, shake);
     }
     for (let i = 1; i <= onion.afterCount; i++) {
-      drawGhost(ctx, project, t + onion.frameStep * i, onion.opacity / i, onion.afterColor, opts);
+      drawGhost(ctx, project, t + onion.frameStep * i, onion.opacity / i, onion.afterColor, opts, width, height, cam, shake);
     }
   }
 
+  // Each layer gets its own camera-transform push/pop (rather than one shared transform around the whole
+  // loop) so a layer's `parallax` factor can scale just its own pan offset — a background layer with a
+  // small factor pans less than the camera, a foreground one with a factor > 1 pans more, the classic
+  // depth illusion; zoom/rotation/shake stay shared across every layer.
   const layers = project.layers;
   for (let i = 0; i < layers.length; i++) {
     const layer = layers[i]!;
     if (!layer.visible) continue;
     const gOpacity = groupOpacityOf(project, layer);
     if (gOpacity <= 0) continue;
+    pushCameraTransform(ctx, width, height, cam, shake, layer.parallax ?? 1);
     const below = i > 0 ? layers[i - 1]! : null;
     if (layer.clipToBelow && below) drawLayerClipped(ctx, layer, below, t, opts, gOpacity);
     else drawLayer(ctx, layer, t, opts, gOpacity);
     if (layer.id === opts.selectedLayerId) drawSelectionOutline(ctx, layer, t);
+    ctx.restore(); // this layer's camera transform
   }
 
   ctx.filter = 'none';
-  ctx.restore(); // camera transform
 
   applyPostEffects(ctx, project, t, width, height);
 
@@ -145,19 +144,31 @@ function hashSeed(id: string, frame: number): number {
   return h;
 }
 
-function drawGhost(ctx: CanvasRenderingContext2D, project: MotionProject, t: number, opacity: number, tint: string, opts: RenderOptions): void {
+function drawGhost(
+  ctx: CanvasRenderingContext2D, project: MotionProject, t: number, opacity: number, tint: string, opts: RenderOptions,
+  width: number, height: number, cam: { x: number; y: number; zoom: number; rotation: number }, shake: { x: number; y: number; rotation: number },
+): void {
   if (opacity <= 0) return;
-  ctx.save();
-  ctx.globalAlpha = opacity;
-  ctx.globalCompositeOperation = 'source-over';
   for (const layer of project.layers) {
     if (!layer.visible) continue;
-    ctx.save();
+    pushCameraTransform(ctx, width, height, cam, shake, layer.parallax ?? 1);
     ctx.globalAlpha = opacity * valueAt(layer, t).opacity;
+    ctx.globalCompositeOperation = 'source-over';
     drawLayerShape(ctx, layer, t, opts, tint);
     ctx.restore();
   }
-  ctx.restore();
+}
+
+/** Push the camera's pan/zoom/rotate/shake transform, scaling just the pan by `parallax` (1 = moves fully with the camera, <1 = a background that pans less, >1 = a foreground that pans more) — call `ctx.restore()` once done. */
+function pushCameraTransform(
+  ctx: CanvasRenderingContext2D, width: number, height: number,
+  cam: { x: number; y: number; zoom: number; rotation: number }, shake: { x: number; y: number; rotation: number }, parallax: number,
+): void {
+  ctx.save();
+  ctx.translate(width / 2, height / 2);
+  ctx.rotate(((cam.rotation + shake.rotation) * Math.PI) / 180);
+  ctx.scale(cam.zoom, cam.zoom);
+  ctx.translate(-width / 2 - cam.x * parallax - shake.x, -height / 2 - cam.y * parallax - shake.y);
 }
 
 function drawLayer(ctx: CanvasRenderingContext2D, layer: MotionLayer, t: number, opts: RenderOptions, groupOpacity = 1): void {

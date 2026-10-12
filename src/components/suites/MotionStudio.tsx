@@ -1224,6 +1224,11 @@ function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPose
           <option value="__new__">+ new folder…</option>
         </select>
       </label>
+      <label className="flex items-center gap-2 text-[11px]" style={{ color: 'var(--ink-dim)' }} title="How much of the camera's pan this layer follows — 1 = normal, less than 1 = a distant background that pans slower, more than 1 = a close foreground that pans faster">
+        parallax
+        <input type="number" step={0.05} value={layer.parallax} onChange={(e) => onPatchLayer({ parallax: Number(e.target.value) })} className={`${inputCls} w-16`} style={inputStyle} />
+        <input type="range" min={0} max={2} step={0.05} value={layer.parallax} onChange={(e) => onPatchLayer({ parallax: Number(e.target.value) })} className="flex-1" />
+      </label>
 
       {layer.kind === 'paint' && layer.paint && (
         <div className="border-t pt-2.5" style={{ borderColor: 'var(--line)' }}>
