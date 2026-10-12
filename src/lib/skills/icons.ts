@@ -44,6 +44,7 @@ const P: Record<string, string> = {
   chat: '<path d="M4 5h16v11H9l-5 4z"/>',
   leaf: '<path d="M5 19C5 10 10 5 20 4c0 10-5 15-14 15z"/><path d="M5 19L14 10"/>',
   triangle: '<path d="M12 4l9 16H3z"/>',
+  film: '<path d="M4 8l2.3-4h3l-2 4M10 8l2.3-4h3l-2 4M16 8l2.3-4H21v4"/><rect x="3" y="8" width="18" height="12" rx="1.5"/><path d="M7 8v12M15 8v12"/>',
 };
 
 export const SKILL_ICON_NAMES = Object.keys(P);

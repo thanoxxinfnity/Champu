@@ -34,7 +34,9 @@ export type SuiteId =
   // Everything generated, in one place (a viewer, not a place where sessions live).
   | 'library'
   // A board of app / website screens to design and export.
-  | 'canvas';
+  | 'canvas'
+  // A layers + keyframes timeline for motion graphics, exported as CSS/GSAP/HTML.
+  | 'motion';
 
 export interface SessionRecord {
   id: string;
@@ -270,6 +272,7 @@ export const SUITE_LABELS: Record<SuiteId, string> = {
   assets: 'Asset Studio',
   library: 'Library',
   canvas: 'Design Canvas',
+  motion: 'Motion Studio',
   android: 'Android & Cross-Platform',
   minecraft: 'Minecraft Engineering',
   godot: 'Godot Game Studio',

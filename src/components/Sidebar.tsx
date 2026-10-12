@@ -34,9 +34,10 @@ const CAPABILITY_SUITE_META: Record<string, { label: string; icon: string; hint:
 };
 
 /** Opens a viewer or editor of its own, so it has no list of chat sessions. */
-const STANDALONE = new Set(['library', 'canvas', 'video', 'audio', 'model3d']);
+const STANDALONE = new Set(['library', 'canvas', 'motion', 'video', 'audio', 'model3d']);
 
 const CANVAS_ENTRY: SuiteEntry = { id: 'canvas', label: 'Canvas', icon: '◰', hint: 'Design app or website screens on a board and export them' };
+const MOTION_ENTRY: SuiteEntry = { id: 'motion', label: 'Motion Studio', icon: '◧', hint: 'Layers, keyframes and a timeline — export CSS, GSAP or HTML' };
 const LIBRARY_ENTRY: SuiteEntry = { id: 'library', label: 'Library', icon: '▦', hint: 'Everything you generated — open and zoom up to 50×' };
 
 function BridgeStatusCard({ onOpenSettings }: { onOpenSettings: () => void }) {
@@ -151,6 +152,7 @@ export function Sidebar({ onOpenSettings, onNavigate }: { onOpenSettings: () => 
   const suites: SuiteEntry[] = [
     LIBRARY_ENTRY,
     CANVAS_ENTRY,
+    MOTION_ENTRY,
     ...CORE_SUITES,
     ...capabilityTabs
       .filter((id) => CAPABILITY_SUITE_META[id] && !mediaHidden.includes(id))
