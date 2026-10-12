@@ -67,6 +67,10 @@ import {
   pingPongFrames, removeStroke, reverseFrames, stretchFrames,
   type PaintStroke,
 } from '@/lib/suites/motion/paint';
+import {
+  BACKGROUND_PRESETS, PROP_PRESETS, VFX_STICKERS, instantiateLayer, layerFromJson, layerToJson, propToLayer, serializeLayer,
+  type PortableLayer,
+} from '@/lib/suites/motion/library';
 import { autoFlatColor, floodFillWithGapClosing } from '@/lib/suites/motion/fill';
 import { autoCelShadow } from '@/lib/suites/motion/shading';
 import { hexToRgb } from '@/lib/suites/motion/color';
@@ -86,6 +90,7 @@ function strokeToDabsLocal(stroke: PaintStroke) {
 }
 
 const KEY = 'motion.project.v1';
+const LIBRARY_KEY = 'motion.library.v1';
 const TRACK_H = 30;
 const RULER_H = 20;
 const WAVE_H = 28;
@@ -202,6 +207,9 @@ export function MotionStudio() {
   const [addOpen, setAddOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [onionOpen, setOnionOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryTab, setLibraryTab] = useState<'props' | 'backgrounds' | 'stickers' | 'saved'>('props');
+  const [savedCharacters, setSavedCharacters] = useState<Array<{ id: string; name: string; layer: PortableLayer; savedAt: number }>>([]);
   const [exporting, setExporting] = useState<'gif' | 'video' | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [waveform, setWaveform] = useState<WaveformBucket[] | null>(null);
@@ -231,6 +239,7 @@ export function MotionStudio() {
 
   useEffect(() => {
     void getSetting<unknown>(KEY, null).then((p) => { if (p) setProject(normalizeProject(p)); setLoaded(true); });
+    void getSetting<typeof savedCharacters>(LIBRARY_KEY, []).then(setSavedCharacters);
   }, []);
   useEffect(() => { if (loaded) void setSetting(KEY, project); }, [project, loaded]);
 
@@ -372,6 +381,74 @@ export function MotionStudio() {
     setSelId(id);
     setSelMarker(null);
     setAddOpen(false);
+  };
+
+  // ── asset library: props, backgrounds, VFX stickers, saved characters ──────────
+  const addPropAt = (presetId: string, x: number, y: number) => {
+    const preset = PROP_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    const layer = propToLayer(preset, project, x, y);
+    setProject((p) => ({ ...p, layers: [...p.layers, layer] }));
+    setSelId(layer.id);
+    setSelMarker(null);
+  };
+  const onStageDragOver = (e: React.DragEvent) => { if (e.dataTransfer.types.includes('application/x-motion-prop')) e.preventDefault(); };
+  const onStageDrop = (e: React.DragEvent) => {
+    const presetId = e.dataTransfer.getData('application/x-motion-prop');
+    if (!presetId) return;
+    e.preventDefault();
+    const pt = stagePointFromEvent(e);
+    addPropAt(presetId, pt.x, pt.y);
+  };
+  const addStickerAt = (stickerId: string) => {
+    const sticker = VFX_STICKERS.find((s) => s.id === stickerId);
+    if (!sticker) return;
+    let next = addLayer(project, 'particles');
+    const id = next.layers[next.layers.length - 1]!.id;
+    next = updateLayer(next, id, { name: sticker.name, particles: newParticleConfig(sticker.preset, Math.floor(Math.random() * 1e6)) });
+    setProject(next);
+    setSelId(id);
+    setSelMarker(null);
+    setLibraryOpen(false);
+  };
+  const saveSelectedAsCharacter = () => {
+    if (!selected) return;
+    const name = window.prompt('Save to the library as:', selected.name);
+    if (!name) return;
+    const entry = { id: newId('lib'), name, layer: serializeLayer(selected), savedAt: Date.now() };
+    const next = [entry, ...savedCharacters];
+    setSavedCharacters(next);
+    void setSetting(LIBRARY_KEY, next);
+  };
+  const loadSavedCharacter = (entryId: string) => {
+    const entry = savedCharacters.find((e) => e.id === entryId);
+    if (!entry) return;
+    const layer = instantiateLayer(entry.layer, project.width / 2, project.height / 2);
+    setProject((p) => ({ ...p, layers: [...p.layers, layer] }));
+    setSelId(layer.id);
+    setSelMarker(null);
+    setLibraryOpen(false);
+  };
+  const deleteSavedCharacter = (entryId: string) => {
+    const next = savedCharacters.filter((e) => e.id !== entryId);
+    setSavedCharacters(next);
+    void setSetting(LIBRARY_KEY, next);
+  };
+  const exportSelectedLayerJson = () => {
+    if (!selected) return;
+    downloadText(layerToJson(selected), `${selected.name || 'layer'}.json`, 'application/json');
+  };
+  const importLayerJsonFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const portable = layerFromJson(String(reader.result));
+      if (!portable) { window.alert('That file is not a valid layer export.'); return; }
+      const layer = instantiateLayer(portable, project.width / 2, project.height / 2);
+      setProject((p) => ({ ...p, layers: [...p.layers, layer] }));
+      setSelId(layer.id);
+      setSelMarker(null);
+    };
+    reader.readAsText(file);
   };
   const patchLayer = (patch: Partial<MotionLayer>) => { if (selId) setProject((p) => updateLayer(p, selId, patch)); };
   const keyNow = (props: Partial<Omit<Keyframe, 'id' | 't'>>) => {
@@ -926,6 +1003,63 @@ export function MotionStudio() {
         <Btn onClick={loadExample} small title="Load the JJK Showcase example project"><SkillIcon name="rocket" size={12} /> Example</Btn>
         <div className="ml-auto flex items-center gap-1.5">
           <div className="relative">
+            <Btn onClick={() => setLibraryOpen((x) => !x)} title="Props, backgrounds, VFX stickers and your saved characters"><SkillIcon name="layers" size={13} /> Library</Btn>
+            {libraryOpen && (
+              <div className="absolute right-0 top-full z-30 mt-1 w-72 rounded-lg border p-2.5 shadow-lg" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
+                <div className="mb-2 flex gap-1">
+                  {(['props', 'backgrounds', 'stickers', 'saved'] as const).map((t) => (
+                    <button key={t} type="button" onClick={() => setLibraryTab(t)} className="press mono flex-1 rounded px-2 py-1 text-[10.5px] capitalize"
+                      style={{ background: libraryTab === t ? 'var(--accent)' : 'transparent', color: libraryTab === t ? '#04150e' : 'var(--ink-dim)' }}>{t}</button>
+                  ))}
+                </div>
+                {libraryTab === 'props' && (
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {PROP_PRESETS.map((p) => (
+                      <button key={p.id} type="button" draggable onDragStart={(e) => e.dataTransfer.setData('application/x-motion-prop', p.id)}
+                        onClick={() => { addPropAt(p.id, project.width / 2, project.height / 2); setLibraryOpen(false); }}
+                        title={`${p.name} — drag onto the stage, or click to add centred`}
+                        className="press flex flex-col items-center gap-1 rounded border p-1.5 text-[9px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)', cursor: 'grab' }}>
+                        <span className="h-6 w-6 rounded-sm" style={{ background: p.color, borderRadius: p.kind === 'circle' ? '50%' : undefined }} />
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {libraryTab === 'backgrounds' && (
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {BACKGROUND_PRESETS.map((b) => (
+                      <button key={b.id} type="button" onClick={() => { setProject((p) => ({ ...p, background: b.color })); setLibraryOpen(false); }}
+                        title={b.name} className="press flex flex-col items-center gap-1 rounded border p-1.5 text-[9px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>
+                        <span className="h-6 w-6 rounded-sm border" style={{ background: b.color, borderColor: 'var(--line)' }} />
+                        {b.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {libraryTab === 'stickers' && (
+                  <div className="flex flex-col gap-1">
+                    {VFX_STICKERS.map((s) => (
+                      <button key={s.id} type="button" onClick={() => addStickerAt(s.id)} className="press mono flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px]" style={{ color: 'var(--ink)' }}>
+                        <SkillIcon name="wand" size={13} /> {s.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {libraryTab === 'saved' && (
+                  <div className="flex flex-col gap-1">
+                    {savedCharacters.length === 0 && <p className="text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>Select a layer and "Save to library" to see it here.</p>}
+                    {savedCharacters.map((entry) => (
+                      <div key={entry.id} className="mono flex items-center justify-between gap-1 text-[10.5px]" style={{ color: 'var(--ink-dim)' }}>
+                        <button type="button" onClick={() => loadSavedCharacter(entry.id)} className="press flex-1 truncate rounded px-1.5 py-1 text-left">{entry.name}</button>
+                        <Btn onClick={() => deleteSavedCharacter(entry.id)} small title="Remove from library">✕</Btn>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="relative">
             <Btn onClick={() => setCameraOpen((x) => !x)} title="Virtual camera: pan / zoom / rotate / shake / impact / speed ramp"><SkillIcon name="globe" size={13} /> Camera</Btn>
             {cameraOpen && (
               <div className="absolute right-0 top-full z-30 mt-1 w-64 rounded-lg border p-2.5 shadow-lg" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
@@ -1054,6 +1188,8 @@ export function MotionStudio() {
             onPointerDown={onStagePointerDown}
             onPointerMove={onStagePointerMove}
             onPointerUp={onStagePointerUp}
+            onDragOver={onStageDragOver}
+            onDrop={onStageDrop}
             className="shrink-0 touch-none rounded-lg border-2 shadow-lg"
             style={{ width: project.width * stageScaleDisplay, height: project.height * stageScaleDisplay, borderColor: 'var(--line)', cursor: selected?.kind === 'paint' ? 'crosshair' : undefined }}
           />
@@ -1083,6 +1219,9 @@ export function MotionStudio() {
               onStretchFrames={(n) => selected.paint && patchLayer({ paint: stretchFrames(selected.paint, n) })}
               onGenerateGait={onGenerateGait}
               onDetachBone={onDetachBone}
+              onSaveToLibrary={saveSelectedAsCharacter}
+              onExportJson={exportSelectedLayerJson}
+              onImportJson={importLayerJsonFile}
             />
           )}
         </div>
@@ -1256,7 +1395,7 @@ function LayerTrackRow({ layer, project, selId, selKf, time, indent, onSelect, o
 
 // ── properties panel for a layer ───────────────────────────────────────────────
 
-function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPoseNow, onDeleteLayer, onDeleteKeyframe, onSetKfEasing, onPatchKeyframe, onNewGroup, onInsertFrame, onDuplicateFrame, onDeleteFrame, onFrameFps, onHoldFrame, onReverseFrames, onPingPongFrames, onStretchFrames, onGenerateGait, onDetachBone }: {
+function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPoseNow, onDeleteLayer, onDeleteKeyframe, onSetKfEasing, onPatchKeyframe, onNewGroup, onInsertFrame, onDuplicateFrame, onDeleteFrame, onFrameFps, onHoldFrame, onReverseFrames, onPingPongFrames, onStretchFrames, onGenerateGait, onDetachBone, onSaveToLibrary, onExportJson, onImportJson }: {
   layer: MotionLayer; time: number; selKf: string | null; groups: LayerGroup[];
   onPatchLayer: (patch: Partial<MotionLayer>) => void;
   onKeyNow: (props: Partial<Omit<Keyframe, 'id' | 't'>>) => void;
@@ -1276,6 +1415,9 @@ function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPose
   onStretchFrames: (n: number) => void;
   onGenerateGait: (mode: GaitMode) => void;
   onDetachBone: (boneId: string) => void;
+  onSaveToLibrary: () => void;
+  onExportJson: () => void;
+  onImportJson: (file: File) => void;
 }) {
   const v = valueAt(layer, time);
   const kf = layer.keyframes.find((k) => k.id === selKf) ?? null;
@@ -1492,6 +1634,14 @@ function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPose
         </div>
       )}
 
+      <div className="flex flex-wrap gap-1.5 border-t pt-2.5" style={{ borderColor: 'var(--line)' }}>
+        <Btn onClick={onSaveToLibrary} small title="Save this layer (any kind — a character, a prop) to your local library for reuse"><SkillIcon name="layers" size={11} /> Save to library</Btn>
+        <Btn onClick={onExportJson} small title="Download this layer as a portable .json file"><SkillIcon name="doc" size={11} /> Export JSON</Btn>
+        <label className="press mono inline-flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-[10.5px]" style={{ border: '1px solid var(--line)', color: 'var(--ink-dim)' }} title="Import a layer from a .json file exported by this tool">
+          <SkillIcon name="doc" size={11} /> Import JSON
+          <input type="file" accept="application/json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) onImportJson(f); e.target.value = ''; }} />
+        </label>
+      </div>
       <Btn onClick={onDeleteLayer} title="Delete this layer"><SkillIcon name="bug" size={12} /> Delete layer</Btn>
     </div>
   );
