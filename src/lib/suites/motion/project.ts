@@ -23,6 +23,8 @@ import { newParticleConfig } from './particles.ts';
 import type { RigConfig } from './rig.ts';
 import { newRig } from './rig.ts';
 import type { AudioTrack } from './audio.ts';
+import type { PaintLayerData } from './paint.ts';
+import { newPaintLayerData } from './paint.ts';
 
 export type { Easing } from './easing.ts';
 export { EASINGS, easeFn } from './easing.ts';
@@ -30,10 +32,33 @@ export type { CameraKeyframe, ImpactFrame, ShakeEvent, SpeedRamp } from './camer
 export type { ParticleConfig, ParticlePreset } from './particles.ts';
 export type { BoneDef, RigConfig } from './rig.ts';
 export type { AudioTrack } from './audio.ts';
+export type { PaintLayerData, PaintFrame, PaintStroke } from './paint.ts';
 
-export type LayerKind = 'text' | 'rect' | 'circle' | 'image' | 'particles' | 'rig';
-export type BlendMode = 'normal' | 'add' | 'multiply' | 'screen';
-export const BLEND_MODES: BlendMode[] = ['normal', 'add', 'multiply', 'screen'];
+export type LayerKind = 'text' | 'rect' | 'circle' | 'image' | 'particles' | 'rig' | 'paint';
+export type BlendMode = 'normal' | 'add' | 'multiply' | 'screen' | 'overlay' | 'soft-light' | 'color-dodge';
+export const BLEND_MODES: BlendMode[] = ['normal', 'add', 'multiply', 'screen', 'overlay', 'soft-light', 'color-dodge'];
+
+/** A folder a layer can be filed under — collapsing/moving/dimming it moves every layer inside together. */
+export interface LayerGroup {
+  id: string;
+  name: string;
+  collapsed: boolean;
+  opacity: number;
+  visible: boolean;
+}
+
+export interface OnionSkinConfig {
+  enabled: boolean;
+  /** How many frames before/after to ghost, 0-5 each. */
+  beforeCount: number;
+  afterCount: number;
+  beforeColor: string;
+  afterColor: string;
+  /** Base opacity of the nearest ghost frame; farther frames fade further. */
+  opacity: number;
+  /** Seconds between each onion-skin step. */
+  frameStep: number;
+}
 
 export interface Keyframe {
   id: string;
@@ -69,8 +94,16 @@ export interface MotionLayer {
   particles?: ParticleConfig;
   /** Only present when kind === 'rig'. */
   rig?: RigConfig;
+  /** Only present when kind === 'paint'. */
+  paint?: PaintLayerData;
   /** Sorted by `t`; never empty — a new layer gets one keyframe at t=0. */
   keyframes: Keyframe[];
+  /** Hidden layers are skipped entirely at render/export time. */
+  visible: boolean;
+  /** Which folder (see LayerGroup) this layer is filed under, if any. */
+  groupId: string | null;
+  /** Clipped to the alpha of the layer directly below it in the same group/top level. */
+  clipToBelow: boolean;
 }
 
 export interface MotionProject {
@@ -80,13 +113,16 @@ export interface MotionProject {
   duration: number;
   background: string;
   layers: MotionLayer[];
+  groups: LayerGroup[];
   /** Pan/zoom/rotate, keyframed the same way a layer is. Sorted by t; never empty. */
   camera: CameraKeyframe[];
   shakes: ShakeEvent[];
   impacts: ImpactFrame[];
   speedRamps: SpeedRamp[];
-  onionSkin: { enabled: boolean; opacity: number };
+  onionSkin: OnionSkinConfig;
   audio?: AudioTrack;
+  /** Saved HSV swatches, most-recently-used first. */
+  palette: string[];
 }
 
 export const STAGE_PRESETS: Array<{ label: string; w: number; h: number }> = [
@@ -99,11 +135,16 @@ export function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 }
 
+export function defaultOnionSkin(): OnionSkinConfig {
+  return { enabled: false, beforeCount: 1, afterCount: 1, beforeColor: '#2ad4ff', afterColor: '#ff5c8a', opacity: 0.35, frameStep: 1 / 12 };
+}
+export const DEFAULT_PALETTE: string[] = ['#f4f5f7', '#1a1a1a', '#ff5c5c', '#ffb14e', '#ffe14e', '#5cffb0', '#5c8cff', '#8a5cff'];
+
 export function emptyProject(): MotionProject {
   return {
-    title: 'My motion', width: 960, height: 540, duration: 4, background: '#111318', layers: [],
+    title: 'My motion', width: 960, height: 540, duration: 4, background: '#111318', layers: [], groups: [],
     camera: defaultCamera(), shakes: [], impacts: [], speedRamps: [],
-    onionSkin: { enabled: false, opacity: 0.35 },
+    onionSkin: defaultOnionSkin(), palette: [...DEFAULT_PALETTE],
   };
 }
 
@@ -117,25 +158,31 @@ export function normalizeProject(raw: unknown): MotionProject {
   const p = (raw ?? {}) as Record<string, unknown>;
   const rawLayers = Array.isArray(p.layers) ? (p.layers as Array<Record<string, unknown>>) : [];
   const camera = Array.isArray(p.camera) ? (p.camera as CameraKeyframe[]) : [];
+  const rawOnion = p.onionSkin as Partial<OnionSkinConfig> | undefined;
+  const fallbackOnion = defaultOnionSkin();
   return {
     title: typeof p.title === 'string' ? p.title : 'My motion',
     width: typeof p.width === 'number' ? p.width : 960,
     height: typeof p.height === 'number' ? p.height : 540,
     duration: typeof p.duration === 'number' ? p.duration : 4,
     background: typeof p.background === 'string' ? p.background : '#111318',
-    layers: rawLayers.map((l) => ({ blendMode: 'normal' as BlendMode, ...l }) as MotionLayer),
+    layers: rawLayers.map((l) => ({
+      blendMode: 'normal' as BlendMode, visible: true, groupId: null, clipToBelow: false, ...l,
+    }) as MotionLayer),
+    groups: Array.isArray(p.groups) ? (p.groups as LayerGroup[]) : [],
     camera: camera.length > 0 ? camera : defaultCamera(),
     shakes: Array.isArray(p.shakes) ? (p.shakes as ShakeEvent[]) : [],
     impacts: Array.isArray(p.impacts) ? (p.impacts as ImpactFrame[]) : [],
     speedRamps: Array.isArray(p.speedRamps) ? (p.speedRamps as SpeedRamp[]) : [],
-    onionSkin: (p.onionSkin as { enabled: boolean; opacity: number } | undefined) ?? { enabled: false, opacity: 0.35 },
+    onionSkin: rawOnion ? { ...fallbackOnion, ...rawOnion } : fallbackOnion,
     audio: p.audio as AudioTrack | undefined,
+    palette: Array.isArray(p.palette) && p.palette.length > 0 ? (p.palette as string[]) : [...DEFAULT_PALETTE],
   };
 }
 
 const BASE_KEYFRAME: Omit<Keyframe, 'id' | 't'> = { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, easing: 'easeOut' };
 
-const KIND_DEFAULT: Record<LayerKind, { w: number; h: number; color: string; text: string }> = {
+const KIND_DEFAULT: Record<Exclude<LayerKind, 'paint'>, { w: number; h: number; color: string; text: string }> = {
   text: { w: 320, h: 60, color: '#f4f5f7', text: 'Headline' },
   rect: { w: 140, h: 90, color: '#5b8cff', text: '' },
   circle: { w: 110, h: 110, color: '#ff8a5c', text: '' },
@@ -145,9 +192,10 @@ const KIND_DEFAULT: Record<LayerKind, { w: number; h: number; color: string; tex
 };
 
 export function newLayer(kind: LayerKind, project: MotionProject, name?: string): MotionLayer {
-  const d = KIND_DEFAULT[kind];
-  const cx = Math.round(project.width / 2 - d.w / 2);
-  const cy = Math.round(project.height / 2 - d.h / 2);
+  // A paint layer is a cel covering the whole stage, not a small positioned shape.
+  const d = kind === 'paint' ? { w: project.width, h: project.height, color: '#1a1a1a', text: '' } : KIND_DEFAULT[kind];
+  const cx = kind === 'paint' ? 0 : Math.round(project.width / 2 - d.w / 2);
+  const cy = kind === 'paint' ? 0 : Math.round(project.height / 2 - d.h / 2);
   return {
     id: newId('layer'),
     name: name ?? `${kind[0]!.toUpperCase()}${kind.slice(1)} ${project.layers.length + 1}`,
@@ -157,8 +205,12 @@ export function newLayer(kind: LayerKind, project: MotionProject, name?: string)
     w: d.w,
     h: d.h,
     blendMode: 'normal',
+    visible: true,
+    groupId: null,
+    clipToBelow: false,
     ...(kind === 'particles' ? { particles: newParticleConfig('aura', Math.floor(Math.random() * 1e6)) } : {}),
     ...(kind === 'rig' ? { rig: newRig() } : {}),
+    ...(kind === 'paint' ? { paint: newPaintLayerData(12) } : {}),
     keyframes: [{ ...BASE_KEYFRAME, id: newId('kf'), t: 0, x: cx, y: cy, easing: 'easeOut' }],
   };
 }
@@ -173,6 +225,26 @@ export function removeLayer(project: MotionProject, layerId: string): MotionProj
 
 export function updateLayer(project: MotionProject, layerId: string, patch: Partial<MotionLayer>): MotionProject {
   return { ...project, layers: project.layers.map((l) => (l.id === layerId ? { ...l, ...patch } : l)) };
+}
+
+// ── layer groups (folders) ──────────────────────────────────────────────────
+
+export function newGroup(project: MotionProject, name = 'Group'): MotionProject {
+  const group: LayerGroup = { id: newId('group'), name, collapsed: false, opacity: 1, visible: true };
+  return { ...project, groups: [...project.groups, group] };
+}
+export function removeGroup(project: MotionProject, groupId: string): MotionProject {
+  return {
+    ...project,
+    groups: project.groups.filter((g) => g.id !== groupId),
+    layers: project.layers.map((l) => (l.groupId === groupId ? { ...l, groupId: null } : l)),
+  };
+}
+export function updateGroup(project: MotionProject, groupId: string, patch: Partial<LayerGroup>): MotionProject {
+  return { ...project, groups: project.groups.map((g) => (g.id === groupId ? { ...g, ...patch } : g)) };
+}
+export function setLayerGroup(project: MotionProject, layerId: string, groupId: string | null): MotionProject {
+  return updateLayer(project, layerId, { groupId });
 }
 
 /** Insert or replace (within 1/120s — "the same instant") a keyframe, keeping the array sorted by `t`. */
@@ -247,7 +319,7 @@ function layerBaseCss(layer: MotionLayer, className: string): string {
 
 /** Layers the CSS/GSAP/HTML code exporters can represent — a canvas-only particle pool or bone rig has no portable DOM equivalent. */
 function portableLayers(project: MotionProject): MotionLayer[] {
-  return project.layers.filter((l) => l.kind !== 'particles' && l.kind !== 'rig');
+  return project.layers.filter((l) => l.kind !== 'particles' && l.kind !== 'rig' && l.kind !== 'paint');
 }
 
 /** One @keyframes block per layer, with a timing-function set per stop so each segment keeps its own ease. */

@@ -13,9 +13,13 @@ import { cameraAt, impactAt, shakeOffsetAt } from './camera.ts';
 import { particlesAt } from './particles.ts';
 import { computeRigPose, poseAt, type BonePose } from './rig.ts';
 import { easeFn } from './easing.ts';
+import { strokeToDabs, type BrushSettings, type Dab, type StrokePoint } from './brush.ts';
+import { bezierNodesToPolyline } from './vectorStroke.ts';
+import { paintFrameAt } from './paint.ts';
 
 const COMPOSITE: Record<BlendMode, GlobalCompositeOperation> = {
   normal: 'source-over', add: 'lighter', multiply: 'multiply', screen: 'screen',
+  overlay: 'overlay', 'soft-light': 'soft-light', 'color-dodge': 'color-dodge',
 };
 
 export interface RenderOptions {
@@ -34,7 +38,12 @@ export interface RenderOptions {
   applyCamera?: boolean;
 }
 
-const ONION_DT = 1 / 12;
+export function groupOpacityOf(project: MotionProject, layer: MotionLayer): number {
+  if (!layer.groupId) return 1;
+  const g = project.groups.find((x) => x.id === layer.groupId);
+  if (!g) return 1;
+  return g.visible ? g.opacity : 0;
+}
 
 export function drawFrame(ctx: CanvasRenderingContext2D, project: MotionProject, t: number, opts: RenderOptions = {}): void {
   const { width, height, background } = project;
@@ -56,14 +65,26 @@ export function drawFrame(ctx: CanvasRenderingContext2D, project: MotionProject,
 
   if (impact?.style === 'bw') ctx.filter = 'grayscale(1) contrast(1.6) brightness(1.15)';
 
-  const onionOn = opts.onionSkin ?? project.onionSkin.enabled;
+  const onion = project.onionSkin;
+  const onionOn = opts.onionSkin ?? onion.enabled;
   if (onionOn) {
-    drawGhost(ctx, project, t - ONION_DT, project.onionSkin.opacity, '#2ad4ff', opts);
-    drawGhost(ctx, project, t + ONION_DT, project.onionSkin.opacity, '#ff5c8a', opts);
+    for (let i = 1; i <= onion.beforeCount; i++) {
+      drawGhost(ctx, project, t - onion.frameStep * i, onion.opacity / i, onion.beforeColor, opts);
+    }
+    for (let i = 1; i <= onion.afterCount; i++) {
+      drawGhost(ctx, project, t + onion.frameStep * i, onion.opacity / i, onion.afterColor, opts);
+    }
   }
 
-  for (const layer of project.layers) {
-    drawLayer(ctx, layer, t, opts);
+  const layers = project.layers;
+  for (let i = 0; i < layers.length; i++) {
+    const layer = layers[i]!;
+    if (!layer.visible) continue;
+    const gOpacity = groupOpacityOf(project, layer);
+    if (gOpacity <= 0) continue;
+    const below = i > 0 ? layers[i - 1]! : null;
+    if (layer.clipToBelow && below) drawLayerClipped(ctx, layer, below, t, opts, gOpacity);
+    else drawLayer(ctx, layer, t, opts, gOpacity);
     if (layer.id === opts.selectedLayerId) drawSelectionOutline(ctx, layer, t);
   }
 
@@ -84,10 +105,12 @@ export function drawFrame(ctx: CanvasRenderingContext2D, project: MotionProject,
 }
 
 function drawGhost(ctx: CanvasRenderingContext2D, project: MotionProject, t: number, opacity: number, tint: string, opts: RenderOptions): void {
+  if (opacity <= 0) return;
   ctx.save();
   ctx.globalAlpha = opacity;
   ctx.globalCompositeOperation = 'source-over';
   for (const layer of project.layers) {
+    if (!layer.visible) continue;
     ctx.save();
     ctx.globalAlpha = opacity * valueAt(layer, t).opacity;
     drawLayerShape(ctx, layer, t, opts, tint);
@@ -96,13 +119,50 @@ function drawGhost(ctx: CanvasRenderingContext2D, project: MotionProject, t: num
   ctx.restore();
 }
 
-function drawLayer(ctx: CanvasRenderingContext2D, layer: MotionLayer, t: number, opts: RenderOptions): void {
+function drawLayer(ctx: CanvasRenderingContext2D, layer: MotionLayer, t: number, opts: RenderOptions, groupOpacity = 1): void {
   const v = valueAt(layer, t);
-  if (v.opacity <= 0) return;
+  if (v.opacity <= 0 || groupOpacity <= 0) return;
   ctx.save();
-  ctx.globalAlpha = v.opacity;
+  ctx.globalAlpha = v.opacity * groupOpacity;
   ctx.globalCompositeOperation = COMPOSITE[layer.blendMode];
   drawLayerShape(ctx, layer, t, opts);
+  ctx.restore();
+}
+
+// Two reusable offscreen canvases for clipping-mask compositing — module-level because drawFrame always
+// runs to completion synchronously (nothing here ever awaits mid-frame), so there is no reentrant use to
+// race against; two, not one, because a clip needs a separate surface for its content and its mask.
+let scratchContent: HTMLCanvasElement | null = null;
+let scratchMask: HTMLCanvasElement | null = null;
+function getScratch(which: 'content' | 'mask', w: number, h: number): CanvasRenderingContext2D {
+  let canvas = which === 'content' ? scratchContent : scratchMask;
+  if (!canvas) { canvas = document.createElement('canvas'); if (which === 'content') scratchContent = canvas; else scratchMask = canvas; }
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  const sctx = canvas.getContext('2d')!;
+  sctx.setTransform(1, 0, 0, 1, 0, 0);
+  sctx.clearRect(0, 0, w, h);
+  return sctx;
+}
+
+/** Draw `layer`, masked to only show where `below` has coverage — a classic "clip to layer beneath" (Photoshop-style). */
+function drawLayerClipped(ctx: CanvasRenderingContext2D, layer: MotionLayer, below: MotionLayer, t: number, opts: RenderOptions, groupOpacity: number): void {
+  const v = valueAt(layer, t);
+  if (v.opacity <= 0 || groupOpacity <= 0) return;
+  const w = ctx.canvas.width, h = ctx.canvas.height;
+  const contentCtx = getScratch('content', w, h);
+  contentCtx.globalCompositeOperation = 'source-over';
+  drawLayerShape(contentCtx, layer, t, opts);
+
+  const maskCtx = getScratch('mask', w, h);
+  drawLayerShape(maskCtx, below, t, opts);
+
+  contentCtx.globalCompositeOperation = 'destination-in';
+  contentCtx.drawImage(maskCtx.canvas, 0, 0);
+
+  ctx.save();
+  ctx.globalAlpha = v.opacity * groupOpacity;
+  ctx.globalCompositeOperation = COMPOSITE[layer.blendMode];
+  ctx.drawImage(contentCtx.canvas, 0, 0);
   ctx.restore();
 }
 
@@ -148,8 +208,51 @@ function drawLayerShape(ctx: CanvasRenderingContext2D, layer: MotionLayer, t: nu
     case 'rig':
       if (layer.rig) drawRig(ctx, layer, t, opts, tintOverride);
       break;
+    case 'paint':
+      if (layer.paint) drawPaint(ctx, layer.paint, t, tintOverride, opts.images);
+      break;
   }
   ctx.restore();
+}
+
+function drawDab(ctx: CanvasRenderingContext2D, d: Dab, kind: string, color: string): void {
+  const cx = d.x + d.jitter, cy = d.y - d.jitter;
+  ctx.globalAlpha = d.opacity;
+  if (kind === 'airbrush' || kind === 'watercolor' || kind === 'neon') {
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, d.radius);
+    grad.addColorStop(0, color);
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+  } else {
+    ctx.fillStyle = color;
+  }
+  ctx.beginPath();
+  ctx.arc(cx, cy, d.radius, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** Draws a paint layer's current frame: every stroke's bezier nodes → dabs → stamped circles (or a rasterised fill/gradient image), erase strokes cutting into what came before them on the same frame. */
+function drawPaint(ctx: CanvasRenderingContext2D, paint: NonNullable<MotionLayer['paint']>, t: number, tintOverride?: string, images?: Map<string, HTMLImageElement>): void {
+  const frame = paintFrameAt(paint, t);
+  for (const stroke of frame.strokes) {
+    if (stroke.fill) {
+      const img = images?.get(stroke.fill.dataUrl);
+      if (img && img.complete && img.naturalWidth > 0) {
+        ctx.save();
+        if (stroke.mode === 'erase') ctx.globalCompositeOperation = 'destination-out';
+        ctx.drawImage(img, stroke.fill.x, stroke.fill.y, stroke.fill.w, stroke.fill.h);
+        ctx.restore();
+      }
+      continue;
+    }
+    const points = bezierNodesToPolyline(stroke.nodes, 10);
+    const dabs = strokeToDabs(points, stroke.brush, 1);
+    ctx.save();
+    if (stroke.mode === 'erase') ctx.globalCompositeOperation = 'destination-out';
+    else if (stroke.brush.kind === 'neon') ctx.globalCompositeOperation = 'lighter';
+    for (const d of dabs) drawDab(ctx, d, stroke.brush.kind, tintOverride ?? stroke.brush.color);
+    ctx.restore();
+  }
 }
 
 function drawParticles(ctx: CanvasRenderingContext2D, config: NonNullable<MotionLayer['particles']>, t: number, tintOverride?: string): void {
@@ -190,6 +293,20 @@ function drawRig(ctx: CanvasRenderingContext2D, layer: MotionLayer, t: number, o
     ctx.arc(bone.x, bone.y, 4, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
+}
+
+/** The stroke currently being dragged out, not yet committed to the layer — drawn on top of a normal frame so the artist sees it live. Same local transform as any other layer content. */
+export function drawStrokePreview(ctx: CanvasRenderingContext2D, layer: MotionLayer, t: number, points: StrokePoint[], brush: BrushSettings, mode: 'draw' | 'erase'): void {
+  const v = valueAt(layer, t);
+  ctx.save();
+  ctx.translate(v.x + layer.w / 2, v.y + layer.h / 2);
+  ctx.rotate((v.rotation * Math.PI) / 180);
+  ctx.scale(v.scale, v.scale);
+  if (mode === 'erase') ctx.globalCompositeOperation = 'destination-out';
+  else if (brush.kind === 'neon') ctx.globalCompositeOperation = 'lighter';
+  const dabs = strokeToDabs(points, brush, 1);
+  for (const d of dabs) drawDab(ctx, d, brush.kind, brush.color);
   ctx.restore();
 }
 

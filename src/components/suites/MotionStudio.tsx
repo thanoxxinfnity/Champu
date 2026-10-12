@@ -6,6 +6,7 @@ import { downloadBlob, downloadText, downloadZip } from '@/lib/zip';
 import { SkillIcon } from '@/components/SkillIcon';
 import {
   BLEND_MODES,
+  DEFAULT_PALETTE,
   EASINGS,
   STAGE_PRESETS,
   addLayer,
@@ -15,15 +16,20 @@ import {
   exportHtml,
   exportZip,
   moveKeyframe,
+  newGroup,
+  newId,
   normalizeProject,
+  removeGroup,
   removeKeyframe,
   removeLayer,
   setKeyframe,
+  updateGroup,
   updateLayer,
   valueAt,
   type BlendMode,
   type Easing,
   type Keyframe,
+  type LayerGroup,
   type LayerKind,
   type MotionLayer,
   type MotionProject,
@@ -42,10 +48,33 @@ import {
 } from '@/lib/suites/motion/camera';
 import { PARTICLE_PRESETS, newParticleConfig, type ParticlePreset } from '@/lib/suites/motion/particles';
 import { newRig, poseAt, stepPhysicsBone, type PhysicsState } from '@/lib/suites/motion/rig';
-import { drawFrame } from '@/lib/suites/motion/render';
+import { drawFrame, drawStrokePreview, groupOpacityOf } from '@/lib/suites/motion/render';
 import { pickVideoCodec, renderGif, renderVideo } from '@/lib/suites/motion/exportMedia';
 import { peaksFromSamples, mixChannelsDown, type WaveformBucket } from '@/lib/suites/motion/audio';
 import { jjkShowcaseProject } from '@/lib/suites/motion/presets';
+import { newBrush, stabilizePoint, strokeToDabs, type BrushSettings, type StrokePoint } from '@/lib/suites/motion/brush';
+import { bezierNodesToPolyline, vectorizeStroke } from '@/lib/suites/motion/vectorStroke';
+import {
+  addStroke, deleteFrame, duplicateFrame, insertFrame, newPaintLayerData, paintFrameAt, paintFrameIndexAt, removeStroke,
+  type PaintStroke,
+} from '@/lib/suites/motion/paint';
+import { autoFlatColor, floodFillWithGapClosing } from '@/lib/suites/motion/fill';
+import { autoCelShadow } from '@/lib/suites/motion/shading';
+import { hexToRgb } from '@/lib/suites/motion/color';
+import { sampleMeshGradient } from '@/lib/suites/motion/gradient';
+import { PaintToolbar, type PaintTool } from './motion/PaintToolbar';
+
+function hexToRgbLocal(hex: string): [number, number, number] { return hexToRgb(hex); }
+function sameColor(a: string, b: string, tolerance = 24): boolean {
+  const [ar, ag, ab] = hexToRgb(a), [br, bg, bb] = hexToRgb(b);
+  return Math.hypot(ar - br, ag - bg, ab - bb) <= tolerance;
+}
+function sampleMeshLocal(points: Array<{ x: number; y: number; color: string }>, x: number, y: number): string {
+  return sampleMeshGradient({ kind: 'mesh', points }, x, y);
+}
+function strokeToDabsLocal(stroke: PaintStroke) {
+  return strokeToDabs(bezierNodesToPolyline(stroke.nodes, 10), stroke.brush, 1);
+}
 
 const KEY = 'motion.project.v1';
 const TRACK_H = 30;
@@ -57,6 +86,7 @@ const BASIC_KINDS: Array<{ kind: LayerKind; icon: string; label: string }> = [
   { kind: 'rect', icon: 'blocks', label: 'Rectangle' },
   { kind: 'circle', icon: 'spark', label: 'Circle' },
   { kind: 'image', icon: 'image', label: 'Image' },
+  { kind: 'paint', icon: 'pen', label: 'Paint / draw' },
 ];
 const VFX_KINDS: Array<{ preset: ParticlePreset; icon: string; label: string }> = [
   { preset: 'aura', icon: 'wand', label: 'Energy Aura' },
@@ -111,9 +141,17 @@ export function MotionStudio() {
   const [exportOpen, setExportOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [onionOpen, setOnionOpen] = useState(false);
   const [exporting, setExporting] = useState<'gif' | 'video' | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [waveform, setWaveform] = useState<WaveformBucket[] | null>(null);
+
+  // ── paint tools state ─────────────────────────────────────────────────────
+  const [paintTool, setPaintTool] = useState<PaintTool>('brush');
+  const [brush, setBrush] = useState<BrushSettings>(newBrush('ink', '#1a1a1a'));
+  const [gapClosePx, setGapClosePx] = useState(2);
+  const [gradientKind, setGradientKind] = useState<'linear' | 'radial' | 'mesh'>('linear');
+  const [, forcePaintRedraw] = useState(0);
 
   const stageRef = useRef<HTMLCanvasElement>(null);
   const audioElRef = useRef<HTMLAudioElement>(null);
@@ -125,6 +163,8 @@ export function MotionStudio() {
   const timeRef = useRef(0);
   const drag = useRef<{ kind: 'layer'; id: string; ox: number; oy: number; sx: number; sy: number } | { kind: 'kf'; layerId: string; kfId: string } | { kind: 'playhead' } | { kind: 'ramp'; id: string; edge: 't0' | 't1' | 'move'; startT0: number; startT1: number; sx: number } | null>(null);
   const rafRef = useRef<number | undefined>(undefined);
+  const strokeRef = useRef<StrokePoint[] | null>(null);
+  const meshSessionRef = useRef<{ layerId: string; strokeId: string; points: Array<{ x: number; y: number; color: string }> } | null>(null);
 
   useEffect(() => { projectRef.current = project; }, [project]);
   useEffect(() => { timeRef.current = time; }, [time]);
@@ -136,14 +176,20 @@ export function MotionStudio() {
 
   const selected = project.layers.find((l) => l.id === selId) ?? null;
 
-  // ── image preloading ───────────────────────────────────────────────────────
+  // ── image preloading (image layers, and rasterised paint fills/gradients) ──────
   useEffect(() => {
-    for (const l of project.layers) {
-      if (l.kind !== 'image' || !l.src || imagesRef.current.has(l.src)) continue;
+    const load = (src: string) => {
+      if (imagesRef.current.has(src)) return;
       const img = new Image();
       img.onload = () => setImagesVersion((v) => v + 1);
-      img.src = l.src;
-      imagesRef.current.set(l.src, img);
+      img.src = src;
+      imagesRef.current.set(src, img);
+    };
+    for (const l of project.layers) {
+      if (l.kind === 'image' && l.src) load(l.src);
+      if (l.kind === 'paint' && l.paint) {
+        for (const f of l.paint.frames) for (const s of f.strokes) if (s.fill) load(s.fill.dataUrl);
+      }
     }
   }, [project.layers]);
 
@@ -284,13 +330,289 @@ export function MotionStudio() {
     }
     return null;
   };
+  // ── paint: coordinate conversion + canvas access ───────────────────────────
+  const stagePointFromEvent = (e: { clientX: number; clientY: number }): { x: number; y: number } => {
+    const canvas = stageRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const s = stageScale();
+    return { x: (e.clientX - rect.left) / s, y: (e.clientY - rect.top) / s };
+  };
+  /** A paint layer's own local space — the inverse of the x/y/rotate/scale transform render.ts applies. */
+  const toLocalPaint = (layer: MotionLayer, stageX: number, stageY: number): { x: number; y: number } => {
+    const v = valueAt(layer, time);
+    const cx = v.x + layer.w / 2, cy = v.y + layer.h / 2;
+    const dx = stageX - cx, dy = stageY - cy;
+    const rad = (-v.rotation * Math.PI) / 180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    const scale = v.scale || 1;
+    return { x: (dx * cos - dy * sin) / scale, y: (dx * sin + dy * cos) / scale };
+  };
+  const stageCtx = (): CanvasRenderingContext2D | null => stageRef.current?.getContext('2d') ?? null;
+
+  const redrawWithPreview = () => {
+    draw(project, time, false);
+    const pts = strokeRef.current;
+    if (!pts || !selected) return;
+    const ctx = stageCtx();
+    if (!ctx) return;
+    const erasing = paintTool === 'erase-pixel';
+    drawStrokePreview(ctx, selected, time, pts, brush, erasing ? 'erase' : 'draw');
+  };
+
+  const currentFrameIndex = (layer: MotionLayer): number => (layer.paint ? paintFrameIndexAt(layer.paint, time) : 0);
+
+  /** Rasterise a filled region/gradient into a small canvas and store it as a data: URL — the common tail of fill/gradient/cel-shade. */
+  function rasterizeToFillStroke(
+    maskOrPaint: (ctx: CanvasRenderingContext2D, w: number, h: number) => void, x: number, y: number, w: number, h: number, mode: 'draw' | 'erase' = 'draw',
+  ): PaintStroke {
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w));
+    c.height = Math.max(1, Math.round(h));
+    const cctx = c.getContext('2d')!;
+    maskOrPaint(cctx, c.width, c.height);
+    const dataUrl = c.toDataURL();
+    const img = new Image();
+    img.onload = () => setImagesVersion((v) => v + 1);
+    img.src = dataUrl;
+    imagesRef.current.set(dataUrl, img);
+    return { id: newId('stroke'), brush, nodes: [], mode, fill: { dataUrl, x, y, w, h } };
+  }
+
+  const commitFillAtLayer = (layer: MotionLayer, stroke: PaintStroke) => {
+    if (!layer.paint) return;
+    const idx = currentFrameIndex(layer);
+    patchLayerById(layer.id, { paint: addStroke(layer.paint, idx, stroke) });
+  };
+  const patchLayerById = (id: string, patch: Partial<MotionLayer>) => setProject((p) => updateLayer(p, id, patch));
+
+  // ── paint pointer handlers ─────────────────────────────────────────────────
+  const onPaintPointerDown = (layer: MotionLayer, e: React.PointerEvent<HTMLCanvasElement>) => {
+    const stage = stagePointFromEvent(e);
+    const local = toLocalPaint(layer, stage.x, stage.y);
+    const pressure = e.pressure > 0 ? e.pressure : 0.5;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+
+    if (paintTool === 'brush' || paintTool === 'erase-pixel') {
+      strokeRef.current = [{ x: local.x, y: local.y, pressure }];
+      redrawWithPreview();
+      return;
+    }
+    if (paintTool === 'erase-object' && layer.paint) {
+      const idx = currentFrameIndex(layer);
+      const frame = paintFrameAt(layer.paint, time);
+      let bestId: string | null = null, bestDist = Infinity;
+      for (const s of frame.strokes) {
+        const pts = s.fill ? [{ x: s.fill.x + s.fill.w / 2, y: s.fill.y + s.fill.h / 2 }] : s.nodes;
+        for (const p of pts) {
+          const d = Math.hypot(p.x - local.x, p.y - local.y);
+          if (d < bestDist) { bestDist = d; bestId = s.id; }
+        }
+      }
+      if (bestId && bestDist < 60) patchLayerById(layer.id, { paint: removeStroke(layer.paint, idx, bestId) });
+      return;
+    }
+    if (paintTool === 'eyedropper' || paintTool === 'color-replace') {
+      const ctx = stageCtx();
+      if (!ctx) return;
+      const px = ctx.getImageData(Math.round(stage.x * stageScale()), Math.round(stage.y * stageScale()), 1, 1).data;
+      const hex = `#${[px[0], px[1], px[2]].map((v) => v!.toString(16).padStart(2, '0')).join('')}`;
+      if (paintTool === 'eyedropper') {
+        setBrush((b) => ({ ...b, color: hex }));
+      } else if (layer.paint) {
+        const to = window.prompt(`Replace ${hex} with which hex colour, everywhere in this project?`, brush.color);
+        if (to && /^#?[0-9a-f]{6}$/i.test(to)) {
+          const toHex = to.startsWith('#') ? to : `#${to}`;
+          setProject((p) => ({
+            ...p,
+            layers: p.layers.map((l) => {
+              if (l.kind !== 'paint' || !l.paint) return l;
+              return {
+                ...l,
+                paint: {
+                  ...l.paint,
+                  frames: l.paint.frames.map((f) => ({
+                    strokes: f.strokes.map((s) => (!s.fill && sameColor(s.brush.color, hex) ? { ...s, brush: { ...s.brush, color: toHex } } : s)),
+                  })),
+                },
+              };
+            }),
+          }));
+        }
+      }
+      return;
+    }
+    if (paintTool === 'fill' && layer.paint) {
+      const w = layer.w, h = layer.h;
+      const flatCtx = document.createElement('canvas');
+      flatCtx.width = w; flatCtx.height = h;
+      const fctx = flatCtx.getContext('2d')!;
+      const frame = paintFrameAt(layer.paint, time);
+      for (const s of frame.strokes) {
+        if (s.fill || s.brush.kind !== 'ink' && s.brush.kind !== 'pencil') continue;
+        const dabs = strokeToDabsLocal(s);
+        fctx.fillStyle = '#000';
+        for (const d of dabs) { fctx.globalAlpha = d.opacity; fctx.beginPath(); fctx.arc(d.x + w / 2, d.y + h / 2, d.radius, 0, Math.PI * 2); fctx.fill(); }
+      }
+      const alpha = fctx.getImageData(0, 0, w, h).data;
+      const alphaOnly = new Uint8ClampedArray(w * h);
+      for (let i = 0; i < w * h; i++) alphaOnly[i] = alpha[i * 4 + 3]!;
+      const seedX = Math.round(local.x + w / 2), seedY = Math.round(local.y + h / 2);
+      const mask = floodFillWithGapClosing(alphaOnly, w, h, seedX, seedY, { gapClosePx });
+      const stroke = rasterizeToFillStroke((cctx) => {
+        const img = cctx.createImageData(w, h);
+        const [r, g, b] = hexToRgbLocal(brush.color);
+        for (let i = 0; i < w * h; i++) if (mask[i]) { img.data[i * 4] = r; img.data[i * 4 + 1] = g; img.data[i * 4 + 2] = b; img.data[i * 4 + 3] = Math.round(brush.opacity * 255); }
+        cctx.putImageData(img, 0, 0);
+      }, -w / 2, -h / 2, w, h);
+      commitFillAtLayer(layer, stroke);
+      return;
+    }
+    if (paintTool === 'cel-shade' && layer.paint) {
+      const w = layer.w, h = layer.h;
+      const flatCtx = document.createElement('canvas');
+      flatCtx.width = w; flatCtx.height = h;
+      const fctx = flatCtx.getContext('2d')!;
+      const frame = paintFrameAt(layer.paint, time);
+      for (const s of frame.strokes) {
+        if (s.fill) { fctx.drawImage(imagesRef.current.get(s.fill.dataUrl) ?? new Image(), s.fill.x + w / 2, s.fill.y + h / 2, s.fill.w, s.fill.h); continue; }
+        const dabs = strokeToDabsLocal(s);
+        fctx.fillStyle = s.brush.color;
+        for (const d of dabs) { fctx.globalAlpha = d.opacity; fctx.beginPath(); fctx.arc(d.x + w / 2, d.y + h / 2, d.radius, 0, Math.PI * 2); fctx.fill(); }
+      }
+      const alpha = fctx.getImageData(0, 0, w, h).data;
+      const mask = new Uint8Array(w * h);
+      for (let i = 0; i < w * h; i++) mask[i] = alpha[i * 4 + 3]! > 16 ? 1 : 0;
+      const shadow = autoCelShadow(mask, w, h, { lightAngleDeg: 45, offsetPx: Math.max(4, gapClosePx * 3) });
+      const stroke = rasterizeToFillStroke((cctx) => {
+        const img = cctx.createImageData(w, h);
+        const [r, g, b] = hexToRgbLocal(brush.color);
+        for (let i = 0; i < w * h; i++) if (shadow[i]) { img.data[i * 4] = r; img.data[i * 4 + 1] = g; img.data[i * 4 + 2] = b; img.data[i * 4 + 3] = 140; }
+        cctx.putImageData(img, 0, 0);
+      }, -w / 2, -h / 2, w, h);
+      commitFillAtLayer(layer, stroke);
+      return;
+    }
+    if (paintTool === 'gradient' && layer.paint) {
+      if (gradientKind === 'mesh') {
+        const session = meshSessionRef.current;
+        const points = session && session.layerId === layer.id ? [...session.points, { x: local.x, y: local.y, color: brush.color }] : [{ x: local.x, y: local.y, color: brush.color }];
+        const strokeId = session?.layerId === layer.id ? session.strokeId : newId('stroke');
+        meshSessionRef.current = { layerId: layer.id, strokeId, points };
+        if (points.length >= 2) {
+          const w = layer.w, h = layer.h;
+          const stroke = rasterizeToFillStroke((cctx) => {
+            const img = cctx.createImageData(w, h);
+            for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+              const hex = sampleMeshLocal(points, x - w / 2, y - h / 2);
+              const [r, g, b] = hexToRgbLocal(hex);
+              const i = (y * w + x) * 4;
+              img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255;
+            }
+            cctx.putImageData(img, 0, 0);
+          }, -w / 2, -h / 2, w, h);
+          stroke.id = strokeId;
+          const idx = currentFrameIndex(layer);
+          const existing = paintFrameAt(layer.paint, time).strokes.find((s) => s.id === strokeId);
+          patchLayerById(layer.id, { paint: existing ? { ...layer.paint, frames: layer.paint.frames.map((f, i) => (i === idx ? { strokes: f.strokes.map((s) => (s.id === strokeId ? stroke : s)) } : f)) } : addStroke(layer.paint, idx, stroke) });
+        }
+        return;
+      }
+      drag.current = { kind: 'layer', id: layer.id, ox: local.x, oy: local.y, sx: e.clientX, sy: e.clientY };
+      return;
+    }
+    if (paintTool === 'lasso') {
+      strokeRef.current = [{ x: local.x, y: local.y, pressure: 1 }];
+      return;
+    }
+  };
+
+  const onPaintPointerMove = (layer: MotionLayer, e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (paintTool === 'brush' || paintTool === 'erase-pixel') {
+      if (!strokeRef.current) return;
+      const stage = stagePointFromEvent(e);
+      const local = toLocalPaint(layer, stage.x, stage.y);
+      const pressure = e.pressure > 0 ? e.pressure : 0.5;
+      const prev = strokeRef.current[strokeRef.current.length - 1]!;
+      const smoothed = stabilizePoint(prev, { x: local.x, y: local.y, pressure }, brush.stabilizer);
+      strokeRef.current.push(smoothed);
+      redrawWithPreview();
+      return;
+    }
+    if (paintTool === 'lasso' && strokeRef.current) {
+      const stage = stagePointFromEvent(e);
+      const local = toLocalPaint(layer, stage.x, stage.y);
+      strokeRef.current.push({ x: local.x, y: local.y, pressure: 1 });
+      draw(project, time, false);
+      const ctx = stageCtx();
+      if (ctx && strokeRef.current.length > 1) {
+        const v = valueAt(layer, time);
+        ctx.save();
+        ctx.translate(v.x + layer.w / 2, v.y + layer.h / 2);
+        ctx.strokeStyle = '#2ad4ff';
+        ctx.setLineDash([5, 4]);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        strokeRef.current.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+        ctx.stroke();
+        ctx.restore();
+      }
+      return;
+    }
+  };
+
+  const onPaintPointerUp = (layer: MotionLayer, e: React.PointerEvent<HTMLCanvasElement>) => {
+    if ((paintTool === 'brush' || paintTool === 'erase-pixel') && strokeRef.current && layer.paint) {
+      const points = strokeRef.current;
+      strokeRef.current = null;
+      if (points.length >= 1) {
+        // The stabilizer lags behind the raw cursor by design (see brush.ts) — left alone, a stroke would
+        // never quite reach the point where the pen actually lifted, leaving closed shapes with a visible
+        // gap at every corner. Snap the true release point on as the stroke's real last point.
+        const stage = stagePointFromEvent(e);
+        const local = toLocalPaint(layer, stage.x, stage.y);
+        const releasePressure = e.pressure > 0 ? e.pressure : points[points.length - 1]!.pressure;
+        points.push({ x: local.x, y: local.y, pressure: releasePressure });
+        const nodes = vectorizeStroke(points, 1.5);
+        const stroke: PaintStroke = { id: newId('stroke'), brush, nodes, mode: paintTool === 'erase-pixel' ? 'erase' : 'draw' };
+        const idx = currentFrameIndex(layer);
+        patchLayerById(layer.id, { paint: addStroke(layer.paint, idx, stroke) });
+      } else {
+        draw(project, time, false);
+      }
+      return;
+    }
+    if (paintTool === 'lasso') {
+      strokeRef.current = null;
+      draw(project, time, false);
+      return;
+    }
+    if (paintTool === 'gradient' && gradientKind !== 'mesh') {
+      const d = drag.current;
+      if (d && d.kind === 'layer' && layer.paint) {
+        const w = layer.w, h = layer.h;
+        const stroke = rasterizeToFillStroke((cctx) => {
+          const grad = gradientKind === 'linear'
+            ? cctx.createLinearGradient(d.ox + w / 2, d.oy + h / 2, toLocalPaint(layer, stagePointFromEvent({ clientX: 0, clientY: 0 }).x, 0).x + w / 2, d.oy + h / 2)
+            : cctx.createRadialGradient(d.ox + w / 2, d.oy + h / 2, 0, d.ox + w / 2, d.oy + h / 2, Math.max(10, Math.hypot(w, h) / 3));
+          grad.addColorStop(0, brush.color);
+          grad.addColorStop(1, 'transparent');
+          cctx.fillStyle = grad;
+          cctx.fillRect(0, 0, w, h);
+        }, -w / 2, -h / 2, w, h);
+        commitFillAtLayer(layer, stroke);
+      }
+      drag.current = null;
+      return;
+    }
+  };
+
   const onStagePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = stageRef.current;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const s = stageScale();
-    const sx = (e.clientX - rect.left) / s, sy = (e.clientY - rect.top) / s;
-    const hit = hitTestLayer(sx, sy);
+    const stage = stagePointFromEvent(e);
+    if (selected?.kind === 'paint' && selected.paint) { onPaintPointerDown(selected, e); return; }
+    const hit = hitTestLayer(stage.x, stage.y);
     setSelId(hit?.id ?? null);
     setSelMarker(null);
     if (!hit) return;
@@ -299,6 +621,10 @@ export function MotionStudio() {
     drag.current = { kind: 'layer', id: hit.id, ox: v.x, oy: v.y, sx: e.clientX, sy: e.clientY };
   };
   const onStagePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (selected?.kind === 'paint' && selected.paint && paintTool !== 'eyedropper' && paintTool !== 'fill' && paintTool !== 'cel-shade' && paintTool !== 'color-replace' && paintTool !== 'erase-object') {
+      onPaintPointerMove(selected, e);
+      return;
+    }
     const d = drag.current;
     if (!d || d.kind !== 'layer') return;
     const s = stageScale();
@@ -306,7 +632,10 @@ export function MotionStudio() {
     const ny = Math.round(d.oy + (e.clientY - d.sy) / s);
     setProject((p) => ({ ...p, layers: p.layers.map((l) => (l.id === d.id ? setKeyframe(l, time, { x: nx, y: ny }) : l)) }));
   };
-  const onStagePointerUp = () => { drag.current = null; };
+  const onStagePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (selected?.kind === 'paint' && selected.paint) { onPaintPointerUp(selected, e); return; }
+    drag.current = null;
+  };
 
   // ── timeline: keyframes ─────────────────────────────────────────────────────
   const trackWidth = () => timelineRef.current?.clientWidth ?? 600;
@@ -543,6 +872,50 @@ export function MotionStudio() {
 
       {/* Stage + properties */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
+        {selected?.kind === 'paint' && selected.paint && (
+          <PaintToolbar
+            tool={paintTool} onToolChange={setPaintTool}
+            brush={brush} onBrushChange={setBrush}
+            gapClosePx={gapClosePx} onGapCloseChange={setGapClosePx}
+            gradientKind={gradientKind} onGradientKindChange={setGradientKind}
+            alphaLock={selected.paint.alphaLock} onAlphaLockChange={(v) => patchLayer({ paint: { ...selected.paint!, alphaLock: v } })}
+            palette={project.palette} onPaletteChange={(pal) => setProject((p) => ({ ...p, palette: pal }))}
+            onAutoFlatColor={() => {
+              const w = selected.w, h = selected.h;
+              const flat = document.createElement('canvas'); flat.width = w; flat.height = h;
+              const fctx = flat.getContext('2d')!;
+              const frame = paintFrameAt(selected.paint!, time);
+              for (const s of frame.strokes) {
+                if (s.fill || (s.brush.kind !== 'ink' && s.brush.kind !== 'pencil')) continue;
+                fctx.fillStyle = '#000';
+                for (const d of strokeToDabsLocal(s)) { fctx.globalAlpha = d.opacity; fctx.beginPath(); fctx.arc(d.x + w / 2, d.y + h / 2, d.radius, 0, Math.PI * 2); fctx.fill(); }
+              }
+              const alpha = fctx.getImageData(0, 0, w, h).data;
+              const alphaOnly = new Uint8ClampedArray(w * h);
+              for (let i = 0; i < w * h; i++) alphaOnly[i] = alpha[i * 4 + 3]!;
+              const { labels, colorOf } = autoFlatColor(alphaOnly, w, h, project.palette.length ? project.palette : DEFAULT_PALETTE, { gapClosePx });
+              const backgroundLabel = labels[0]; // the region touching the canvas corner is "outside", never flat-coloured
+              const stroke = rasterizeToFillStroke((cctx) => {
+                const img = cctx.createImageData(w, h);
+                for (let i = 0; i < w * h; i++) {
+                  const label = labels[i]!;
+                  if (label < 0 || label === backgroundLabel || alphaOnly[i]! >= 16) continue; // skip the line art itself and the outside
+                  const [r, g, b] = hexToRgbLocal(colorOf[label] ?? '#cccccc');
+                  img.data[i * 4] = r; img.data[i * 4 + 1] = g; img.data[i * 4 + 2] = b; img.data[i * 4 + 3] = 255;
+                }
+                cctx.putImageData(img, 0, 0);
+              }, -w / 2, -h / 2, w, h);
+              commitFillAtLayer(selected, stroke);
+            }}
+            onClearFrame={() => {
+              const idx = currentFrameIndex(selected);
+              setProject((p) => ({
+                ...p,
+                layers: p.layers.map((l) => (l.id === selected.id && l.paint ? { ...l, paint: { ...l.paint, frames: l.paint.frames.map((f, i) => (i === idx ? { strokes: [] } : f)) } } : l)),
+              }));
+            }}
+          />
+        )}
         <div className="flex flex-1 items-center justify-center overflow-auto p-4">
           <canvas
             ref={stageRef}
@@ -552,7 +925,7 @@ export function MotionStudio() {
             onPointerMove={onStagePointerMove}
             onPointerUp={onStagePointerUp}
             className="shrink-0 touch-none rounded-lg border-2 shadow-lg"
-            style={{ width: project.width * stageScaleDisplay, height: project.height * stageScaleDisplay, borderColor: 'var(--line)' }}
+            style={{ width: project.width * stageScaleDisplay, height: project.height * stageScaleDisplay, borderColor: 'var(--line)', cursor: selected?.kind === 'paint' ? 'crosshair' : undefined }}
           />
         </div>
 
@@ -564,10 +937,15 @@ export function MotionStudio() {
             <p className="text-[11.5px] leading-[1.6]" style={{ color: 'var(--ink-faint)' }}>Pick a layer on the stage, or add one. Drag to move; the timeline below keys its position at the playhead. Camera previews during Play.</p>
           ) : (
             <LayerPanel
-              layer={selected} time={time} selKf={selKf}
+              layer={selected} time={time} selKf={selKf} groups={project.groups}
               onPatchLayer={patchLayer} onKeyNow={keyNow} onPoseNow={poseNow}
               onDeleteLayer={onDeleteLayer} onDeleteKeyframe={onDeleteKeyframe}
               onSetKfEasing={(easing) => setProject((p) => ({ ...p, layers: p.layers.map((l) => (l.id === selId ? { ...l, keyframes: l.keyframes.map((k) => (k.id === selKf ? { ...k, easing } : k)) } : l)) }))}
+              onNewGroup={() => setProject((p) => newGroup(p))}
+              onInsertFrame={() => selected.paint && patchLayer({ paint: insertFrame(selected.paint, currentFrameIndex(selected)) })}
+              onDuplicateFrame={() => selected.paint && patchLayer({ paint: duplicateFrame(selected.paint, currentFrameIndex(selected)) })}
+              onDeleteFrame={() => selected.paint && patchLayer({ paint: deleteFrame(selected.paint, currentFrameIndex(selected)) })}
+              onFrameFps={(fps) => selected.paint && patchLayer({ paint: { ...selected.paint, fps: Math.max(1, fps) } })}
             />
           )}
         </div>
@@ -583,9 +961,21 @@ export function MotionStudio() {
             onion skin
           </label>
           {project.onionSkin.enabled && (
-            <input type="range" min={0.1} max={0.8} step={0.05} value={project.onionSkin.opacity}
-              onChange={(e) => setProject((p) => ({ ...p, onionSkin: { ...p.onionSkin, opacity: Number(e.target.value) } }))}
-              className="w-20" aria-label="Onion skin opacity" />
+            <div className="relative">
+              <Btn onClick={() => setOnionOpen((x) => !x)} small title="Onion-skin settings"><SkillIcon name="layers" size={10} /> settings</Btn>
+              {onionOpen && (
+                <div className="absolute bottom-full left-0 z-30 mb-1 w-56 rounded-lg border p-2.5 shadow-lg" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <NumField label="frames before" value={project.onionSkin.beforeCount} min={0} max={5} onChange={(v) => setProject((p) => ({ ...p, onionSkin: { ...p.onionSkin, beforeCount: Math.max(0, Math.min(5, Math.round(v))) } }))} />
+                    <NumField label="frames after" value={project.onionSkin.afterCount} min={0} max={5} onChange={(v) => setProject((p) => ({ ...p, onionSkin: { ...p.onionSkin, afterCount: Math.max(0, Math.min(5, Math.round(v))) } }))} />
+                  </div>
+                  <label className="mt-1.5 flex items-center gap-2 text-[10.5px]" style={{ color: 'var(--ink-dim)' }}>before <input type="color" value={project.onionSkin.beforeColor} onChange={(e) => setProject((p) => ({ ...p, onionSkin: { ...p.onionSkin, beforeColor: e.target.value } }))} className="h-6 w-8 rounded border" style={{ borderColor: 'var(--line)' }} /></label>
+                  <label className="mt-1 flex items-center gap-2 text-[10.5px]" style={{ color: 'var(--ink-dim)' }}>after <input type="color" value={project.onionSkin.afterColor} onChange={(e) => setProject((p) => ({ ...p, onionSkin: { ...p.onionSkin, afterColor: e.target.value } }))} className="h-6 w-8 rounded border" style={{ borderColor: 'var(--line)' }} /></label>
+                  <label className="mt-1.5 flex items-center gap-2 text-[10.5px]" style={{ color: 'var(--ink-dim)' }}>opacity <input type="range" min={0.1} max={0.8} step={0.05} value={project.onionSkin.opacity} onChange={(e) => setProject((p) => ({ ...p, onionSkin: { ...p.onionSkin, opacity: Number(e.target.value) } }))} className="flex-1" /></label>
+                  <label className="mt-1 flex items-center gap-2 text-[10.5px]" style={{ color: 'var(--ink-dim)' }}>step (s) <input type="number" step={0.01} min={0.01} value={project.onionSkin.frameStep} onChange={(e) => setProject((p) => ({ ...p, onionSkin: { ...p.onionSkin, frameStep: Math.max(0.01, Number(e.target.value) || 0.05) } }))} className={`${inputCls} w-16`} style={inputStyle} /></label>
+                </div>
+              )}
+            </div>
           )}
           <label className="press mono ml-auto flex cursor-pointer items-center gap-1 text-[10.5px]" style={{ color: 'var(--ink-dim)' }}>
             <SkillIcon name="music" size={12} /> {project.audio ? project.audio.name.slice(0, 18) : 'load audio'}
@@ -637,18 +1027,27 @@ export function MotionStudio() {
           )}
 
           <div className="relative mt-1 flex flex-col gap-0.5">
-            {project.layers.map((l) => (
-              <div key={l.id} className="flex items-center gap-2">
-                <button type="button" onClick={() => { setSelId(l.id); setSelMarker(null); }} className="mono w-20 shrink-0 truncate text-left text-[10.5px]" style={{ color: l.id === selId ? 'var(--accent)' : 'var(--ink-dim)' }}>{l.name}</button>
-                <div className="relative flex-1 cursor-copy rounded" style={{ height: TRACK_H, background: l.id === selId ? 'color-mix(in oklab, var(--accent) 10%, var(--surface))' : 'var(--surface)' }} onDoubleClick={(e) => onTrackDoubleClick(e, l)}>
-                  {l.keyframes.map((k) => (
-                    <div key={k.id} onPointerDown={(e) => onKeyDiamondDown(e, l.id, k.id)}
-                      className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 cursor-grab"
-                      style={{ left: `${(k.t / project.duration) * 100}%`, background: k.id === selKf ? 'var(--accent)' : 'var(--ink)', border: '1px solid var(--panel)' }}
-                      title={`${k.t.toFixed(2)}s · ${k.easing}`} />
+            {project.groups.map((g) => {
+              const members = project.layers.filter((l) => l.groupId === g.id);
+              if (members.length === 0) return null;
+              return (
+                <div key={g.id}>
+                  <div className="flex items-center gap-1.5 py-0.5">
+                    <button type="button" onClick={() => setProject((p) => updateGroup(p, g.id, { collapsed: !g.collapsed }))} className="mono shrink-0 text-[9px]" style={{ color: 'var(--ink-faint)' }}>{g.collapsed ? '▶' : '▼'}</button>
+                    <input value={g.name} onChange={(e) => setProject((p) => updateGroup(p, g.id, { name: e.target.value }))} className="mono w-20 shrink-0 truncate bg-transparent text-[10.5px] outline-none" style={{ color: 'var(--ink)' }} />
+                    <input type="range" min={0} max={1} step={0.05} value={g.opacity} onChange={(e) => setProject((p) => updateGroup(p, g.id, { opacity: Number(e.target.value) }))} className="h-3 w-12" title="Folder opacity" />
+                    <button type="button" onClick={() => setProject((p) => removeGroup(p, g.id))} className="mono shrink-0 text-[9px]" style={{ color: 'var(--color-rose)' }}>✕</button>
+                  </div>
+                  {!g.collapsed && members.map((l) => (
+                    <LayerTrackRow key={l.id} layer={l} project={project} selId={selId} selKf={selKf} time={time} indent onSelect={() => { setSelId(l.id); setSelMarker(null); }}
+                      onToggleVisible={() => patchLayerById(l.id, { visible: !l.visible })} onTrackDoubleClick={onTrackDoubleClick} onKeyDiamondDown={onKeyDiamondDown} seek={seek} />
                   ))}
                 </div>
-              </div>
+              );
+            })}
+            {project.layers.filter((l) => !l.groupId).map((l) => (
+              <LayerTrackRow key={l.id} layer={l} project={project} selId={selId} selKf={selKf} time={time} onSelect={() => { setSelId(l.id); setSelMarker(null); }}
+                onToggleVisible={() => patchLayerById(l.id, { visible: !l.visible })} onTrackDoubleClick={onTrackDoubleClick} onKeyDiamondDown={onKeyDiamondDown} seek={seek} />
             ))}
           </div>
           <div className="pointer-events-none absolute top-0 bottom-0 w-px" style={{ left: `calc(5rem + ${(time / project.duration) * 100}% * (100% - 5rem) / 100%)`, background: 'var(--accent)' }} />
@@ -658,24 +1057,103 @@ export function MotionStudio() {
   );
 }
 
+// ── one row of the layer list / timeline track ──────────────────────────────────
+
+function LayerTrackRow({ layer, project, selId, selKf, time, indent, onSelect, onToggleVisible, onTrackDoubleClick, onKeyDiamondDown, seek }: {
+  layer: MotionLayer; project: MotionProject; selId: string | null; selKf: string | null; time: number; indent?: boolean;
+  onSelect: () => void;
+  onToggleVisible: () => void;
+  onTrackDoubleClick: (e: React.MouseEvent, layer: MotionLayer) => void;
+  onKeyDiamondDown: (e: React.PointerEvent, layerId: string, kfId: string) => void;
+  seek: (t: number) => void;
+}) {
+  return (
+    <div className={`flex items-center gap-2 ${indent ? 'pl-4' : ''}`}>
+      <button type="button" onClick={onToggleVisible} className="mono shrink-0 text-[10px]" style={{ color: layer.visible ? 'var(--ink-dim)' : 'var(--ink-faint)' }} title="Toggle visibility">
+        {layer.visible ? '◉' : '○'}
+      </button>
+      <button type="button" onClick={onSelect} className="mono w-16 shrink-0 truncate text-left text-[10.5px]" style={{ color: layer.id === selId ? 'var(--accent)' : 'var(--ink-dim)', opacity: layer.visible ? 1 : 0.5 }}>{layer.name}</button>
+      {layer.kind === 'paint' && layer.paint ? (
+        <div className="relative flex flex-1 gap-px overflow-hidden rounded" style={{ height: TRACK_H, background: layer.id === selId ? 'color-mix(in oklab, var(--accent) 10%, var(--surface))' : 'var(--surface)' }}>
+          {layer.paint.frames.map((f, i) => (
+            <button key={i} type="button" onClick={() => seek(i / layer.paint!.fps + 1e-4)}
+              className="press shrink-0"
+              style={{
+                width: `${100 / layer.paint!.frames.length}%`,
+                background: f.strokes.length ? 'color-mix(in oklab, var(--accent) 35%, var(--surface))' : 'transparent',
+                outline: i === paintFrameIndexAt(layer.paint!, time) ? '2px solid var(--accent)' : 'none',
+                outlineOffset: -1,
+                borderRight: '1px solid var(--panel)',
+              }}
+              title={`frame ${i + 1}${f.strokes.length ? ` (${f.strokes.length} strokes)` : ' (empty)'}`} />
+          ))}
+        </div>
+      ) : (
+        <div className="relative flex-1 cursor-copy rounded" style={{ height: TRACK_H, background: layer.id === selId ? 'color-mix(in oklab, var(--accent) 10%, var(--surface))' : 'var(--surface)' }} onDoubleClick={(e) => onTrackDoubleClick(e, layer)}>
+          {layer.keyframes.map((k) => (
+            <div key={k.id} onPointerDown={(e) => onKeyDiamondDown(e, layer.id, k.id)}
+              className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 cursor-grab"
+              style={{ left: `${(k.t / project.duration) * 100}%`, background: k.id === selKf ? 'var(--accent)' : 'var(--ink)', border: '1px solid var(--panel)' }}
+              title={`${k.t.toFixed(2)}s · ${k.easing}`} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── properties panel for a layer ───────────────────────────────────────────────
 
-function LayerPanel({ layer, time, selKf, onPatchLayer, onKeyNow, onPoseNow, onDeleteLayer, onDeleteKeyframe, onSetKfEasing }: {
-  layer: MotionLayer; time: number; selKf: string | null;
+function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPoseNow, onDeleteLayer, onDeleteKeyframe, onSetKfEasing, onNewGroup, onInsertFrame, onDuplicateFrame, onDeleteFrame, onFrameFps }: {
+  layer: MotionLayer; time: number; selKf: string | null; groups: LayerGroup[];
   onPatchLayer: (patch: Partial<MotionLayer>) => void;
   onKeyNow: (props: Partial<Omit<Keyframe, 'id' | 't'>>) => void;
   onPoseNow: (boneId: string, angle: number) => void;
   onDeleteLayer: () => void;
   onDeleteKeyframe: () => void;
   onSetKfEasing: (easing: Easing) => void;
+  onNewGroup: () => void;
+  onInsertFrame: () => void;
+  onDuplicateFrame: () => void;
+  onDeleteFrame: () => void;
+  onFrameFps: (fps: number) => void;
 }) {
   const v = valueAt(layer, time);
   const kf = layer.keyframes.find((k) => k.id === selKf) ?? null;
   const currentPose = layer.rig ? poseAt(layer.rig, layer.keyframes, time, easeFn(layer.keyframes[0]?.easing ?? 'linear')) : {};
+  const frameIdx = layer.paint ? paintFrameIndexAt(layer.paint, time) : 0;
 
   return (
     <div className="flex flex-col gap-2.5">
       <input value={layer.name} onChange={(e) => onPatchLayer({ name: e.target.value })} aria-label="Layer name" className={`${inputCls} w-full font-semibold`} style={inputStyle} />
+
+      <div className="flex items-center gap-2 text-[10.5px]" style={{ color: 'var(--ink-dim)' }}>
+        <label className="mono flex items-center gap-1"><input type="checkbox" checked={layer.visible} onChange={(e) => onPatchLayer({ visible: e.target.checked })} /> visible</label>
+        <label className="mono flex items-center gap-1" title="Only shows where the layer directly beneath it has coverage"><input type="checkbox" checked={layer.clipToBelow} onChange={(e) => onPatchLayer({ clipToBelow: e.target.checked })} /> clip to below</label>
+      </div>
+      <label className="flex items-center gap-2 text-[11px]" style={{ color: 'var(--ink-dim)' }}>
+        folder
+        <select value={layer.groupId ?? ''} onChange={(e) => (e.target.value === '__new__' ? onNewGroup() : onPatchLayer({ groupId: e.target.value || null }))} className={`${inputCls} flex-1`} style={{ ...inputStyle, background: 'var(--panel)' }}>
+          <option value="">— none —</option>
+          {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+          <option value="__new__">+ new folder…</option>
+        </select>
+      </label>
+
+      {layer.kind === 'paint' && layer.paint && (
+        <div className="border-t pt-2.5" style={{ borderColor: 'var(--line)' }}>
+          <p className="mono mb-1.5 text-[10px] uppercase tracking-wide" style={{ color: 'var(--ink-faint)' }}>frame {frameIdx + 1} / {layer.paint.frames.length}</p>
+          <div className="flex flex-wrap gap-1.5">
+            <Btn onClick={onInsertFrame} small title="Insert a blank frame after this one"><SkillIcon name="doc" size={11} /> + Frame</Btn>
+            <Btn onClick={onDuplicateFrame} small title="Duplicate this frame"><SkillIcon name="layers" size={11} /> Duplicate</Btn>
+            <Btn onClick={onDeleteFrame} small title="Delete this frame"><SkillIcon name="bug" size={11} /> Delete</Btn>
+          </div>
+          <label className="mono mt-1.5 flex items-center gap-2 text-[10.5px]" style={{ color: 'var(--ink-dim)' }}>
+            fps
+            <input type="number" min={1} max={60} value={layer.paint.fps} onChange={(e) => onFrameFps(Number(e.target.value) || 12)} className={`${inputCls} w-16`} style={inputStyle} />
+          </label>
+        </div>
+      )}
 
       {layer.kind === 'text' && <input value={layer.text} onChange={(e) => onPatchLayer({ text: e.target.value })} aria-label="Text content" className={`${inputCls} w-full`} style={inputStyle} />}
       {layer.kind === 'image' && (
