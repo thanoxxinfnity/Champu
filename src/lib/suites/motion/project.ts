@@ -1,21 +1,39 @@
 /**
- * Motion Studio: a layers-and-keyframes timeline for motion graphics.
+ * Motion Studio: a layers-and-keyframes timeline for motion graphics, a virtual camera, a particle/VFX
+ * engine and a stickman bone rig on top of it.
  *
- * This is the pure part — the project shape, the interpolation math, and three exporters (CSS, GSAP,
- * a standalone HTML page). It renders nothing itself: the React component reads `valueAt()` every frame
- * to draw the stage, and the same function is what the exporters are checked against.
+ * This file is the pure part — the project shape, the interpolation math, and three code exporters (CSS,
+ * GSAP, a standalone HTML page). It renders nothing itself: render.ts reads `valueAt()` (and the sibling
+ * `*At()` functions in camera.ts/particles.ts/rig.ts) every frame to draw the canvas stage, live or for
+ * GIF/video export, and the same functions are what the exporters are checked against.
  *
- * There is no video render here on purpose — Chomugiri tried a real HTML→video pipeline once (v3.40)
- * and removed it the next day in favour of motion *guidance* (v3.41, see suites/web/motion.ts). This
- * keeps that boundary: the deliverable is motion *code* (CSS, GSAP, or a page that plays itself), which
- * a person drops into their own project, not a rendered file.
+ * Earlier note, for the record: Chomugiri had removed HTML→video rendering once (v3.40 → v3.41, see
+ * suites/web/motion.ts) in favour of motion *guidance* only. The GIF/MP4 export added for the VFX/rig
+ * upgrade (exportMedia.ts) is a deliberate, explicit reversal of that, asked for directly — it renders
+ * real pixel frames (particles, blend modes, camera shake) that cannot be expressed as portable CSS/GSAP,
+ * so it is a different deliverable from the three code exporters below, not a replacement for them.
  */
 import type { ZipEntry } from '../../zip.ts';
+import type { Easing } from './easing.ts';
+import { easeFn } from './easing.ts';
+import type { CameraKeyframe, ImpactFrame, ShakeEvent, SpeedRamp } from './camera.ts';
+import { defaultCamera } from './camera.ts';
+import type { ParticleConfig } from './particles.ts';
+import { newParticleConfig } from './particles.ts';
+import type { RigConfig } from './rig.ts';
+import { newRig } from './rig.ts';
+import type { AudioTrack } from './audio.ts';
 
-export type Easing = 'linear' | 'ease' | 'easeIn' | 'easeOut' | 'easeInOut' | 'back' | 'bounce';
-export type LayerKind = 'text' | 'rect' | 'circle' | 'image';
+export type { Easing } from './easing.ts';
+export { EASINGS, easeFn } from './easing.ts';
+export type { CameraKeyframe, ImpactFrame, ShakeEvent, SpeedRamp } from './camera.ts';
+export type { ParticleConfig, ParticlePreset } from './particles.ts';
+export type { BoneDef, RigConfig } from './rig.ts';
+export type { AudioTrack } from './audio.ts';
 
-export const EASINGS: Easing[] = ['linear', 'ease', 'easeIn', 'easeOut', 'easeInOut', 'back', 'bounce'];
+export type LayerKind = 'text' | 'rect' | 'circle' | 'image' | 'particles' | 'rig';
+export type BlendMode = 'normal' | 'add' | 'multiply' | 'screen';
+export const BLEND_MODES: BlendMode[] = ['normal', 'add', 'multiply', 'screen'];
 
 export interface Keyframe {
   id: string;
@@ -28,6 +46,8 @@ export interface Keyframe {
   opacity: number;
   /** Eases the segment that leaves this keyframe, toward the next one. */
   easing: Easing;
+  /** Only meaningful on a 'rig' layer: boneId → angle in degrees at this instant (see rig.ts). */
+  pose?: Record<string, number>;
 }
 
 export interface MotionLayer {
@@ -43,6 +63,12 @@ export interface MotionLayer {
   h: number;
   /** 'image' source — a data: URL, so a project is one portable JSON blob. */
   src?: string;
+  /** How this layer composites onto the ones under it. */
+  blendMode: BlendMode;
+  /** Only present when kind === 'particles'. */
+  particles?: ParticleConfig;
+  /** Only present when kind === 'rig'. */
+  rig?: RigConfig;
   /** Sorted by `t`; never empty — a new layer gets one keyframe at t=0. */
   keyframes: Keyframe[];
 }
@@ -54,6 +80,13 @@ export interface MotionProject {
   duration: number;
   background: string;
   layers: MotionLayer[];
+  /** Pan/zoom/rotate, keyframed the same way a layer is. Sorted by t; never empty. */
+  camera: CameraKeyframe[];
+  shakes: ShakeEvent[];
+  impacts: ImpactFrame[];
+  speedRamps: SpeedRamp[];
+  onionSkin: { enabled: boolean; opacity: number };
+  audio?: AudioTrack;
 }
 
 export const STAGE_PRESETS: Array<{ label: string; w: number; h: number }> = [
@@ -67,7 +100,37 @@ export function newId(prefix: string): string {
 }
 
 export function emptyProject(): MotionProject {
-  return { title: 'My motion', width: 960, height: 540, duration: 4, background: '#111318', layers: [] };
+  return {
+    title: 'My motion', width: 960, height: 540, duration: 4, background: '#111318', layers: [],
+    camera: defaultCamera(), shakes: [], impacts: [], speedRamps: [],
+    onionSkin: { enabled: false, opacity: 0.35 },
+  };
+}
+
+/**
+ * Fill in anything missing from a project saved before this field existed — every field above `layers`
+ * is newer than the first shipped version, so JSON loaded from storage may be missing any of them (the
+ * input is `unknown`, not `Partial<MotionProject>`, because this is exactly the system boundary where
+ * trusting the compile-time type would be wrong: the data came from IndexedDB, not from this module).
+ */
+export function normalizeProject(raw: unknown): MotionProject {
+  const p = (raw ?? {}) as Record<string, unknown>;
+  const rawLayers = Array.isArray(p.layers) ? (p.layers as Array<Record<string, unknown>>) : [];
+  const camera = Array.isArray(p.camera) ? (p.camera as CameraKeyframe[]) : [];
+  return {
+    title: typeof p.title === 'string' ? p.title : 'My motion',
+    width: typeof p.width === 'number' ? p.width : 960,
+    height: typeof p.height === 'number' ? p.height : 540,
+    duration: typeof p.duration === 'number' ? p.duration : 4,
+    background: typeof p.background === 'string' ? p.background : '#111318',
+    layers: rawLayers.map((l) => ({ blendMode: 'normal' as BlendMode, ...l }) as MotionLayer),
+    camera: camera.length > 0 ? camera : defaultCamera(),
+    shakes: Array.isArray(p.shakes) ? (p.shakes as ShakeEvent[]) : [],
+    impacts: Array.isArray(p.impacts) ? (p.impacts as ImpactFrame[]) : [],
+    speedRamps: Array.isArray(p.speedRamps) ? (p.speedRamps as SpeedRamp[]) : [],
+    onionSkin: (p.onionSkin as { enabled: boolean; opacity: number } | undefined) ?? { enabled: false, opacity: 0.35 },
+    audio: p.audio as AudioTrack | undefined,
+  };
 }
 
 const BASE_KEYFRAME: Omit<Keyframe, 'id' | 't'> = { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, easing: 'easeOut' };
@@ -77,6 +140,8 @@ const KIND_DEFAULT: Record<LayerKind, { w: number; h: number; color: string; tex
   rect: { w: 140, h: 90, color: '#5b8cff', text: '' },
   circle: { w: 110, h: 110, color: '#ff8a5c', text: '' },
   image: { w: 200, h: 200, color: '#ffffff', text: '' },
+  particles: { w: 160, h: 160, color: '#8a5cff', text: '' },
+  rig: { w: 120, h: 180, color: '#f4f5f7', text: '' },
 };
 
 export function newLayer(kind: LayerKind, project: MotionProject, name?: string): MotionLayer {
@@ -91,6 +156,9 @@ export function newLayer(kind: LayerKind, project: MotionProject, name?: string)
     color: d.color,
     w: d.w,
     h: d.h,
+    blendMode: 'normal',
+    ...(kind === 'particles' ? { particles: newParticleConfig('aura', Math.floor(Math.random() * 1e6)) } : {}),
+    ...(kind === 'rig' ? { rig: newRig() } : {}),
     keyframes: [{ ...BASE_KEYFRAME, id: newId('kf'), t: 0, x: cx, y: cy, easing: 'easeOut' }],
   };
 }
@@ -127,29 +195,6 @@ export function moveKeyframe(layer: MotionLayer, keyframeId: string, t: number):
   if (!kf) return layer;
   const keyframes = layer.keyframes.filter((k) => k.id !== keyframeId).concat({ ...kf, t: Math.max(0, t) }).sort((a, b) => a.t - b.t);
   return { ...layer, keyframes };
-}
-
-// ── easing ───────────────────────────────────────────────────────────────────
-
-/** 0..1 in, 0..1 out. The same curve names the CSS and GSAP exporters map to their own syntax. */
-export function easeFn(name: Easing): (p: number) => number {
-  switch (name) {
-    case 'linear': return (p) => p;
-    case 'easeIn': return (p) => p * p * p;
-    case 'easeOut': return (p) => 1 - (1 - p) ** 3;
-    case 'easeInOut': return (p) => (p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2);
-    case 'back': return (p) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * (p - 1) ** 3 + c1 * (p - 1) ** 2; };
-    case 'bounce': return bounceOut;
-    case 'ease':
-    default: return (p) => p * p * (3 - 2 * p); // smoothstep: a reasonable stand-in for CSS's default "ease"
-  }
-}
-function bounceOut(p: number): number {
-  const n1 = 7.5625, d1 = 2.75;
-  if (p < 1 / d1) return n1 * p * p;
-  if (p < 2 / d1) return n1 * (p -= 1.5 / d1) * p + 0.75;
-  if (p < 2.5 / d1) return n1 * (p -= 2.25 / d1) * p + 0.9375;
-  return n1 * (p -= 2.625 / d1) * p + 0.984375;
 }
 
 const NUMERIC_KEYS = ['x', 'y', 'scale', 'rotation', 'opacity'] as const;
@@ -200,11 +245,16 @@ function layerBaseCss(layer: MotionLayer, className: string): string {
   return `.${className}{position:absolute;left:0;top:0;width:${layer.w}px;height:${layer.h}px;${fill}${shape}${font}transform-origin:center;will-change:transform,opacity;}`;
 }
 
+/** Layers the CSS/GSAP/HTML code exporters can represent — a canvas-only particle pool or bone rig has no portable DOM equivalent. */
+function portableLayers(project: MotionProject): MotionLayer[] {
+  return project.layers.filter((l) => l.kind !== 'particles' && l.kind !== 'rig');
+}
+
 /** One @keyframes block per layer, with a timing-function set per stop so each segment keeps its own ease. */
 export function exportCss(project: MotionProject): string {
   const taken = new Set<string>();
   const parts: string[] = [`.motion-stage{position:relative;width:${project.width}px;height:${project.height}px;background:${project.background};overflow:hidden;}`];
-  for (const layer of project.layers) {
+  for (const layer of portableLayers(project)) {
     const cls = slug(layer.name, taken);
     parts.push(layerBaseCss(layer, cls));
     const stops = layer.keyframes.map((k) => {
@@ -223,7 +273,7 @@ function escHtml(s: string): string {
 
 /** The elements the CSS/standalone exports both need: one tagged div per layer. */
 function layerElements(project: MotionProject, classesOf: (l: MotionLayer) => string): string {
-  return project.layers
+  return portableLayers(project)
     .map((l) => {
       const cls = classesOf(l);
       if (l.kind === 'text') return `  <div class="${cls}">${escHtml(l.text)}</div>`;
@@ -239,7 +289,7 @@ export function exportGsap(project: MotionProject): string {
   const selectors = new Map<string, string>();
   for (const l of project.layers) selectors.set(l.id, `#${slug(l.name, taken)}`);
   const lines: string[] = [`const tl = gsap.timeline({ repeat: -1 });`];
-  for (const layer of project.layers) {
+  for (const layer of portableLayers(project)) {
     const sel = selectors.get(layer.id)!;
     const kfs = layer.keyframes;
     if (kfs.length === 0) continue;

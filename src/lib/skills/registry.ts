@@ -730,6 +730,34 @@ Reply with ONE JSON object and nothing else:
 
 The template is the whole value of the skill. Make it specific and prescriptive — a vague template produces vague output.`,
   },
+  {
+    command: 'fight-vfx',
+    name: 'Fight scene VFX',
+    description: 'Plan a JJK-style action beat as a concrete Motion Studio recipe — rig pose, VFX preset, camera, impact timing.',
+    suite: 'motion',
+    lane: 'A',
+    icon: 'film',
+    argHint: '<the beat — e.g. "a cursed-energy punch" or "a sword clash with a dodge">',
+    template: `Choreograph this beat for Motion Studio's Stick Rig + VFX + camera tools: {{input}}
+
+Motion Studio has: a stick-figure bone rig (angle per bone, keyframed, plus an optional "phys" toggle per
+bone for gravity/momentum secondary motion during Play); five particle presets — Energy Aura, Fire,
+Electric, Explosion, Cursed Energy — each with spawn rate, lifespan, speed, size, a colour-start/colour-end
+fade; a virtual camera with keyframed pan/zoom/rotate; screen-shake bursts (magnitude, duration); 1-2 frame
+impact flashes (white flash or black-and-white); and speed-ramp regions (a time range at a chosen rate, for
+slow-mo build-up or a fast snap).
+
+Do not write code or touch any file — this project is a hand-built scene, not a generated one. Output a
+short shot plan the user enters directly into the UI:
+1. A one-line read of the beat (what sells it — anticipation, a held breath, a snap release).
+2. A timeline, in seconds, as a table: time | what happens | which tool | exact values (bone + angle, or
+   VFX preset + colours, or camera pan/zoom/rotate, or shake magnitude/duration, or impact style/duration,
+   or speed-ramp range/rate).
+3. The 1-2 beats that matter most — call them out so the user spends their polish time there, not evenly
+   across everything.
+
+Keep it to what the UI can actually do today; do not invent features it does not have.`,
+  },
 ];
 
 // ── Matching & expansion ────────────────────────────────────────────────────
