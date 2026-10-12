@@ -348,7 +348,7 @@ function drawRig(ctx: CanvasRenderingContext2D, layer: MotionLayer, t: number, o
   const rig = layer.rig!;
   const physics = opts.physicsPose?.get(layer.id);
   const angles = physics ?? poseAt(rig, layer.keyframes, t, easeFn(layer.keyframes[0]?.easing ?? 'linear'));
-  const pose: BonePose[] = computeRigPose(rig, angles);
+  const pose: BonePose[] = computeRigPose(rig, angles, t, rig.detachments ?? []);
   // drawLayerShape has already translated/rotated/scaled to the layer's own centre — the rig's root
   // bones start at an offset from that centre, same as any other shape drawn inside this local space.
   ctx.save();

@@ -50,7 +50,8 @@ import {
   type SpeedRamp,
 } from '@/lib/suites/motion/camera';
 import { PARTICLE_PRESETS, newParticleConfig, type ParticlePreset } from '@/lib/suites/motion/particles';
-import { newRig, poseAt, stepPhysicsBone, type PhysicsState } from '@/lib/suites/motion/rig';
+import { computeRigPose, newRig, poseAt, stepPhysicsBone, stepRagdollAll, type DetachEvent, type PhysicsState } from '@/lib/suites/motion/rig';
+import { generateWalkCycle, newGaitConfig, type GaitMode } from '@/lib/suites/motion/walkcycle';
 import { drawFrame, drawStrokePreview, groupOpacityOf } from '@/lib/suites/motion/render';
 import { pickVideoCodec, renderGif, renderVideo } from '@/lib/suites/motion/exportMedia';
 import { peaksFromSamples, mixChannelsDown, type WaveformBucket } from '@/lib/suites/motion/audio';
@@ -212,6 +213,17 @@ export function MotionStudio() {
   const stepAllPhysics = useCallback((proj: MotionProject, dt: number) => {
     for (const layer of proj.layers) {
       if (layer.kind !== 'rig' || !layer.rig) continue;
+      if (layer.rig.ragdoll) {
+        const base = poseNowFor(layer, timeRef.current);
+        const prevMap = physicsRef.current.get(layer.id);
+        const prevObj: Record<string, PhysicsState> = {};
+        if (prevMap) for (const [id, st] of prevMap) prevObj[id] = st;
+        const next = stepRagdollAll(layer.rig, prevObj, base, dt);
+        const states = new Map<string, PhysicsState>();
+        for (const id of Object.keys(next)) states.set(id, next[id]!);
+        physicsRef.current.set(layer.id, states);
+        continue;
+      }
       const physicsBones = layer.rig.bones.filter((b) => b.physics);
       if (physicsBones.length === 0) { physicsRef.current.delete(layer.id); continue; }
       let states = physicsRef.current.get(layer.id);
@@ -323,6 +335,43 @@ export function MotionStudio() {
     keyNow({ pose: { ...current, [boneId]: angle } });
   };
   const onDeleteLayer = () => { if (!selId) return; setProject((p) => removeLayer(p, selId)); setSelId(null); };
+
+  /** Tiles a procedural walk/run cycle from the playhead to the end of the project, as ordinary pose keyframes (no different from a human having posed them). */
+  const onGenerateGait = (mode: GaitMode) => {
+    if (!selected?.rig) return;
+    const rig = selected.rig;
+    const cycleDuration = newGaitConfig(mode).cycleDuration;
+    let layer = selected;
+    let cycleStart = time;
+    while (cycleStart < project.duration) {
+      for (const frame of generateWalkCycle(rig, mode, cycleDuration, 10)) {
+        const t = cycleStart + frame.t;
+        if (t > project.duration) break;
+        layer = setKeyframe(layer, t, { pose: frame.pose });
+      }
+      cycleStart += cycleDuration;
+    }
+    patchLayer({ keyframes: layer.keyframes });
+  };
+
+  /** Breaks a bone (and its subtree) off the rig at the playhead — it freezes its current world position/angle and flies off under gravity from here on, independent of the rest of the rig (see DetachEvent in rig.ts). */
+  const onDetachBone = (boneId: string) => {
+    if (!selected?.rig) return;
+    const rig = selected.rig;
+    const angles = poseNowFor(selected, time);
+    const pose = computeRigPose(rig, angles, time, rig.detachments ?? []);
+    const bonePose = pose.find((p) => p.id === boneId);
+    if (!bonePose) return;
+    const dirRad = (bonePose.worldAngle * Math.PI) / 180;
+    const event: DetachEvent = {
+      id: `detach_${Date.now().toString(36)}`,
+      boneId, t: time,
+      ax: bonePose.x, ay: bonePose.y, originAngle: bonePose.worldAngle,
+      vx: Math.cos(dirRad) * 180, vy: Math.sin(dirRad) * 180 - 120,
+      angularVelocity: (Math.random() - 0.5) * 240,
+    };
+    patchLayer({ rig: { ...rig, detachments: [...(rig.detachments ?? []), event] } });
+  };
 
   // ── dragging a layer on the stage (camera is neutral while editing — see render.ts) ─────────────────
   const stageScale = () => {
@@ -971,6 +1020,8 @@ export function MotionStudio() {
               onDuplicateFrame={() => selected.paint && patchLayer({ paint: duplicateFrame(selected.paint, currentFrameIndex(selected)) })}
               onDeleteFrame={() => selected.paint && patchLayer({ paint: deleteFrame(selected.paint, currentFrameIndex(selected)) })}
               onFrameFps={(fps) => selected.paint && patchLayer({ paint: { ...selected.paint, fps: Math.max(1, fps) } })}
+              onGenerateGait={onGenerateGait}
+              onDetachBone={onDetachBone}
             />
           )}
         </div>
@@ -1136,7 +1187,7 @@ function LayerTrackRow({ layer, project, selId, selKf, time, indent, onSelect, o
 
 // ── properties panel for a layer ───────────────────────────────────────────────
 
-function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPoseNow, onDeleteLayer, onDeleteKeyframe, onSetKfEasing, onNewGroup, onInsertFrame, onDuplicateFrame, onDeleteFrame, onFrameFps }: {
+function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPoseNow, onDeleteLayer, onDeleteKeyframe, onSetKfEasing, onNewGroup, onInsertFrame, onDuplicateFrame, onDeleteFrame, onFrameFps, onGenerateGait, onDetachBone }: {
   layer: MotionLayer; time: number; selKf: string | null; groups: LayerGroup[];
   onPatchLayer: (patch: Partial<MotionLayer>) => void;
   onKeyNow: (props: Partial<Omit<Keyframe, 'id' | 't'>>) => void;
@@ -1149,6 +1200,8 @@ function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPose
   onDuplicateFrame: () => void;
   onDeleteFrame: () => void;
   onFrameFps: (fps: number) => void;
+  onGenerateGait: (mode: GaitMode) => void;
+  onDetachBone: (boneId: string) => void;
 }) {
   const v = valueAt(layer, time);
   const kf = layer.keyframes.find((k) => k.id === selKf) ?? null;
@@ -1235,20 +1288,53 @@ function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPose
       {layer.kind === 'rig' && layer.rig && (
         <div className="border-t pt-2.5" style={{ borderColor: 'var(--line)' }}>
           <p className="mono mb-1.5 text-[10px] uppercase tracking-wide" style={{ color: 'var(--ink-faint)' }}>bones — pose at {fmt(time)}</p>
-          <div className="flex max-h-48 flex-col gap-1 overflow-y-auto pr-1">
+          <div className="flex max-h-56 flex-col gap-1 overflow-y-auto pr-1">
             {layer.rig.bones.map((b) => (
-              <div key={b.id} className="flex items-center gap-1.5">
-                <span className="mono w-20 shrink-0 truncate text-[10px]" style={{ color: 'var(--ink-dim)' }}>{b.name}</span>
-                <input type="number" value={Math.round((currentPose[b.id] ?? b.baseAngle) * 10) / 10} step={5}
-                  onChange={(e) => onPoseNow(b.id, Number(e.target.value) || 0)}
-                  className={`${miniCls} w-16`} style={inputStyle} />
-                <label className="mono flex items-center gap-0.5 text-[9px]" style={{ color: 'var(--ink-faint)' }} title="Secondary motion: this bone lags under gravity/momentum during Play instead of following its keyframed pose directly">
-                  <input type="checkbox" checked={!!b.physics} onChange={(e) => onPatchLayer({ rig: { ...layer.rig!, bones: layer.rig!.bones.map((x) => (x.id === b.id ? { ...x, physics: e.target.checked } : x)) } })} />
-                  phys
-                </label>
+              <div key={b.id} className="flex flex-col gap-0.5 border-b pb-1" style={{ borderColor: 'var(--line)' }}>
+                <div className="flex items-center gap-1.5">
+                  <span className="mono w-20 shrink-0 truncate text-[10px]" style={{ color: 'var(--ink-dim)' }}>{b.name}</span>
+                  <input type="number" value={Math.round((currentPose[b.id] ?? b.baseAngle) * 10) / 10} step={5}
+                    onChange={(e) => onPoseNow(b.id, Number(e.target.value) || 0)}
+                    className={`${miniCls} w-14`} style={inputStyle} />
+                  <label className="mono flex items-center gap-0.5 text-[9px]" style={{ color: 'var(--ink-faint)' }} title="Secondary motion: this bone lags under gravity/momentum during Play instead of following its keyframed pose directly">
+                    <input type="checkbox" checked={!!b.physics} onChange={(e) => onPatchLayer({ rig: { ...layer.rig!, bones: layer.rig!.bones.map((x) => (x.id === b.id ? { ...x, physics: e.target.checked } : x)) } })} />
+                    phys
+                  </label>
+                  <Btn onClick={() => onDetachBone(b.id)} small title="Break this bone (and anything attached past it) off the rig here — it flies off and falls under gravity from the playhead on"><SkillIcon name="bug" size={10} /></Btn>
+                </div>
+                <div className="mono flex items-center gap-1 pl-[86px] text-[9px]" style={{ color: 'var(--ink-faint)' }} title="Joint limits — leave blank for none">
+                  min <input type="number" value={b.minAngle ?? ''} placeholder="—"
+                    onChange={(e) => onPatchLayer({ rig: { ...layer.rig!, bones: layer.rig!.bones.map((x) => (x.id === b.id ? { ...x, minAngle: e.target.value === '' ? undefined : Number(e.target.value) } : x)) } })}
+                    className={`${miniCls} w-12`} style={inputStyle} />
+                  max <input type="number" value={b.maxAngle ?? ''} placeholder="—"
+                    onChange={(e) => onPatchLayer({ rig: { ...layer.rig!, bones: layer.rig!.bones.map((x) => (x.id === b.id ? { ...x, maxAngle: e.target.value === '' ? undefined : Number(e.target.value) } : x)) } })}
+                    className={`${miniCls} w-12`} style={inputStyle} />
+                </div>
               </div>
             ))}
           </div>
+
+          <label className="mono mt-2 flex items-center gap-1.5 text-[10.5px]" style={{ color: 'var(--ink-dim)' }} title="Every bone goes limp and falls under gravity during Play, instead of only ones marked phys">
+            <input type="checkbox" checked={!!layer.rig.ragdoll} onChange={(e) => onPatchLayer({ rig: { ...layer.rig!, ragdoll: e.target.checked } })} />
+            ragdoll (whole body) during Play
+          </label>
+
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <Btn onClick={() => onGenerateGait('walk')} small title="Generate a walk cycle from the playhead to the end of the project"><SkillIcon name="trend" size={11} /> + Walk cycle</Btn>
+            <Btn onClick={() => onGenerateGait('run')} small title="Generate a run cycle from the playhead to the end of the project"><SkillIcon name="rocket" size={11} /> + Run cycle</Btn>
+          </div>
+
+          {layer.rig.detachments && layer.rig.detachments.length > 0 && (
+            <div className="mt-2">
+              <p className="mono mb-1 text-[9.5px] uppercase tracking-wide" style={{ color: 'var(--ink-faint)' }}>detached</p>
+              {layer.rig.detachments.map((d) => (
+                <div key={d.id} className="mono flex items-center justify-between text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+                  <span>{layer.rig!.bones.find((b) => b.id === d.boneId)?.name ?? d.boneId} @ {d.t.toFixed(2)}s</span>
+                  <Btn onClick={() => onPatchLayer({ rig: { ...layer.rig!, detachments: (layer.rig!.detachments ?? []).filter((x) => x.id !== d.id) } })} small title="Re-attach">✕</Btn>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

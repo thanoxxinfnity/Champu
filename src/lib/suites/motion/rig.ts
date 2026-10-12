@@ -22,13 +22,48 @@ export interface BoneDef {
   baseAngle: number;
   /** Marks this bone as secondary motion (see file header) rather than a directly-posed FK bone. */
   physics?: boolean;
+  /** Joint limit, in local degrees — a posed or physics-driven angle is clamped into [minAngle, maxAngle] when both are set (e.g. a knee that only bends one way). */
+  minAngle?: number;
+  maxAngle?: number;
 }
+
+/** Clamp a local angle into a bone's joint limits, if it has any. */
+export function clampLocalAngle(bone: BoneDef, angle: number): number {
+  if (bone.minAngle === undefined || bone.maxAngle === undefined) return angle;
+  return Math.max(bone.minAngle, Math.min(bone.maxAngle, angle));
+}
+
+/**
+ * A bone that has broken off its parent (a thrown weapon, a severed limb) and now flies on its own —
+ * closed-form ballistic motion (ballistic position/rotation is a plain function of elapsed time since
+ * breaking free), not a stepped simulation, so it stays correct when scrubbing or exporting frames.
+ * `ax/ay`/`originAngle` freeze the bone's actual world position/angle at the instant it detached; `vx/vy`
+ * are the world-space velocity (px/s) it carries away, `angularVelocity` the spin it keeps (deg/s).
+ */
+export interface DetachEvent {
+  id: string;
+  boneId: string;
+  t: number;
+  ax: number;
+  ay: number;
+  originAngle: number;
+  vx: number;
+  vy: number;
+  angularVelocity: number;
+}
+
+/** Gravity applied to a detached bone's ballistic fall, in stage px/s². */
+export const DETACH_GRAVITY = 900;
 
 export interface RigConfig {
   bones: BoneDef[];
   /** Where the root bone(s) start, relative to the layer's own x/y keyframe position. */
   originX: number;
   originY: number;
+  /** When true, every bone goes limp under gravity during Play (whole-body ragdoll) instead of only ones individually marked `physics: true`. */
+  ragdoll?: boolean;
+  /** Bones that have broken off their parent at some point in time (see `DetachEvent`). */
+  detachments?: DetachEvent[];
 }
 
 export interface BonePose {
@@ -57,30 +92,62 @@ const STICKMAN_BONES: BoneDef[] = [
 ];
 
 export function newRig(): RigConfig {
-  return { bones: STICKMAN_BONES.map((b) => ({ ...b })), originX: 0, originY: 40 };
+  return { bones: STICKMAN_BONES.map((b) => ({ ...b })), originX: 0, originY: 40, ragdoll: false, detachments: [] };
 }
 
-/** Forward kinematics: a local angle per bone (falling back to its base pose) → every bone's world pose. */
-export function computeRigPose(rig: RigConfig, angles: Record<string, number> = {}): BonePose[] {
+/**
+ * Forward kinematics: a local angle per bone (falling back to its base pose) → every bone's world pose.
+ * `t` and `detachments` are optional — when a bone has an active detach event (`t >= event.t`), it and its
+ * whole subtree stop following their parent and fly off on the frozen ballistic trajectory instead (see
+ * `DetachEvent`); every other bone poses exactly as before, so passing neither keeps prior behaviour.
+ */
+export function computeRigPose(rig: RigConfig, angles: Record<string, number> = {}, t = 0, detachments: DetachEvent[] = []): BonePose[] {
   const children = new Map<string | null, BoneDef[]>();
   for (const b of rig.bones) {
     const key = b.parentId;
     if (!children.has(key)) children.set(key, []);
     children.get(key)!.push(b);
   }
+  const detachOf = new Map<string, DetachEvent>();
+  for (const d of detachments) if (t >= d.t && (!detachOf.has(d.boneId) || d.t > detachOf.get(d.boneId)!.t)) detachOf.set(d.boneId, d);
   const out = new Map<string, BonePose>();
   const walk = (bone: BoneDef, originX: number, originY: number, parentWorldAngle: number) => {
-    const local = angles[bone.id] ?? bone.baseAngle;
-    const worldAngle = bone.parentId === null ? local : parentWorldAngle + local;
+    const d = detachOf.get(bone.id);
+    let startX: number, startY: number, worldAngle: number;
+    if (d) {
+      const age = t - d.t;
+      worldAngle = d.originAngle + d.angularVelocity * age;
+      startX = d.ax + d.vx * age;
+      startY = d.ay + d.vy * age + 0.5 * DETACH_GRAVITY * age * age;
+    } else {
+      const local = clampLocalAngle(bone, angles[bone.id] ?? bone.baseAngle);
+      worldAngle = bone.parentId === null ? local : parentWorldAngle + local;
+      startX = originX;
+      startY = originY;
+    }
     const rad = (worldAngle * Math.PI) / 180;
-    const endX = originX + Math.cos(rad) * bone.length;
-    const endY = originY + Math.sin(rad) * bone.length;
-    out.set(bone.id, { id: bone.id, x: originX, y: originY, endX, endY, worldAngle });
+    const endX = startX + Math.cos(rad) * bone.length;
+    const endY = startY + Math.sin(rad) * bone.length;
+    out.set(bone.id, { id: bone.id, x: startX, y: startY, endX, endY, worldAngle });
     for (const child of children.get(bone.id) ?? []) walk(child, endX, endY, worldAngle);
   };
   for (const root of children.get(null) ?? []) walk(root, rig.originX, rig.originY, 0);
   // bones.filter order may not match tree order; return in bones[] order for a stable list
   return rig.bones.map((b) => out.get(b.id)).filter((p): p is BonePose => !!p);
+}
+
+/** Bones in root-to-leaf order (every parent appears before its children) — the order a chain reaction (ragdoll) needs to step in. */
+export function boneTreeOrder(rig: RigConfig): BoneDef[] {
+  const children = new Map<string | null, BoneDef[]>();
+  for (const b of rig.bones) {
+    const key = b.parentId;
+    if (!children.has(key)) children.set(key, []);
+    children.get(key)!.push(b);
+  }
+  const out: BoneDef[] = [];
+  const walk = (bone: BoneDef) => { out.push(bone); for (const c of children.get(bone.id) ?? []) walk(c); };
+  for (const root of children.get(null) ?? []) walk(root);
+  return out;
 }
 
 /**
@@ -169,4 +236,27 @@ export function stepPhysicsBone(
   const angularVelocity = state.angularVelocity + angularAccel * dt;
   const angle = state.angle + angularVelocity * dt;
   return { angle, angularVelocity };
+}
+
+/**
+ * Whole-rig ragdoll: every bone (not just ones individually marked `physics: true`) goes limp and falls
+ * under gravity, each pulled toward its own keyframed rest angle like a loose spring, with its parent's
+ * fresh angular velocity feeding in as a push — the same damped-pendulum model `stepPhysicsBone` already
+ * uses, just run down the whole tree in one step so motion cascades from the root outward. Joint limits
+ * (`minAngle`/`maxAngle`) are respected, so a ragdolled knee still only bends the one way it can.
+ */
+export function stepRagdollAll(
+  rig: RigConfig, states: Record<string, PhysicsState>, restAngles: Record<string, number>, dt: number,
+  gravity = 420, damping = 3.2, stiffness = 10,
+): Record<string, PhysicsState> {
+  const byId = new Map(rig.bones.map((b) => [b.id, b]));
+  const next: Record<string, PhysicsState> = {};
+  for (const bone of boneTreeOrder(rig)) {
+    const prev = states[bone.id] ?? { angle: restAngles[bone.id] ?? bone.baseAngle, angularVelocity: 0 };
+    const parentVel = bone.parentId ? (next[bone.parentId]?.angularVelocity ?? 0) : 0;
+    const stepped = stepPhysicsBone(prev, restAngles[bone.id] ?? bone.baseAngle, parentVel, dt, gravity, damping, stiffness);
+    const angle = clampLocalAngle(bone, stepped.angle);
+    next[bone.id] = { angle, angularVelocity: angle === stepped.angle ? stepped.angularVelocity : 0 };
+  }
+  return next;
 }
