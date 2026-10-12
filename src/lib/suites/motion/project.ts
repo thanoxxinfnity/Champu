@@ -14,8 +14,8 @@
  * so it is a different deliverable from the three code exporters below, not a replacement for them.
  */
 import type { ZipEntry } from '../../zip.ts';
-import type { Easing } from './easing.ts';
-import { easeFn } from './easing.ts';
+import type { CustomEase, Easing } from './easing.ts';
+import { cubicBezierEase, easeFn } from './easing.ts';
 import type { CameraKeyframe, ImpactFrame, ShakeEvent, SpeedRamp } from './camera.ts';
 import { defaultCamera } from './camera.ts';
 import type { ParticleConfig } from './particles.ts';
@@ -28,8 +28,8 @@ import { newPaintLayerData } from './paint.ts';
 import type { SpeedLineConfig } from './speedlines.ts';
 import { newSpeedLineConfig } from './speedlines.ts';
 
-export type { Easing } from './easing.ts';
-export { EASINGS, easeFn } from './easing.ts';
+export type { CustomEase, Easing } from './easing.ts';
+export { EASINGS, cubicBezierEase, easeFn } from './easing.ts';
 export type { CameraKeyframe, ImpactFrame, ShakeEvent, SpeedRamp } from './camera.ts';
 export type { ParticleConfig, ParticlePreset } from './particles.ts';
 export type { BoneDef, RigConfig } from './rig.ts';
@@ -91,8 +91,14 @@ export interface Keyframe {
   scale: number;
   rotation: number;
   opacity: number;
-  /** Eases the segment that leaves this keyframe, toward the next one. */
+  /** Eases the segment that leaves this keyframe, toward the next one — ignored in favour of `customEase` when that's set. */
   easing: Easing;
+  /** A hand-shaped timing curve for the segment leaving this keyframe (the graph editor), overriding `easing` when present. */
+  customEase?: CustomEase;
+  /** A motion-path handle: offset (in stage px) from this keyframe's own x/y, curving the path leaving it toward the next keyframe — a straight line when absent. */
+  pathOut?: { dx: number; dy: number };
+  /** A motion-path handle: offset from this keyframe's own x/y, curving the path arriving into it from the previous keyframe — a straight line when absent. */
+  pathIn?: { dx: number; dy: number };
   /** Only meaningful on a 'rig' layer: boneId → angle in degrees at this instant (see rig.ts). */
   pose?: Record<string, number>;
 }
@@ -153,6 +159,26 @@ export interface MotionProject {
   palette: string[];
   /** Whole-screen chromatic-aberration/glitch/invert/warp bursts, timed like impact frames. */
   postEffects: PostEffect[];
+  /** Named, coloured points on the timeline for navigation — purely organisational, never affects rendering. */
+  markers: TimelineMarker[];
+}
+
+export interface TimelineMarker {
+  id: string;
+  t: number;
+  label: string;
+  color: string;
+}
+
+export function addMarker(project: MotionProject, t: number, label = 'Marker'): MotionProject {
+  const marker: TimelineMarker = { id: newId('marker'), t: Math.max(0, t), label, color: '#ffd23f' };
+  return { ...project, markers: [...project.markers, marker].sort((a, b) => a.t - b.t) };
+}
+export function updateMarker(project: MotionProject, id: string, patch: Partial<Omit<TimelineMarker, 'id'>>): MotionProject {
+  return { ...project, markers: project.markers.map((m) => (m.id === id ? { ...m, ...patch } : m)).sort((a, b) => a.t - b.t) };
+}
+export function removeMarker(project: MotionProject, id: string): MotionProject {
+  return { ...project, markers: project.markers.filter((m) => m.id !== id) };
 }
 
 export const STAGE_PRESETS: Array<{ label: string; w: number; h: number }> = [
@@ -178,7 +204,7 @@ export function emptyProject(): MotionProject {
   return {
     title: 'My motion', width: 960, height: 540, duration: 4, background: '#111318', layers: [], groups: [],
     camera: defaultCamera(), shakes: [], impacts: [], speedRamps: [],
-    onionSkin: defaultOnionSkin(), palette: [...DEFAULT_PALETTE], postEffects: [],
+    onionSkin: defaultOnionSkin(), palette: [...DEFAULT_PALETTE], postEffects: [], markers: [],
   };
 }
 
@@ -212,6 +238,7 @@ export function normalizeProject(raw: unknown): MotionProject {
     audio: p.audio as AudioTrack | undefined,
     palette: Array.isArray(p.palette) && p.palette.length > 0 ? (p.palette as string[]) : [...DEFAULT_PALETTE],
     postEffects: Array.isArray(p.postEffects) ? (p.postEffects as PostEffect[]) : [],
+    markers: Array.isArray(p.markers) ? (p.markers as TimelineMarker[]) : [],
   };
 }
 
@@ -322,13 +349,41 @@ export function valueAt(layer: MotionLayer, t: number): Transform {
   const a = kfs[i]!, b = kfs[i + 1]!;
   const span = b.t - a.t;
   const raw = span <= 0 ? 1 : (t - a.t) / span;
-  const p = easeFn(a.easing)(raw);
+  const p = a.customEase ? cubicBezierEase(a.customEase.x1, a.customEase.y1, a.customEase.x2, a.customEase.y2)(raw) : easeFn(a.easing)(raw);
   const out: Partial<Transform> = {};
   for (const k of NUMERIC_KEYS) out[k] = a[k] + (b[k] - a[k]) * p;
+  if (a.pathOut || b.pathIn) {
+    const pt = motionPathPoint(a.x, a.y, a.pathOut, b.x, b.y, b.pathIn, p);
+    out.x = pt.x;
+    out.y = pt.y;
+  }
   return out as Transform;
 }
 function pick(k: Keyframe): Transform {
   return { x: k.x, y: k.y, scale: k.scale, rotation: k.rotation, opacity: k.opacity };
+}
+
+/**
+ * A cubic-bezier motion path between two keyframes' x/y: `pathOut` is the handle leaving `(ax,ay)`,
+ * `pathIn` the handle arriving at `(bx,by)` — either defaulting to zero offset (a straight line from that
+ * end), so a layer with only one handle set still curves smoothly rather than snapping. `p` is the already
+ * -eased 0..1 progress (the same curve timing a straight-line move would use — only the spatial path
+ * changes, not the speed along it).
+ */
+export function motionPathPoint(
+  ax: number, ay: number, pathOut: { dx: number; dy: number } | undefined,
+  bx: number, by: number, pathIn: { dx: number; dy: number } | undefined, p: number,
+): { x: number; y: number } {
+  // with no handles at all there's nothing to curve — a plain straight-line lerp, not a degenerate cubic
+  // bezier (control points sitting exactly on the endpoints stay geometrically on the line, but distort
+  // the speed along it into an unwanted ease, which a caller with no handles never asked for).
+  if (!pathOut && !pathIn) return { x: ax + (bx - ax) * p, y: ay + (by - ay) * p };
+  const c1x = ax + (pathOut?.dx ?? 0), c1y = ay + (pathOut?.dy ?? 0);
+  const c2x = bx + (pathIn?.dx ?? 0), c2y = by + (pathIn?.dy ?? 0);
+  const u = 1 - p;
+  const x = u * u * u * ax + 3 * u * u * p * c1x + 3 * u * p * p * c2x + p * p * p * bx;
+  const y = u * u * u * ay + 3 * u * u * p * c1y + 3 * u * p * p * c2y + p * p * p * by;
+  return { x, y };
 }
 
 // ── export ───────────────────────────────────────────────────────────────────

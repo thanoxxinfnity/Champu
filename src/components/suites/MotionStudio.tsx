@@ -22,9 +22,11 @@ import {
   removeGroup,
   removeKeyframe,
   removeLayer,
+  removeMarker,
   setKeyframe,
   updateGroup,
   updateLayer,
+  updateMarker,
   valueAt,
   type BlendMode,
   type Easing,
@@ -36,7 +38,9 @@ import {
   type MotionProject,
   type PostEffect,
   type PostEffectKind,
+  type TimelineMarker,
 } from '@/lib/suites/motion/project';
+import { cubicBezierEase, type CustomEase } from '@/lib/suites/motion/easing';
 import { easeFn } from '@/lib/suites/motion/easing';
 import {
   cameraAt,
@@ -59,7 +63,8 @@ import { jjkShowcaseProject } from '@/lib/suites/motion/presets';
 import { newBrush, stabilizePoint, strokeToDabs, type BrushSettings, type StrokePoint } from '@/lib/suites/motion/brush';
 import { bezierNodesToPolyline, vectorizeStroke } from '@/lib/suites/motion/vectorStroke';
 import {
-  addStroke, deleteFrame, duplicateFrame, insertFrame, newPaintLayerData, paintFrameAt, paintFrameIndexAt, removeStroke,
+  addStroke, deleteFrame, duplicateFrame, holdFrame, insertFrame, newPaintLayerData, paintFrameAt, paintFrameIndexAt,
+  pingPongFrames, removeStroke, reverseFrames, stretchFrames,
   type PaintStroke,
 } from '@/lib/suites/motion/paint';
 import { autoFlatColor, floodFillWithGapClosing } from '@/lib/suites/motion/fill';
@@ -130,9 +135,53 @@ function NumField({ label, value, onChange, step = 1, min, max }: { label: strin
   );
 }
 
+function PaintStretchControl({ frameCount, onStretch }: { frameCount: number; onStretch: (n: number) => void }) {
+  const [n, setN] = useState(frameCount);
+  return (
+    <span className="mono inline-flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--ink-dim)' }}>
+      <input type="number" min={1} value={n} onChange={(e) => setN(Math.max(1, Number(e.target.value) || 1))} className={`${miniCls} w-12`} style={inputStyle} />
+      <Btn onClick={() => onStretch(n)} small title="Resample the frame sequence to this many frames (repeats or drops frames evenly)">Stretch</Btn>
+    </span>
+  );
+}
+
+/** A small draggable-handle graph for a keyframe's custom cubic-bezier timing curve — the same shape as CSS's cubic-bezier(), x1/y1/x2/y2 anchored between (0,0) and (1,1), y allowed to overshoot for back/elastic-style curves. */
+function EaseGraphEditor({ ease, onChange }: { ease: CustomEase; onChange: (ease: CustomEase) => void }) {
+  const W = 160, H = 100;
+  const svgRef = useRef<SVGSVGElement>(null);
+  const dragRef = useRef<'p1' | 'p2' | null>(null);
+  const toPx = (x: number, y: number) => ({ px: x * W, py: H - ((y + 0.5) / 2) * H });
+  const fromPx = (px: number, py: number) => ({ x: Math.max(0, Math.min(1, px / W)), y: Math.max(-0.5, Math.min(1.5, (1 - py / H) * 2 - 0.5)) });
+  const p0 = toPx(0, 0), p3 = toPx(1, 1), p1 = toPx(ease.x1, ease.y1), p2 = toPx(ease.x2, ease.y2);
+
+  const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!dragRef.current || !svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const { x, y } = fromPx(e.clientX - rect.left, e.clientY - rect.top);
+    if (dragRef.current === 'p1') onChange({ ...ease, x1: x, y1: y });
+    else onChange({ ...ease, x2: x, y2: y });
+  };
+  // Capture on the <svg> itself (not e.target, the circle) — otherwise pointer-capture retargets every
+  // subsequent move/up event straight to the circle, which has no listener, so onMove on the svg never fires.
+  const grab = (which: 'p1' | 'p2') => (e: React.PointerEvent) => { dragRef.current = which; svgRef.current?.setPointerCapture(e.pointerId); };
+
+  return (
+    <svg ref={svgRef} data-testid="ease-graph-editor" width={W} height={H} className="mt-1.5 rounded border" style={{ borderColor: 'var(--line)', background: 'var(--surface)', touchAction: 'none' }}
+      onPointerMove={onMove} onPointerUp={() => { dragRef.current = null; }}>
+      <line x1={0} y1={toPx(0, 0).py} x2={W} y2={toPx(0, 0).py} stroke="var(--line)" strokeDasharray="2,2" />
+      <line x1={0} y1={toPx(0, 1).py} x2={W} y2={toPx(0, 1).py} stroke="var(--line)" strokeDasharray="2,2" />
+      <path d={`M ${p0.px} ${p0.py} C ${p1.px} ${p1.py}, ${p2.px} ${p2.py}, ${p3.px} ${p3.py}`} stroke="var(--accent)" fill="none" strokeWidth={2} />
+      <line x1={p0.px} y1={p0.py} x2={p1.px} y2={p1.py} stroke="var(--ink-faint)" strokeWidth={1} />
+      <line x1={p3.px} y1={p3.py} x2={p2.px} y2={p2.py} stroke="var(--ink-faint)" strokeWidth={1} />
+      <circle cx={p1.px} cy={p1.py} r={5} fill="var(--accent)" style={{ cursor: 'grab' }} onPointerDown={grab('p1')} />
+      <circle cx={p2.px} cy={p2.py} r={5} fill="var(--accent)" style={{ cursor: 'grab' }} onPointerDown={grab('p2')} />
+    </svg>
+  );
+}
+
 const fmt = (s: number) => `${s < 0 ? '-' : ''}${Math.floor(Math.abs(s) / 60)}:${(Math.abs(s) % 60).toFixed(2).padStart(5, '0')}`;
 
-type MarkerSel = { kind: 'shake' | 'impact' | 'ramp' | 'posteffect'; id: string } | null;
+type MarkerSel = { kind: 'shake' | 'impact' | 'ramp' | 'posteffect' | 'bookmark'; id: string } | null;
 
 /**
  * A layers-and-keyframes motion editor on a canvas stage: a particle/VFX engine, a stickman bone rig
@@ -770,12 +819,19 @@ export function MotionStudio() {
     setCameraOpen(false);
   };
   const patchPostEffect = (id: string, patch: Partial<PostEffect>) => setProject((p) => ({ ...p, postEffects: p.postEffects.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
+  const addBookmark = () => {
+    const marker: TimelineMarker = { id: newId('marker'), t: time, label: 'Marker', color: '#ffd23f' };
+    setProject((p) => ({ ...p, markers: [...p.markers, marker].sort((a, b) => a.t - b.t) }));
+    setSelMarker({ kind: 'bookmark', id: marker.id });
+  };
+  const patchBookmark = (id: string, patch: Partial<TimelineMarker>) => setProject((p) => updateMarker(p, id, patch));
   const deleteMarker = () => {
     if (!selMarker) return;
     setProject((p) => {
       if (selMarker.kind === 'shake') return { ...p, shakes: p.shakes.filter((s) => s.id !== selMarker.id) };
       if (selMarker.kind === 'impact') return { ...p, impacts: p.impacts.filter((i) => i.id !== selMarker.id) };
       if (selMarker.kind === 'posteffect') return { ...p, postEffects: p.postEffects.filter((e) => e.id !== selMarker.id) };
+      if (selMarker.kind === 'bookmark') return removeMarker(p, selMarker.id);
       return { ...p, speedRamps: p.speedRamps.filter((r) => r.id !== selMarker.id) };
     });
     setSelMarker(null);
@@ -1006,7 +1062,7 @@ export function MotionStudio() {
         {/* Properties panel */}
         <div className="w-64 shrink-0 overflow-y-auto border-l p-3" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
           {selMarker ? (
-            <MarkerPanel project={project} sel={selMarker} onPatchShake={patchShake} onPatchImpact={patchImpact} onPatchRamp={patchRamp} onPatchPostEffect={patchPostEffect} onDelete={deleteMarker} />
+            <MarkerPanel project={project} sel={selMarker} onPatchShake={patchShake} onPatchImpact={patchImpact} onPatchRamp={patchRamp} onPatchPostEffect={patchPostEffect} onPatchBookmark={patchBookmark} onDelete={deleteMarker} />
           ) : !selected ? (
             <p className="text-[11.5px] leading-[1.6]" style={{ color: 'var(--ink-faint)' }}>Pick a layer on the stage, or add one. Drag to move; the timeline below keys its position at the playhead. Camera previews during Play.</p>
           ) : (
@@ -1015,11 +1071,16 @@ export function MotionStudio() {
               onPatchLayer={patchLayer} onKeyNow={keyNow} onPoseNow={poseNow}
               onDeleteLayer={onDeleteLayer} onDeleteKeyframe={onDeleteKeyframe}
               onSetKfEasing={(easing) => setProject((p) => ({ ...p, layers: p.layers.map((l) => (l.id === selId ? { ...l, keyframes: l.keyframes.map((k) => (k.id === selKf ? { ...k, easing } : k)) } : l)) }))}
+              onPatchKeyframe={(patch) => setProject((p) => ({ ...p, layers: p.layers.map((l) => (l.id === selId ? { ...l, keyframes: l.keyframes.map((k) => (k.id === selKf ? { ...k, ...patch } : k)) } : l)) }))}
               onNewGroup={() => setProject((p) => newGroup(p))}
               onInsertFrame={() => selected.paint && patchLayer({ paint: insertFrame(selected.paint, currentFrameIndex(selected)) })}
               onDuplicateFrame={() => selected.paint && patchLayer({ paint: duplicateFrame(selected.paint, currentFrameIndex(selected)) })}
               onDeleteFrame={() => selected.paint && patchLayer({ paint: deleteFrame(selected.paint, currentFrameIndex(selected)) })}
               onFrameFps={(fps) => selected.paint && patchLayer({ paint: { ...selected.paint, fps: Math.max(1, fps) } })}
+              onHoldFrame={() => selected.paint && patchLayer({ paint: holdFrame(selected.paint, currentFrameIndex(selected), 1) })}
+              onReverseFrames={() => selected.paint && patchLayer({ paint: reverseFrames(selected.paint) })}
+              onPingPongFrames={() => selected.paint && patchLayer({ paint: pingPongFrames(selected.paint) })}
+              onStretchFrames={(n) => selected.paint && patchLayer({ paint: stretchFrames(selected.paint, n) })}
               onGenerateGait={onGenerateGait}
               onDetachBone={onDetachBone}
             />
@@ -1032,6 +1093,7 @@ export function MotionStudio() {
         <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
           <Btn onClick={() => setPlaying((x) => !x)} small title="Play / pause (space)"><SkillIcon name={playing ? 'bug' : 'spark'} size={11} />{playing ? 'Pause' : 'Play'}</Btn>
           <span className="mono text-[10.5px] tabular-nums" style={{ color: 'var(--ink-dim)' }}>{fmt(time)} / {fmt(project.duration)}</span>
+          <Btn onClick={addBookmark} small title="Drop a named, coloured bookmark at the playhead"><SkillIcon name="doc" size={10} /> + Bookmark</Btn>
           <label className="mono flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--ink-dim)' }}>
             <input type="checkbox" checked={project.onionSkin.enabled} onChange={(e) => setProject((p) => ({ ...p, onionSkin: { ...p.onionSkin, enabled: e.target.checked } }))} />
             onion skin
@@ -1089,6 +1151,13 @@ export function MotionStudio() {
                 title={`${fx.kind} at ${fx.t.toFixed(2)}s`}
                 className="absolute top-0 h-full w-1.5 -translate-x-1/2 cursor-pointer"
                 style={{ left: `${(fx.t / project.duration) * 100}%`, background: '#ff5ec4', outline: selMarker?.kind === 'posteffect' && selMarker.id === fx.id ? '1px solid var(--accent)' : 'none' }} />
+            ))}
+            {project.markers.map((m) => (
+              <div key={m.id}
+                onPointerDown={(e) => { e.stopPropagation(); setSelMarker({ kind: 'bookmark', id: m.id }); seek(m.t); }}
+                title={`${m.label} @ ${m.t.toFixed(2)}s`}
+                className="absolute -top-1.5 h-2.5 w-2.5 -translate-x-1/2 cursor-pointer rotate-45"
+                style={{ left: `${(m.t / project.duration) * 100}%`, background: m.color, outline: selMarker?.kind === 'bookmark' && selMarker.id === m.id ? '1px solid var(--ink)' : 'none' }} />
             ))}
             {project.shakes.map((s) => (
               <div key={s.id}
@@ -1187,7 +1256,7 @@ function LayerTrackRow({ layer, project, selId, selKf, time, indent, onSelect, o
 
 // ── properties panel for a layer ───────────────────────────────────────────────
 
-function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPoseNow, onDeleteLayer, onDeleteKeyframe, onSetKfEasing, onNewGroup, onInsertFrame, onDuplicateFrame, onDeleteFrame, onFrameFps, onGenerateGait, onDetachBone }: {
+function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPoseNow, onDeleteLayer, onDeleteKeyframe, onSetKfEasing, onPatchKeyframe, onNewGroup, onInsertFrame, onDuplicateFrame, onDeleteFrame, onFrameFps, onHoldFrame, onReverseFrames, onPingPongFrames, onStretchFrames, onGenerateGait, onDetachBone }: {
   layer: MotionLayer; time: number; selKf: string | null; groups: LayerGroup[];
   onPatchLayer: (patch: Partial<MotionLayer>) => void;
   onKeyNow: (props: Partial<Omit<Keyframe, 'id' | 't'>>) => void;
@@ -1195,11 +1264,16 @@ function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPose
   onDeleteLayer: () => void;
   onDeleteKeyframe: () => void;
   onSetKfEasing: (easing: Easing) => void;
+  onPatchKeyframe: (patch: Partial<Keyframe>) => void;
   onNewGroup: () => void;
   onInsertFrame: () => void;
   onDuplicateFrame: () => void;
   onDeleteFrame: () => void;
   onFrameFps: (fps: number) => void;
+  onHoldFrame: () => void;
+  onReverseFrames: () => void;
+  onPingPongFrames: () => void;
+  onStretchFrames: (n: number) => void;
   onGenerateGait: (mode: GaitMode) => void;
   onDetachBone: (boneId: string) => void;
 }) {
@@ -1242,6 +1316,13 @@ function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPose
             fps
             <input type="number" min={1} max={60} value={layer.paint.fps} onChange={(e) => onFrameFps(Number(e.target.value) || 12)} className={`${inputCls} w-16`} style={inputStyle} />
           </label>
+          <p className="mono mb-1 mt-2 text-[9.5px] uppercase tracking-wide" style={{ color: 'var(--ink-faint)' }}>frame operations</p>
+          <div className="flex flex-wrap gap-1.5">
+            <Btn onClick={onHoldFrame} small title="Repeat this frame once more right after itself"><SkillIcon name="spark" size={11} /> Hold</Btn>
+            <Btn onClick={onReverseFrames} small title="Play the whole sequence back to front"><SkillIcon name="trend" size={11} /> Reverse</Btn>
+            <Btn onClick={onPingPongFrames} small title="Forward then backward — a seamless back-and-forth loop"><SkillIcon name="layers" size={11} /> Ping-pong</Btn>
+            <PaintStretchControl key={layer.paint.frames.length} frameCount={layer.paint.frames.length} onStretch={onStretchFrames} />
+          </div>
         </div>
       )}
 
@@ -1394,9 +1475,19 @@ function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPose
       {kf && (
         <div className="border-t pt-2.5" style={{ borderColor: 'var(--line)' }}>
           <p className="mono mb-1.5 text-[10px] uppercase tracking-wide" style={{ color: 'var(--ink-faint)' }}>selected keyframe eases into the next</p>
-          <select value={kf.easing} onChange={(e) => onSetKfEasing(e.target.value as Easing)} className={`${inputCls} w-full`} style={{ ...inputStyle, background: 'var(--panel)' }}>
+          <select value={kf.customEase ? '__custom__' : kf.easing} onChange={(e) => (e.target.value === '__custom__' ? onPatchKeyframe({ customEase: { x1: 0.4, y1: 0, x2: 0.6, y2: 1 } }) : (onPatchKeyframe({ customEase: undefined }), onSetKfEasing(e.target.value as Easing)))} className={`${inputCls} w-full`} style={{ ...inputStyle, background: 'var(--panel)' }}>
             {EASINGS.map((e) => <option key={e} value={e}>{e}</option>)}
+            <option value="__custom__">custom (graph editor)…</option>
           </select>
+          {kf.customEase && (
+            <EaseGraphEditor ease={kf.customEase} onChange={(ease) => onPatchKeyframe({ customEase: ease })} />
+          )}
+          <p className="mono mb-1 mt-2.5 text-[10px] uppercase tracking-wide" style={{ color: 'var(--ink-faint)' }} title="Curves the spatial path this keyframe takes toward the next one — a straight line when both are left blank">motion path handle (out)</p>
+          <div className="grid grid-cols-2 gap-1.5">
+            <NumField label="handle dx" value={kf.pathOut?.dx ?? 0} onChange={(dx) => onPatchKeyframe({ pathOut: { dx, dy: kf.pathOut?.dy ?? 0 } })} />
+            <NumField label="handle dy" value={kf.pathOut?.dy ?? 0} onChange={(dy) => onPatchKeyframe({ pathOut: { dx: kf.pathOut?.dx ?? 0, dy } })} />
+          </div>
+          {kf.pathOut && <Btn onClick={() => onPatchKeyframe({ pathOut: undefined })} small title="Back to a straight line leaving this keyframe">straighten</Btn>}
           <Btn onClick={onDeleteKeyframe} small title="Delete this keyframe (Del)"><SkillIcon name="bug" size={11} /> Delete key</Btn>
         </div>
       )}
@@ -1408,14 +1499,30 @@ function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPose
 
 // ── properties panel for a camera marker (shake / impact / speed ramp) ─────────
 
-function MarkerPanel({ project, sel, onPatchShake, onPatchImpact, onPatchRamp, onPatchPostEffect, onDelete }: {
+function MarkerPanel({ project, sel, onPatchShake, onPatchImpact, onPatchRamp, onPatchPostEffect, onPatchBookmark, onDelete }: {
   project: MotionProject; sel: NonNullable<MarkerSel>;
   onPatchShake: (id: string, patch: Partial<ShakeEvent>) => void;
   onPatchImpact: (id: string, patch: Partial<ImpactFrame>) => void;
   onPatchRamp: (id: string, patch: Partial<SpeedRamp>) => void;
   onPatchPostEffect: (id: string, patch: Partial<PostEffect>) => void;
+  onPatchBookmark: (id: string, patch: Partial<TimelineMarker>) => void;
   onDelete: () => void;
 }) {
+  if (sel.kind === 'bookmark') {
+    const m = project.markers.find((x) => x.id === sel.id);
+    if (!m) return null;
+    return (
+      <div className="flex flex-col gap-2.5">
+        <p className="mono text-[11px] font-semibold" style={{ color: 'var(--ink)' }}>Bookmark</p>
+        <input value={m.label} onChange={(e) => onPatchBookmark(m.id, { label: e.target.value })} aria-label="Bookmark label" className={`${inputCls} w-full`} style={inputStyle} />
+        <NumField label="at (s)" value={m.t} step={0.05} min={0} onChange={(v) => onPatchBookmark(m.id, { t: Math.max(0, v) })} />
+        <label className="flex items-center gap-2 text-[11px]" style={{ color: 'var(--ink-dim)' }}>
+          colour <input type="color" value={m.color} onChange={(e) => onPatchBookmark(m.id, { color: e.target.value })} className="h-7 w-10 rounded border" style={{ borderColor: 'var(--line)' }} />
+        </label>
+        <Btn onClick={onDelete} title="Delete this bookmark (Del)"><SkillIcon name="bug" size={12} /> Delete bookmark</Btn>
+      </div>
+    );
+  }
   if (sel.kind === 'posteffect') {
     const fx = project.postEffects.find((x) => x.id === sel.id);
     if (!fx) return null;

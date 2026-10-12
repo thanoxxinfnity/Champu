@@ -86,3 +86,40 @@ export function deleteFrame(paint: PaintLayerData, index: number): PaintLayerDat
   if (paint.frames.length <= 1) return paint; // a paint layer always has somewhere to draw
   return { ...paint, frames: paint.frames.filter((_, i) => i !== index) };
 }
+
+/** Repeat a frame `times` extra times in place — "hold" a drawing longer without changing the layer's fps. */
+export function holdFrame(paint: PaintLayerData, index: number, times: number): PaintLayerData {
+  if (index < 0 || index >= paint.frames.length || times <= 0) return paint;
+  const frames = [...paint.frames];
+  const copies = Array.from({ length: times }, () => ({ strokes: paint.frames[index]!.strokes.map((s) => ({ ...s, id: `${s.id}_hold_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}` })) }));
+  frames.splice(index + 1, 0, ...copies);
+  return { ...paint, frames };
+}
+
+/** Play the frames back to front — a quick way to get a return trip (an in-breath after an out-breath) without redrawing anything. */
+export function reverseFrames(paint: PaintLayerData): PaintLayerData {
+  return { ...paint, frames: [...paint.frames].reverse() };
+}
+
+/** Forward then backward (excluding the two end frames from being doubled) — a seamless back-and-forth loop, e.g. a blink or an idle sway. */
+export function pingPongFrames(paint: PaintLayerData): PaintLayerData {
+  if (paint.frames.length <= 2) return { ...paint, frames: [...paint.frames, ...[...paint.frames].reverse()] };
+  const backward = [...paint.frames].slice(0, -1).reverse().slice(0, -1);
+  return { ...paint, frames: [...paint.frames, ...backward] };
+}
+
+/**
+ * Resample the frame sequence to exactly `newCount` frames (repeating or dropping frames as evenly as
+ * possible, nearest-neighbour) — stretching a 6-frame cycle out to 12 for a slower take, or squashing it
+ * down for a faster one, without having to redraw anything or touch the layer's fps.
+ */
+export function stretchFrames(paint: PaintLayerData, newCount: number): PaintLayerData {
+  const n = Math.max(1, Math.round(newCount));
+  if (paint.frames.length === 0) return paint;
+  const frames: PaintFrame[] = [];
+  for (let i = 0; i < n; i++) {
+    const srcIndex = Math.min(paint.frames.length - 1, Math.floor((i * paint.frames.length) / n));
+    frames.push({ strokes: paint.frames[srcIndex]!.strokes.map((s) => ({ ...s, id: `${s.id}_str_${Date.now().toString(36)}_${i}` })) });
+  }
+  return { ...paint, frames };
+}
