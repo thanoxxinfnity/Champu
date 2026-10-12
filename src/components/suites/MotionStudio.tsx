@@ -57,8 +57,9 @@ import { PARTICLE_PRESETS, newParticleConfig, type ParticlePreset } from '@/lib/
 import { computeRigPose, newRig, poseAt, stepPhysicsBone, stepRagdollAll, type DetachEvent, type PhysicsState } from '@/lib/suites/motion/rig';
 import { generateWalkCycle, newGaitConfig, type GaitMode } from '@/lib/suites/motion/walkcycle';
 import { drawFrame, drawStrokePreview, groupOpacityOf } from '@/lib/suites/motion/render';
-import { pickVideoCodec, renderGif, renderVideo } from '@/lib/suites/motion/exportMedia';
-import { peaksFromSamples, mixChannelsDown, type WaveformBucket } from '@/lib/suites/motion/audio';
+import { pickVideoCodec, renderGif, renderPngSequence, renderVideo } from '@/lib/suites/motion/exportMedia';
+import { detectBeats, lipSyncEnvelope, newAudioTrack, peaksFromSamples, mixChannelsDown, type AudioRole, type AudioTrack, type WaveformBucket } from '@/lib/suites/motion/audio';
+import { canRedo as canRedoHistory, canUndo as canUndoHistory, newHistory, pushHistory, redo as redoHistory, undo as undoHistory, type HistoryState } from '@/lib/suites/motion/historyStack';
 import { jjkShowcaseProject } from '@/lib/suites/motion/presets';
 import { newBrush, stabilizePoint, strokeToDabs, type BrushSettings, type StrokePoint } from '@/lib/suites/motion/brush';
 import { bezierNodesToPolyline, vectorizeStroke } from '@/lib/suites/motion/vectorStroke';
@@ -210,9 +211,11 @@ export function MotionStudio() {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryTab, setLibraryTab] = useState<'props' | 'backgrounds' | 'stickers' | 'saved'>('props');
   const [savedCharacters, setSavedCharacters] = useState<Array<{ id: string; name: string; layer: PortableLayer; savedAt: number }>>([]);
-  const [exporting, setExporting] = useState<'gif' | 'video' | null>(null);
+  const [exporting, setExporting] = useState<'gif' | 'video' | 'pngseq' | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
-  const [waveform, setWaveform] = useState<WaveformBucket[] | null>(null);
+  const [waveforms, setWaveforms] = useState<Partial<Record<AudioRole, WaveformBucket[]>>>({});
+  const [audioOpen, setAudioOpen] = useState(false);
+  const [audioBusy, setAudioBusy] = useState<AudioRole | null>(null);
 
   // ── paint tools state ─────────────────────────────────────────────────────
   const [paintTool, setPaintTool] = useState<PaintTool>('brush');
@@ -222,7 +225,7 @@ export function MotionStudio() {
   const [, forcePaintRedraw] = useState(0);
 
   const stageRef = useRef<HTMLCanvasElement>(null);
-  const audioElRef = useRef<HTMLAudioElement>(null);
+  const audioElRefs = useRef<Partial<Record<AudioRole, HTMLAudioElement>>>({});
   const timelineRef = useRef<HTMLDivElement>(null);
   const imagesRef = useRef(new Map<string, HTMLImageElement>());
   const [imagesVersion, setImagesVersion] = useState(0);
@@ -242,6 +245,42 @@ export function MotionStudio() {
     void getSetting<typeof savedCharacters>(LIBRARY_KEY, []).then(setSavedCharacters);
   }, []);
   useEffect(() => { if (loaded) void setSetting(KEY, project); }, [project, loaded]);
+
+  // ── undo/redo (a capped stack of whole-project snapshots — see historyStack.ts) ──────
+  // Real state, not a ref: the Undo/Redo buttons' disabled attribute reads this at render
+  // time, and a ref mutation alone never triggers React to re-render, so a plain ref here
+  // would leave the buttons stuck showing stale enabled/disabled until some unrelated state
+  // change happened to force a re-render.
+  //
+  // The push check is a comparison (`project === h.entries[h.index]`), not a consumable
+  // "skip the next push" flag — a flag gets eaten by the first of React StrictMode's two
+  // dev-mode effect invocations per commit, so the second invocation would see it already
+  // cleared and push a spurious extra entry, destroying the just-restored redo-able future.
+  // The comparison is naturally idempotent: however many times the effect runs for the same
+  // commit, it keeps seeing the project already represented in history and does nothing.
+  const [history, setHistory] = useState<HistoryState<MotionProject> | null>(null);
+  useEffect(() => {
+    if (!loaded) return;
+    setHistory((h) => {
+      if (!h) return newHistory(project); // first project load seeds history, doesn't push
+      if (h.entries[h.index] === project) return h; // already represented (e.g. we just undid/redid to this exact state)
+      return pushHistory(h, project, 100);
+    });
+  }, [project, loaded]);
+  const onUndo = () => {
+    if (!history) return;
+    const result = undoHistory(history);
+    if (!result) return;
+    setHistory(result.state);
+    setProject(result.value);
+  };
+  const onRedo = () => {
+    if (!history) return;
+    const result = redoHistory(history);
+    if (!result) return;
+    setHistory(result.state);
+    setProject(result.value);
+  };
 
   const selected = project.layers.find((l) => l.id === selId) ?? null;
 
@@ -342,15 +381,18 @@ export function MotionStudio() {
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [playing, draw, stepAllPhysics, physicsSnapshot]);
 
-  // ── audio playback sync ───────────────────────────────────────────────────
+  // ── audio playback sync (every loaded track, independently) ─────────────────
   useEffect(() => {
-    const el = audioElRef.current;
-    if (!el || !project.audio) return;
-    if (playing) {
-      el.currentTime = Math.max(0, time - project.audio.offset);
-      void el.play().catch(() => {});
-    } else {
-      el.pause();
+    for (const track of project.audioTracks) {
+      const el = audioElRefs.current[track.role];
+      if (!el) continue;
+      el.volume = track.muted ? 0 : track.volume;
+      if (playing) {
+        el.currentTime = Math.max(0, time - track.offset);
+        void el.play().catch(() => {});
+      } else {
+        el.pause();
+      }
     }
   }, [playing]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -914,8 +956,9 @@ export function MotionStudio() {
     setSelMarker(null);
   };
 
-  // ── audio ────────────────────────────────────────────────────────────────────
-  const onLoadAudio = async (file: File) => {
+  // ── audio (up to 3 tracks: bgm / sfx / voice) ─────────────────────────────────
+  const audioCtxClass = () => window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  const onLoadAudio = async (file: File, role: AudioRole) => {
     const dataUrl: string = await new Promise((resolve, reject) => {
       const r = new FileReader();
       r.onload = () => resolve(String(r.result));
@@ -924,17 +967,74 @@ export function MotionStudio() {
     });
     try {
       const buf = await file.arrayBuffer();
-      const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = new AC();
+      const ctx = new (audioCtxClass())();
       const decoded = await ctx.decodeAudioData(buf.slice(0));
       const channels: Float32Array[] = [];
       for (let c = 0; c < decoded.numberOfChannels; c++) channels.push(decoded.getChannelData(c));
-      setWaveform(peaksFromSamples(mixChannelsDown(channels), 400));
-      setProject((p) => ({ ...p, audio: { name: file.name, dataUrl, duration: decoded.duration, offset: 0 } }));
+      setWaveforms((w) => ({ ...w, [role]: peaksFromSamples(mixChannelsDown(channels), 400) }));
+      const track = newAudioTrack(role, file.name, dataUrl, decoded.duration);
+      setProject((p) => ({ ...p, audioTracks: [...p.audioTracks.filter((t) => t.role !== role), track] }));
       void ctx.close();
     } catch {
-      setWaveform(null);
-      setProject((p) => ({ ...p, audio: { name: file.name, dataUrl, duration: p.duration, offset: 0 } }));
+      setWaveforms((w) => ({ ...w, [role]: undefined }));
+      const track = newAudioTrack(role, file.name, dataUrl, project.duration);
+      setProject((p) => ({ ...p, audioTracks: [...p.audioTracks.filter((t) => t.role !== role), track] }));
+    }
+  };
+  const removeAudioTrack = (role: AudioRole) => {
+    setProject((p) => ({ ...p, audioTracks: p.audioTracks.filter((t) => t.role !== role) }));
+    setWaveforms((w) => ({ ...w, [role]: undefined }));
+  };
+  const patchAudioTrack = (role: AudioRole, patch: Partial<AudioTrack>) => {
+    setProject((p) => ({ ...p, audioTracks: p.audioTracks.map((t) => (t.role === role ? { ...t, ...patch } : t)) }));
+  };
+  /** Decodes a track's own data URL back into raw samples — done on demand (not cached) so a long clip's decoded buffer doesn't sit in React state the whole session. */
+  const decodeTrack = async (track: AudioTrack): Promise<{ samples: Float32Array; sampleRate: number } | null> => {
+    try {
+      const buf = await fetch(track.dataUrl).then((r) => r.arrayBuffer());
+      const ctx = new (audioCtxClass())();
+      const decoded = await ctx.decodeAudioData(buf.slice(0));
+      const channels: Float32Array[] = [];
+      for (let c = 0; c < decoded.numberOfChannels; c++) channels.push(decoded.getChannelData(c));
+      void ctx.close();
+      return { samples: mixChannelsDown(channels), sampleRate: decoded.sampleRate };
+    } catch {
+      return null;
+    }
+  };
+  const onDetectBeats = async (role: AudioRole) => {
+    const track = project.audioTracks.find((t) => t.role === role);
+    if (!track) return;
+    setAudioBusy(role);
+    try {
+      const decoded = await decodeTrack(track);
+      if (!decoded) { window.alert('Could not decode this track for beat detection.'); return; }
+      const beats = detectBeats(decoded.samples, decoded.sampleRate);
+      setProject((p) => {
+        const newMarkers = beats.map((bt) => ({ id: newId('marker'), t: track.offset + bt, label: 'Beat', color: '#ff8a3d' }));
+        return { ...p, markers: [...p.markers, ...newMarkers].sort((a, b) => a.t - b.t) };
+      });
+    } finally {
+      setAudioBusy(null);
+    }
+  };
+  const onGenerateLipSync = async () => {
+    const track = project.audioTracks.find((t) => t.role === 'voice');
+    if (!track || !selected) { window.alert('Load a voice track and select a layer to use as the mouth first.'); return; }
+    setAudioBusy('voice');
+    try {
+      const decoded = await decodeTrack(track);
+      if (!decoded) { window.alert('Could not decode the voice track.'); return; }
+      const fps = 12;
+      const envelope = lipSyncEnvelope(decoded.samples, decoded.sampleRate, fps);
+      const baseScale = selected.keyframes[0]?.scale ?? 1;
+      let layer = selected;
+      for (let i = 0; i < envelope.length; i++) {
+        layer = setKeyframe(layer, track.offset + i / fps, { scale: baseScale * (1 + envelope[i]! * 0.5) });
+      }
+      patchLayer({ keyframes: layer.keyframes });
+    } finally {
+      setAudioBusy(null);
     }
   };
 
@@ -945,6 +1045,11 @@ export function MotionStudio() {
       if ((e.key === 'Delete' || e.key === 'Backspace') && selKf && !typing) onDeleteKeyframe();
       if ((e.key === 'Delete' || e.key === 'Backspace') && selMarker && !typing) deleteMarker();
       if (e.key === ' ' && !typing) { e.preventDefault(); setPlaying((x) => !x); }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) {
+        e.preventDefault();
+        if (e.shiftKey) onRedo(); else onUndo();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); onRedo(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -952,7 +1057,7 @@ export function MotionStudio() {
 
   // ── export ──────────────────────────────────────────────────────────────────
   const fileBase = (project.title || 'motion').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'motion';
-  const doExport = async (kind: 'css' | 'gsap' | 'html' | 'zip' | 'gif' | 'video') => {
+  const doExport = async (kind: 'css' | 'gsap' | 'html' | 'zip' | 'gif' | 'video' | 'pngseq') => {
     setExportError(null);
     if (kind === 'css') { downloadText(exportCss(project), `${fileBase}.css`, 'text/css;charset=utf-8'); setExportOpen(false); return; }
     if (kind === 'gsap') { downloadText(exportGsap(project), `${fileBase}.gsap.js`, 'text/javascript;charset=utf-8'); setExportOpen(false); return; }
@@ -964,8 +1069,11 @@ export function MotionStudio() {
       if (kind === 'gif') {
         const bytes = await renderGif(project, { images: imagesRef.current }, 15);
         downloadBlob(new Blob([bytes as unknown as ArrayBuffer], { type: 'image/gif' }), `${fileBase}.gif`);
+      } else if (kind === 'pngseq') {
+        const frames = await renderPngSequence(project, { images: imagesRef.current }, exportFps);
+        downloadZip(frames.map((f) => ({ path: f.name, content: f.bytes })), `${fileBase}-frames.zip`);
       } else {
-        const res = await renderVideo(project, { images: imagesRef.current }, 30);
+        const res = await renderVideo(project, { images: imagesRef.current }, exportFps);
         downloadBlob(res.blob, `${fileBase}.${res.extension}`);
       }
     } catch (err) {
@@ -975,6 +1083,7 @@ export function MotionStudio() {
     }
   };
   const videoCodec = useMemo(() => (typeof window === 'undefined' ? null : pickVideoCodec()), []);
+  const [exportFps, setExportFps] = useState(30);
 
   const loadExample = () => {
     if (project.layers.length > 0 && !window.confirm('Replace the current project with the "JJK Showcase" example?')) return;
@@ -1001,6 +1110,8 @@ export function MotionStudio() {
         </label>
         <input type="color" value={project.background} onChange={(e) => setProject((p) => ({ ...p, background: e.target.value }))} aria-label="Stage background" className="h-7 w-8 rounded border" style={{ borderColor: 'var(--line)' }} />
         <Btn onClick={loadExample} small title="Load the JJK Showcase example project"><SkillIcon name="rocket" size={12} /> Example</Btn>
+        <Btn onClick={onUndo} small disabled={!history || !canUndoHistory(history)} title="Undo (Ctrl/Cmd+Z)"><SkillIcon name="trend" size={12} /> Undo</Btn>
+        <Btn onClick={onRedo} small disabled={!history || !canRedoHistory(history)} title="Redo (Ctrl/Cmd+Shift+Z)"><SkillIcon name="trend" size={12} /> Redo</Btn>
         <div className="ml-auto flex items-center gap-1.5">
           <div className="relative">
             <Btn onClick={() => setLibraryOpen((x) => !x)} title="Props, backgrounds, VFX stickers and your saved characters"><SkillIcon name="layers" size={13} /> Library</Btn>
@@ -1116,9 +1227,18 @@ export function MotionStudio() {
                   <button key={k} type="button" onClick={() => void doExport(k)} className="press mono block w-full rounded px-2 py-1.5 text-left text-[11.5px]" style={{ color: 'var(--ink)' }}>{label}</button>
                 ))}
                 <div className="my-1 border-t" style={{ borderColor: 'var(--line)' }} />
-                <button type="button" onClick={() => void doExport('gif')} className="press mono block w-full rounded px-2 py-1.5 text-left text-[11.5px]" style={{ color: 'var(--ink)' }}>Looping GIF (pixels)</button>
-                <button type="button" onClick={() => void doExport('video')} disabled={!videoCodec} className="press mono block w-full rounded px-2 py-1.5 text-left text-[11.5px] disabled:opacity-40" style={{ color: 'var(--ink)' }} title={videoCodec ? `Records as ${videoCodec.extension.toUpperCase()}` : 'This browser cannot record video'}>
-                  Video ({videoCodec ? videoCodec.extension.toUpperCase() : 'unsupported'})
+                <label className="mono flex items-center justify-between gap-2 px-2 py-1 text-[10.5px]" style={{ color: 'var(--ink-dim)' }} onClick={(e) => e.stopPropagation()}>
+                  fps
+                  <select value={exportFps} onChange={(e) => setExportFps(Number(e.target.value))} className={`${inputCls}`} style={{ ...inputStyle, background: 'var(--panel)' }}>
+                    {[24, 30, 60].map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </label>
+                <button type="button" onClick={() => void doExport('gif')} className="press mono block w-full rounded px-2 py-1.5 text-left text-[11.5px]" style={{ color: 'var(--ink)' }}>Looping GIF (transparent, pixels)</button>
+                <button type="button" onClick={() => void doExport('video')} disabled={!videoCodec} className="press mono block w-full rounded px-2 py-1.5 text-left text-[11.5px] disabled:opacity-40" style={{ color: 'var(--ink)' }} title={videoCodec ? `Records as ${videoCodec.extension.toUpperCase()}, at the chosen fps — set the stage to the 4K preset for a 4K export` : 'This browser cannot record video'}>
+                  Video ({videoCodec ? videoCodec.extension.toUpperCase() : 'unsupported'}, {exportFps}fps)
+                </button>
+                <button type="button" onClick={() => void doExport('pngseq')} className="press mono block w-full rounded px-2 py-1.5 text-left text-[11.5px]" style={{ color: 'var(--ink)' }} title="One numbered .png per frame, zipped — for compositing downstream">
+                  PNG sequence (.zip, {exportFps}fps)
                 </button>
               </div>
             )}
@@ -1127,7 +1247,7 @@ export function MotionStudio() {
       </div>
       {exporting && (
         <div className="mono shrink-0 px-3 py-1 text-[10.5px]" style={{ color: 'var(--accent)', background: 'var(--panel)' }}>
-          rendering {exporting === 'gif' ? 'GIF' : 'video'} frame-by-frame… this can take a few seconds
+          rendering {exporting === 'gif' ? 'GIF' : exporting === 'pngseq' ? 'PNG sequence' : 'video'} frame-by-frame… this can take a few seconds
         </div>
       )}
       {exportError && (
@@ -1254,15 +1374,49 @@ export function MotionStudio() {
               )}
             </div>
           )}
-          <label className="press mono ml-auto flex cursor-pointer items-center gap-1 text-[10.5px]" style={{ color: 'var(--ink-dim)' }}>
-            <SkillIcon name="music" size={12} /> {project.audio ? project.audio.name.slice(0, 18) : 'load audio'}
-            <input type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void onLoadAudio(f); e.target.value = ''; }} />
-          </label>
-          {project.audio && <Btn onClick={() => { setProject((p) => ({ ...p, audio: undefined })); setWaveform(null); }} small title="Remove audio">✕</Btn>}
+          <div className="relative ml-auto">
+            <Btn onClick={() => setAudioOpen((x) => !x)} small title="Audio — up to 3 tracks: music bed, sound effects, and dialogue"><SkillIcon name="music" size={12} /> Audio ({project.audioTracks.length}/3)</Btn>
+            {audioOpen && (
+              <div className="absolute bottom-full right-0 z-30 mb-1 w-72 rounded-lg border p-2.5 shadow-lg" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
+                {(['bgm', 'sfx', 'voice'] as const).map((role) => {
+                  const track = project.audioTracks.find((t) => t.role === role);
+                  return (
+                    <div key={role} className="mb-2 border-b pb-2 last:mb-0 last:border-0 last:pb-0" style={{ borderColor: 'var(--line)' }}>
+                      <div className="mono mb-1 flex items-center justify-between text-[9.5px] uppercase tracking-wide" style={{ color: 'var(--ink-faint)' }}>
+                        <span>{role === 'bgm' ? 'music (bgm)' : role}</span>
+                        {track && <Btn onClick={() => removeAudioTrack(role)} small title="Remove this track">✕</Btn>}
+                      </div>
+                      {!track ? (
+                        <label className="press mono flex cursor-pointer items-center justify-center gap-1.5 rounded border border-dashed px-2 py-1.5 text-[10.5px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>
+                          <SkillIcon name="music" size={12} /> Load {role === 'bgm' ? 'music' : role}
+                          <input type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void onLoadAudio(f, role); e.target.value = ''; }} />
+                        </label>
+                      ) : (
+                        <div className="flex flex-col gap-1">
+                          <p className="mono truncate text-[10.5px]" style={{ color: 'var(--ink)' }}>{track.name}</p>
+                          <div className="flex items-center gap-1.5">
+                            <label className="mono flex items-center gap-1 text-[9.5px]" style={{ color: 'var(--ink-dim)' }}>offset<input type="number" step={0.1} value={track.offset} onChange={(e) => patchAudioTrack(role, { offset: Number(e.target.value) || 0 })} className={`${miniCls} w-14`} style={inputStyle} /></label>
+                            <input type="range" min={0} max={1} step={0.05} value={track.volume} onChange={(e) => patchAudioTrack(role, { volume: Number(e.target.value) })} className="h-3 flex-1" title="Volume" />
+                            <label className="mono flex items-center gap-0.5 text-[9px]" style={{ color: 'var(--ink-faint)' }}><input type="checkbox" checked={track.muted} onChange={(e) => patchAudioTrack(role, { muted: e.target.checked })} /> mute</label>
+                          </div>
+                          {(role === 'bgm' || role === 'sfx') && (
+                            <Btn onClick={() => void onDetectBeats(role)} small disabled={audioBusy === role} title="Find beats in this track and drop a bookmark at each one"><SkillIcon name="spark" size={10} /> {audioBusy === role ? 'detecting…' : 'Detect beats'}</Btn>
+                          )}
+                          {role === 'voice' && (
+                            <Btn onClick={() => void onGenerateLipSync()} small disabled={audioBusy === 'voice'} title="Pulse the selected layer's scale with this voice clip's loudness — a quick mouth-flap guide"><SkillIcon name="wand" size={10} /> {audioBusy === 'voice' ? 'generating…' : 'Generate lip-sync on selected layer'}</Btn>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-        {project.audio && (
-          <audio ref={audioElRef} src={project.audio.dataUrl} className="hidden" />
-        )}
+        {project.audioTracks.map((track) => (
+          <audio key={track.role} ref={(el) => { if (el) audioElRefs.current[track.role] = el; }} src={track.dataUrl} className="hidden" />
+        ))}
         <div ref={timelineRef} className="relative select-none px-3 pb-3" onPointerMove={onTimelinePointerMove} onPointerUp={onTimelinePointerUp}>
           <div className="relative cursor-pointer rounded" style={{ height: RULER_H, background: 'var(--surface)' }} onPointerDown={onRulerPointerDown}>
             {Array.from({ length: Math.floor(project.duration) + 1 }, (_, i) => (
@@ -1307,15 +1461,20 @@ export function MotionStudio() {
             ))}
           </div>
 
-          {waveform && (
-            <div className="relative mt-0.5 flex items-center" style={{ height: WAVE_H, background: 'var(--surface)' }}>
-              <svg width="100%" height={WAVE_H} preserveAspectRatio="none" viewBox={`0 0 ${waveform.length} 100`}>
-                {waveform.map((b, i) => (
-                  <rect key={i} x={i} y={50 - b.max * 50} width={1} height={Math.max(1, (b.max - b.min) * 50)} fill="var(--ink-faint)" />
-                ))}
-              </svg>
-            </div>
-          )}
+          {(['bgm', 'sfx', 'voice'] as const).map((role) => {
+            const wave = waveforms[role];
+            if (!wave) return null;
+            return (
+              <div key={role} className="relative mt-0.5 flex items-center" style={{ height: WAVE_H, background: 'var(--surface)' }} title={`${role} waveform`}>
+                <span className="mono absolute left-1 top-0 z-10 text-[8px] uppercase" style={{ color: 'var(--ink-faint)' }}>{role}</span>
+                <svg width="100%" height={WAVE_H} preserveAspectRatio="none" viewBox={`0 0 ${wave.length} 100`}>
+                  {wave.map((b, i) => (
+                    <rect key={i} x={i} y={50 - b.max * 50} width={1} height={Math.max(1, (b.max - b.min) * 50)} fill="var(--ink-faint)" />
+                  ))}
+                </svg>
+              </div>
+            );
+          })}
 
           <div className="relative mt-1 flex flex-col gap-0.5">
             {project.groups.map((g) => {

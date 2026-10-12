@@ -56,6 +56,30 @@ export async function renderGif(project: MotionProject, opts: ExportImages = {},
   return encodeGif(gifFrames, palette, true);
 }
 
+export interface PngFrame {
+  name: string;
+  bytes: Uint8Array;
+}
+
+/** One PNG file per frame, numbered — for a frame-by-frame compositing/VFX pipeline downstream rather than a baked video. */
+export async function renderPngSequence(project: MotionProject, opts: ExportImages = {}, fps = 24): Promise<PngFrame[]> {
+  const { canvas, ctx } = makeCanvas(project);
+  const step = 1 / fps;
+  const frames: PngFrame[] = [];
+  const total = Math.max(1, Math.ceil(project.duration / step));
+  const digits = String(total).length;
+  let i = 0;
+  for (let t = 0; t < project.duration; t += step, i++) {
+    drawFrame(ctx, project, t, { images: opts.images });
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) continue;
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    frames.push({ name: `frame_${String(i + 1).padStart(digits, '0')}.png`, bytes });
+    await yieldToBrowser();
+  }
+  return frames;
+}
+
 interface VideoCodecChoice {
   mimeType: string;
   extension: 'mp4' | 'webm';

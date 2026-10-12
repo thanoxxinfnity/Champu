@@ -154,7 +154,8 @@ export interface MotionProject {
   impacts: ImpactFrame[];
   speedRamps: SpeedRamp[];
   onionSkin: OnionSkinConfig;
-  audio?: AudioTrack;
+  /** Up to 3 clips — one per role (bgm/sfx/voice), same as a real NLE's basic audio bus. */
+  audioTracks: AudioTrack[];
   /** Saved HSV swatches, most-recently-used first. */
   palette: string[];
   /** Whole-screen chromatic-aberration/glitch/invert/warp bursts, timed like impact frames. */
@@ -185,6 +186,7 @@ export const STAGE_PRESETS: Array<{ label: string; w: number; h: number }> = [
   { label: '16:9', w: 960, h: 540 },
   { label: '1:1', w: 640, h: 640 },
   { label: '9:16', w: 405, h: 720 },
+  { label: '4K 16:9', w: 3840, h: 2160 },
 ];
 
 export function newId(prefix: string): string {
@@ -204,7 +206,7 @@ export function emptyProject(): MotionProject {
   return {
     title: 'My motion', width: 960, height: 540, duration: 4, background: '#111318', layers: [], groups: [],
     camera: defaultCamera(), shakes: [], impacts: [], speedRamps: [],
-    onionSkin: defaultOnionSkin(), palette: [...DEFAULT_PALETTE], postEffects: [], markers: [],
+    onionSkin: defaultOnionSkin(), palette: [...DEFAULT_PALETTE], postEffects: [], markers: [], audioTracks: [],
   };
 }
 
@@ -235,11 +237,26 @@ export function normalizeProject(raw: unknown): MotionProject {
     impacts: Array.isArray(p.impacts) ? (p.impacts as ImpactFrame[]) : [],
     speedRamps: Array.isArray(p.speedRamps) ? (p.speedRamps as SpeedRamp[]) : [],
     onionSkin: rawOnion ? { ...fallbackOnion, ...rawOnion } : fallbackOnion,
-    audio: p.audio as AudioTrack | undefined,
+    audioTracks: normalizeAudioTracks(p),
     palette: Array.isArray(p.palette) && p.palette.length > 0 ? (p.palette as string[]) : [...DEFAULT_PALETTE],
     postEffects: Array.isArray(p.postEffects) ? (p.postEffects as PostEffect[]) : [],
     markers: Array.isArray(p.markers) ? (p.markers as TimelineMarker[]) : [],
   };
+}
+
+/** Migrates a project saved before multi-track audio existed (a single `audio` field) into the new `audioTracks` array, as a 'bgm' clip — the one role a lone pre-existing track almost always was. */
+function normalizeAudioTracks(p: Record<string, unknown>): AudioTrack[] {
+  if (Array.isArray(p.audioTracks)) {
+    return (p.audioTracks as Array<Partial<AudioTrack>>).map((t) => ({
+      name: t.name ?? 'Audio', dataUrl: t.dataUrl ?? '', duration: t.duration ?? 0, offset: t.offset ?? 0,
+      role: t.role ?? 'bgm', volume: t.volume ?? 1, muted: t.muted ?? false,
+    }));
+  }
+  const legacy = p.audio as Partial<AudioTrack> | undefined;
+  if (legacy && typeof legacy.dataUrl === 'string') {
+    return [{ name: legacy.name ?? 'Audio', dataUrl: legacy.dataUrl, duration: legacy.duration ?? 0, offset: legacy.offset ?? 0, role: 'bgm', volume: 1, muted: false }];
+  }
+  return [];
 }
 
 const BASE_KEYFRAME: Omit<Keyframe, 'id' | 't'> = { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, easing: 'easeOut' };
