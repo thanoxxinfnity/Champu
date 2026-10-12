@@ -31,8 +31,11 @@ import {
   type Keyframe,
   type LayerGroup,
   type LayerKind,
+  type MotionBlurConfig,
   type MotionLayer,
   type MotionProject,
+  type PostEffect,
+  type PostEffectKind,
 } from '@/lib/suites/motion/project';
 import { easeFn } from '@/lib/suites/motion/easing';
 import {
@@ -87,6 +90,13 @@ const BASIC_KINDS: Array<{ kind: LayerKind; icon: string; label: string }> = [
   { kind: 'circle', icon: 'spark', label: 'Circle' },
   { kind: 'image', icon: 'image', label: 'Image' },
   { kind: 'paint', icon: 'pen', label: 'Paint / draw' },
+  { kind: 'speedlines', icon: 'trend', label: 'Speed Lines' },
+];
+const POST_EFFECT_KINDS: Array<{ kind: PostEffectKind; icon: string; label: string; defaultStrength: number; defaultDuration: number }> = [
+  { kind: 'chromatic', icon: 'spark', label: 'Chromatic', defaultStrength: 6, defaultDuration: 0.4 },
+  { kind: 'glitch', icon: 'bug', label: 'Glitch', defaultStrength: 0.8, defaultDuration: 0.25 },
+  { kind: 'invert', icon: 'globe', label: 'Invert', defaultStrength: 1, defaultDuration: 0.1 },
+  { kind: 'warp', icon: 'wand', label: 'Warp (domain)', defaultStrength: 220, defaultDuration: 0.5 },
 ];
 const VFX_KINDS: Array<{ preset: ParticlePreset; icon: string; label: string }> = [
   { preset: 'aura', icon: 'wand', label: 'Energy Aura' },
@@ -121,7 +131,7 @@ function NumField({ label, value, onChange, step = 1, min, max }: { label: strin
 
 const fmt = (s: number) => `${s < 0 ? '-' : ''}${Math.floor(Math.abs(s) / 60)}:${(Math.abs(s) % 60).toFixed(2).padStart(5, '0')}`;
 
-type MarkerSel = { kind: 'shake' | 'impact' | 'ramp'; id: string } | null;
+type MarkerSel = { kind: 'shake' | 'impact' | 'ramp' | 'posteffect'; id: string } | null;
 
 /**
  * A layers-and-keyframes motion editor on a canvas stage: a particle/VFX engine, a stickman bone rig
@@ -703,11 +713,20 @@ export function MotionStudio() {
   const patchShake = (id: string, patch: Partial<ShakeEvent>) => setProject((p) => ({ ...p, shakes: p.shakes.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
   const patchImpact = (id: string, patch: Partial<ImpactFrame>) => setProject((p) => ({ ...p, impacts: p.impacts.map((i) => (i.id === id ? { ...i, ...patch } : i)) }));
   const patchRamp = (id: string, patch: Partial<SpeedRamp>) => setProject((p) => ({ ...p, speedRamps: p.speedRamps.map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
+  const addPostEffect = (kind: PostEffectKind) => {
+    const preset = POST_EFFECT_KINDS.find((k) => k.kind === kind)!;
+    const effect: PostEffect = { id: `fx_${Date.now().toString(36)}`, t: time, duration: preset.defaultDuration, kind, strength: preset.defaultStrength };
+    setProject((p) => ({ ...p, postEffects: [...p.postEffects, effect] }));
+    setSelMarker({ kind: 'posteffect', id: effect.id });
+    setCameraOpen(false);
+  };
+  const patchPostEffect = (id: string, patch: Partial<PostEffect>) => setProject((p) => ({ ...p, postEffects: p.postEffects.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
   const deleteMarker = () => {
     if (!selMarker) return;
     setProject((p) => {
       if (selMarker.kind === 'shake') return { ...p, shakes: p.shakes.filter((s) => s.id !== selMarker.id) };
       if (selMarker.kind === 'impact') return { ...p, impacts: p.impacts.filter((i) => i.id !== selMarker.id) };
+      if (selMarker.kind === 'posteffect') return { ...p, postEffects: p.postEffects.filter((e) => e.id !== selMarker.id) };
       return { ...p, speedRamps: p.speedRamps.filter((r) => r.id !== selMarker.id) };
     });
     setSelMarker(null);
@@ -817,6 +836,12 @@ export function MotionStudio() {
                   <Btn onClick={addShake} small title="Add a screen-shake burst at the playhead"><SkillIcon name="bug" size={11} /> + Shake</Btn>
                   <Btn onClick={addImpact} small title="Add a 1-2 frame impact flash at the playhead"><SkillIcon name="spark" size={11} /> + Impact</Btn>
                   <Btn onClick={addRamp} small title="Add a slow-mo/fast speed-ramp region starting at the playhead"><SkillIcon name="trend" size={11} /> + Speed ramp</Btn>
+                </div>
+                <p className="mono mb-1 mt-2 text-[10px] uppercase tracking-wide" style={{ color: 'var(--ink-faint)' }}>screen-space effect at playhead</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {POST_EFFECT_KINDS.map((k) => (
+                    <Btn key={k.kind} onClick={() => addPostEffect(k.kind)} small title={`Add a ${k.label} burst at the playhead`}><SkillIcon name={k.icon} size={11} /> + {k.label}</Btn>
+                  ))}
                 </div>
               </div>
             )}
@@ -932,7 +957,7 @@ export function MotionStudio() {
         {/* Properties panel */}
         <div className="w-64 shrink-0 overflow-y-auto border-l p-3" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
           {selMarker ? (
-            <MarkerPanel project={project} sel={selMarker} onPatchShake={patchShake} onPatchImpact={patchImpact} onPatchRamp={patchRamp} onDelete={deleteMarker} />
+            <MarkerPanel project={project} sel={selMarker} onPatchShake={patchShake} onPatchImpact={patchImpact} onPatchRamp={patchRamp} onPatchPostEffect={patchPostEffect} onDelete={deleteMarker} />
           ) : !selected ? (
             <p className="text-[11.5px] leading-[1.6]" style={{ color: 'var(--ink-faint)' }}>Pick a layer on the stage, or add one. Drag to move; the timeline below keys its position at the playhead. Camera previews during Play.</p>
           ) : (
@@ -1006,6 +1031,13 @@ export function MotionStudio() {
                 title={`impact (${i.style}) at ${i.t.toFixed(2)}s`}
                 className="absolute top-0 h-full w-1.5 -translate-x-1/2 cursor-pointer"
                 style={{ left: `${(i.t / project.duration) * 100}%`, background: i.style === 'bw' ? '#aaaaaa' : '#ffffff', outline: selMarker?.kind === 'impact' && selMarker.id === i.id ? '1px solid var(--accent)' : 'none' }} />
+            ))}
+            {project.postEffects.map((fx) => (
+              <div key={fx.id}
+                onPointerDown={(e) => { e.stopPropagation(); setSelMarker({ kind: 'posteffect', id: fx.id }); seek(fx.t); }}
+                title={`${fx.kind} at ${fx.t.toFixed(2)}s`}
+                className="absolute top-0 h-full w-1.5 -translate-x-1/2 cursor-pointer"
+                style={{ left: `${(fx.t / project.duration) * 100}%`, background: '#ff5ec4', outline: selMarker?.kind === 'posteffect' && selMarker.id === fx.id ? '1px solid var(--accent)' : 'none' }} />
             ))}
             {project.shakes.map((s) => (
               <div key={s.id}
@@ -1220,6 +1252,42 @@ function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPose
         </div>
       )}
 
+      {layer.kind === 'speedlines' && layer.speedlines && (
+        <div className="border-t pt-2.5" style={{ borderColor: 'var(--line)' }}>
+          <p className="mono mb-1.5 text-[10px] uppercase tracking-wide" style={{ color: 'var(--ink-faint)' }}>speed lines</p>
+          <label className="mb-1.5 flex items-center gap-2 text-[11px]" style={{ color: 'var(--ink-dim)' }}>
+            kind
+            <select value={layer.speedlines.kind} onChange={(e) => onPatchLayer({ speedlines: { ...layer.speedlines!, kind: e.target.value as 'radial' | 'linear' } })} className={`${inputCls} flex-1`} style={{ ...inputStyle, background: 'var(--panel)' }}>
+              <option value="radial">radial (impact burst)</option>
+              <option value="linear">linear (fast pan/run)</option>
+            </select>
+          </label>
+          <div className="grid grid-cols-2 gap-1.5">
+            <NumField label="density" value={layer.speedlines.density} min={1} onChange={(v) => onPatchLayer({ speedlines: { ...layer.speedlines!, density: Math.max(1, Math.round(v)) } })} />
+            <NumField label="length" value={layer.speedlines.length} min={1} onChange={(v) => onPatchLayer({ speedlines: { ...layer.speedlines!, length: Math.max(1, v) } })} />
+            {layer.speedlines.kind === 'linear' && <NumField label="angle°" value={layer.speedlines.angleDeg} onChange={(v) => onPatchLayer({ speedlines: { ...layer.speedlines!, angleDeg: v } })} />}
+            <NumField label="opacity" value={layer.speedlines.opacity} step={0.05} min={0} max={1} onChange={(v) => onPatchLayer({ speedlines: { ...layer.speedlines!, opacity: Math.max(0, Math.min(1, v)) } })} />
+          </div>
+          <div className="mt-1.5 flex items-center gap-2 text-[10.5px]" style={{ color: 'var(--ink-dim)' }}>
+            colour <input type="color" value={layer.speedlines.color} onChange={(e) => onPatchLayer({ speedlines: { ...layer.speedlines!, color: e.target.value } })} className="h-6 w-8 rounded border" style={{ borderColor: 'var(--line)' }} />
+          </div>
+          <Btn onClick={() => onPatchLayer({ speedlines: { ...layer.speedlines!, seed: Math.floor(Math.random() * 1e6) } })} small title="Reshuffle the line layout"><SkillIcon name="wand" size={11} /> Reshuffle</Btn>
+        </div>
+      )}
+
+      <div className="border-t pt-2.5" style={{ borderColor: 'var(--line)' }}>
+        <label className="mono flex items-center gap-1.5 text-[10.5px]" style={{ color: 'var(--ink-dim)' }}>
+          <input type="checkbox" checked={layer.motionBlur.enabled} onChange={(e) => onPatchLayer({ motionBlur: { ...layer.motionBlur, enabled: e.target.checked } })} />
+          motion blur (trails behind real movement)
+        </label>
+        {layer.motionBlur.enabled && (
+          <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+            <NumField label="strength" value={layer.motionBlur.strength} step={0.01} min={0} onChange={(v) => onPatchLayer({ motionBlur: { ...layer.motionBlur, strength: Math.max(0, v) } })} />
+            <NumField label="ghosts" value={layer.motionBlur.samples} min={0} max={12} onChange={(v) => onPatchLayer({ motionBlur: { ...layer.motionBlur, samples: Math.max(0, Math.min(12, Math.round(v))) } })} />
+          </div>
+        )}
+      </div>
+
       <div className="mt-1 border-t pt-2.5" style={{ borderColor: 'var(--line)' }}>
         <p className="mono mb-1.5 text-[10px] uppercase tracking-wide" style={{ color: 'var(--ink-faint)' }}>at {fmt(time)} — edit keys a keyframe here</p>
         <div className="grid grid-cols-2 gap-1.5">
@@ -1249,13 +1317,30 @@ function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPose
 
 // ── properties panel for a camera marker (shake / impact / speed ramp) ─────────
 
-function MarkerPanel({ project, sel, onPatchShake, onPatchImpact, onPatchRamp, onDelete }: {
+function MarkerPanel({ project, sel, onPatchShake, onPatchImpact, onPatchRamp, onPatchPostEffect, onDelete }: {
   project: MotionProject; sel: NonNullable<MarkerSel>;
   onPatchShake: (id: string, patch: Partial<ShakeEvent>) => void;
   onPatchImpact: (id: string, patch: Partial<ImpactFrame>) => void;
   onPatchRamp: (id: string, patch: Partial<SpeedRamp>) => void;
+  onPatchPostEffect: (id: string, patch: Partial<PostEffect>) => void;
   onDelete: () => void;
 }) {
+  if (sel.kind === 'posteffect') {
+    const fx = project.postEffects.find((x) => x.id === sel.id);
+    if (!fx) return null;
+    const preset = POST_EFFECT_KINDS.find((k) => k.kind === fx.kind)!;
+    return (
+      <div className="flex flex-col gap-2.5">
+        <p className="mono text-[11px] font-semibold" style={{ color: 'var(--ink)' }}>{preset.label} effect</p>
+        <NumField label="start (s)" value={fx.t} step={0.02} min={0} onChange={(v) => onPatchPostEffect(fx.id, { t: Math.max(0, v) })} />
+        <NumField label="duration (s)" value={fx.duration} step={0.02} min={0.02} onChange={(v) => onPatchPostEffect(fx.id, { duration: Math.max(0.02, v) })} />
+        {fx.kind !== 'invert' && (
+          <NumField label={fx.kind === 'glitch' ? 'intensity' : fx.kind === 'warp' ? 'pull (px)' : 'offset (px)'} value={fx.strength} step={fx.kind === 'glitch' ? 0.05 : 1} onChange={(v) => onPatchPostEffect(fx.id, { strength: v })} />
+        )}
+        <Btn onClick={onDelete} title="Delete this effect (Del)"><SkillIcon name="bug" size={12} /> Delete effect</Btn>
+      </div>
+    );
+  }
   if (sel.kind === 'shake') {
     const s = project.shakes.find((x) => x.id === sel.id);
     if (!s) return null;

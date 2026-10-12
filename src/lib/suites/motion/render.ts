@@ -16,6 +16,9 @@ import { easeFn } from './easing.ts';
 import { strokeToDabs, type BrushSettings, type Dab, type StrokePoint } from './brush.ts';
 import { bezierNodesToPolyline } from './vectorStroke.ts';
 import { paintFrameAt } from './paint.ts';
+import { generateSpeedLines } from './speedlines.ts';
+import { motionBlurGhosts, velocityAt } from './motionblur.ts';
+import { chromaticAberration, glitchSlices, radialWarp, screenInvert, type RgbaBuffer } from './postfx.ts';
 
 const COMPOSITE: Record<BlendMode, GlobalCompositeOperation> = {
   normal: 'source-over', add: 'lighter', multiply: 'multiply', screen: 'screen',
@@ -91,6 +94,8 @@ export function drawFrame(ctx: CanvasRenderingContext2D, project: MotionProject,
   ctx.filter = 'none';
   ctx.restore(); // camera transform
 
+  applyPostEffects(ctx, project, t, width, height);
+
   if (impact?.style === 'flash') {
     const age = t - impact.t;
     const p = impact.duration > 0 ? 1 - age / impact.duration : 1;
@@ -102,6 +107,42 @@ export function drawFrame(ctx: CanvasRenderingContext2D, project: MotionProject,
   }
 
   ctx.restore();
+}
+
+/** Dramatic whole-screen moments (chromatic split, glitch, invert, space-bend warp) applied to the already-composited pixels — screen-space, after the camera transform is popped, so they distort the final image rather than the scene. */
+function applyPostEffects(ctx: CanvasRenderingContext2D, project: MotionProject, t: number, width: number, height: number): void {
+  const active = project.postEffects.filter((e) => t >= e.t && t <= e.t + e.duration);
+  if (active.length === 0) return;
+  let buf: RgbaBuffer = ctx.getImageData(0, 0, width, height);
+  for (const effect of active) {
+    const age = t - effect.t;
+    const p = effect.duration > 0 ? 1 - age / effect.duration : 1;
+    const envelope = Math.max(0, Math.min(1, p));
+    switch (effect.kind) {
+      case 'chromatic':
+        buf = chromaticAberration(buf, effect.strength * envelope);
+        break;
+      case 'glitch':
+        buf = glitchSlices(buf, 24, Math.round(width * 0.08), hashSeed(effect.id, Math.floor(t * 24)), effect.strength * envelope);
+        break;
+      case 'invert':
+        if (envelope > 0.5) buf = screenInvert(buf);
+        break;
+      case 'warp':
+        buf = radialWarp(buf, width / 2, height / 2, Math.max(width, height) * 0.7, effect.strength * envelope);
+        break;
+    }
+  }
+  const outData = new ImageData(buf.width, buf.height);
+  outData.data.set(buf.data);
+  ctx.putImageData(outData, 0, 0);
+}
+
+/** A small deterministic string+int hash — gives glitchSlices a seed that changes every frame (so the glitch animates) without needing a stored RNG state per effect. */
+function hashSeed(id: string, frame: number): number {
+  let h = frame >>> 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h;
 }
 
 function drawGhost(ctx: CanvasRenderingContext2D, project: MotionProject, t: number, opacity: number, tint: string, opts: RenderOptions): void {
@@ -122,6 +163,19 @@ function drawGhost(ctx: CanvasRenderingContext2D, project: MotionProject, t: num
 function drawLayer(ctx: CanvasRenderingContext2D, layer: MotionLayer, t: number, opts: RenderOptions, groupOpacity = 1): void {
   const v = valueAt(layer, t);
   if (v.opacity <= 0 || groupOpacity <= 0) return;
+  if (layer.motionBlur?.enabled) {
+    const { vx, vy } = velocityAt(layer, t);
+    const ghosts = motionBlurGhosts(vx, vy, layer.motionBlur.strength, layer.motionBlur.samples);
+    for (const g of ghosts) {
+      if (g.opacity <= 0) continue;
+      ctx.save();
+      ctx.translate(g.dx, g.dy);
+      ctx.globalAlpha = v.opacity * groupOpacity * g.opacity;
+      ctx.globalCompositeOperation = COMPOSITE[layer.blendMode];
+      drawLayerShape(ctx, layer, t, opts);
+      ctx.restore();
+    }
+  }
   ctx.save();
   ctx.globalAlpha = v.opacity * groupOpacity;
   ctx.globalCompositeOperation = COMPOSITE[layer.blendMode];
@@ -211,6 +265,27 @@ function drawLayerShape(ctx: CanvasRenderingContext2D, layer: MotionLayer, t: nu
     case 'paint':
       if (layer.paint) drawPaint(ctx, layer.paint, t, tintOverride, opts.images);
       break;
+    case 'speedlines':
+      if (layer.speedlines) drawSpeedlinesLayer(ctx, layer.speedlines, tintOverride);
+      break;
+  }
+  ctx.restore();
+}
+
+/** Speed lines are drawn centred on the layer's own local origin (0,0) — the layer's x/y keyframes move the whole burst, same as every other layer kind. */
+function drawSpeedlinesLayer(ctx: CanvasRenderingContext2D, config: NonNullable<MotionLayer['speedlines']>, tintOverride?: string): void {
+  const reachPx = Math.hypot(ctx.canvas.width, ctx.canvas.height);
+  const lines = generateSpeedLines(config, reachPx);
+  ctx.save();
+  ctx.strokeStyle = tintOverride ?? config.color;
+  ctx.lineCap = 'round';
+  for (const line of lines) {
+    ctx.globalAlpha = line.opacity;
+    ctx.lineWidth = line.width;
+    ctx.beginPath();
+    ctx.moveTo(line.x1, line.y1);
+    ctx.lineTo(line.x2, line.y2);
+    ctx.stroke();
   }
   ctx.restore();
 }

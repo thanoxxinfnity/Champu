@@ -25,6 +25,8 @@ import { newRig } from './rig.ts';
 import type { AudioTrack } from './audio.ts';
 import type { PaintLayerData } from './paint.ts';
 import { newPaintLayerData } from './paint.ts';
+import type { SpeedLineConfig } from './speedlines.ts';
+import { newSpeedLineConfig } from './speedlines.ts';
 
 export type { Easing } from './easing.ts';
 export { EASINGS, easeFn } from './easing.ts';
@@ -33,10 +35,30 @@ export type { ParticleConfig, ParticlePreset } from './particles.ts';
 export type { BoneDef, RigConfig } from './rig.ts';
 export type { AudioTrack } from './audio.ts';
 export type { PaintLayerData, PaintFrame, PaintStroke } from './paint.ts';
+export type { SpeedLineConfig, SpeedLineKind } from './speedlines.ts';
 
-export type LayerKind = 'text' | 'rect' | 'circle' | 'image' | 'particles' | 'rig' | 'paint';
+export type LayerKind = 'text' | 'rect' | 'circle' | 'image' | 'particles' | 'rig' | 'paint' | 'speedlines';
 export type BlendMode = 'normal' | 'add' | 'multiply' | 'screen' | 'overlay' | 'soft-light' | 'color-dodge';
 export const BLEND_MODES: BlendMode[] = ['normal', 'add', 'multiply', 'screen', 'overlay', 'soft-light', 'color-dodge'];
+
+export interface MotionBlurConfig {
+  enabled: boolean;
+  /** How far the trail reaches per unit of speed. */
+  strength: number;
+  /** Number of fading ghost copies. */
+  samples: number;
+}
+
+/** A dramatic whole-screen moment: chromatic aberration, a glitch, a screen invert, or a space-bend warp. */
+export type PostEffectKind = 'chromatic' | 'glitch' | 'invert' | 'warp';
+export interface PostEffect {
+  id: string;
+  t: number;
+  duration: number;
+  kind: PostEffectKind;
+  /** Meaning depends on kind: pixel offset (chromatic), intensity 0-1 (glitch), ignored (invert), pull strength (warp). */
+  strength: number;
+}
 
 /** A folder a layer can be filed under — collapsing/moving/dimming it moves every layer inside together. */
 export interface LayerGroup {
@@ -96,6 +118,10 @@ export interface MotionLayer {
   rig?: RigConfig;
   /** Only present when kind === 'paint'. */
   paint?: PaintLayerData;
+  /** Only present when kind === 'speedlines'. */
+  speedlines?: SpeedLineConfig;
+  /** A trailing-ghost blur derived from this layer's own keyframed motion. */
+  motionBlur: MotionBlurConfig;
   /** Sorted by `t`; never empty — a new layer gets one keyframe at t=0. */
   keyframes: Keyframe[];
   /** Hidden layers are skipped entirely at render/export time. */
@@ -123,6 +149,8 @@ export interface MotionProject {
   audio?: AudioTrack;
   /** Saved HSV swatches, most-recently-used first. */
   palette: string[];
+  /** Whole-screen chromatic-aberration/glitch/invert/warp bursts, timed like impact frames. */
+  postEffects: PostEffect[];
 }
 
 export const STAGE_PRESETS: Array<{ label: string; w: number; h: number }> = [
@@ -140,11 +168,15 @@ export function defaultOnionSkin(): OnionSkinConfig {
 }
 export const DEFAULT_PALETTE: string[] = ['#f4f5f7', '#1a1a1a', '#ff5c5c', '#ffb14e', '#ffe14e', '#5cffb0', '#5c8cff', '#8a5cff'];
 
+export function defaultMotionBlur(): MotionBlurConfig {
+  return { enabled: false, strength: 0.08, samples: 5 };
+}
+
 export function emptyProject(): MotionProject {
   return {
     title: 'My motion', width: 960, height: 540, duration: 4, background: '#111318', layers: [], groups: [],
     camera: defaultCamera(), shakes: [], impacts: [], speedRamps: [],
-    onionSkin: defaultOnionSkin(), palette: [...DEFAULT_PALETTE],
+    onionSkin: defaultOnionSkin(), palette: [...DEFAULT_PALETTE], postEffects: [],
   };
 }
 
@@ -167,7 +199,7 @@ export function normalizeProject(raw: unknown): MotionProject {
     duration: typeof p.duration === 'number' ? p.duration : 4,
     background: typeof p.background === 'string' ? p.background : '#111318',
     layers: rawLayers.map((l) => ({
-      blendMode: 'normal' as BlendMode, visible: true, groupId: null, clipToBelow: false, ...l,
+      blendMode: 'normal' as BlendMode, visible: true, groupId: null, clipToBelow: false, motionBlur: defaultMotionBlur(), ...l,
     }) as MotionLayer),
     groups: Array.isArray(p.groups) ? (p.groups as LayerGroup[]) : [],
     camera: camera.length > 0 ? camera : defaultCamera(),
@@ -177,6 +209,7 @@ export function normalizeProject(raw: unknown): MotionProject {
     onionSkin: rawOnion ? { ...fallbackOnion, ...rawOnion } : fallbackOnion,
     audio: p.audio as AudioTrack | undefined,
     palette: Array.isArray(p.palette) && p.palette.length > 0 ? (p.palette as string[]) : [...DEFAULT_PALETTE],
+    postEffects: Array.isArray(p.postEffects) ? (p.postEffects as PostEffect[]) : [],
   };
 }
 
@@ -189,6 +222,7 @@ const KIND_DEFAULT: Record<Exclude<LayerKind, 'paint'>, { w: number; h: number; 
   image: { w: 200, h: 200, color: '#ffffff', text: '' },
   particles: { w: 160, h: 160, color: '#8a5cff', text: '' },
   rig: { w: 120, h: 180, color: '#f4f5f7', text: '' },
+  speedlines: { w: 1, h: 1, color: '#ffffff', text: '' },
 };
 
 export function newLayer(kind: LayerKind, project: MotionProject, name?: string): MotionLayer {
@@ -208,9 +242,11 @@ export function newLayer(kind: LayerKind, project: MotionProject, name?: string)
     visible: true,
     groupId: null,
     clipToBelow: false,
+    motionBlur: defaultMotionBlur(),
     ...(kind === 'particles' ? { particles: newParticleConfig('aura', Math.floor(Math.random() * 1e6)) } : {}),
     ...(kind === 'rig' ? { rig: newRig() } : {}),
     ...(kind === 'paint' ? { paint: newPaintLayerData(12) } : {}),
+    ...(kind === 'speedlines' ? { speedlines: newSpeedLineConfig('radial', 0, 0, Math.floor(Math.random() * 1e6)) } : {}),
     keyframes: [{ ...BASE_KEYFRAME, id: newId('kf'), t: 0, x: cx, y: cy, easing: 'easeOut' }],
   };
 }
@@ -319,7 +355,7 @@ function layerBaseCss(layer: MotionLayer, className: string): string {
 
 /** Layers the CSS/GSAP/HTML code exporters can represent — a canvas-only particle pool or bone rig has no portable DOM equivalent. */
 function portableLayers(project: MotionProject): MotionLayer[] {
-  return project.layers.filter((l) => l.kind !== 'particles' && l.kind !== 'rig' && l.kind !== 'paint');
+  return project.layers.filter((l) => l.kind !== 'particles' && l.kind !== 'rig' && l.kind !== 'paint' && l.kind !== 'speedlines');
 }
 
 /** One @keyframes block per layer, with a timing-function set per stop so each segment keeps its own ease. */
