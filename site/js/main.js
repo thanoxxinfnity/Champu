@@ -204,6 +204,9 @@ whenVisible($('#space'), () => import('./space.js').then((m) => m.start()).catch
 }), { once: true, margin: '0px 0px 600px 0px' });
 import('./nasa-cards.js').then((m) => m.start());
 
+/* ---------- the small 3D model next to "What it can make" ---------- */
+whenVisible($('#model3d-card'), () => import('./model3d.js').then((m) => m.start()).catch((e) => console.error(e)), { once: true, margin: '0px 0px 400px 0px' });
+
 import('./fx.js').then((m) => m.start());
 import('./immersive.js').then((m) => m.start());
 import('./agent.js').then((m) => m.start());
