@@ -5,6 +5,7 @@ import { deleteAsset, listAssets } from '@/lib/db/history';
 import type { AssetRecord } from '@/lib/db/schema';
 import { useWorkspace } from '@/lib/store';
 import { downloadAsset } from './LibraryView';
+import { ModelStudio } from './ModelStudio';
 import { ModelViewer } from './ModelViewer';
 import { apiBase, authHeaders, endpointsFor, httpJson, mediaToBlob, modelsFor, pickMedia, saveMedia, sleep, srcOf } from './shared';
 
@@ -21,6 +22,7 @@ export function Model3D() {
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<AssetRecord[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [studio, setStudio] = useState(false);
   const file = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => setItems(await listAssets('model3d', 100)), []);
@@ -58,6 +60,11 @@ export function Model3D() {
     setSelected(saved.id); await refresh();
   };
 
+  const exportFromStudio = async (blob: Blob, filename: string) => {
+    const saved = await saveMedia({ suite: 'model3d', kind: 'model3d', prompt: filename.replace(/\.(glb|obj)$/i, ''), provider: 'studio', model: filename.toLowerCase().endsWith('.obj') ? 'obj' : 'glb', blob });
+    setSelected(saved.id); await refresh();
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col md:flex-row" data-testid="model3d">
       <section className="flex min-h-[18rem] min-w-0 flex-1 flex-col">
@@ -70,6 +77,7 @@ export function Model3D() {
             <select value={model} onChange={(e) => setModel(e.target.value)} className="mono max-w-[12rem] rounded border bg-transparent px-2 py-1 text-[10.5px]" style={{ borderColor: 'var(--line)', color: 'var(--ink)' }} aria-label="Model">{models.map((m) => <option key={m} value={m}>{m}</option>)}</select>
             <button type="button" onClick={() => file.current?.click()} className="press mono rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--line)' }}>open .glb</button>
             <input ref={file} type="file" accept=".glb,model/gltf-binary" hidden onChange={(e) => { void openFile(e.target.files?.[0]); e.target.value = ''; }} />
+            <button type="button" onClick={() => setStudio(true)} className="press mono rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--line)' }}>{now ? 'edit in studio' : 'open studio'}</button>
             <button type="button" onClick={() => void generate()} disabled={busy || !prompt.trim() || !endpoint} className="press mono ml-auto rounded-lg px-4 py-1.5 text-[11.5px] font-semibold disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--panel)' }}>{busy ? 'building…' : 'make model'}</button>
           </div>
           {error && <p className="text-[11px] leading-[1.5]" role="alert" style={{ color: 'var(--color-red, #e5484d)' }}>{error}</p>}
@@ -87,6 +95,14 @@ export function Model3D() {
           ))}
         </ul>
       </aside>
+      {studio && (
+        <ModelStudio
+          src={now ? srcOf(now) : undefined}
+          title={now?.prompt}
+          onClose={() => setStudio(false)}
+          onExport={(blob, filename) => { void exportFromStudio(blob, filename); }}
+        />
+      )}
     </div>
   );
 }
