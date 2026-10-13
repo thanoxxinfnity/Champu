@@ -63,7 +63,7 @@ import { PLANNER_NIM_MODEL } from '@/lib/providers/registry';
 import { endpointConfigFor } from '@/lib/providers/endpoint-models';
 import { draftSystemSuffix, pickAngles } from './drafts';
 import { scanForSecrets, hasBlockingSecret } from '@/lib/security/secrets';
-import { appendMessage, createSession, getSetting, listMessages, setSetting, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
+import { appendMessage, createSession, getSetting, listMessages, setSetting, titleFromInput, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
 import type { SuiteId } from '@/lib/db/schema';
 import { BridgeOfflineError } from '@/lib/bridge/client';
 
@@ -773,7 +773,7 @@ export async function send(opts: SendOptions): Promise<void> {
   // A brand-new chat gets its session now, once, so everything typed into it while it waits belongs together.
   let sessionId = opts.sessionId ?? st.sessionId;
   if (!sessionId) {
-    creating ??= createSession(suite, input.slice(0, 80) || 'Untitled run', { provider: st.selection.provider, model: st.selection.model })
+    creating ??= createSession(suite, titleFromInput(input), { provider: st.selection.provider, model: st.selection.model })
       .then((made) => {
         useWorkspace.getState().setSessionId(made.id);
         return made.id;
@@ -869,7 +869,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
   // Session bootstrap.
   let sessionId = opts.sessionId ?? state.sessionId;
   if (!sessionId) {
-    const session = await createSession(suite, input.slice(0, 80) || 'Untitled run', {
+    const session = await createSession(suite, titleFromInput(input), {
       provider: selection.provider,
       model: selection.model,
     });

@@ -139,6 +139,15 @@ export interface DeployResult {
   releases?: number;
 }
 
+export interface DriveUploadLogEntry {
+  id: string;
+  filename: string;
+  suite: string;
+  status: 'ok' | 'error';
+  error?: string;
+  at: number;
+}
+
 /**
  * A finished background run, announced briefly and then gone.
  *
@@ -283,6 +292,23 @@ interface WorkspaceState {
   setVercelCredentials: (token: string, teamId?: string) => void;
   lastDeploy: DeployResult | null;
   setLastDeploy: (result: DeployResult | null) => void;
+
+  // ── Google Drive ──────────────────────────────────────────────────────────
+  // Client ID is public (it travels in every OAuth request the browser sends), so it is safe to
+  // persist. The access token is not: it is kept in memory only and never written to IndexedDB, so
+  // a reload always requires a fresh consent — there is no refresh token because that would need a
+  // client secret, which has nowhere safe to live in a client-only app.
+  driveClientId: string;
+  setDriveClientId: (id: string) => void;
+  driveAccessToken: string | null;
+  driveTokenExpiresAt: number | null;
+  driveStatus: 'idle' | 'connecting' | 'connected' | 'error';
+  driveError: string | null;
+  driveAutoSave: boolean;
+  setDriveAutoSave: (enabled: boolean) => void;
+  driveUploads: DriveUploadLogEntry[];
+  connectDrive: () => Promise<void>;
+  disconnectDrive: () => void;
 
   // ── Run notices ───────────────────────────────────────────────────────────
   notices: RunNotice[];
@@ -592,6 +618,44 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     void setSetting('deploy', result);
   },
 
+  driveClientId: '',
+  setDriveClientId: (id) => {
+    set({ driveClientId: id });
+    void setSetting('driveClientId', id);
+  },
+  driveAccessToken: null,
+  driveTokenExpiresAt: null,
+  driveStatus: 'idle',
+  driveError: null,
+  driveAutoSave: false,
+  setDriveAutoSave: (enabled) => {
+    // Off by default and never flips on by itself — this is the one switch the user has to go
+    // into Settings and press themselves before anything generated leaves the device for Drive.
+    set({ driveAutoSave: enabled });
+    void setSetting('driveAutoSave', enabled);
+  },
+  driveUploads: [],
+  connectDrive: async () => {
+    set({ driveStatus: 'connecting', driveError: null });
+    try {
+      const { requestDriveToken } = await import('@/lib/drive/client');
+      const { accessToken, expiresAt } = await requestDriveToken(get().driveClientId);
+      set({ driveAccessToken: accessToken, driveTokenExpiresAt: expiresAt, driveStatus: 'connected', driveError: null });
+    } catch (err) {
+      set({ driveStatus: 'error', driveError: (err as Error).message });
+    }
+  },
+  disconnectDrive: () => {
+    const token = get().driveAccessToken;
+    set({ driveAccessToken: null, driveTokenExpiresAt: null, driveStatus: 'idle', driveError: null });
+    if (token) {
+      void import('@/lib/drive/client').then(({ revokeDriveToken, resetDriveFolderCache }) => {
+        resetDriveFolderCache();
+        void revokeDriveToken(token);
+      });
+    }
+  },
+
   notices: [],
   pushNotice: (notice) => {
     const id = `notice_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
@@ -709,6 +773,10 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     set({ draftsEnabled: await getSetting<boolean>('draftsEnabled', false) });
     set({ mediaHidden: await getSetting<SuiteId[]>('mediaHidden', []) });
     set({ imageModel: await getSetting<string>('imageModel', 'nim:black-forest-labs/flux.1-dev') });
+    set({ driveClientId: await getSetting<string>('driveClientId', '') });
+    // Only the on/off switch is restored — the access token itself is never persisted, so Drive
+    // always comes back disconnected after a reload and waits for the user to reconnect.
+    set({ driveAutoSave: await getSetting<boolean>('driveAutoSave', false) });
 
     // The boot script already painted the stored theme; this re-syncs the store
     // with it and covers the case where the localStorage mirror was cleared.

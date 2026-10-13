@@ -98,7 +98,7 @@ export async function saveMedia(args: {
   meta?: Record<string, unknown>;
 }): Promise<AssetRecord> {
   const dataUrl = args.blob ? await blobToDataUrl(args.blob) : undefined;
-  return saveAsset({
+  const saved = await saveAsset({
     suite: args.suite,
     kind: args.kind,
     prompt: args.prompt,
@@ -109,6 +109,27 @@ export async function saveMedia(args: {
     bytes: args.blob?.size,
     meta: args.meta,
   });
+  if (args.blob) void backUpToDriveIfEnabled(saved, args.blob);
+  return saved;
+}
+
+const DRIVE_EXT: Record<AssetRecord['kind'], string> = { image: 'png', video: 'mp4', audio: 'wav', model3d: 'glb', binary: 'bin' };
+
+/** Fire-and-forget: only runs when the user connected Drive AND flipped the auto-save switch on in Settings. */
+async function backUpToDriveIfEnabled(asset: AssetRecord, blob: Blob): Promise<void> {
+  const { useWorkspace } = await import('@/lib/store');
+  const s = useWorkspace.getState();
+  if (!s.driveAutoSave || !s.driveAccessToken) return;
+  const safeName = (asset.prompt || asset.kind).replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || asset.kind;
+  const filename = `${safeName}.${asset.id.slice(0, 6)}.${DRIVE_EXT[asset.kind]}`;
+  const entry = { id: asset.id, filename, suite: asset.suite, at: Date.now() };
+  try {
+    const { uploadToDrive } = await import('@/lib/drive/client');
+    await uploadToDrive(s.driveAccessToken, filename, blob);
+    useWorkspace.setState((st) => ({ driveUploads: [{ ...entry, status: 'ok' as const }, ...st.driveUploads].slice(0, 30) }));
+  } catch (err) {
+    useWorkspace.setState((st) => ({ driveUploads: [{ ...entry, status: 'error' as const, error: (err as Error).message }, ...st.driveUploads].slice(0, 30) }));
+  }
 }
 
 export const srcOf = (a: Pick<AssetRecord, 'dataUrl' | 'url'>) => a.dataUrl ?? a.url ?? '';

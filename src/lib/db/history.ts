@@ -9,6 +9,7 @@ import {
   type SessionRecord,
   type SuiteId,
 } from './schema';
+export { titleFromInput } from '@/lib/text/session-title';
 
 /**
  * History repository — one API per suite, each partition fully independent.

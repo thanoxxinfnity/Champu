@@ -15,7 +15,7 @@ import { isShellHosted, loadKeys, maskKey, nimConfigured, saveKeys, validateNimK
 import { normalizeBase } from '@/lib/providers/model-list';
 import { parseBridgeInput } from '@/lib/bridge/parse';
 
-type Tab = 'guide' | 'keys' | 'bridge' | 'secrets' | 'endpoints' | 'media' | 'deploy' | 'voice' | 'guard';
+type Tab = 'guide' | 'keys' | 'bridge' | 'secrets' | 'endpoints' | 'media' | 'deploy' | 'drive' | 'voice' | 'guard';
 
 function Field({
   label,
@@ -1207,6 +1207,114 @@ function DeployTab() {
   );
 }
 
+function DriveTab() {
+  const clientId = useWorkspace((s) => s.driveClientId);
+  const setDriveClientId = useWorkspace((s) => s.setDriveClientId);
+  const status = useWorkspace((s) => s.driveStatus);
+  const error = useWorkspace((s) => s.driveError);
+  const autoSave = useWorkspace((s) => s.driveAutoSave);
+  const setDriveAutoSave = useWorkspace((s) => s.setDriveAutoSave);
+  const uploads = useWorkspace((s) => s.driveUploads);
+  const connectDrive = useWorkspace((s) => s.connectDrive);
+  const disconnectDrive = useWorkspace((s) => s.disconnectDrive);
+
+  const [id, setId] = useState(clientId);
+  useEffect(() => setId(clientId), [clientId]);
+
+  const connected = status === 'connected';
+
+  return (
+    <div className="space-y-4">
+      <p className="text-[11.5px] leading-[1.55]" style={{ color: 'var(--ink-dim)' }}>
+        Connect your own Google Drive so everything generated here — images, video, audio, 3D models —
+        is also saved to a <strong>Chomugiri</strong> folder in your Drive, not just this device. This uses
+        Google&apos;s official sign-in with the narrowest scope that exists (<code>drive.file</code>): the app
+        can only see files it creates itself, never the rest of your Drive. Nothing is saved anywhere
+        until you turn the switch on below — connecting alone does not start it.
+      </p>
+
+      <Field
+        label="Google OAuth Client ID"
+        hint="Your own, free to create: console.cloud.google.com → APIs & Services → Credentials → Create Credentials → OAuth client ID → Web application. Add this app's URL to 'Authorized JavaScript origins'. Nothing but your browser and Google ever sees this ID."
+      >
+        <input
+          value={id}
+          onChange={(e) => setId(e.target.value)}
+          onBlur={() => id !== clientId && setDriveClientId(id.trim())}
+          placeholder="123456-abc.apps.googleusercontent.com"
+          className={inputClass}
+          style={inputStyle}
+          spellCheck={false}
+        />
+      </Field>
+
+      <div className="flex items-center gap-2">
+        {!connected ? (
+          <button
+            type="button"
+            onClick={() => { setDriveClientId(id.trim()); void connectDrive(); }}
+            disabled={!id.trim() || status === 'connecting'}
+            className="mono rounded-lg px-3 py-2 text-[11.5px] font-medium disabled:opacity-40"
+            style={{ background: 'var(--accent)', color: '#04150e' }}
+          >
+            {status === 'connecting' ? 'opening Google sign-in…' : 'connect Google Drive'}
+          </button>
+        ) : (
+          <>
+            <span className="mono flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--accent)' }}>
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--accent)' }} aria-hidden /> connected
+            </span>
+            <button type="button" onClick={disconnectDrive} className="mono rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--line)' }}>
+              disconnect
+            </button>
+          </>
+        )}
+      </div>
+
+      {error && (
+        <p className="text-[11px] leading-[1.5]" role="alert" style={{ color: 'var(--color-red, #e5484d)' }}>
+          {error}
+        </p>
+      )}
+
+      <div className="flex items-center justify-between rounded-lg border p-2.5" style={{ borderColor: 'var(--line)' }}>
+        <div>
+          <p className="text-[11.5px] font-medium">Auto-save generated files to Drive</p>
+          <p className="mt-0.5 text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>
+            Off by default. {connected ? 'Drive is connected — flip this on to start.' : 'Connect Drive first.'}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={autoSave}
+          onClick={() => setDriveAutoSave(!autoSave)}
+          disabled={!connected && !autoSave}
+          className="press shrink-0 rounded-full px-0.5 py-0.5 transition-colors disabled:opacity-40"
+          style={{ width: 38, height: 22, background: autoSave ? 'var(--accent)' : 'var(--line)' }}
+        >
+          <span className="block h-[18px] w-[18px] rounded-full bg-white transition-transform" style={{ transform: autoSave ? 'translateX(16px)' : 'translateX(0)' }} />
+        </button>
+      </div>
+
+      {uploads.length > 0 && (
+        <div>
+          <p className="mono mb-1.5 text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-faint)' }}>Recent Drive activity</p>
+          <ul className="max-h-40 space-y-1 overflow-y-auto">
+            {uploads.map((u) => (
+              <li key={`${u.id}-${u.at}`} className="flex items-center gap-2 rounded-lg border px-2 py-1.5 text-[10.5px]" style={{ borderColor: 'var(--line)' }}>
+                <span aria-hidden style={{ color: u.status === 'ok' ? 'var(--accent)' : 'var(--color-rose, #e5484d)' }}>{u.status === 'ok' ? '✓' : '✕'}</span>
+                <span className="min-w-0 flex-1 truncate" style={{ color: 'var(--ink-dim)' }}>{u.filename}</span>
+                <span className="mono shrink-0" style={{ color: 'var(--ink-faint)' }}>{new Date(u.at).toLocaleTimeString()}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GuardTab() {
   const fingerprints = useWorkspace((s) => s.fingerprints);
   const resetGuard = useWorkspace((s) => s.resetGuard);
@@ -1912,6 +2020,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'endpoints', label: 'Custom Endpoints' },
   { id: 'media', label: 'Media' },
   { id: 'deploy', label: 'Deployment' },
+  { id: 'drive', label: 'Google Drive' },
   { id: 'voice', label: 'Voice' },
   { id: 'guard', label: 'Anti-Loop Ledger' },
 ];
@@ -1976,6 +2085,7 @@ export function Settings({ open, onClose }: { open: boolean; onClose: () => void
           {tab === 'endpoints' && <EndpointsTab />}
           {tab === 'media' && <MediaTab goTo={setTab} />}
           {tab === 'deploy' && <DeployTab />}
+          {tab === 'drive' && <DriveTab />}
           {tab === 'voice' && <VoiceTab />}
           {tab === 'guard' && <GuardTab />}
         </div>
