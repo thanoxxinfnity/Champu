@@ -1,0 +1,17 @@
+[
+  {
+    "id": "acme",
+    "name": "Acme Corp",
+    "enabled": true,
+    "apiKeyHash": "REPLACE_WITH_SHA256_HEX_OF_YOUR_KEY",
+    "scopes": ["tools:image", "tools:video"],
+    "rateLimit": { "points": 30, "windowSeconds": 60 },
+    "providers": {
+      "image": {
+        "baseUrl": "https://integrate.api.nvidia.com/v1",
+        "apiKey": "nvapi-...",
+        "model": "black-forest-labs/flux.1-dev"
+      }
+    }
+  }
+]

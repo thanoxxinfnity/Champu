@@ -1,0 +1,10 @@
+node_modules
+dist
+test
+*.test.ts
+.env
+.env.*
+tenants.json
+*.log
+.git
+.scratch-verify

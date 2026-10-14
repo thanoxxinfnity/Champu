@@ -1,0 +1,33 @@
+services:
+  mcp-server:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    env_file:
+      - .env
+    volumes:
+      # Tenant records live outside the image; edit the file on the host (or mount a secret) and the
+      # server picks it up on its own within 30s — no rebuild, no restart.
+      - ./tenants.json:/app/data/tenants.json:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Not started by default (`docker compose up` leaves profile services out). Bring it in with
+  # `docker compose --profile redis up` once you run more than one mcp-server instance and need the
+  # rate limiter and session routing to agree across instances — see auth/rateLimiter.ts's own note
+  # on swapping RateLimiterMemory for RateLimiterRedis, and put a sticky-session-aware load balancer
+  # (or this same Redis) in front of session routing too, since StreamableHTTPServerTransport's
+  # session map is in-process.
+  redis:
+    image: redis:7-alpine
+    profiles: ["redis"]
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:
