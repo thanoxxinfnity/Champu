@@ -72,8 +72,6 @@ function SuiteTool() {
       return <ImageSuite />;
     case 'workdrive':
       return <Workdrive />;
-    case 'skills':
-      return <SkillsManager />;
     case 'assets':
       return <AssetStudio />;
     default:
@@ -90,12 +88,13 @@ function FullSuite({ id }: { id: string }) {
     case 'video': return <VideoFlow />;
     case 'audio': return <AudioStudio />;
     case 'model3d': return <Model3D />;
+    case 'skills': return <SkillsManager />;
     default: return null;
   }
 }
-const FULL_SCREEN = new Set(['library', 'canvas', 'motion', 'video', 'audio', 'model3d']);
+const FULL_SCREEN = new Set(['library', 'canvas', 'motion', 'video', 'audio', 'model3d', 'skills']);
 
-const HAS_TOOL = new Set(['android', 'minecraft', 'studio', 'game', 'image', 'workdrive', 'skills', 'assets']);
+const HAS_TOOL = new Set(['android', 'minecraft', 'studio', 'game', 'image', 'workdrive', 'assets']);
 
 export function Workspace() {
   const activeSuite = useWorkspace((s) => s.activeSuite);

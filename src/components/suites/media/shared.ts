@@ -1,17 +1,7 @@
 import type { AssetRecord, EndpointRecord } from '@/lib/db/schema';
 import { saveAsset } from '@/lib/db/history';
 
-export type MediaCap = 'image' | 'video' | 'audio' | 'model3d';
-
-/** Endpoints the user added that can do this kind of generation. Removing the endpoint removes the tab. */
-export const endpointsFor = (endpoints: EndpointRecord[], cap: MediaCap) =>
-  endpoints.filter((e) => e.enabled && e.capabilities.includes(cap));
-
-export const modelsFor = (endpoint: EndpointRecord | undefined, cap: MediaCap) => {
-  const all = endpoint?.models.filter((m) => m.enabled !== false) ?? [];
-  const mine = all.filter((m) => m.capabilities.includes(cap));
-  return (mine.length ? mine : all).map((m) => m.id);
-};
+export { endpointsFor, modelsFor, type MediaCap } from '@/lib/providers/media-picker';
 
 export const apiBase = (e: EndpointRecord) => e.baseUrl.trim().replace(/\/+$/, '');
 

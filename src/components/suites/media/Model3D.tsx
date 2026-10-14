@@ -78,7 +78,7 @@ export function Model3D() {
             <button type="button" onClick={() => file.current?.click()} className="press mono rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--line)' }}>open .glb</button>
             <input ref={file} type="file" accept=".glb,model/gltf-binary" hidden onChange={(e) => { void openFile(e.target.files?.[0]); e.target.value = ''; }} />
             <button type="button" onClick={() => setStudio(true)} className="press mono rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--line)' }}>{now ? 'edit in studio' : 'open studio'}</button>
-            <button type="button" onClick={() => void generate()} disabled={busy || !prompt.trim() || !endpoint} className="press mono ml-auto rounded-lg px-4 py-1.5 text-[11.5px] font-semibold disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--panel)' }}>{busy ? 'building…' : 'make model'}</button>
+            <button type="button" onClick={() => void generate()} disabled={busy || !prompt.trim() || !endpoint || !model} className="press mono ml-auto rounded-lg px-4 py-1.5 text-[11.5px] font-semibold disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--panel)' }}>{busy ? 'building…' : !model && endpoint ? 'no 3D model on this provider' : 'make model'}</button>
           </div>
           {error && <p className="text-[11px] leading-[1.5]" role="alert" style={{ color: 'var(--color-red, #e5484d)' }}>{error}</p>}
         </div>

@@ -34,7 +34,7 @@ const CAPABILITY_SUITE_META: Record<string, { label: string; icon: string; hint:
 };
 
 /** Opens a viewer or editor of its own, so it has no list of chat sessions. */
-const STANDALONE = new Set(['library', 'canvas', 'motion', 'video', 'audio', 'model3d']);
+const STANDALONE = new Set(['library', 'canvas', 'motion', 'video', 'audio', 'model3d', 'skills']);
 
 const CANVAS_ENTRY: SuiteEntry = { id: 'canvas', label: 'Canvas', icon: '◰', hint: 'Design app or website screens on a board and export them' };
 const MOTION_ENTRY: SuiteEntry = { id: 'motion', label: 'Motion Studio', icon: '◧', hint: 'Layers, keyframes and a timeline — export CSS, GSAP or HTML' };

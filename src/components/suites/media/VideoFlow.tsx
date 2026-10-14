@@ -195,7 +195,7 @@ export function VideoFlow() {
             {DURATIONS.map((d) => <button key={d} type="button" onClick={() => setSeconds(d)} className="press mono rounded-full border px-2.5 py-1 text-[10.5px]" style={{ borderColor: seconds === d ? 'var(--accent)' : 'var(--line)', color: seconds === d ? 'var(--accent)' : 'var(--ink-dim)' }}>{d}s</button>)}
             <button type="button" onClick={() => (startFrame ? setStartFrame(null) : frameInput.current?.click())} className="press mono rounded-full border px-2.5 py-1 text-[10.5px]" style={{ borderColor: startFrame ? 'var(--accent)' : 'var(--line)', color: startFrame ? 'var(--accent)' : 'var(--ink-dim)' }}>{startFrame ? '✕ start frame' : '＋ start frame'}</button>
             <input ref={frameInput} type="file" accept="image/*" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (f) setStartFrame(await blobToDataUrl(f)); e.target.value = ''; }} />
-            <button type="button" onClick={generate} disabled={!prompt.trim() || !endpoint} className="press mono ml-auto rounded-xl px-4 py-1.5 text-[11.5px] font-semibold disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--panel)' }}>generate scene</button>
+            <button type="button" onClick={generate} disabled={!prompt.trim() || !endpoint || !model} className="press mono ml-auto rounded-xl px-4 py-1.5 text-[11.5px] font-semibold disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--panel)' }}>{!model && endpoint ? 'no video model on this provider' : 'generate scene'}</button>
           </div>
         </div>
       </div>
