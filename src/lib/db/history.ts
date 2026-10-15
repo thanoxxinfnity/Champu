@@ -140,6 +140,21 @@ export async function clearSuite(suite: SuiteId): Promise<number> {
 
 // ── Messages ────────────────────────────────────────────────────────────────
 
+/**
+ * Writes a still-streaming assistant reply to disk as it grows, throttled by the caller — so a
+ * reply that was most of the way done when the app's process got killed (swiped away, a phone
+ * that force-kills a foreground service, the OS reclaiming memory) leaves behind what it had
+ * written so far, marked incomplete, instead of vanishing with nothing to show for it. The real
+ * `appendMessage` call that runs when a reply actually finishes overwrites this (same id) with the
+ * final content and clears the error, and — unlike appendMessage — this never touches the
+ * session's messageCount/searchText/summary, since a session must count a message once, not once
+ * per throttled save.
+ */
+export async function saveDraftProgress(message: Pick<MessageRecord, 'id' | 'sessionId' | 'suite' | 'role' | 'content' | 'reasoning' | 'createdAt' | 'model' | 'provider' | 'lane'>): Promise<void> {
+  if (!isBrowser()) return;
+  await db().messages.put({ ...message, error: 'interrupted — the app closed before this reply finished' }).catch(() => undefined);
+}
+
 export async function appendMessage(message: Omit<MessageRecord, 'id'> & { id?: string }): Promise<MessageRecord> {
   const record: MessageRecord = { id: message.id ?? uid('msg'), ...message };
   if (!isBrowser()) return record;

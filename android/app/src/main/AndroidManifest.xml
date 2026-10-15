@@ -12,6 +12,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+      Several OEM battery managers (MIUI/HyperOS, ColorOS, OriginOS, Realme UI, ...)
+      kill a foreground service anyway the moment the app is swiped from recents,
+      notification and all, despite it being implemented exactly as Android asks.
+      This permission only lets the app ASK the user to exempt it from that — see
+      BatteryOptimization.kt, triggered the first time a real run starts, never
+      silently and never more than once if declined.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="true"

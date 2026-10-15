@@ -139,13 +139,14 @@
   </ul>
 
   <h2>Permissions the Android app asks for</h2>
-  <p>All five, as declared in the manifest:</p>
+  <p>All six, as declared in the manifest:</p>
   <table>
     <tr><th>Permission</th><th>What it is for</th></tr>
     <tr><td><code>INTERNET</code></td><td>Reaching the providers you have configured.</td></tr>
     <tr><td><code>ACCESS_NETWORK_STATE</code></td><td>Telling you the request failed because you are offline, rather than just failing.</td></tr>
     <tr><td><code>FOREGROUND_SERVICE</code><br><code>FOREGROUND_SERVICE_DATA_SYNC</code></td><td>Keeping a long build running when you switch away from the app. Android kills background work otherwise, and a compile that dies halfway is a compile you have to start again.</td></tr>
     <tr><td><code>POST_NOTIFICATIONS</code></td><td>Telling you that build finished. You can refuse it; everything else still works.</td></tr>
+    <tr><td><code>REQUEST_IGNORE_BATTERY_OPTIMIZATIONS</code></td><td>Asking, once, to be exempted from your phone's own battery manager — some brands (Xiaomi/HyperOS, Oppo, Vivo, Realme and others) kill a running build the moment the app is swiped from recents even with the notification above in place. Only asked the first time a real build starts, never more than once if you say no.</td></tr>
   </table>
   <p>There is <strong>no storage permission</strong>, no camera, no microphone, no location and no
   contacts. Generated files are written to the app's own storage and handed to you through your

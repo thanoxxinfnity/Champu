@@ -66,6 +66,10 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 if (state.active) {
                     RunService.start(this, state.topic)
+                    // Tied to an actual run starting, not app launch — on an OEM whose own
+                    // battery manager would otherwise kill this the moment the app is swiped
+                    // from recents, this is the only thing that can prevent that.
+                    BatteryOptimization.requestExemptionOnce(this)
                 } else {
                     RunService.stop(this)
                     if (state.notify) {

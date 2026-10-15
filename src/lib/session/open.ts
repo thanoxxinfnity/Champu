@@ -42,6 +42,7 @@ export async function openSession(session: SessionRecord): Promise<void> {
       attachments: m.attachments?.map((a, i) => ({ id: `${m.id}_${i}`, ...a })),
       usage: m.usage,
       durationMs: m.durationMs,
+      error: m.error,
     });
   }
 

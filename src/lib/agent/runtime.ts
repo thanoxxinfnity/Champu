@@ -63,7 +63,7 @@ import { PLANNER_NIM_MODEL } from '@/lib/providers/registry';
 import { endpointConfigFor } from '@/lib/providers/endpoint-models';
 import { draftSystemSuffix, pickAngles } from './drafts';
 import { scanForSecrets, hasBlockingSecret } from '@/lib/security/secrets';
-import { appendMessage, createSession, getSetting, listMessages, setSetting, titleFromInput, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
+import { appendMessage, createSession, getSetting, listMessages, saveDraftProgress, setSetting, titleFromInput, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
 import type { SuiteId } from '@/lib/db/schema';
 import { BridgeOfflineError } from '@/lib/bridge/client';
 
@@ -905,8 +905,24 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
   const emit = (message: Parameters<typeof pushMessage>[0]) => {
     if (isCurrent()) pushMessage(message);
   };
+  // A streaming reply exists only in memory until it finishes (appendMessage runs once, at the
+  // end) — so a process that gets killed mid-reply (the app swiped away, an OEM battery manager
+  // killing it, the OS reclaiming memory) loses the whole answer, not just the last few words.
+  // This throttle writes whatever has streamed in so far to disk every couple of seconds, marked
+  // "interrupted"; the real appendMessage call at the end overwrites it (same id) with the final
+  // content and clears that mark, so it only ever shows if the reply genuinely never finished.
+  const lastDraftSave = new Map<string, number>();
+  const DRAFT_SAVE_MS = 2000;
   const patch = (id: string, patchValue: Parameters<typeof patchMessage>[1]) => {
     if (isCurrent()) patchMessage(id, patchValue);
+    if (typeof patchValue.content === 'string' && patchValue.streaming !== false) {
+      const last = lastDraftSave.get(id) ?? 0;
+      const now = Date.now();
+      if (now - last >= DRAFT_SAVE_MS) {
+        lastDraftSave.set(id, now);
+        void saveDraftProgress({ id, sessionId, suite, role: 'assistant', content: patchValue.content, reasoning: patchValue.reasoning, createdAt: now, model: selection.model, provider: selection.provider, lane });
+      }
+    }
   };
 
   // ── Classify ──────────────────────────────────────────────────────────────
