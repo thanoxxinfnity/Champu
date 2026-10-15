@@ -17,26 +17,40 @@ import { db, isBrowser } from '@/lib/db/schema';
 const TEXT_EXTENSIONS =
   /\.(txt|md|markdown|json|jsonc|ya?ml|toml|ini|cfg|conf|env|csv|tsv|xml|html?|css|scss|less|js|jsx|mjs|cjs|ts|tsx|py|rb|go|rs|java|kt|kts|swift|c|h|cpp|hpp|cs|sh|bash|zsh|ps1|sql|gradle|properties|lock|gitignore|dockerfile|mcfunction|lang|vue|svelte|astro)$/i;
 
+// The Android WebView's file-picker bridge reads this from whatever MIME type the source app
+// (gallery, file manager) put on the content:// URI's result — and several of them leave it empty
+// for an image, even though the file clearly is one. Without this fallback, such an image never
+// got a dataUrl and never reached the model: it silently became an unreadable "binary attachment"
+// with nothing inlined, from a tap that looked like it worked.
+const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|bmp|heic|heif|avif)$/i;
+const isImageFile = (file: File) => file.type.startsWith('image/') || (!file.type && IMAGE_EXTENSIONS.test(file.name));
+
 const MAX_INLINE_TEXT = 400_000;
 const MAX_ATTACHMENT_BYTES = 24 * 1024 * 1024;
 
 async function readAttachment(file: File): Promise<ChatAttachment> {
+  const isImage = isImageFile(file);
   const base: ChatAttachment = {
     id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
     name: file.name,
-    kind: file.type || 'application/octet-stream',
+    kind: file.type || (isImage ? `image/${file.name.split('.').pop()!.toLowerCase().replace('jpg', 'jpeg')}` : 'application/octet-stream'),
     bytes: file.size,
   };
 
   if (file.size > MAX_ATTACHMENT_BYTES) return base;
 
-  if (file.type.startsWith('image/')) {
-    const dataUrl = await new Promise<string>((resolve, reject) => {
+  if (isImage) {
+    let dataUrl = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
       reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(file);
     }).catch(() => '');
+    // readAsDataURL takes its "data:<mime>" prefix from the File's own (possibly empty) type, not
+    // from the `isImage`/`kind` guess above — so a file.type of '' comes back as
+    // "data:application/octet-stream", which a model provider can reject as not being an image at
+    // all even though the bytes are a real PNG/JPEG. Rewrite the prefix to match what was inferred.
+    if (dataUrl && !file.type) dataUrl = dataUrl.replace(/^data:[^;]*/, `data:${base.kind}`);
     return { ...base, dataUrl: dataUrl || undefined };
   }
 
@@ -317,7 +331,7 @@ function ModelSwitcher() {
 
       {open && (
         <div
-          className="enter-pop absolute bottom-full right-0 mb-2 flex max-h-[420px] w-80 flex-col overflow-hidden rounded-2xl border"
+          className="enter-pop absolute bottom-full left-2 right-2 mb-2 flex max-h-[420px] flex-col overflow-hidden rounded-2xl border sm:left-auto sm:right-0 sm:w-80"
           style={{
             borderColor: 'var(--line-strong)',
             background: 'color-mix(in oklab, var(--panel) 94%, transparent)',
