@@ -67,9 +67,10 @@ func setup(w: World) -> void:
 	fade_layer.add_child(_fade)
 
 	var sh := w.safehouse
-	sh.bed_use.callback = func(_p): sleep()
-	sh.wardrobe_use.callback = func(_p): next_outfit()
-	sh.wardrobe_use.prompt = "E - Change Clothes"
+	if sh != null:
+		sh.bed_use.callback = func(_p): sleep()
+		sh.wardrobe_use.callback = func(_p): next_outfit()
+		sh.wardrobe_use.prompt = "E - Change Clothes"
 	player.died.connect(_on_player_died)
 	apply_outfit()
 

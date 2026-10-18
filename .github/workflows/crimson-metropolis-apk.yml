@@ -65,6 +65,11 @@ jobs:
         run: |
           godot --headless --fixed-fps 60 -s tests/mission_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
           grep -q 'ALL OK' /tmp/out.txt
+      - name: "Bermuda island: terrain, landmarks, forests, a car that drives"
+        timeout-minutes: 8
+        run: |
+          godot --headless --fixed-fps 60 -s tests/island_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
       - name: "On-screen controls"
         timeout-minutes: 8
         run: |

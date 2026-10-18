@@ -5,10 +5,13 @@ extends Node
 func _ready() -> void:
 	var world := World.new()
 	world.name = "World"
+	world.map = "island" if GameBoot.mode == GameBoot.Mode.ISLAND else "city"
 	add_child(world)
 	await get_tree().process_frame
 	var d := world.director
-	if GameBoot.mode == GameBoot.Mode.FREE_ROAM:
+	if GameBoot.mode == GameBoot.Mode.ISLAND:
+		d.hud.toast("Bermuda Island — find the clock tower, the mill, the factory...", 4.0)
+	elif GameBoot.mode == GameBoot.Mode.FREE_ROAM:
 		d.state.mission_stage = PenthouseDeal.Stage.DONE        # no story prompts; the city is yours
 		d.hud.toast("Free Roam — the whole city is yours.", 4.0)
 	else:

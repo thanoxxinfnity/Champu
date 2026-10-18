@@ -5,6 +5,7 @@ render_mode cull_disabled;
 uniform vec3 deep : source_color = vec3(0.02, 0.18, 0.28);
 uniform vec3 shallow : source_color = vec3(0.1, 0.5, 0.55);
 uniform sampler2D wave_n : hint_normal, repeat_enable, filter_linear_mipmap;
+uniform float radial_radius = 0.0;   // > 0: the shore is a circle of this radius (an island); 0: the shore is the line z = 440
 global uniform float night;
 
 varying vec3 wpos;
@@ -19,7 +20,7 @@ void fragment() {
 	vec2 uv2 = wpos.xz * 0.11 - vec2(TIME * 0.02, -TIME * 0.011);
 	NORMAL_MAP = mix(texture(wave_n, uv1).rgb, texture(wave_n, uv2).rgb, 0.5);
 	NORMAL_MAP_DEPTH = 0.9;
-	float shore = clamp((wpos.z - 440.0) / 60.0, 0.0, 1.0);
+	float shore = radial_radius > 0.0 ? clamp((length(wpos.xz) - radial_radius) / 220.0, 0.0, 1.0) : clamp((wpos.z - 440.0) / 60.0, 0.0, 1.0);
 	vec3 col = mix(shallow, deep, shore);
 	float f = pow(1.0 - clamp(dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0), 3.0);
 	ALBEDO = col * mix(1.0, 0.25, night);

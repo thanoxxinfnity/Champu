@@ -66,6 +66,8 @@ func _ready() -> void:
 	root.add_child(bl)
 	minimap = Minimap.new()
 	minimap.player = player
+	if world != null and world.get("island") != null:
+		minimap.island = world.island
 	bl.add_child(minimap)
 	_health = ProgressBar.new()
 	_health.custom_minimum_size = Vector2(190, 12)

@@ -142,6 +142,7 @@ func _finish() -> void:
 		_add_button("CONTINUE", func(): _go(GameBoot.Mode.STORY, true))
 	_add_button("STORY MODE", func(): _go(GameBoot.Mode.STORY, false))
 	_add_button("FREE ROAM", func(): _go(GameBoot.Mode.FREE_ROAM, false))
+	_add_button("ISLAND", func(): _go(GameBoot.Mode.ISLAND, false))
 	_buttons.visible = true
 
 

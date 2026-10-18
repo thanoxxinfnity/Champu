@@ -18,9 +18,15 @@ var mission: PenthouseDeal
 var vehicles: Array[Vehicle] = []
 ## Tests that only care about the buildings and doors turn the population, HUD and phone off.
 var with_life := true
+## "city" (the story map) or "island" (the Bermuda-style survival island).
+var map := "city"
+var island: Island
 
 
 func _ready() -> void:
+	if map == "island":
+		_ready_island()
+		return
 	atmosphere = Atmosphere.new()
 	atmosphere.name = "Atmosphere"
 	add_child(atmosphere)
@@ -96,3 +102,32 @@ static func house_origin() -> Vector3:
 ## On the footpath inside the gate, looking at the front door (-Z is toward the street, so the player faces +Z).
 static func spawn_point() -> Vector3:
 	return house_origin() + Vector3(0, 0.25, -6.0)
+
+
+## The island: the same sky, player, cars, HUD and phone, on the Bermuda-style map. No story, no police.
+func _ready_island() -> void:
+	atmosphere = Atmosphere.new()
+	atmosphere.name = "Atmosphere"
+	add_child(atmosphere)
+	island = Island.new()
+	add_child(island)
+	island.build()
+	var spawn := island.spawn_point()
+	for entry in [["muscle", Vector3(22, 0, 52)], ["sedan", Vector3(-20, 0, 56)], ["hypercar", Vector3(40, 0, 36)]]:
+		var car := Vehicle.make(entry[0])
+		add_child(car)
+		var p: Vector3 = entry[1]
+		car.global_position = Vector3(p.x, island.height_at(p.x, p.z) + 1.1, p.z)
+		car.rotation.y = 0.6
+		vehicles.append(car)
+	player = Player.new()
+	player.name = "Player"
+	add_child(player)
+	player.global_position = spawn
+	atmosphere.follow = player
+	if with_life:
+		director = Director.new()
+		director.name = "Director"
+		add_child(director)
+		director.setup(self)
+		director.hud.set_objective("Explore Bermuda — clock tower, mill, factory, shipyard, peak.")
