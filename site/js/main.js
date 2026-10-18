@@ -207,6 +207,9 @@ import('./nasa-cards.js').then((m) => m.start());
 /* ---------- the small 3D model next to "What it can make" ---------- */
 whenVisible($('#model3d-card'), () => import('./model3d.js').then((m) => m.start()).catch((e) => console.error(e)), { once: true, margin: '0px 0px 400px 0px' });
 
+/* ---------- the hero-scale 3D story scene (room + character walk-in) ---------- */
+whenVisible($('#story-card'), () => import('./story-scene.js').then((m) => m.start()).catch((e) => console.error(e)), { once: true, margin: '0px 0px 200px 0px' });
+
 import('./fx.js').then((m) => m.start());
 import('./immersive.js').then((m) => m.start());
 import('./agent.js').then((m) => m.start());
