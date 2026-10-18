@@ -8,8 +8,8 @@ global uniform float night;
 uniform vec3 wall_color : source_color = vec3(0.58, 0.56, 0.53);
 uniform vec3 glass_color : source_color = vec3(0.12, 0.2, 0.28);
 uniform vec3 lit_color : source_color = vec3(1.0, 0.8, 0.5);
-uniform vec2 bay = vec2(3.4, 3.6);          // metres per window bay (across, up)
-uniform vec2 glass_frac = vec2(0.66, 0.62);  // how much of a bay is glass
+uniform vec2 bay = vec2(2.6, 3.4);          // metres per window bay (across, up)
+uniform vec2 glass_frac = vec2(0.74, 0.66);  // how much of a bay is glass
 uniform float glassiness : hint_range(0.0, 1.0) = 0.7;
 uniform float lit_chance : hint_range(0.0, 1.0) = 0.55;
 uniform float seed = 0.0;
@@ -38,13 +38,23 @@ void fragment() {
 	// Roofs are plain; only walls get windows.
 	float is_wall = step(n.y, 0.5);
 	float is_glass = inside.x * inside.y * is_wall;
-	float lit = step(hash(cell + floor(wpos.xz * 0.01)), lit_chance) * night;
+	float h = hash(cell + floor(wpos.xz * 0.01));
+	float lit = step(h, lit_chance) * night;
+	// A thin mullion down the middle of each window, and a darker sill under it.
+	float mullion = step(abs(f.x - 0.5), 0.022);
+	float glass_only = is_glass * (1.0 - mullion);
+	float sill = step(f.y, lo.y * 0.55) * is_wall;
 
-	vec3 col = mix(wall_color, glass_color, is_glass);
+	// Sky reflected in the glass, brighter higher up; rooms lit warm or cool, never all the same.
+	vec3 sky_tint = glass_color * mix(1.0, 2.2, smoothstep(0.0, 140.0, wpos.y));
+	vec3 col = mix(wall_color, sky_tint, glass_only);
 	col = mix(wall_color * 0.55, col, is_wall);
+	col *= mix(0.72, 1.0, smoothstep(0.0, 14.0, wpos.y));
+	col = mix(col, col * 0.6, sill);
+	vec3 warm = mix(lit_color, vec3(0.75, 0.88, 1.0), step(0.8, fract(h * 7.0)));
 	ALBEDO = col;
-	METALLIC = is_glass * 0.6;
-	ROUGHNESS = mix(0.9, 0.12, is_glass * glassiness);
+	METALLIC = glass_only * 0.6;
+	ROUGHNESS = mix(0.9, 0.1, glass_only * glassiness);
 	SPECULAR = 0.6;
-	EMISSION = lit_color * lit * is_glass * 1.6;
+	EMISSION = warm * lit * glass_only * (0.9 + 0.9 * fract(h * 13.0));
 }

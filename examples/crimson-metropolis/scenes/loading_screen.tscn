@@ -1,11 +1,10 @@
-[gd_scene format=3]
+[gd_scene load_steps=2 format=3]
 
-[node name="LoadingScreen" type="Node2D"]
+[ext_resource type="Script" path="res://scripts/ui/loading_screen.gd" id="1"]
 
-[node name="Label" type="Label" parent="."]
-offset_left = 400.0
-offset_top = 340.0
-offset_right = 900.0
-offset_bottom = 380.0
-text = "CRIMSON METROPOLIS — building in progress"
-horizontal_alignment = 1
+[node name="LoadingScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1")

@@ -12,6 +12,7 @@ var tower: Tower
 var director: Director
 var traffic: Traffic
 var wanted: Wanted
+var mission: PenthouseDeal
 var vehicles: Array[Vehicle] = []
 ## Tests that only care about the buildings and doors turn the population, HUD and phone off.
 var with_life := true
@@ -71,6 +72,11 @@ func _ready() -> void:
 		wanted.hud = director.hud
 		wanted.director = director
 		add_child(wanted)
+		mission = PenthouseDeal.new()
+		mission.name = "Mission1"
+		add_child(mission)
+		mission.setup(self, director)
+		director.mission = mission
 
 
 ## The house's front wall centre: 14 m in from the sidewalk, so local z = -12 is the plot's street edge.
