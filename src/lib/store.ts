@@ -209,11 +209,23 @@ interface WorkspaceState {
   sessionId: string | null;
   sidebarOpen: boolean;
   rightPaneTab: 'preview' | 'site' | 'files' | 'terminal' | 'plan';
+  /**
+   * An image handed to the Video suite as its next start frame.
+   *
+   * Set when chat gets an image attachment alongside a video-ish request —
+   * generating video is a suite with its own provider/model picker and
+   * timeline, not something the chat agent can finish on its own, so rather
+   * than answer in text it hands the picture over and switches there. Read
+   * once by VideoFlow on mount, then cleared, so it never resurfaces on a
+   * suite the user switches back to later.
+   */
+  pendingVideoFrame: string | null;
 
   setSuite: (suite: SuiteId) => void;
   setSessionId: (id: string | null) => void;
   toggleSidebar: () => void;
   setRightPaneTab: (tab: WorkspaceState['rightPaneTab']) => void;
+  setPendingVideoFrame: (dataUrl: string | null) => void;
 
   // ── Models ────────────────────────────────────────────────────────────────
   models: ModelDescriptor[];
@@ -385,11 +397,13 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   sessionId: null,
   sidebarOpen: true,
   rightPaneTab: 'preview',
+  pendingVideoFrame: null,
 
   setSuite: (suite) => set({ activeSuite: suite }),
   setSessionId: (id) => set({ sessionId: id }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setRightPaneTab: (tab) => set({ rightPaneTab: tab }),
+  setPendingVideoFrame: (dataUrl) => set({ pendingVideoFrame: dataUrl }),
 
   models: [],
   modelWarnings: [],

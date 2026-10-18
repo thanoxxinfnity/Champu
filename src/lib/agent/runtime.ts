@@ -942,6 +942,34 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
     useWorkspace.getState().setSessionId(sessionId);
   }
 
+  // A picture plus a request to turn it into a video: the chat agent has no
+  // video provider of its own to call — that lives in the Video suite, with
+  // its own model picker and polling loop (see VideoFlow.tsx) — so answering
+  // in text here was always going to be "I can't," no matter how the prompt
+  // was phrased. Handing the image over and switching there does what the
+  // user actually asked for instead of explaining why chat can't do it.
+  const videoFrame = attachments.find((a) => a.kind.startsWith('image/') && a.dataUrl);
+  if (videoFrame && suite !== 'video' && /\b(video|movie|clip|animat\w*|reel)\b/i.test(input)) {
+    const now = Date.now();
+    const userMessage = { id: uid('msg'), role: 'user' as const, content: input, createdAt: now, attachments, lane: 'A' as const };
+    pushMessage(userMessage);
+    void appendMessage({ ...userMessage, sessionId, suite });
+    const note = {
+      id: uid('msg'),
+      role: 'assistant' as const,
+      content:
+        "Video generation has its own screen — a provider/model picker and a timeline, not a chat reply — so I've " +
+        'opened the Video suite with this image loaded as the start frame. Write a prompt there and hit Generate.',
+      createdAt: now + 1,
+      lane: 'A' as const,
+    };
+    pushMessage(note);
+    void appendMessage({ ...note, sessionId, suite });
+    useWorkspace.getState().setPendingVideoFrame(videoFrame.dataUrl!);
+    useWorkspace.getState().setSuite('video');
+    return;
+  }
+
   const controller = new AbortController();
   useWorkspace.getState().beginRun(sessionId, { controller, heavy });
 

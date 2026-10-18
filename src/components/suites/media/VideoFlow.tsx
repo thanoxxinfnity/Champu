@@ -21,6 +21,8 @@ interface Job { id: string; prompt: string; startedAt: number; error?: string }
  */
 export function VideoFlow() {
   const endpoints = useWorkspace((s) => s.endpoints);
+  const pendingVideoFrame = useWorkspace((s) => s.pendingVideoFrame);
+  const setPendingVideoFrame = useWorkspace((s) => s.setPendingVideoFrame);
   const providers = endpointsFor(endpoints, 'video');
   const [endpointId, setEndpointId] = useState('');
   const endpoint = providers.find((e) => e.id === endpointId) ?? providers[0];
@@ -48,6 +50,13 @@ export function VideoFlow() {
     setClips(list); setOrder(saved);
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
+  // A sketch (or any image) handed over from chat — see runtime.ts's video handoff.
+  // Consumed once: a later visit to this suite should not keep reloading an old frame.
+  useEffect(() => {
+    if (!pendingVideoFrame) return;
+    setStartFrame(pendingVideoFrame);
+    setPendingVideoFrame(null);
+  }, [pendingVideoFrame, setPendingVideoFrame]);
   useEffect(() => { if (!models.includes(model)) setModel(models[0] ?? ''); }, [endpoint?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!jobs.length) return; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [jobs.length]);
 
