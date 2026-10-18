@@ -13,8 +13,8 @@ export const viewport: Viewport = {
   // Matches the paper/desk backgrounds so the browser chrome does not flash a
   // colour the app never uses.
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#fdf7ee' },
-    { media: '(prefers-color-scheme: dark)', color: '#17120e' },
+    { media: '(prefers-color-scheme: light)', color: '#faf9f6' },
+    { media: '(prefers-color-scheme: dark)', color: '#1a1915' },
   ],
   width: 'device-width',
   initialScale: 1,

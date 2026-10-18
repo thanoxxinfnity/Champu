@@ -16,8 +16,8 @@ const UA =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 const FAMILIES = [
-  { css: 'Caveat:wght@400..700', file: 'caveat', family: 'Caveat', weight: '400 700' },
-  { css: 'Nunito:wght@400..800', file: 'nunito', family: 'Nunito', weight: '400 800' },
+  { css: 'Source+Serif+4:opsz,wght@8..60,400..700', file: 'source-serif-4', family: 'Source Serif 4', weight: '400 700' },
+  { css: 'Inter:wght@400..700', file: 'inter', family: 'Inter', weight: '400 700' },
   { css: 'JetBrains+Mono:wght@400..700', file: 'jetbrains-mono', family: 'JetBrains Mono', weight: '400 700' },
 ];
 
