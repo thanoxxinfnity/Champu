@@ -87,19 +87,8 @@ func _box(parent: Node, pos: Vector3, size: Vector3, mat: Material, collide := t
 
 
 func _ground() -> void:
-	var noise := FastNoiseLite.new()
-	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-	noise.frequency = 0.05
-	var tex := NoiseTexture2D.new()
-	tex.noise = noise
-	tex.width = 256
-	tex.height = 256
-	tex.seamless = true
-	road_mat = _mat(Color(0.13, 0.13, 0.15), 0.92)
-	road_mat.albedo_texture = tex
-	road_mat.uv1_triplanar = true
-	road_mat.uv1_scale = Vector3(0.08, 0.08, 0.08)
-	road_mat.metallic_specular = 0.4
+	road_mat = Scenery.pbr("asphalt", 7.0, 0.88)
+	road_mat.metallic_specular = 0.45
 	if atmosphere != null:
 		atmosphere.register_wet_material(road_mat)
 	# One big slab is the road; sidewalks and lots sit on top of it.
@@ -108,7 +97,7 @@ func _ground() -> void:
 
 
 func _blocks() -> void:
-	var walk_mat := _mat(Color(0.52, 0.51, 0.49), 0.88)
+	var walk_mat := Scenery.pbr("pavement", 3.0, 0.85)
 	var pal := [Color(0.62, 0.6, 0.56), Color(0.55, 0.52, 0.5), Color(0.7, 0.66, 0.6), Color(0.46, 0.5, 0.55), Color(0.6, 0.45, 0.4), Color(0.4, 0.42, 0.45)]
 	for bx in range(-1, 2):
 		for bz in range(-1, 2):
