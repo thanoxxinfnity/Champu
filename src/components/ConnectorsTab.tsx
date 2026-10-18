@@ -25,6 +25,46 @@ export function ConnectorsTab() {
     if (ag.config?.bridgeUrl && !combined) setCombined(ag.config.token ? `${ag.config.bridgeUrl}#${ag.config.token}` : ag.config.bridgeUrl);
   }, [ag.config, combined]);
 
+  /** Looks for the AntiGem bridge on this device: its /api/health answers without a token. */
+  const detect = async () => {
+    setNote('Looking for AntiGem on this device…');
+    for (const port of [8080, 8081, 8888, 3000, 7717]) {
+      try {
+        const res = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1500) });
+        if (res.ok) {
+          const { token } = parseBridgeInput(combined);
+          setCombined(`http://127.0.0.1:${port}${token ? `#${token}` : '#'}`);
+          setNote(`✔ Found a bridge on port ${port}. Now paste the token (copy it in AntiGem, then press "Paste token").`);
+          return;
+        }
+      } catch {
+        // not this port
+      }
+    }
+    setNote('No bridge found on this device. Is AntiGem running? Or paste a tunnel address instead.');
+  };
+
+  /** Reads the clipboard: a bare 12-character token is added to the address; a whole address#token replaces the field. */
+  const pasteToken = async () => {
+    try {
+      const text = (await navigator.clipboard.readText()).trim();
+      if (!text) {
+        setNote('The clipboard is empty — copy the security token in AntiGem first.');
+        return;
+      }
+      if (/^[A-Za-z0-9]{8,16}$/.test(text)) {
+        const { url } = parseBridgeInput(combined);
+        setCombined(`${url || 'http://127.0.0.1:8080'}#${text}`);
+        setNote('✔ Token pasted. Press Connect.');
+      } else {
+        setCombined(text);
+        setNote('✔ Pasted. Press Connect.');
+      }
+    } catch {
+      setNote('The browser would not let the app read the clipboard — long-press the box and paste by hand.');
+    }
+  };
+
   const run = async () => {
     const { url, token } = parseBridgeInput(combined);
     if (!url) {
@@ -56,8 +96,7 @@ export function ConnectorsTab() {
           </span>
         </div>
         <p className="mt-2 text-[11.5px] leading-[1.55]" style={{ color: 'var(--ink-dim)' }}>
-          Uses your own <strong>AntiGem</strong> app (github.com/Santoshkurmi/antigem). Start it, sign in to Antigravity there, then paste the
-          bridge address and the security token it shows. Every Antigravity model then appears in the model picker, and those chats run in
+          Uses your own <strong>AntiGem</strong> app (github.com/Santoshkurmi/antigem). Start it, sign in to Antigravity there, press <em>Find AntiGem</em>, then copy the security token in AntiGem and press <em>Paste token</em>. Every Antigravity model then appears in the model picker, and those chats run in
           Antigravity&rsquo;s own agent sandbox — nothing is sent through our servers.
         </p>
 
@@ -77,7 +116,7 @@ export function ConnectorsTab() {
               spellCheck={false}
             />
           </label>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               disabled={busy}
@@ -86,6 +125,12 @@ export function ConnectorsTab() {
               style={{ background: 'var(--accent)', color: 'var(--accent-ink, #000)', opacity: busy ? 0.6 : 1 }}
             >
               {busy ? 'connecting…' : ag.connected ? 'Reconnect' : 'Connect'}
+            </button>
+            <button type="button" onClick={() => void detect()} className="press mono rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>
+              Find AntiGem
+            </button>
+            <button type="button" onClick={() => void pasteToken()} className="press mono rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>
+              Paste token
             </button>
             {ag.connected && (
               <button type="button" onClick={() => { disconnect(); setNote(null); }} className="press mono rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>
