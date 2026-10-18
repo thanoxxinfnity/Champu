@@ -8,6 +8,7 @@ var city: City
 var player: Player
 var lamp_pool: LampPool
 var safehouse: Safehouse
+var tower: Tower
 var vehicles: Array[Vehicle] = []
 
 
@@ -25,6 +26,12 @@ func _ready() -> void:
 	add_child(safehouse)
 	safehouse.position = house_origin()
 	safehouse.build()
+	tower = Tower.new()
+	tower.name = "Tower"
+	add_child(tower)
+	tower.position = City.block_center(City.TOWER_PLOT)
+	tower.build()
+
 	# The player's own car waits in the garage, nose to the door.
 	var car := Vehicle.make("sedan")
 	add_child(car)
