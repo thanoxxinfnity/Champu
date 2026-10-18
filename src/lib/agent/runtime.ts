@@ -780,6 +780,7 @@ export async function send(opts: SendOptions): Promise<void> {
       })
       .finally(() => { creating = null; });
     sessionId = await creating;
+    freshSessions.add(sessionId);
   }
 
   const heavy = needsSlot(opts);
@@ -792,14 +793,77 @@ export async function send(opts: SendOptions): Promise<void> {
   await launch(sessionId, { ...opts, sessionId, suite }, heavy);
 }
 
+/**
+ * Sessions whose title is still the instant regex guess (titleFromInput) and
+ * so are owed a smarter one once there is a reply to read the topic from.
+ *
+ * titleFromInput() only has the user's raw text to go on, which is why "Hi"
+ * stays "Hi" and a long build request keeps whatever its first clause was.
+ * One cheap, non-streaming completion after the first reply does what Claude
+ * and Gemini do — read the exchange, not just echo it — without paying an
+ * LLM call on every session (most never get a reply, e.g. a queued one that
+ * errors before responding; those are left with the regex title, which is
+ * still better than nothing).
+ */
+const freshSessions = new Set<string>();
+
 /** Runs one message to its end, then gives whatever was waiting its turn. */
 async function launch(sessionId: string, opts: SendOptions, heavy: boolean): Promise<void> {
   try {
     await execute({ ...opts, sessionId }, heavy);
+    if (freshSessions.delete(sessionId)) void retitleSession(sessionId);
   } finally {
     useWorkspace.getState().endRun(sessionId);
     // Even if this run threw, whatever waited behind it still gets its turn.
     void drainQueue();
+  }
+}
+
+/**
+ * Replaces a session's instant regex title with one that actually read the
+ * exchange — "Hi" becomes "Casual Greeting", a paragraph-long build request
+ * becomes the thing it asked for, not its first clause.
+ *
+ * Best-effort and silent: a session already has a reasonable title from
+ * titleFromInput(), so a failed or slow call here costs nothing visible —
+ * it just leaves the regex guess standing, which was always the fallback.
+ */
+async function retitleSession(sessionId: string): Promise<void> {
+  try {
+    const { listMessages, touchSession } = await import('@/lib/db/history');
+    const msgs = await listMessages(sessionId);
+    const userMsg = msgs.find((m) => m.role === 'user');
+    const assistantMsg = msgs.find((m) => m.role === 'assistant' && m.content.trim().length > 0);
+    if (!userMsg || !assistantMsg) return;
+
+    const selection = useWorkspace.getState().selection;
+    const model = selection.provider === 'nim' ? PLANNER_NIM_MODEL : selection.model;
+    const raw = await complete({
+      provider: selection.provider,
+      model,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Name this chat session. Read the user message and the reply, then output ONLY a short title, 2-6 words, ' +
+            'Title Case, no quotes, no trailing punctuation. Describe the actual topic, not the literal wording — ' +
+            'a bare greeting becomes something like "Casual Greeting", a request to build something becomes what it asked for.',
+        },
+        { role: 'user', content: `User: ${userMsg.content.slice(0, 600)}\n\nReply: ${assistantMsg.content.slice(0, 600)}` },
+      ],
+      maxTokens: 20,
+    });
+
+    const title = raw
+      .replace(/^["'“”]+|["'“”]+$/g, '')
+      .replace(/[.!?]+$/, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 72);
+    if (!title || title.split(' ').length > 10) return;
+    await touchSession(sessionId, { title });
+  } catch {
+    // The regex title already stands — nothing to roll back.
   }
 }
 
@@ -874,6 +938,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       model: selection.model,
     });
     sessionId = session.id;
+    freshSessions.add(sessionId);
     useWorkspace.getState().setSessionId(sessionId);
   }
 
