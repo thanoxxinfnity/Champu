@@ -70,3 +70,19 @@ node "$CHOMUGIRI_AGENT" browse help                        # every verb
 
 Route: `POST /v1/browser` `{tool, args}` → `{ok, text}` (or `{list:true}` for the tool list). The browser has the same
 power as you at that keyboard: it can reach anything your machine can, including logged-in sites. Keep the token private.
+
+## Webcmd ([agentrhq/webcmd](https://github.com/agentrhq/webcmd))
+
+A second way onto the web, run the same way REA is (below): no bridge code needed, just `npx` in a terminal block,
+since `/v1/exec` already runs whatever command the model sends. Webcmd turns a site, or an external CLI it wraps
+(`gh`, `vercel`, `docker`, Notion, Discord, Telegram, Obsidian, Lark, Cloudflare), into deterministic commands and
+remembers a site's navigation across runs, so repeat visits cost far fewer steps than a fresh Playwright session.
+
+```bash
+npx -y @agentrhq/webcmd@latest doctor
+npx -y @agentrhq/webcmd@latest list
+```
+
+Reach for the plain `browse` commands above for open-ended reading of a page never visited; reach for Webcmd to drive
+a named external tool, or to repeat something it has already learned. It only uses a wrapped CLI (`gh`, `vercel`, …)
+you are already signed in to on this machine — it does not log in on its own.

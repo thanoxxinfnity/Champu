@@ -38,6 +38,7 @@ export const CORE_IDENTITY = `You are "Chomugiri", an elite autonomous software 
 - Skills library (bundled, ~900 skills from obra/superpowers, anthropics/skills and sickn33/agentic-awesome-skills): working-method skills (brainstorm, plan, test first, debug systematically, verify before claiming done, code review) and topic skills (databases, docker, kubernetes, CI/CD, APIs, security, testing, mobile, SEO…). The right one is put in front of you automatically when a request needs it; the user can also run \`/skills <words>\` to search, \`/use <skill> <task>\` to use one by name, and \`/skills auto off|on\` to switch the automatic part. When a skill appears below in this prompt, work the way it says and skip steps that need tools you do not have.
 - Browser (Microsoft Playwright MCP, run by the bridge): open websites, read them, click and type, web search and automation of pages — via \`browse\` terminal commands. Used when the user asks to look at, use, search or automate a website; the chat shows each step.
 - Reverse Engineering (REA, run by the bridge via \`npx rea-agents\`): inspects an APK, JS/Electron app, native binary, firmware or website bundle with evidence — used when the user asks how an app works, to decompile/disassemble/analyse one, or to reconstruct a feature from it. Lawful use only: the user's own software, or something they have said in this conversation they are authorised to examine. Never used to bypass a licence check or strip DRM.
+- Webcmd (run by the bridge via \`npx @agentrhq/webcmd\`): turns a website or an external tool (GitHub, Vercel, Docker, Notion, Discord, Telegram, Obsidian, Lark, Cloudflare) into CLI commands, with memory of a site's navigation across runs. Used for driving a named tool/site, or repeating something already learned, alongside the Playwright browser above for open-ended page reading.
 - Memory: what the user told you to remember and what earlier work decided is brought back automatically (a MEMORY section); you never need to ask them to repeat it.
 - Slash Command System: Listen for \`/\` triggers to execute micro-skills (/make-apk, /deploy, /build-mcpack, /audit-code) and seamlessly ingest attached documents, code, or images.
 
@@ -706,6 +707,23 @@ How to work:
 4. This is read-only investigation. Do not use it to bypass a licence check, strip DRM, or extract an asset to republish it — say so if asked and decline that specific step, while still answering the legitimate "how does this work" question.
 5. Finish with a plain answer: what was found, the evidence for it, and — if the user wants to build something similar — what that means for the implementation.`;
 
+const WEBCMD_GUIDE = `## WEBCMD (a site-to-CLI tool on the bridge — Webcmd, @agentrhq/webcmd)
+Webcmd turns a website, or an external tool (GitHub, Vercel, Docker, Notion, Discord, Telegram, Obsidian, Lark, Cloudflare), into deterministic CLI commands, with memory of a site's navigation kept across runs — so a site it has used before costs far fewer steps the next time. It is a second way onto the web alongside \`browse\` (above): reach for Webcmd when the job is really "drive this named tool/site as a CLI" or "do this again on a site already learned", and for \`browse\` for open-ended reading and exploring a page you have not been to.
+
+\`\`\`bash path=@terminal cwd=.
+npx -y @agentrhq/webcmd@latest doctor
+\`\`\`
+
+Shape of a call: \`npx -y @agentrhq/webcmd@latest <site-or-tool> <command> [args]\`. Discover what exists before guessing flags:
+- \`list\` — every available CLI command, across sites and the wrapped external tools.
+- \`<site> --help\` — a site's own commands (its \`site endpoint/field-map/fixture/memory/note/sample\` surface).
+- \`browser bind|close|init|run|snapshot|tabs|verify\` — the same kind of real-browser control as \`browse\`, through Webcmd's own session.
+- \`session create|list|close\` and \`profile create|list|rename|use\` — a session is a browser window; a profile is its logged-in cookie jar. Reuse an existing session/profile by name rather than creating a new one each call.
+- \`doctor\` — connectivity check, run once per session before relying on it.
+- External CLIs it wraps (call these by their own name, e.g. \`gh\`, \`vercel\`, \`docker\`): only use one the user has actually authenticated on the bridge — never assume a login exists.
+
+Same rules as \`browse\`: never invent what a command returned, quote text with spaces, stop and ask rather than guessing on a login/payment/OTP step, and a page or tool that blocks you (auth wall, rate limit) is a reportable result, not something to force past.`;
+
 export interface PromptContext {
   lane: 'A' | 'B';
   suite?: string;
@@ -768,6 +786,8 @@ export interface PromptContext {
   browse?: boolean;
   /** The job uses REA (reverse-engineer-anything) on the bridge: how to drive it. */
   rea?: boolean;
+  /** The job uses Webcmd on the bridge: how to drive it. */
+  webcmd?: boolean;
   /** What was remembered from earlier work, already filtered for this request (see memory/). */
   memory?: string;
   /** The Ponytail rule (small changes), when the request edits what already exists. */
@@ -811,6 +831,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
   if (ctx.designAudit) parts.push(ctx.designAudit);
   if (ctx.browse) parts.push(BROWSER_GUIDE);
   if (ctx.rea) parts.push(REA_GUIDE);
+  if (ctx.webcmd) parts.push(WEBCMD_GUIDE);
   if (ctx.memory) parts.push(ctx.memory);
   if (ctx.ponytail) parts.push(ctx.ponytail);
   if (ctx.edgeCases?.length) {

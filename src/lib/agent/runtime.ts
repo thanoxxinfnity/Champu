@@ -663,7 +663,7 @@ let creating: Promise<string> | null = null;
  * "Ha" / "ok bro" / a pasted link only mean something next to the task they answer.
  */
 const GREETING = /^(hi+|hello|hey+|hlo|yo|thanks?|thank you|bye)\b[\s!.]*$/i;
-function previousTurn(): { previousLane?: 'A' | 'B'; previousOps?: boolean; previousBrowse?: boolean; previousRea?: boolean } {
+function previousTurn(): { previousLane?: 'A' | 'B'; previousOps?: boolean; previousBrowse?: boolean; previousRea?: boolean; previousWebcmd?: boolean } {
   const { messages } = useWorkspace.getState();
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
@@ -675,6 +675,7 @@ function previousTurn(): { previousLane?: 'A' | 'B'; previousOps?: boolean; prev
       previousOps: m.ops,
       previousBrowse: Boolean(m.ops) && recent.some((x) => USED_BROWSER.test(x.content)),
       previousRea: Boolean(m.ops) && recent.some((x) => USED_REA.test(x.content)),
+      previousWebcmd: Boolean(m.ops) && recent.some((x) => USED_WEBCMD.test(x.content)),
     };
   }
   return {};
@@ -684,6 +685,8 @@ function previousTurn(): { previousLane?: 'A' | 'B'; previousOps?: boolean; prev
 const USED_BROWSER = /browse\s+(open|search|snapshot|click|type|shot|find|eval|tabs|press|select|wait|back)\b/;
 /** An REA command the assistant ran lately: the next short reply is still a reverse-engineering job. */
 const USED_REA = /\brea\s+(analyze|inspect|decompile|decode-android-resources|analyze-javascript-application|capture-adb-screen|doctor)\b/;
+/** A webcmd command the assistant ran lately: the next short reply is still that job. */
+const USED_WEBCMD = /\bwebcmd\s+(\S+\s+)?(browser|session|profile|site|list|doctor|auth)\b/;
 const MAX_OPS_TURNS = 6;
 const MAX_BROWSE_TURNS = 12;
 const MAX_FIX_TURNS = 3;
@@ -1380,6 +1383,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       ...(designAudit ? { designAudit } : {}),
       ...(classification.browse ? { browse: true } : {}),
       ...(classification.rea ? { rea: true } : {}),
+      ...(classification.webcmd ? { webcmd: true } : {}),
       ...(memoryText ? { memory: memoryText } : {}),
       ...(lane === 'B' && pipe.ponytail && wantsPonytail(modelInput, useWorkspace.getState().files.size) ? { ponytail: PONYTAIL_RULE } : {}),
       ...(plan?.edgeCases?.length ? { edgeCases: plan.edgeCases } : {}),

@@ -24,6 +24,8 @@ export interface Classification {
   browse?: boolean;
   /** The job uses REA (reverse-engineer-anything) on the bridge — inspecting a binary, APK, JS bundle or site someone owns or is authorised to examine. Implies `ops`. */
   rea?: boolean;
+  /** The job uses Webcmd on the bridge — a site turned into CLI commands, with memory across runs, or one of its wrapped external CLIs (gh, vercel, docker, notion, discord, …). Implies `ops`. */
+  webcmd?: boolean;
   /** Set when the deterministic pass was inconclusive. */
   needsModel?: boolean;
 }
@@ -105,6 +107,19 @@ export function wantsReverseEngineer(text: string): boolean {
   if (!t) return false;
   if (REA_STRONG.test(t)) return true;
   return REA_VERB.test(t) && REA_NOUN.test(t);
+}
+
+/**
+ * Webcmd — a site turned into deterministic CLI commands, with memory of its navigation across
+ * runs, plus its own wrapped external CLIs (gh, vercel, docker, notion, discord, telegram,
+ * obsidian, lark, wrangler). Named explicitly, or one of those external tools named by name.
+ */
+const WEBCMD_STRONG = /\b(webcmd|web ?cmd)\b/i;
+const WEBCMD_EXTERNAL = /\b(via|with|using|through)\s+(gh cli|github cli|vercel cli|docker cli|notion|obsidian|discord(?: bot)?|telegram|wrangler|cloudflare cli|lark)\b/i;
+export function wantsWebcmd(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  return WEBCMD_STRONG.test(t) || WEBCMD_EXTERNAL.test(t);
 }
 
 export function wantsBrowse(text: string): boolean {
@@ -221,7 +236,7 @@ export function detectSuite(text: string): string | undefined {
 
 export function classifyLocal(
   input: string,
-  opts: { hasAttachments?: boolean; previousLane?: Lane; previousOps?: boolean; previousBrowse?: boolean; previousRea?: boolean } = {},
+  opts: { hasAttachments?: boolean; previousLane?: Lane; previousOps?: boolean; previousBrowse?: boolean; previousRea?: boolean; previousWebcmd?: boolean } = {},
 ): Classification {
   const text = input.trim();
   const suite = detectSuite(text);
@@ -238,12 +253,19 @@ export function classifyLocal(
     return { lane: 'A', confidence: 0.8, reason: `Slash command /${cmd} is informational.`, suite };
   }
 
-  // 2a. A job for the browser on the bridge.
+  // 2a. A job for Webcmd on the bridge — checked before the generic browse detector, since naming
+  // Webcmd or one of its wrapped tools (gh, vercel, docker, …) explicitly is a stronger signal than
+  // a generic browse verb the same sentence might also contain ("open github and check my PRs").
+  if (wantsWebcmd(text)) {
+    return { lane: 'B', confidence: 0.9, reason: 'using Webcmd on the bridge — this is work, not a question', ops: true, webcmd: true };
+  }
+
+  // 2b. A job for the browser on the bridge.
   if (wantsBrowse(text)) {
     return { lane: 'B', confidence: 0.9, reason: 'using a real browser on the bridge — this is work, not a question', ops: true, browse: true };
   }
 
-  // 2b. A job for REA (reverse-engineer-anything) on the bridge.
+  // 2c. A job for REA (reverse-engineer-anything) on the bridge.
   if (wantsReverseEngineer(text)) {
     return { lane: 'B', confidence: 0.9, reason: 'inspecting a binary/app with REA on the bridge — this is work, not a question', ops: true, rea: true };
   }
@@ -253,7 +275,7 @@ export function classifyLocal(
     return { lane: 'B', confidence: 0.95, reason: 'running it on the terminal — this is work, not a question', ops: true };
   }
   if (opts.previousLane === 'B' && isFollowUp(text) && !INQUIRY_MARKERS.test(text)) {
-    return { lane: 'B', confidence: 0.85, reason: 'carrying on the task already under way', suite: opts.previousOps ? undefined : suite, ops: opts.previousOps, browse: opts.previousBrowse, rea: opts.previousRea };
+    return { lane: 'B', confidence: 0.85, reason: 'carrying on the task already under way', suite: opts.previousOps ? undefined : suite, ops: opts.previousOps, browse: opts.previousBrowse, rea: opts.previousRea, webcmd: opts.previousWebcmd };
   }
 
   let score = 0;
