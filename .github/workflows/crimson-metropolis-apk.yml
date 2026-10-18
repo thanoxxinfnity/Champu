@@ -1,0 +1,99 @@
+name: Crimson Metropolis APK
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - claude/chomugiri-workspace-design-09sxwa
+    paths:
+      - "examples/crimson-metropolis/**"
+      - "examples/sideload.keystore"
+      - ".github/workflows/crimson-metropolis-apk.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container:
+      image: barichello/godot-ci:4.3
+    # GitHub Actions forces HOME=/github/home inside a `container:` job, which hides this image's
+    # baked-in export templates and Java SDK config (both live under /root). Point HOME back.
+    env:
+      HOME: /root
+    defaults:
+      run:
+        working-directory: examples/crimson-metropolis
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import the project
+        run: |
+          godot --headless --import || true
+          godot --headless --editor --quit-after 2 || true
+
+      # A script that fails to load prints errors and still exits 0, so every gate also checks for the verdict line.
+      - name: "Player controller: movement, camera, jump, doors"
+        run: |
+          godot --headless --fixed-fps 60 -s tests/player_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: "Four cars: drive, steer, brake, enter and exit"
+        run: |
+          godot --headless --fixed-fps 60 -s tests/vehicle_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: "A bot walks through the safehouse"
+        run: |
+          godot --headless --fixed-fps 60 -s tests/house_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: "The lobby and the working elevator"
+        run: |
+          godot --headless --fixed-fps 60 -s tests/tower_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: "Traffic, pedestrians, wanted level, phone, bed, wardrobe, hijack"
+        run: |
+          godot --headless --fixed-fps 60 -s tests/life_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: "The Penthouse Deal, start to finish"
+        run: |
+          godot --headless --fixed-fps 60 -s tests/mission_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: "On-screen controls"
+        run: |
+          godot --headless --fixed-fps 60 -s tests/touch_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: "Loading screen and mode buttons"
+        run: |
+          godot --headless --fixed-fps 60 -s tests/boot_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+
+      - name: Give this build a higher version number than the last
+        run: |
+          sed -i "s/^version\/code=.*/version\/code=$((1000 + GITHUB_RUN_NUMBER))/" export_presets.cfg
+          grep -n "^version/" export_presets.cfg
+
+      - name: Export Android APK
+        env:
+          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/examples/sideload.keystore
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: chomugames
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: chomugames
+        run: |
+          mkdir -pv build
+          godot --headless --export-release "Android" build/CrimsonMetropolis.apk
+          ls -la build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CrimsonMetropolis-apk
+          path: examples/crimson-metropolis/build/CrimsonMetropolis.apk
+          retention-days: 60
+
+      - name: Publish a download release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: crimson-metropolis-apk
+          name: Crimson Metropolis (latest build)
+          body: Auto-built from ${{ github.sha }}. Sideload APK — enable "install from unknown sources" to install.
+          files: examples/crimson-metropolis/build/CrimsonMetropolis.apk

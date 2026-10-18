@@ -17,6 +17,7 @@ var world: World
 var state: GameState
 var hud: Hud
 var phone: Phone
+var touch: TouchControls
 var atmosphere: Atmosphere
 var player: Player
 var mission: Node = null
@@ -50,6 +51,11 @@ func setup(w: World) -> void:
 	phone.closed.connect(func():
 		player.set_cinematic(false)
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED)
+
+	touch = TouchControls.new()
+	touch.name = "Touch"
+	touch.director = self
+	add_child(touch)
 
 	var fade_layer := CanvasLayer.new()
 	fade_layer.layer = 90
