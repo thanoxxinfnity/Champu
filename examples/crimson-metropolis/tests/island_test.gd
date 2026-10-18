@@ -35,9 +35,13 @@ func _init() -> void:
 	for s in Island.SITES:
 		var h := isl.height_at(s.pos.x, s.pos.y)
 		check(h > 2.0, "%s stands on dry land (%.1f m)" % [s.name, h])
-	for n in ["Clock Tower", "Mill", "Factory", "Shipyard", "Rim Nam", "Cape", "Watch Peak"]:
+	for n in ["Clock Tower", "Mill", "Factory", "Shipyard", "Rim Nam", "Cape", "Downtown", "Watch Peak"]:
 		check(isl.landmarks.get(n) != null, "landmark placed: %s" % n)
 	check(isl.trees > 600, "forests: %d trees and bushes" % isl.trees)
+	check(isl.npcs.size() >= 25, "%d people live on the island" % isl.npcs.size())
+	var npc0 := isl.npcs[0]
+	var npc_start := npc0.global_position
+	check(isl.trees > 1200, "the jungle thickens the forests (%d)" % isl.trees)
 	check(isl.blades.size() == 1, "the windmill sails have a pivot to turn on")
 	var rot0 := (isl.blades[0] as Node3D).rotation.z
 	for i in range(60):
@@ -63,6 +67,25 @@ func _init() -> void:
 	check(car.global_position.distance_to(start) > 12.0 and car.global_basis.y.y > 0.8, "the car drives over the island (%.0f m, upright)" % car.global_position.distance_to(start))
 	car.is_player_driven = false
 	car.driver = null
+
+	# People wander and run from gunfire.
+	var moved := 0
+	for n in isl.npcs:
+		if n.global_position.distance_to(isl.height_at(n.global_position.x, n.global_position.z) * Vector3.UP + Vector3(n.global_position.x, 0, n.global_position.z)) > 3.0:
+			moved += 0
+	await physics_frame
+	var near_npc := isl.npcs[0]
+	world.get_tree().call_group("pedestrians", "hear_noise", near_npc.global_position + Vector3(3, 0, 0), true)
+	check(near_npc.fleeing, "a gunshot sends an islander running")
+	var walkers := 0
+	for i in range(60 * 6):
+		await physics_frame
+	for n in isl.npcs:
+		var h := isl.height_at(n.global_position.x, n.global_position.z)
+		if absf(n.global_position.y - h) < 1.2:
+			walkers += 1
+	check(walkers >= isl.npcs.size() - 2, "islanders keep their feet on the ground (%d of %d)" % [walkers, isl.npcs.size()])
+	check(npc0.global_position.distance_to(npc_start) > 1.0, "…and walk about")
 
 	# HUD and radar know about the island.
 	check(world.director != null and world.director.hud.minimap.island == isl, "the radar shows the island")

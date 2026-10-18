@@ -20,6 +20,10 @@ var model: Node3D
 var anim: AnimationPlayer
 var cw := true
 var block := Vector3.ZERO         # centre of the block it walks around
+var wander_centre := Vector3.ZERO   # set on the island: stroll round this point instead of a city block
+var wander_radius := 0.0
+var _wander_to := Vector3.ZERO
+var _wander_wait := 0.0
 var corner := 0                   # index of the corner it is heading for
 var _flee_from := Vector3.ZERO
 var _flee_t := 0.0
@@ -162,13 +166,18 @@ func _physics_process(delta: float) -> void:
 			fleeing = false
 		speed = RUN
 	else:
-		var target := _corner_pos(corner)
-		dir = target - global_position
-		dir.y = 0.0
-		if dir.length() < 1.5:
-			corner += 1 if cw else -1
-			dir = _corner_pos(corner) - global_position
+		if wander_radius > 0.0:
+			dir = _wander_dir(delta)
+			if dir == Vector3.ZERO:
+				speed = 0.0
+		else:
+			var target := _corner_pos(corner)
+			dir = target - global_position
 			dir.y = 0.0
+			if dir.length() < 1.5:
+				corner += 1 if cw else -1
+				dir = _corner_pos(corner) - global_position
+				dir.y = 0.0
 	if dir.length() > 0.01:
 		dir = dir.normalized()
 		# Keep to the loop while fleeing too: slide along the pavement rather than into the road or a wall.
@@ -189,6 +198,22 @@ func _physics_process(delta: float) -> void:
 		_play(&"run", 1.1)
 	else:
 		_play(&"walk", clampf(sp / 2.1, 0.5, 1.2))
+
+
+## Island walking: amble to a random spot near the settlement, stand for a few seconds, pick another.
+func _wander_dir(delta: float) -> Vector3:
+	if _wander_wait > 0.0:
+		_wander_wait -= delta
+		return Vector3.ZERO
+	var d := _wander_to - global_position
+	d.y = 0.0
+	if _wander_to == Vector3.ZERO or d.length() < 1.5:
+		var a := randf() * TAU
+		var r := sqrt(randf()) * wander_radius
+		_wander_to = wander_centre + Vector3(cos(a) * r, 0, sin(a) * r)
+		_wander_wait = randf_range(1.0, 5.0) if _wander_to != Vector3.ZERO else 0.0
+		return Vector3.ZERO
+	return d
 
 
 ## A fast car close by frightens (and, at touching distance, hurts) the pedestrian.

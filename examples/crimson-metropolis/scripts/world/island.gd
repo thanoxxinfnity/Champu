@@ -20,15 +20,20 @@ const SITES := [
 	{"name": "Shipyard", "pos": Vector2(40, 600), "r": 85.0, "h": 5.0},
 	{"name": "Rim Nam", "pos": Vector2(-120, -380), "r": 70.0},
 	{"name": "Cape", "pos": Vector2(480, 380), "r": 55.0, "h": 7.0},
+	{"name": "Downtown", "pos": Vector2(-250, -40), "r": 85.0, "h": 14.0},
 	{"name": "Watch Peak", "pos": PEAK, "r": 32.0},
 ]
-const ROADS := [["Clock Tower", "Mill"], ["Clock Tower", "Factory"], ["Clock Tower", "Shipyard"], ["Clock Tower", "Rim Nam"], ["Rim Nam", "Watch Peak"], ["Factory", "Cape"]]
+## Dense forest: no clearings, taller trees, undergrowth. Nothing is built here.
+const JUNGLE := Vector2(-380.0, -420.0)
+const JUNGLE_R := 260.0
+const ROADS := [["Clock Tower", "Mill"], ["Clock Tower", "Factory"], ["Clock Tower", "Shipyard"], ["Clock Tower", "Rim Nam"], ["Rim Nam", "Watch Peak"], ["Factory", "Cape"], ["Clock Tower", "Downtown"]]
 
 var terrain: MeshInstance3D
 var sea: MeshInstance3D
 var blades: Array[Node3D] = []
 var landmarks: Dictionary = {}          # name -> Node3D, for tests and the minimap
 var trees := 0
+var npcs: Array[Pedestrian] = []
 var _noise := FastNoiseLite.new()
 var _coast := FastNoiseLite.new()
 var _site_h: Dictionary = {}
@@ -55,6 +60,7 @@ func build() -> void:
 	_build_roads()
 	_place_landmarks()
 	_scatter_trees()
+	_populate()
 
 
 # ── the shape of the land ─────────────────────────────────────────────────────
@@ -281,6 +287,28 @@ func _place_landmarks() -> void:
 	landmarks["Cape"] = _put("watchtower", k.x, k.y, 0.0)
 	_ring("hut", k, 30.0, 5, 0.7)
 	landmarks["Watch Peak"] = _put("watchtower", PEAK.x, PEAK.y, 45.0)
+	_downtown(SITES[6].pos)
+
+
+## A small city on the west side: generated towers and shop blocks round two crossing streets.
+func _downtown(c: Vector2) -> void:
+	var specs := [
+		["skyscraper", 78.0, Vector2(-24, -24)], ["tower_a", 58.0, Vector2(24, -26)], ["tower_a", 44.0, Vector2(-30, 22)],
+		["skyscraper", 66.0, Vector2(30, 26)], ["shop_block", 22.0, Vector2(0, -46)], ["shop_block", 18.0, Vector2(-52, 0)],
+		["shop_block", 20.0, Vector2(54, 0)], ["shop_block", 18.0, Vector2(0, 50)],
+	]
+	for sp in specs:
+		var scene := load(Data.model_path(sp[0])) as PackedScene
+		if scene == null:
+			continue
+		var n := scene.instantiate() as Node3D
+		add_child(n)
+		var p: Vector2 = c + sp[2]
+		ModelFit.place_by_height(n, sp[1], rad_to_deg(atan2(-sp[2].x, -sp[2].y)), height_at(p.x, p.y) - 0.1)
+		n.position += Vector3(p.x, 0, p.y)
+		ModelFit.collider_for(n, 0.9)
+		if landmarks.get("Downtown") == null:
+			landmarks["Downtown"] = n
 
 
 # ── vegetation ────────────────────────────────────────────────────────────────
@@ -299,25 +327,33 @@ func _scatter_trees() -> void:
 		var aabb := mi.get_aabb()
 		var scale_k: float = k[1] / maxf(aabb.size.y, 0.001)
 		var xforms: Array[Transform3D] = []
-		var want := 220 if k[0] != "bush_near.glb" else 300
+		var want := 380 if k[0] != "bush_near.glb" else 520
+		var jungle_quota := want / 2
 		var tries := 0
 		while xforms.size() < want and tries < want * 40:
 			tries += 1
 			var x := _rng.randf_range(-RADIUS, RADIUS)
 			var z := _rng.randf_range(-RADIUS, RADIUS)
+			if xforms.size() < jungle_quota:
+				# first half of every kind goes into the jungle, which is what makes it one
+				var a := _rng.randf_range(0.0, TAU)
+				var rr := sqrt(_rng.randf()) * JUNGLE_R
+				x = JUNGLE.x + cos(a) * rr
+				z = JUNGLE.y + sin(a) * rr
 			var h := height_at(x, z)
 			var is_palm: bool = k[0] == "palm_near.glb"
 			if is_palm and (h < 1.0 or h > 5.5):
 				continue
 			if not is_palm and (h < 5.0 or h > 110.0):
 				continue
-			if cluster.get_noise_2d(x, z) < -0.05 and k[0] != "bush_near.glb":
+			var in_jungle := Vector2(x, z).distance_to(JUNGLE) < JUNGLE_R
+			if cluster.get_noise_2d(x, z) < -0.05 and k[0] != "bush_near.glb" and not in_jungle:
 				continue
 			if _near_site(x, z) or _road_dist(x, z) < 7.0:
 				continue
 			if absf(height_at(x + 4.0, z) - h) > 3.2 or absf(height_at(x, z + 4.0) - h) > 3.2:
 				continue
-			var sc := scale_k * _rng.randf_range(0.8, 1.25)
+			var sc := scale_k * _rng.randf_range(0.8, 1.25) * (1.3 if Vector2(x, z).distance_to(JUNGLE) < JUNGLE_R and k[1] > 5.0 else 1.0)
 			var basis := Basis(Vector3.UP, _rng.randf_range(0.0, TAU)).scaled(Vector3.ONE * sc)
 			var centre := Vector3(aabb.position.x + aabb.size.x * 0.5, aabb.position.y, aabb.position.z + aabb.size.z * 0.5)
 			xforms.append(Transform3D(basis, Vector3(x, h - 0.1, z) - basis * centre))
@@ -339,6 +375,27 @@ func _scatter_trees() -> void:
 		inst.free()
 		add_child(mmi)
 		trees += xforms.size()
+
+
+## People: a handful in every settlement, strolling round it; they run from gunfire and from cars like the city's pedestrians.
+func _populate() -> void:
+	var kinds := ["npc_casual", "npc_street", "npc_business", "npc_casual"]
+	var counts := {"Clock Tower": 8, "Downtown": 7, "Rim Nam": 4, "Factory": 4, "Shipyard": 3, "Cape": 2, "Mill": 2}
+	var i := 0
+	for s in SITES:
+		var n: int = counts.get(s.name, 0)
+		for _k in range(n):
+			var a := _rng.randf_range(0.0, TAU)
+			var r := _rng.randf_range(8.0, s.r * 0.7)
+			var x: float = s.pos.x + cos(a) * r
+			var z: float = s.pos.y + sin(a) * r
+			var ped := Pedestrian.make(kinds[i % kinds.size()], Vector3.ZERO, true)
+			i += 1
+			ped.wander_centre = Vector3(s.pos.x, 0, s.pos.y)
+			ped.wander_radius = minf(s.r * 0.8, 55.0)
+			add_child(ped)
+			ped.global_position = Vector3(x, height_at(x, z) + 0.4, z)
+			npcs.append(ped)
 
 
 func _near_site(x: float, z: float) -> bool:

@@ -17,19 +17,22 @@ func _init() -> void:
 	cam.fov = 62.0
 	cam.far = 4000.0
 	var views := [
-		["isl_aerial", Vector3(0, 1500, 1500), Vector3(0, 0, 0)],
-		["isl_town", Vector3(40, 30, 90), Vector3(0, 12, 0)],
-		["isl_factory", Vector3(250, 22, 190), Vector3(320, 10, 90)],
-		["isl_peak", Vector3(150, 120, -260), Vector3(280, 150, -430)],
-		["isl_mill", Vector3(-280, 22, 230), Vector3(-330, 10, 150)],
-		["isl_ship", Vector3(-30, 24, 520), Vector3(40, 10, 600)],
+		["isl_city", Vector3(-250, 40, 90), Vector3(-250, 35, -40)],
+		["isl_jungle", Vector3(-380, 8, -330), Vector3(-380, 14, -440)],
+		["isl_npcs", Vector3.ZERO, Vector3.ZERO],
+		["isl_aerial", Vector3(0, 1100, 1100), Vector3(0, 0, 0)],
 	]
 	for v in views:
 		var pos: Vector3 = v[1]
-		if v[0] != "isl_aerial":
+		var look: Vector3 = v[2]
+		if v[0] == "isl_npcs":
+			var n := isl.npcs[0]
+			pos = n.global_position + Vector3(3.0, 2.0, 5.0)
+			look = n.global_position + Vector3(0, 1.1, 0)
+		if v[0] != "isl_aerial" and v[0] != "isl_npcs":
 			pos.y = max(pos.y, isl.height_at(pos.x, pos.z) + 6.0)
 		cam.global_position = pos
-		cam.look_at(v[2], Vector3.UP)
+		cam.look_at(look, Vector3.UP)
 		for i in range(6):
 			await process_frame
 		root.get_viewport().get_texture().get_image().save_png("%s/%s.png" % [out_dir, v[0]])
