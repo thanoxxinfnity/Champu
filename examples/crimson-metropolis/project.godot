@@ -83,6 +83,13 @@ camera_switch={
 ]
 }
 
+[shader_globals]
+
+night={
+"type": "float",
+"value": 0.0
+}
+
 [physics]
 
 common/physics_ticks_per_second=60

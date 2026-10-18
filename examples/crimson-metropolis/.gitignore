@@ -2,3 +2,8 @@
 *.import
 *.webp
 export/
+
+assets/generated/**/*_albedo.*
+assets/generated/**/*_metallic_roughness.*
+assets/generated/**/*_normal.*
+assets/generated/**/*_emissive.*
