@@ -1,8 +1,10 @@
 /**
  * The site's 3D story: a room assembles, the camera drifts around it like an
- * establishing shot, then a character walks in holding a phone and opens
- * Chomugiri. Every model here is a real generated asset (Tripo-class image-to-3D,
- * downsized for the web — see assets/3d/README.md), not a placeholder.
+ * establishing shot, then a character walks in, sits on the sofa, turns the
+ * TV on (a flashing ad, then the Chomugiri brand), picks up their phone, and
+ * types the exact request Chomugiri would actually build. Every model here
+ * is a real generated asset (Tripo-class image-to-3D, downsized for the web
+ * — see assets/3d/README.md), not a placeholder.
  *
  * Kept separate from model3d.js (the small code-built icon in the feature
  * list) — this is the hero-scale piece, heavier and only started when its
@@ -11,6 +13,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from '/vendor/three/examples/OrbitControls.js';
 import { GLTFLoader } from '/vendor/three/examples/GLTFLoader.js';
+import { typeInto } from './type.js';
 
 const $ = (s) => document.querySelector(s);
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -37,14 +40,40 @@ const ROOM = [
   ['22_photo_frame.glb', 1.9, -2.85, 0, 0.35, 1.2],
   ['16_succulent.glb', 1.6, -0.5, 0, 0.28],
 ];
-const CENTER = new THREE.Vector3(0, 1.1, 0.6);
-const ORBIT_RADIUS = 5.2;
-const ORBIT_HEIGHT = 2.0;
-const ORBIT_SPEED = 0.07; // radians/sec — a slow drift, not a spin
+const CENTER = new THREE.Vector3(-0.6, 1.0, -1.0);
+const ORBIT_RADIUS = 4.6;
+const ORBIT_HEIGHT = 1.9;
+const ORBIT_SPEED = 0.06; // radians/sec — a slow drift, not a spin
+
+// ── The whole sequence, as named phases on one timeline (seconds from the
+// canvas becoming visible). Each later phase starts where the one before it
+// settles, so moving one duration does not have to re-time everything after
+// it by hand. ──────────────────────────────────────────────────────────────
+const WALK_START = 1.0, WALK_DUR = 3.0;
+const SIT_START = WALK_START + WALK_DUR, SIT_DUR = 0.9;
+const TV_ON_START = SIT_START + SIT_DUR + 0.4, TV_ON_DUR = 0.4;
+const TV_AD_START = TV_ON_START + TV_ON_DUR, TV_AD_DUR = 2.6;
+const TV_BRAND_START = TV_AD_START + TV_AD_DUR, TV_BRAND_DUR = 1.8;
+const PHONE_START = TV_BRAND_START + TV_BRAND_DUR + 0.3, PHONE_DUR = 1.6;
+const PROMPT_START = PHONE_START + PHONE_DUR + 0.3;
+const PROMPT_TEXT = 'Make me a racing game';
+
+const WALK_FROM_XZ = [-4.2, 1.4];
+const STAND_XZ = [-0.75, -0.55]; // in front of the sofa, facing it
+const SIT_XZ = [-1.15, -0.85]; // settled into the seat cushion
+const SIT_DROP = 0.5; // how far the rigid body sinks to read as "seated" — a stand-in for knee/hip bend a static mesh cannot do
+const PHONE_REST_OFFSET = [0.28, -0.32, 0.1]; // relative to the character, resting on their lap
+const PHONE_HELD_OFFSET = [0.22, 0.42, 0.28]; // relative to the character, raised to read it
+
+const phase = (t, start, dur) => Math.min(1, Math.max(0, (t - start) / dur));
+const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const lerp = (a, b, e) => a + (b - a) * e;
 
 export function start() {
   const canvas = $('#story-canvas');
   const card = $('#story-card');
+  const bubble = $('#story-bubble');
   if (!canvas || !card) return;
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -58,7 +87,13 @@ export function start() {
   key.position.set(4, 5, 3);
   scene.add(key);
   scene.add(new THREE.DirectionalLight(0xdce8ff, 0.5).translateX(-4).translateY(2).translateZ(-3));
-  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+  scene.add(ambient);
+  // The TV is the only other light source in the story — its glow should
+  // actually tint the room once it is "on", or the whole beat reads as inert.
+  const tvBounce = new THREE.PointLight(0xff8a3d, 0, 4, 2);
+  tvBounce.position.set(0, 1.0, -2.2);
+  scene.add(tvBounce);
 
   const floor = new THREE.Mesh(
     new THREE.CircleGeometry(5.5, 48),
@@ -107,6 +142,62 @@ export function start() {
   const root = new THREE.Group();
   scene.add(root);
 
+  // ── The TV screen: a canvas texture drawn fresh each frame while the ad or
+  // the brand beat is playing, idle (and dark) otherwise — cheaper than a
+  // video element and gives full control over the two beats it needs to show.
+  const screenCanvas = document.createElement('canvas');
+  screenCanvas.width = 256; screenCanvas.height = 160;
+  const screenCtx = screenCanvas.getContext('2d');
+  const screenTex = new THREE.CanvasTexture(screenCanvas);
+  screenTex.colorSpace = THREE.SRGBColorSpace;
+  const tvScreen = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.95, 0.56),
+    new THREE.MeshBasicMaterial({ map: screenTex, transparent: true, opacity: 0 }),
+  );
+  tvScreen.position.set(0, 1.0, -2.29);
+  root.add(tvScreen);
+
+  function drawTvOff() {
+    screenCtx.fillStyle = '#05080c';
+    screenCtx.fillRect(0, 0, screenCanvas.width, screenCanvas.height);
+  }
+  function drawTvAd(t) {
+    const hue = (t * 140) % 360;
+    const grd = screenCtx.createLinearGradient(0, 0, screenCanvas.width, screenCanvas.height);
+    grd.addColorStop(0, `hsl(${hue}, 70%, 55%)`);
+    grd.addColorStop(1, `hsl(${(hue + 80) % 360}, 70%, 40%)`);
+    screenCtx.fillStyle = grd;
+    screenCtx.fillRect(0, 0, screenCanvas.width, screenCanvas.height);
+    // A couple of blocky "ad" shapes, not real content — it reads as motion at this size.
+    screenCtx.fillStyle = 'rgba(255,255,255,0.85)';
+    const bw = 40 + 30 * Math.sin(t * 3);
+    screenCtx.fillRect(20, 110 + 10 * Math.sin(t * 2.2), bw, 14);
+    screenCtx.beginPath();
+    screenCtx.arc(190 + 20 * Math.cos(t * 1.7), 50, 22, 0, Math.PI * 2);
+    screenCtx.fill();
+  }
+  function drawTvBrand(e) {
+    screenCtx.fillStyle = '#17130f';
+    screenCtx.fillRect(0, 0, screenCanvas.width, screenCanvas.height);
+    const scale = 0.85 + 0.15 * Math.min(1, e * 3); // a quick pop-in
+    screenCtx.save();
+    screenCtx.translate(screenCanvas.width / 2, screenCanvas.height / 2);
+    screenCtx.scale(scale, scale);
+    screenCtx.fillStyle = '#ff8a3d';
+    screenCtx.font = '700 34px system-ui, sans-serif';
+    screenCtx.textAlign = 'center';
+    screenCtx.textBaseline = 'middle';
+    screenCtx.shadowColor = 'rgba(255,138,61,0.8)';
+    screenCtx.shadowBlur = 18;
+    screenCtx.fillText('CHOMUGIRI', 0, -6);
+    screenCtx.font = '600 13px system-ui, sans-serif';
+    screenCtx.fillStyle = '#f4d9c4';
+    screenCtx.shadowBlur = 0;
+    screenCtx.fillText('say it. it builds it.', 0, 24);
+    screenCtx.restore();
+  }
+  drawTvOff();
+
   // Character + phone, animated separately from the static room.
   let character = null;
   let phone = null;
@@ -131,13 +222,13 @@ export function start() {
       // somewhere to walk in from. Grounded and sized like an adult, not
       // whatever scale the generator happened to export at.
       fitAndPlace(character, { x: WALK_FROM_XZ[0], z: WALK_FROM_XZ[1], yawDeg: 63, targetSize: 1.75 });
-      character.userData.groundY = character.position.y;
+      character.userData.standGroundY = character.position.y;
       root.add(character);
     }
     if (phoneScene) {
       phone = phoneScene;
-      fitAndPlace(phone, { x: PHONE_FROM_XZ[0], z: PHONE_FROM_XZ[1], targetSize: 0.15 });
-      phone.userData.groundY = phone.position.y;
+      fitAndPlace(phone, { x: 0, z: 0, targetSize: 0.15 });
+      phone.userData.localY = phone.position.y; // the model's own floor offset at this scale
       root.add(phone);
       screenGlow.position.set(0, 0.02, 0.045);
       phone.add(screenGlow);
@@ -168,19 +259,13 @@ export function start() {
   controls.addEventListener('start', () => { userDriving = true; });
   controls.addEventListener('end', () => { userDriving = false; userDriveUntil = performance.now() + 4000; });
 
-  // Walk-in timeline, in seconds from page-visible. x/z only — each model's
-  // grounded Y (set by fitAndPlace) is captured once it loads and reapplied
-  // every frame, so the walk never fights the floor placement.
-  const WALK_START = 1.0;
-  const WALK_DURATION = 3.2;
-  const WALK_FROM_XZ = [-4.2, 1.4];
-  const WALK_TO_XZ = [0.55, 0.9];
-  const PHONE_FROM_XZ = [-4.0, 2.4];
-  const PHONE_TO_XZ = [0.78, 1.0];
-  const PHONE_HELD_HEIGHT = 1.15; // raised to roughly chest/hand height once arrived
-
-  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-  const lerp = (a, b, e) => a + (b - a) * e;
+  let promptStarted = false;
+  function startPrompt() {
+    if (promptStarted || !bubble) return;
+    promptStarted = true;
+    bubble.classList.add('on');
+    void typeInto(bubble.querySelector('.story-bubble-text'), PROMPT_TEXT, { speed: 48 });
+  }
 
   let raf = 0;
   const clock = new THREE.Clock();
@@ -199,28 +284,48 @@ export function start() {
     controls.update();
 
     if (character) {
-      const walkT = Math.min(1, Math.max(0, (t - WALK_START) / WALK_DURATION));
-      const e = easeOutCubic(walkT);
-      const bob = walkT < 1 && !reduced() ? Math.abs(Math.sin(t * 6.5)) * 0.06 * (1 - e) : 0;
-      character.position.set(
-        lerp(WALK_FROM_XZ[0], WALK_TO_XZ[0], e),
-        character.userData.groundY + bob,
-        lerp(WALK_FROM_XZ[1], WALK_TO_XZ[1], e),
-      );
-      character.rotation.y = Math.PI * 0.35 * (1 - e); // turns to face the room as it arrives
-      if (!reduced()) character.rotation.z = Math.sin(t * 1.4) * 0.01; // a breathing idle once arrived
+      const walkE = easeOutCubic(phase(t, WALK_START, WALK_DUR));
+      const sitE = easeInOutCubic(phase(t, SIT_START, SIT_DUR));
+      const bob = walkE < 1 && !reduced() ? Math.abs(Math.sin(t * 6.5)) * 0.06 * (1 - walkE) : 0;
+
+      // Walking covers off-stage → standing in front of the sofa; sitting
+      // then covers standing → seated, as its own phase so the two never blend.
+      const x = lerp(lerp(WALK_FROM_XZ[0], STAND_XZ[0], walkE), SIT_XZ[0], sitE);
+      const z = lerp(lerp(WALK_FROM_XZ[1], STAND_XZ[1], walkE), SIT_XZ[1], sitE);
+      const y = character.userData.standGroundY + bob - SIT_DROP * sitE;
+      character.position.set(x, y, z);
+
+      // Faces the room while walking, then the TV once seated.
+      const faceRoom = Math.PI * 0.35 * (1 - walkE);
+      const faceTv = lerp(0, 0.25, sitE);
+      character.rotation.y = faceRoom + faceTv;
+      character.rotation.x = -0.12 * sitE; // a slight recline into the cushions
+      if (!reduced()) character.rotation.z = Math.sin(t * 1.4) * 0.01 * (1 - sitE * 0.6); // idle breathing, settles once seated
 
       if (phone) {
-        phone.position.set(
-          lerp(PHONE_FROM_XZ[0], PHONE_TO_XZ[0], e),
-          lerp(phone.userData.groundY, PHONE_HELD_HEIGHT, e),
-          lerp(PHONE_FROM_XZ[1], PHONE_TO_XZ[1], e),
-        );
-        phone.rotation.set(-0.15, Math.PI * 0.15, 0.08);
-        const litT = Math.min(1, Math.max(0, (walkT - 0.85) / 0.15));
-        glowMat.opacity = litT * 0.85;
+        const raiseE = easeInOutCubic(phase(t, PHONE_START, PHONE_DUR));
+        const ox = lerp(PHONE_REST_OFFSET[0], PHONE_HELD_OFFSET[0], raiseE);
+        const oy = lerp(PHONE_REST_OFFSET[1], PHONE_HELD_OFFSET[1], raiseE);
+        const oz = lerp(PHONE_REST_OFFSET[2], PHONE_HELD_OFFSET[2], raiseE);
+        phone.position.set(character.position.x + ox, character.userData.standGroundY + phone.userData.localY + oy, character.position.z + oz);
+        phone.rotation.set(-0.15 - 0.3 * raiseE, Math.PI * 0.15, 0.08);
+        glowMat.opacity = Math.max(0, raiseE - 0.5) * 1.7;
       }
     }
+
+    // The TV: off, then the ad, then the brand beat — each only (re)draws the
+    // canvas while it is the active one, so the texture is not re-painted 60
+    // times a second for nothing once the beat has passed.
+    const onE = phase(t, TV_ON_START, TV_ON_DUR);
+    const adE = phase(t, TV_AD_START, TV_AD_DUR);
+    const brandE = phase(t, TV_BRAND_START, TV_BRAND_DUR);
+    if (t >= TV_ON_START && t < TV_AD_START) { tvScreen.material.opacity = onE; drawTvOff(); screenTex.needsUpdate = true; }
+    else if (t >= TV_AD_START && t < TV_BRAND_START) { drawTvAd(t); screenTex.needsUpdate = true; tvScreen.material.opacity = 1; }
+    else if (t >= TV_BRAND_START) { drawTvBrand(brandE); screenTex.needsUpdate = brandE < 1 || Math.floor(t * 2) % 2 === 0; tvScreen.material.opacity = 1; }
+    tvBounce.intensity = t >= TV_ON_START ? 0.9 + 0.1 * Math.sin(t * 8) : 0;
+    ambient.intensity = 0.55 + 0.15 * Math.min(1, onE);
+
+    if (t >= PROMPT_START) startPrompt();
 
     renderer.render(scene, camera);
   }
@@ -229,8 +334,23 @@ export function start() {
   ready.finally(() => {
     if (reduced()) {
       // Settle straight to the final pose without animating.
-      if (character) character.position.set(WALK_TO_XZ[0], character.userData.groundY, WALK_TO_XZ[1]);
-      if (phone) { phone.position.set(PHONE_TO_XZ[0], PHONE_HELD_HEIGHT, PHONE_TO_XZ[1]); glowMat.opacity = 0.85; }
+      if (character) {
+        character.position.set(SIT_XZ[0], character.userData.standGroundY - SIT_DROP, SIT_XZ[1]);
+        character.rotation.set(-0.12, 0.25, 0);
+      }
+      if (phone && character) {
+        phone.position.set(
+          character.position.x + PHONE_HELD_OFFSET[0],
+          character.userData.standGroundY + phone.userData.localY + PHONE_HELD_OFFSET[1],
+          character.position.z + PHONE_HELD_OFFSET[2],
+        );
+        glowMat.opacity = 0.85;
+      }
+      drawTvBrand(1);
+      screenTex.needsUpdate = true;
+      tvScreen.material.opacity = 1;
+      tvBounce.intensity = 0.9;
+      startPrompt();
       resize(); controls.update(); renderer.render(scene, camera);
     } else {
       tick();

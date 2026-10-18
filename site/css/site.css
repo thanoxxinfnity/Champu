@@ -256,6 +256,12 @@ nav.top {
 .story-cap { position: absolute; left: 16px; bottom: 12px; margin: 0; font: 600 12.5px/1.3 var(--font-mono); color: #d8c9b8; pointer-events: none; text-shadow: 0 1px 6px rgba(0,0,0,.6); }
 .story-cap b { color: #ff9b5c; }
 
+/* The typed-prompt bubble near the phone, once the character opens Chomugiri. */
+.story-bubble { position: absolute; right: 18px; top: 18px; max-width: 72%; padding: 10px 14px; border-radius: 12px; background: rgba(23,19,15,.88); border: 1px solid rgba(255,138,61,.35); backdrop-filter: blur(6px); font: 600 13px/1.4 var(--font-mono); color: #ffd9b8; opacity: 0; transform: translateY(-6px); transition: opacity .4s ease, transform .4s ease; pointer-events: none; }
+.story-bubble.on { opacity: 1; transform: translateY(0); }
+.story-bubble .caret { display: inline-block; width: 7px; height: 1em; margin-left: 2px; vertical-align: -2px; background: #ff8a3d; animation: story-caret-blink 1s step-end infinite; }
+@keyframes story-caret-blink { 50% { opacity: 0; } }
+
 /* ---------- space ---------- */
 .space { background: var(--space-bg); color: #e8edf7; padding-bottom: 80px; }
 .space h2, .space strong { color: #fff; } .space p { color: #a9b4c9; } .space .kicker { color: #7ab7ff; }
