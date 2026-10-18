@@ -1,0 +1,92 @@
+name: Chomugiri test APK (installs beside the real app)
+
+# The real Chomugiri APK is signed with a private keystore that is not in CI. This builds the same app signed with the public
+# sideload key and a different application id (com.chomugiri.workspace.ag), so it installs NEXT TO the real one — your chats and
+# keys in the real app are untouched — and can be thrown away. Use it to try new features such as the Antigravity connector.
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - claude/chomugiri-workspace-design-09sxwa
+    paths:
+      - "src/**"
+      - "android/**"
+      - "scripts/export-static.mjs"
+      - ".github/workflows/chomugiri-test-apk.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check and unit tests
+        run: |
+          npx tsc --noEmit
+          node --experimental-strip-types --test scripts/test-antigravity.mjs
+
+      - name: Build the web app and export it into the APK
+        run: |
+          npm run build
+          node scripts/export-static.mjs
+
+      - name: Name the test build so it is not confused with the real app
+        run: sed -i 's#<string name="app_name">Chomugiri</string>#<string name="app_name">Chomugiri (test)</string>#' android/app/src/main/res/values/strings.xml
+
+      - name: Android SDK pieces the build pins
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.11.1
+
+      - name: Build the APK
+        working-directory: android
+        run: |
+          gradle assembleRelease \
+            -PCHOMUGIRI_KEYSTORE="$GITHUB_WORKSPACE/examples/sideload.keystore" \
+            -PCHOMUGIRI_KEYSTORE_PASSWORD=chomugames \
+            -PCHOMUGIRI_KEY_ALIAS=chomugames \
+            -PCHOMUGIRI_KEY_PASSWORD=chomugames \
+            -PCHOMUGIRI_APP_ID_SUFFIX=.ag
+          ls -la app/build/outputs/apk/release
+
+      - name: Check it is signed
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs android/app/build/outputs/apk/release/Chomugiri.apk | head -5
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Chomugiri-test-apk
+          path: android/app/build/outputs/apk/release/Chomugiri.apk
+          retention-days: 30
+
+      - name: Publish a download release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: chomugiri-test-apk
+          name: Chomugiri test build (installs beside the real app)
+          body: |
+            Built from ${{ github.sha }}. Signed with the public sideload key, application id com.chomugiri.workspace.ag, so it installs
+            next to the real Chomugiri and does not touch its data. Enable "install from unknown sources". Contains the experimental
+            Antigravity connector (Settings → Connectors).
+          files: android/app/build/outputs/apk/release/Chomugiri.apk

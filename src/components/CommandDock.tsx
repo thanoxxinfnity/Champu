@@ -861,25 +861,7 @@ export function CommandDock() {
               ＋
             </button>
 
-            {effectiveLane && (
-              <button
-                type="button"
-                onClick={() => setLaneOverride(effectiveLane === 'A' ? 'B' : 'A')}
-                className="press mono rounded-lg border px-2 py-1.5 text-[10.5px]"
-                style={{
-                  borderColor: laneOverride ? 'var(--accent)' : 'var(--line)',
-                  color: effectiveLane === 'B' ? 'var(--accent)' : 'var(--color-indigo)',
-                }}
-                title={
-                  effectiveLane === 'B'
-                    ? 'Build mode — plans, writes files, runs the terminal. Click to switch to plain answers.'
-                    : 'Answer mode — just replies. Click to switch to build mode.'
-                }
-              >
-                Lane {effectiveLane}
-                {laneOverride && <span style={{ color: 'var(--ink-faint)' }}> ⟲</span>}
-              </button>
-            )}
+            {/* The Lane A/B chip is hidden: the model picker is the one control that matters here. The lane is still chosen automatically. */}
 
             <button
               type="button"

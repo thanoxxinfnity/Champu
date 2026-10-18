@@ -1,5 +1,6 @@
 'use client';
 
+import { chatFetch } from '@/lib/antigravity/state';
 import { classifyLocal, wantsSite, type Classification } from './router';
 import { liveSearchContext, needsLiveSearch, type LiveSearchResult } from './livesearch';
 import { needsResearch, planResearch, runResearch, summarizeResearch, type ResearchReport } from './research';
@@ -125,7 +126,7 @@ async function streamCompletion(
     // maxDuration and openai-compat.ts's streamChat() default.
     const timeout = AbortSignal.timeout(300_000);
     const composed = signal ? AbortSignal.any([signal, timeout]) : timeout;
-    res = await fetch('/api/chat', withKeys({
+    res = await chatFetch('/api/chat', withKeys({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...body, stream: true }),
@@ -231,7 +232,7 @@ async function complete(
   // slow-but-alive call short.
   const timeout = AbortSignal.timeout(45_000);
   const composed = signal ? AbortSignal.any([signal, timeout]) : timeout;
-  const res = await fetch('/api/chat', withKeys({
+  const res = await chatFetch('/api/chat', withKeys({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...body, stream: false }),
@@ -2812,7 +2813,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
           const last = [...state.messages].reverse().find((m) => m.id === assistantId || (m.role === 'assistant' && m.createdAt >= startedAt && !m.error));
           const outcome = (last?.content ?? '').replace(/```[\s\S]*?```/g, ' ').trim();
           if (!worthCapturing(modelInput ?? input, outcome)) return;
-          const res = await fetch('/api/chat', withKeys({
+          const res = await chatFetch('/api/chat', withKeys({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
