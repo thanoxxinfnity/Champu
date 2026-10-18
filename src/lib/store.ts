@@ -304,6 +304,18 @@ interface WorkspaceState {
   setVercelCredentials: (token: string, teamId?: string) => void;
   lastDeploy: DeployResult | null;
   setLastDeploy: (result: DeployResult | null) => void;
+  /**
+   * Every project this workspace has ever shipped, one entry per project name.
+   *
+   * `lastDeploy` is only the *current* target for "update" — launching a
+   * second site under "launch a separate site instead" used to overwrite it
+   * outright, so the first site was still live on Vercel but the app had no
+   * memory of it at all: no link, no way to pick it back up. This is the
+   * complete list, kept across reloads the same way lastDeploy is.
+   */
+  deployHistory: DeployResult[];
+  /** Switches which project "update" targets, without deploying anything. */
+  setActiveDeploy: (project: string) => void;
 
   // ── Google Drive ──────────────────────────────────────────────────────────
   // Client ID is public (it travels in every OAuth request the browser sends), so it is safe to
@@ -630,6 +642,24 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     // Without this every visit looked like a first launch, and "update the site
     // I already made" was impossible — it would have created a second project.
     void setSetting('deploy', result);
+
+    if (result?.project) {
+      // Upserted by project name: a later deploy of the same site replaces its
+      // row (newer url/release count), a different project name adds a new
+      // one. This is the only place a project is ever added, so launching a
+      // separate site no longer makes the app forget the one before it.
+      const history = [...get().deployHistory.filter((d) => d.project !== result.project), result];
+      set({ deployHistory: history });
+      void setSetting('deployHistory', history);
+    }
+  },
+  deployHistory: [],
+  setActiveDeploy: (project) => {
+    const found = get().deployHistory.find((d) => d.project === project);
+    if (found) {
+      set({ lastDeploy: found });
+      void setSetting('deploy', found);
+    }
   },
 
   driveClientId: '',
@@ -784,6 +814,12 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     // control can offer to update it rather than launch a second one.
     const priorDeploy = await getSetting<DeployResult | null>('deploy', null);
     if (priorDeploy?.project) set({ lastDeploy: priorDeploy });
+    const priorHistory = await getSetting<DeployResult[]>('deployHistory', []);
+    if (priorHistory.length) set({ deployHistory: priorHistory });
+    // A reload on an app from before deployHistory existed has a lastDeploy
+    // with nothing backing it in the list — seed the list so that one site
+    // is not invisible in the new "Deployed" view.
+    else if (priorDeploy?.project) set({ deployHistory: [priorDeploy] });
     set({ draftsEnabled: await getSetting<boolean>('draftsEnabled', false) });
     set({ mediaHidden: await getSetting<SuiteId[]>('mediaHidden', []) });
     set({ imageModel: await getSetting<string>('imageModel', 'nim:black-forest-labs/flux.1-dev') });

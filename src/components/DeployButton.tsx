@@ -25,6 +25,8 @@ export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void }
   const vercelTeamId = useWorkspace((s) => s.vercelTeamId);
   const setLastDeploy = useWorkspace((s) => s.setLastDeploy);
   const lastDeploy = useWorkspace((s) => s.lastDeploy);
+  const deployHistory = useWorkspace((s) => s.deployHistory);
+  const setActiveDeploy = useWorkspace((s) => s.setActiveDeploy);
   const appendTerminal = useWorkspace((s) => s.appendTerminal);
   const setRightPaneTab = useWorkspace((s) => s.setRightPaneTab);
 
@@ -225,6 +227,55 @@ export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void }
                 </button>
               )}
             </>
+          )}
+
+          {deployHistory.length > (live ? 1 : 0) && (
+            <div className="mt-2">
+              <p className="mono mb-1 text-[9.5px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-faint)' }}>
+                deployed
+              </p>
+              <div className="flex max-h-28 flex-col gap-1 overflow-y-auto">
+                {deployHistory
+                  .filter((d) => d.project !== live?.project)
+                  .sort((a, b) => b.at - a.at)
+                  .map((d) => (
+                    <div
+                      key={d.project}
+                      className="flex items-center gap-1.5 rounded-lg border px-2 py-1.5"
+                      style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="mono truncate text-[10.5px]" style={{ color: 'var(--ink)' }}>
+                          {d.project}
+                        </p>
+                        <p className="mono text-[9.5px]" style={{ color: 'var(--ink-faint)' }}>
+                          {d.releases ?? 1} release{(d.releases ?? 1) === 1 ? '' : 's'}
+                        </p>
+                      </div>
+                      {d.url && (
+                        <a
+                          href={d.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="press mono shrink-0 rounded px-1.5 py-1 text-[10px]"
+                          style={{ color: 'var(--accent)' }}
+                        >
+                          ↗
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => { setActiveDeploy(d.project); setRenaming(false); }}
+                        className="press mono shrink-0 rounded border px-1.5 py-1 text-[10px]"
+                        style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
+                        title={`Update ${d.project} instead`}
+                      >
+                        update this
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            </div>
           )}
 
           <p className="mono mt-1.5 text-[10px] leading-[1.45]" style={{ color: 'var(--ink-faint)' }}>
