@@ -26,7 +26,9 @@ func _init() -> void:
 	var bar := screen.find_child("Progress", true, false) as ProgressBar
 	var seen_partial := false
 	var t := 0
-	while t < 60 * 90 and not (screen.find_child("Buttons", true, false) as Control).visible:
+	var t0 := Time.get_ticks_msec()
+	# Loading runs on a thread in real time, so wait on the clock rather than a frame count (--fixed-fps runs frames far faster).
+	while Time.get_ticks_msec() - t0 < 150000 and not (screen.find_child("Buttons", true, false) as Control).visible:
 		await process_frame
 		t += 1
 		if bar.value > 0.02 and bar.value < 0.98:
@@ -36,6 +38,10 @@ func _init() -> void:
 	check(seen_partial, "the progress bar moved through partial values")
 	check(screen.find_child("StoryMode", true, false) != null and screen.find_child("FreeRoam", true, false) != null, "Story Mode and Free Roam buttons exist")
 
+	if screen.find_child("FreeRoam", true, false) == null:
+		print("FAILED: no buttons")
+		quit(1)
+		return
 	GameBoot.mode = GameBoot.Mode.STORY
 	screen.find_child("FreeRoam", true, false).pressed.emit()
 	for i in range(10):
