@@ -6,6 +6,7 @@ extends Node3D
 var atmosphere: Atmosphere
 var city: City
 var scenery: Scenery
+var outskirts: Outskirts
 var player: Player
 var lamp_pool: LampPool
 var safehouse: Safehouse
@@ -30,6 +31,9 @@ func _ready() -> void:
 	scenery = Scenery.new()
 	add_child(scenery)
 	scenery.build(7, [City.SAFEHOUSE_PLOT, City.TOWER_PLOT])
+	outskirts = Outskirts.new()
+	add_child(outskirts)
+	outskirts.build()
 
 	safehouse = Safehouse.new()
 	safehouse.name = "Safehouse"

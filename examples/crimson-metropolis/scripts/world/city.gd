@@ -155,11 +155,11 @@ func _facade_mat(tint: Color) -> ShaderMaterial:
 
 ## Distant towers around the grid so the skyline has depth. No collision: the player cannot reach them.
 func _skyline() -> void:
-	var ring := 16
+	var ring := 30
 	for i in range(ring):
 		var a := TAU * float(i) / ring + rng.randf_range(-0.1, 0.1)
-		var r := rng.randf_range(260.0, 340.0)
-		var size := Vector3(rng.randf_range(22.0, 40.0), rng.randf_range(60.0, 150.0), rng.randf_range(22.0, 40.0))
+		var r := rng.randf_range(215.0, 300.0)
+		var size := Vector3(rng.randf_range(34.0, 62.0), rng.randf_range(30.0, 110.0), rng.randf_range(34.0, 62.0))
 		var mi := MeshInstance3D.new()
 		var bm := BoxMesh.new()
 		bm.size = size

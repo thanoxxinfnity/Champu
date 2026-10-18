@@ -180,7 +180,7 @@ func _terrain() -> void:
 			var v10 := (i + 1) * n + j
 			var v01 := i * n + j + 1
 			var v11 := (i + 1) * n + j + 1
-			idx.append_array([v00, v01, v10, v10, v01, v11])
+			idx.append_array([v00, v10, v01, v10, v11, v01])    # clockwise seen from above: Godot's front face
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
@@ -206,4 +206,7 @@ static func _height(noise: FastNoiseLite, x: float, z: float) -> float:
 	var d := maxf(absf(x), absf(z))
 	var rise := smoothstep(TERRAIN_INNER - 10.0, TERRAIN_INNER + 520.0, d)
 	var h := (noise.get_noise_2d(x, z) * 0.5 + 0.5) * 230.0 * rise * rise
+	# South is the sea: no hills there, the land just sinks below the water.
+	var sea_side := smoothstep(TERRAIN_INNER - 10.0, TERRAIN_INNER + 60.0, z) * smoothstep(0.9, 0.5, absf(x) / maxf(z, 1.0))
+	h = lerpf(h, -6.0, sea_side)
 	return h - 0.35 + 0.3 * rise
