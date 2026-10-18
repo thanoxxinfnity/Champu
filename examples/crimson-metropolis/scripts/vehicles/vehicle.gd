@@ -71,7 +71,7 @@ func _ready() -> void:
 	max_contacts_reported = 4
 	body_entered.connect(_on_hit)
 
-	var scene := load("res://assets/generated/raw/%s.glb" % cfg.file) as PackedScene
+	var scene := load(Data.model_path(cfg.file)) as PackedScene
 	if scene != null:
 		model = scene.instantiate() as Node3D
 		add_child(model)

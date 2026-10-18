@@ -30,7 +30,7 @@ func _init() -> void:
 		var scene: PackedScene = load("res://assets/generated/raw/%s.glb" % n)
 		var node: Node3D = scene.instantiate()
 		node.position = Vector3(i * 4.5, 1.0, 0)
-		node.scale = Vector3.ONE * 2.0
+		node.scale = Vector3.ONE * float(OS.get_environment("GAL_SCALE") if OS.get_environment("GAL_SCALE") != "" else "2.0")
 		root.add_child(node)
 		var marker := MeshInstance3D.new()
 		var sm := SphereMesh.new()

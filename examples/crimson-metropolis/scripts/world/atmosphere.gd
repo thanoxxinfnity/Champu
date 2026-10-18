@@ -135,7 +135,8 @@ func _apply(delta: float) -> void:
 	RenderingServer.global_shader_parameter_set("night", night_amount)
 
 	var day_phase := fposmod(hour - 6.0, 24.0) / 12.0           # 0..1 while the sun is up
-	var azimuth := lerpf(-70.0, 70.0, clampf(day_phase, 0.0, 1.0))
+	# East to west by way of the north (the street the safehouse faces), so its front catches the sun instead of sitting in shade.
+	var azimuth := lerpf(110.0, 250.0, clampf(day_phase, 0.0, 1.0))
 	var warm := Color(1.0, 0.93, 0.8).lerp(Color(1.0, 0.55, 0.28), smoothstep(0.45, 0.0, elev))
 	var overcast := clampf(rain_amount * 0.8 + haze_amount * 0.3, 0.0, 1.0)
 	if sun_up:

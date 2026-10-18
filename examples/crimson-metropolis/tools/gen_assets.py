@@ -39,6 +39,11 @@ MANIFEST: dict[str, tuple[str, bool]] = {
     "palm_tree": ("tall california palm tree, game asset", True),
     "streetlight": ("modern city street lamp post, game asset", True),
     "traffic_light": ("city traffic light on a pole, game asset", True),
+    # the safehouse's own furniture and the later missions' props
+    "bed": ("modern double bed with grey duvet and two pillows, game asset", False),
+    "wardrobe": ("tall modern wooden wardrobe closet with two doors, game asset", True),
+    "helicopter": ("realistic black civilian helicopter with main rotor, game asset", False),
+    "briefcase": ("black leather briefcase with metal clasps, game asset", True),
     # people (RigNet rigs these)
     "npc_business": ("man in business suit standing in a T-pose with arms straight out, full body, game character", False),
     "npc_casual": ("young woman in jeans and hoodie standing in a T-pose with arms straight out, full body, game character", False),

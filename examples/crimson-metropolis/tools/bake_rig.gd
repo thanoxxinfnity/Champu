@@ -12,7 +12,11 @@ const POWER := 3.0
 
 
 func _init() -> void:
-	var root := (load(Rig.SRC) as PackedScene).instantiate()
+	# godot --path . -s tools/bake_rig.gd -- [character id]   (default: protagonist; ids are in Data.CHARACTERS)
+	var args := OS.get_cmdline_user_args()
+	var id: String = args[0] if args.size() > 0 else "protagonist"
+	Rig.use(Rig.spec_for(id))
+	var root := (load(Rig.S.src) as PackedScene).instantiate()
 	var mi := root.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D
 	var arrays := mi.mesh.surface_get_arrays(0)
 	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
@@ -34,6 +38,7 @@ func _init() -> void:
 	bones.resize(verts.size() * 4)
 	weights.resize(verts.size() * 4)
 	var cx := Rig.to_mesh(Vector3(0.5, 0.5, 0.5)).x
+	var hip_cut: float = Rig.S.profile.hip + 0.02      # legs claim nothing above this; arms claim nothing below it
 	for vi in range(verts.size()):
 		var p := verts[vi]
 		var side := 0
@@ -48,9 +53,9 @@ func _init() -> void:
 			if limb and s.side != side:
 				continue
 			var leg: bool = nm.begins_with("thigh") or nm.begins_with("shin") or nm.begins_with("foot") or nm.begins_with("toe")
-			if leg and p.y > Rig.to_mesh(Vector3(0, 0.52, 0)).y:
+			if leg and p.y > Rig.to_mesh(Vector3(0, hip_cut, 0)).y:
 				continue
-			if limb and not leg and p.y < Rig.to_mesh(Vector3(0, 0.52, 0)).y:
+			if limb and not leg and p.y < Rig.to_mesh(Vector3(0, hip_cut, 0)).y:
 				continue
 			var d := _dist(p, s.a, s.b)
 			cand.append([d, s.i])
@@ -75,8 +80,8 @@ func _init() -> void:
 		src_mat = mi.mesh.surface_get_material(0)
 	if src_mat != null:
 		out.surface_set_material(0, src_mat)
-	var err := ResourceSaver.save(out, Rig.MESH)
-	print("saved ", Rig.MESH, " err ", err, " verts ", verts.size())
+	var err := ResourceSaver.save(out, Rig.S.mesh)
+	print("saved ", Rig.S.mesh, " err ", err, " verts ", verts.size())
 	quit()
 
 

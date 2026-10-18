@@ -7,6 +7,8 @@ var atmosphere: Atmosphere
 var city: City
 var player: Player
 var lamp_pool: LampPool
+var safehouse: Safehouse
+var vehicles: Array[Vehicle] = []
 
 
 func _ready() -> void:
@@ -17,6 +19,17 @@ func _ready() -> void:
 	city.name = "City"
 	add_child(city)
 	city.build(7, atmosphere)
+
+	safehouse = Safehouse.new()
+	safehouse.name = "Safehouse"
+	add_child(safehouse)
+	safehouse.position = house_origin()
+	safehouse.build()
+	# The player's own car waits in the garage, nose to the door.
+	var car := Vehicle.make("sedan")
+	add_child(car)
+	car.global_transform = safehouse.garage_transform()
+	vehicles.append(car)
 
 	player = Player.new()
 	player.name = "Player"
@@ -30,7 +43,12 @@ func _ready() -> void:
 	lamp_pool.follow = player
 
 
-## On the sidewalk in front of the safehouse, facing the avenue (-Z).
-static func spawn_point() -> Vector3:
+## The house's front wall centre: 14 m in from the sidewalk, so local z = -12 is the plot's street edge.
+static func house_origin() -> Vector3:
 	var c := City.block_center(City.SAFEHOUSE_PLOT)
-	return Vector3(c.x, 0.2, c.z - City.BLOCK * 0.5 + City.SIDEWALK + 1.0)
+	return Vector3(c.x, 0.0, c.z - 26.0)
+
+
+## On the footpath inside the gate, looking at the front door (-Z is toward the street, so the player faces +Z).
+static func spawn_point() -> Vector3:
+	return house_origin() + Vector3(0, 0.25, -6.0)

@@ -15,6 +15,41 @@ const PROFILE := {
 	"shoulder_x": 0.065, "elbow_x": 0.27, "wrist_x": 0.40, "leg_x": 0.045, "z": 0.32,
 }
 
+## The character this class is currently building: its baked mesh, source model, the mesh's own box and the bone-height profile.
+## Every function below reads `S`, so one rig, one animation set and one baker serve every humanoid. make_character() and the
+## baker call use() first. Default: the protagonist.
+static var S := {"id": "protagonist", "mesh": MESH, "src": SRC, "box": BOX, "profile": PROFILE}
+
+
+static func use(spec: Dictionary) -> void:
+	S = spec
+
+
+## Spec for a character in Data.CHARACTERS: the profile comes from assets/generated/<id>_profile.json when RigNet has measured
+## one (tools/rignet_profile.py), otherwise the protagonist's. The box is the mesh's own bounding box.
+static func spec_for(id: String) -> Dictionary:
+	if id == "protagonist":
+		return {"id": id, "mesh": MESH, "src": SRC, "box": BOX, "profile": PROFILE}
+	var cfg: Dictionary = Data.CHARACTERS[id]
+	var mesh_path := "res://assets/generated/%s_skin.res" % id
+	var src_path := Data.model_path(cfg.file)
+	var box := AABB()
+	if ResourceLoader.exists(mesh_path):
+		box = (load(mesh_path) as ArrayMesh).get_aabb()
+	else:
+		var inst := (load(src_path) as PackedScene).instantiate()
+		var mi := inst.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D
+		box = mi.get_aabb()
+		inst.free()
+	var profile := PROFILE.duplicate()
+	var pj := "res://assets/generated/%s_profile.json" % id
+	if FileAccess.file_exists(pj):
+		var parsed = JSON.parse_string(FileAccess.get_file_as_string(pj))
+		if parsed is Dictionary:
+			for k in parsed:
+				profile[k] = parsed[k]
+	return {"id": id, "mesh": mesh_path, "src": src_path, "box": box, "profile": profile}
+
 
 static func spec() -> Array:
 	var out: Array = [["hips", ""], ["spine", "hips"], ["chest", "spine"], ["neck", "chest"], ["head", "neck"]]
@@ -30,7 +65,7 @@ static func spec() -> Array:
 
 ## name -> position in the model's own space (metres), measured from the profile.
 static func positions() -> Dictionary:
-	var p: Dictionary = PROFILE
+	var p: Dictionary = S.profile
 	var z: float = p.z
 	var P := {}
 	P["hips"] = to_mesh(Vector3(0.5, p.hip, z))
@@ -52,7 +87,7 @@ static func positions() -> Dictionary:
 
 ## Where a bone's segment ends (its first child; leaves get a short stub), for weighting.
 static func tip(bone: String, P: Dictionary) -> Vector3:
-	var b := BOX
+	var b: AABB = S.box
 	if bone == "head":
 		return P["head"] + Vector3(0, 0.1 * b.size.y, 0)
 	if bone.begins_with("foot"):
@@ -76,7 +111,8 @@ static func joints() -> Array:
 
 
 static func to_mesh(u: Vector3) -> Vector3:
-	return BOX.position + u * BOX.size
+	var b: AABB = S.box
+	return b.position + u * b.size
 
 
 static func index_of(bone: String) -> int:
@@ -155,7 +191,7 @@ static func _cycle(len: float, steps: int, fn: Callable, loop := true) -> Animat
 				tracks[id] = tr
 			var v = pose[key]
 			if is_hips:
-				v = (joints()[0][2] as Vector3) + (v as Vector3) * BOX.size.y
+				v = (joints()[0][2] as Vector3) + (v as Vector3) * (S.box as AABB).size.y
 			an.track_insert_key(tracks[id], len * float(k) / steps, v)
 	return an
 
@@ -288,17 +324,20 @@ static func library() -> AnimationLibrary:
 	return lib
 
 
-## The rigged character: a holder whose origin is the middle of its base, `size` metres tall.
-static func make_character(size: float) -> Node3D:
-	if not ResourceLoader.exists(MESH):
+## The rigged character: a holder whose origin is the middle of its base, `size` metres tall. `spec` (see spec_for) picks which
+## model; omitted, it builds the protagonist.
+static func make_character(size: float, spec := {}) -> Node3D:
+	use(spec if not spec.is_empty() else spec_for("protagonist"))
+	var box: AABB = S.box
+	if not ResourceLoader.exists(S.mesh):
 		return null
-	var mesh := load(MESH) as ArrayMesh
+	var mesh := load(S.mesh) as ArrayMesh
 	var holder := Node3D.new()
 	holder.name = "character"
 	var inner := Node3D.new()
-	var k := size / BOX.size.y
+	var k := size / box.size.y
 	inner.scale = Vector3.ONE * k
-	inner.position = Vector3(-(BOX.position.x + BOX.size.x * 0.5), -BOX.position.y, -(BOX.position.z + BOX.size.z * 0.5)) * k
+	inner.position = Vector3(-(box.position.x + box.size.x * 0.5), -box.position.y, -(box.position.z + box.size.z * 0.5)) * k
 	holder.add_child(inner)
 	var sk := build_skeleton()
 	inner.add_child(sk)

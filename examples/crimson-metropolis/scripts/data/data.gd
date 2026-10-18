@@ -21,3 +21,18 @@ const VEHICLES := {
 	"police": {"file": "car_police", "length": 5.0, "yaw": 90.0, "paint": Color(0.92, 0.92, 0.94), "engine": 10000.0, "top": 50.0, "mass": 1750.0, "grip": 3.4},
 	"hypercar": {"file": "car_hypercar", "length": 4.6, "yaw": 0.0, "paint": Color(0.75, 0.05, 0.05), "engine": 15500.0, "top": 76.0, "mass": 1450.0, "grip": 4.2},
 }
+
+## Humanoids that share the Rig skeleton and animation set. `file` is the generated model in assets/generated/raw; `height` is the
+## real-world height in metres they are scaled to. Their bone-height profiles come from RigNet (see tools/rignet_profile.py).
+const CHARACTERS := {
+	"npc_business": {"file": "npc_business", "height": 1.80},
+	"npc_casual": {"file": "npc_casual", "height": 1.68},
+	"npc_street": {"file": "npc_street", "height": 1.78},
+	"npc_police": {"file": "npc_police", "height": 1.82},
+}
+
+
+## Where a generated model lives: the game-sized copy in assets/generated/lod when tools/prep_assets.sh has made one, else the raw download.
+static func model_path(name: String) -> String:
+	var lod := "res://assets/generated/lod/%s.glb" % name
+	return lod if ResourceLoader.exists(lod) else "res://assets/generated/raw/%s.glb" % name

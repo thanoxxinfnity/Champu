@@ -54,3 +54,33 @@ static func place_by_height(node: Node3D, height: float, yaw_deg := 0.0, floor_y
 	box = aabb_of(node)
 	var c := box.position + box.size * 0.5
 	node.position += Vector3(-c.x, floor_y - box.position.y, -c.z)
+
+
+## For furniture and props: scale so the largest dimension is `size`, optionally lay a model that came out standing on its
+## edge flat (rugs, paintings), turn by `yaw_deg`, centre it on x/z and put its lowest point at `floor_y`
+## (or its middle at `centre_y` when that is given — wall pictures).
+static func place_by_largest(node: Node3D, size: float, yaw_deg := 0.0, floor_y := 0.0, lay_flat := false, centre_y = null) -> void:
+	var box := aabb_of(node)
+	node.scale = Vector3.ONE * (size / maxf(maxf(box.size.x, box.size.y), maxf(box.size.z, 0.0001)))
+	if lay_flat:
+		node.rotation_degrees.x = -90.0
+	node.rotation_degrees.y = yaw_deg
+	box = aabb_of(node)
+	var c := box.position + box.size * 0.5
+	node.position += Vector3(-c.x, (centre_y - c.y) if centre_y != null else (floor_y - box.position.y), -c.z)
+
+
+## A box collider around an already-placed model, added next to it (furniture the player must not walk through).
+static func collider_for(node: Node3D, shrink := 0.92) -> StaticBody3D:
+	var box := aabb_of(node)
+	var sb := StaticBody3D.new()
+	sb.collision_layer = Data.L_WORLD
+	sb.collision_mask = 0
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = box.size * shrink
+	cs.shape = bs
+	sb.add_child(cs)
+	sb.position = box.position + box.size * 0.5
+	node.get_parent().add_child(sb)
+	return sb

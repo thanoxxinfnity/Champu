@@ -5,7 +5,15 @@ extends SceneTree
 func _init() -> void:
 	var args := OS.get_cmdline_user_args()
 	var out: String = args[0] if args.size() > 0 else "/tmp/rig/rig.png"
-	var clips: Array = Array(args.slice(1)) if args.size() > 1 else ["idle", "walk", "run", "jump", "push_door", "aim_rifle", "sleep"]
+	var id := "protagonist"
+	var clips: Array = []
+	for a in args.slice(1):
+		if (a as String).begins_with("id="):
+			id = (a as String).substr(3)
+		else:
+			clips.append(a)
+	if clips.is_empty():
+		clips = ["idle", "walk", "run", "jump", "push_door", "aim_rifle", "sleep"]
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color(0.13, 0.14, 0.17)
@@ -20,7 +28,7 @@ func _init() -> void:
 	root.add_child(sun)
 	var i := 0
 	for c in clips:
-		var m := Rig.make_character(1.8)
+		var m := Rig.make_character(1.8, Rig.spec_for(id))
 		if m == null:
 			print("no rig")
 			quit(1)

@@ -49,6 +49,7 @@ var cam: Camera3D
 
 var _gravity := float(ProjectSettings.get_setting("physics/3d/default_gravity", 19.0))
 var _state := &""
+var _clip_t := 0.0                # while > 0 a one-shot clip (push_door) is playing and locomotion animations wait
 var _jumping := false
 var _near: Array[Node] = []
 var _use_area: Area3D
@@ -57,10 +58,11 @@ var _cam_follow := Vector3.ZERO
 
 
 func _ready() -> void:
+	add_to_group("player")
 	collision_layer = Data.L_PLAYER
 	collision_mask = Data.L_WORLD | Data.L_DYNAMIC
 	floor_snap_length = 0.35
-	floor_max_angle = deg_to_rad(50.0)
+	floor_max_angle = deg_to_rad(58.0)
 
 	var cs := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
@@ -138,11 +140,12 @@ func set_cinematic(on: bool) -> void:
 		body.disabled = on
 
 
-## Play a one-shot clip (push_door, ...) and come back to locomotion afterwards.
-func play_clip(clip: StringName) -> void:
+## Play a one-shot clip (push_door, ...) for `hold` seconds, then locomotion takes over again.
+func play_clip(clip: StringName, hold := 0.0) -> void:
 	if anim == null or not anim.has_animation(clip):
 		return
 	_state = clip
+	_clip_t = hold
 	anim.speed_scale = 1.0
 	anim.play(clip, 0.1)
 
@@ -275,6 +278,9 @@ func horizontal_speed() -> float:
 
 func _animate() -> void:
 	if anim == null:
+		return
+	if _clip_t > 0.0:
+		_clip_t -= get_physics_process_delta_time()
 		return
 	var sp := horizontal_speed()
 	if _jumping and not is_on_floor():
