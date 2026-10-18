@@ -1,0 +1,11 @@
+[gd_scene format=3]
+
+[node name="LoadingScreen" type="Node2D"]
+
+[node name="Label" type="Label" parent="."]
+offset_left = 400.0
+offset_top = 340.0
+offset_right = 900.0
+offset_bottom = 380.0
+text = "CRIMSON METROPOLIS — building in progress"
+horizontal_alignment = 1

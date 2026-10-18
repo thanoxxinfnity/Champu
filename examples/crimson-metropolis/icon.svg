@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="24" fill="#05121c"/>
+  <circle cx="64" cy="58" r="36" fill="none" stroke="#1f6f8b" stroke-width="5"/>
+  <circle cx="64" cy="58" r="26" fill="#0a2a3a"/>
+  <path d="M64 28 L64 88 M34 58 L94 58" stroke="#14465c" stroke-width="3"/>
+  <circle cx="64" cy="58" r="9" fill="#ffd36b"/>
+  <path d="M30 100 Q64 84 98 100" fill="none" stroke="#1f6f8b" stroke-width="4"/>
+  <text x="64" y="118" font-family="monospace" font-size="15" font-weight="bold" fill="#7fd3ee" text-anchor="middle">STATION 9</text>
+</svg>

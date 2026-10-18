@@ -1,0 +1,4 @@
+.godot/
+*.import
+*.webp
+export/
