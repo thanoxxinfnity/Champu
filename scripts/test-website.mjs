@@ -98,10 +98,7 @@ test('the Content-Security-Policy matches the page’s inline scripts', () => {
   for (const h of inline) assert.ok(csp.includes(`'${h}'`), `CSP is missing '${h}' for an inline script — update site/vercel.json`);
   assert.ok(!/unsafe-eval|script-src[^;]*unsafe-inline/.test(csp));
   // The page talks to itself — NASA goes through /api/nasa — and, for the helper panel only, to the one text service.
-  // blob: carries no exfiltration risk — a blob: URL is only ever valid inside the page
-  // that created it, never reachable from another origin — so it is allowed alongside
-  // the two origins this still has to be exactly: this site, and the helper's text service.
-  assert.match(csp, /connect-src 'self' blob: https:\/\/text\.pollinations\.ai(;|$)/, "connect-src must be exactly: this site, blob:, and the helper's text service");
+  assert.match(csp, /connect-src 'self' https:\/\/text\.pollinations\.ai(;|$)/, 'connect-src must be exactly: this site, and the helper\'s text service');
 });
 
 test('the transcripts are the Godot licence, timed in order, for all three voices', () => {

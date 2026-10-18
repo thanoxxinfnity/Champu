@@ -1,0 +1,6 @@
+config_version=5
+[application]
+config/name="chomugiri-site-video"
+run/main_scene="res://scenes/main.tscn"
+[rendering]
+renderer/rendering_method="gl_compatibility"

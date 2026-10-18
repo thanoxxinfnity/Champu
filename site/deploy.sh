@@ -19,7 +19,7 @@ trap 'rm -rf "$stage"' EXIT
 
 cp "$here"/index.html "$here"/privacy.html "$here"/vercel.json "$here"/package.json "$stage/"
 # The page itself: styles, scripts, the 3D library, pictures, textures, fonts, transcripts.
-for dir in css js vendor img textures fonts data assets; do
+for dir in css js vendor img textures fonts data video; do
   cp -r "$here/$dir" "$stage/$dir"
 done
 # The serverless routes: /api/nasa (the NASA proxy — its key is the NASA_API_KEY
