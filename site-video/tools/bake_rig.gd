@@ -46,7 +46,11 @@ func _init() -> void:
 			if limb and s.side != side:
 				continue
 			var leg: bool = nm.begins_with("thigh") or nm.begins_with("shin") or nm.begins_with("foot") or nm.begins_with("toe")
-			if leg and p.y > Rig.to_mesh(Vector3(0, 0.56, 0)).y:
+			# Thigh bones swing ~80deg in the sit pose while hips/spine barely move; letting that
+			# segment claim vertices all the way up to spine height (as this used to) blends the
+			# belly between a near-still torso and a wildly-rotated leg and pinches it flat. Keep
+			# the leg's reach just above the hip line, matching the arm's symmetric cutoff below.
+			if leg and p.y > Rig.to_mesh(Vector3(0, 0.52, 0)).y:
 				continue
 			if limb and not leg and p.y < Rig.to_mesh(Vector3(0, 0.52, 0)).y:
 				continue

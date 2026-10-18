@@ -114,7 +114,12 @@ func _drive_character() -> void:
 		anim.seek(pt, true)
 		if phone != null:
 			var raise_e: float = clampf(pt / PHONE_DUR, 0.0, 1.0)
-			var hand := character.global_transform * (Vector3(0.22, 1.0, 0.18) if raise_e < 0.5 else Vector3(0.14, 1.42, 0.3))
+			# The real right-hand bone, not a guessed offset — a hardcoded local point does not
+			# follow the arm through its own animation, which is how the phone ended up floating
+			# off by the bookshelf instead of in the character's hand.
+			var sk := character.get_meta("skeleton") as Skeleton3D
+			var hand_pose := sk.get_bone_global_pose(Rig.index_of("handR"))
+			var hand: Vector3 = sk.global_transform * hand_pose.origin
 			if first_frame:
 				phone.visible = true
 				phone.global_position = hand # drawn from the pocket, not lerped in from the hidden origin
