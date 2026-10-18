@@ -19,7 +19,6 @@ const ROOM := [
 	["22_photo_frame.glb", 1.9, -2.88, 0.0, 0.35, 1.2, false],
 	["16_succulent.glb", 1.6, -0.5, 0.0, 0.28, null, false],
 	["05_fridge.glb", 3.3, -2.3, -90.0, 1.7, null, false],
-	["21_curtains.glb", -2.9, -2.9, 0.0, 2.6, null, false],
 ]
 const ROOM_W := 7.2
 const ROOM_D := 6.4
@@ -29,6 +28,9 @@ const CHAR_SIZE := 1.75
 var character: Node3D
 var anim: AnimationPlayer
 var phone: Node3D
+var phone_screen: MeshInstance3D
+var phone_screen_img := Image.create(96, 176, false, Image.FORMAT_RGBA8)
+var phone_screen_tex := ImageTexture.new()
 var tv_screen: MeshInstance3D
 var screen_img := Image.create(256, 160, false, Image.FORMAT_RGBA8)
 var screen_tex := ImageTexture.new()
@@ -132,6 +134,15 @@ func _drive_character() -> void:
 				var lit: float = clampf((raise_e - 0.55) * 2.2, 0.0, 1.0)
 				gm.albedo_color.a = lit * 0.9
 				gm.emission_energy_multiplier = 1.0 + lit * 1.0
+			if phone_screen != null and cam != null:
+				# Offset toward the camera (not a fixed world axis — the phone's own rotation makes
+				# any fixed offset land behind the opaque case from an arbitrary fraction of angles),
+				# so the app is the thing this shot actually reads, not a dark silhouette of the case.
+				var lit2: float = clampf((raise_e - 0.5) * 2.5, 0.0, 1.0)
+				phone_screen.visible = lit2 > 0.0
+				var toward_cam: Vector3 = (cam.global_position - phone.global_position).normalized()
+				phone_screen.global_position = phone.global_position + toward_cam * 0.09
+				(phone_screen.material_override as StandardMaterial3D).albedo_color.a = lit2
 
 
 func _drive_tv() -> void:
@@ -160,15 +171,25 @@ func _drive_camera() -> void:
 		cam.look_at(Vector3(-1.4, 1.0, -0.6), Vector3.UP)
 	elif t < TV_BRAND_START + TV_BRAND_DUR:
 		var e: float = clampf((t - SIT_START) / (TV_BRAND_START + TV_BRAND_DUR - SIT_START), 0.0, 1.0)
-		cam.global_position = Vector3(0.6, 1.7, 1.6).lerp(Vector3(0.1, 1.35, 0.9), e)
-		cam.look_at(Vector3(-0.3, 1.1, -1.8), Vector3.UP)
+		# Over the sofa's own backrest, not a guessed spot — the classic "watching TV from behind
+		# the couch" shot: the sofa sits at (-1.6, -1.2), the TV at (0, -2.6), so behind the sofa
+		# relative to the TV is +z. Kept near the seated character's own head height (~0.9m, not
+		# the TV's) so the shot reads as looking past them at the screen, not a drone shot of the
+		# room that happens to have a couch in it.
+		var sofa_pos := Vector3(-1.6, 0, -1.2)
+		var behind_sofa := sofa_pos + Vector3(0.75, 1.25, 1.35)
+		cam.global_position = Vector3(0.6, 1.7, 1.6).lerp(behind_sofa, e)
+		var tv_look: Vector3 = tv_screen.global_position
+		cam.look_at(Vector3(-0.45, 0.95, tv_look.z + 0.25), Vector3.UP)
 	else:
 		var e: float = clampf((t - (TV_BRAND_START + TV_BRAND_DUR)) / (HOLD_END - (TV_BRAND_START + TV_BRAND_DUR)), 0.0, 1.0)
 		# Pushes in from the TV shot's own end position toward a close three-quarter view of the
 		# character, offset from wherever they actually ended up sitting — not a hardcoded guess.
 		var seat := walk_target
-		var wide := Vector3(0.6, 1.7, 1.6)
-		var close := seat + Vector3(1.1, 0.75, 1.3)
+		var wide := Vector3(-0.85, 1.25, 0.15)
+		# Close enough that the phone's own screen — the point of this shot, "coding" on the
+		# Chomugiri app — is actually legible, not a dark smear near the bookshelf.
+		var close := seat + Vector3(0.55, 0.85, 0.75)
 		cam.global_position = wide.lerp(close, e)
 		var look: Vector3 = (phone.global_position if phone != null else seat + Vector3(0, 1.1, 0)) if t > PHONE_START else seat + Vector3(0, 1.1, 0)
 		cam.look_at(look, Vector3.UP)
@@ -363,6 +384,48 @@ func _load_phone() -> void:
 	phone.add_child(glow)
 	phone.set_meta("glow", glow)
 
+	# The screen itself: a billboard plane, not a child of the phone mesh — phone.glb's own screen
+	# face and UV orientation were never measured, so anything parented to it and rotated to "face
+	# forward" is a guess that can end up facing the inside of the case. A billboard always faces
+	# the camera, which is what a phone screen reads as from any angle in a four-second close-up.
+	phone_screen = MeshInstance3D.new()
+	var sp := PlaneMesh.new()
+	sp.size = Vector2(0.1, 0.19)
+	phone_screen.mesh = sp
+	var sm := StandardMaterial3D.new()
+	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	sm.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	draw_phone_screen()
+	phone_screen_tex = ImageTexture.create_from_image(phone_screen_img)
+	sm.albedo_texture = phone_screen_tex
+	phone_screen.material_override = sm
+	phone_screen.visible = false
+	add_child(phone_screen)
+
+
+## The app itself, drawn once: a status bar with the Chomugiri wordmark, then lines of "code" —
+## indented, syntax-colored blocks, no font rasteriser needed at this resolution — plus a cursor
+## so it reads as live, not a screenshot.
+func draw_phone_screen() -> void:
+	var w := phone_screen_img.get_width()
+	var h := phone_screen_img.get_height()
+	phone_screen_img.fill(Color(0.1, 0.1, 0.13))
+	phone_screen_img.fill_rect(Rect2i(0, 0, w, 22), Color(0.07, 0.065, 0.08))
+	phone_screen_img.fill_rect(Rect2i(10, 6, 56, 11), Color(1.0, 0.54, 0.24))
+	# Few, bold, wide lines beat many thin ones — this screen is only ever seen from across a room.
+	var indents := [8, 18, 8, 26, 8]
+	var widths := [0.7, 0.45, 0.85, 0.55, 0.3]
+	var colors := [
+		Color(0.55, 0.75, 1.0), Color(1.0, 0.65, 0.4), Color(0.85, 0.82, 0.78),
+		Color(0.6, 0.85, 0.65), Color(0.85, 0.82, 0.78),
+	]
+	for i in range(indents.size()):
+		var y := 34 + i * 26
+		var bw := int((w - indents[i] - 10) * widths[i])
+		phone_screen_img.fill_rect(Rect2i(indents[i], y, bw, 13), colors[i])
+	phone_screen_img.fill_rect(Rect2i(indents[indents.size() - 1] + int((w - 18) * 0.3) + 4, 34 + (indents.size() - 1) * 26, 5, 15), Color(1, 1, 1, 0.9))
+
 
 func _build_tv_screen() -> void:
 	# The generated 04_tv.glb model came out lying flat (like the rug, but never caught — a thin
@@ -398,14 +461,38 @@ func draw_tv_off() -> void:
 	screen_img.fill(Color(0.02, 0.03, 0.05))
 
 
+## The ad itself, not an abstract color cycle: a mock Chomugiri app screen (chat bubbles typing
+## out, like the real product) with the wordmark as a lower-third, the way a phone-app ad actually
+## looks on a TV.
 func draw_tv_ad(t: float) -> void:
-	var hue := fmod(t * 0.4, 1.0)
-	for y in range(screen_img.get_height()):
-		for x in range(screen_img.get_width()):
-			var u := float(x) / screen_img.get_width()
-			var c := Color.from_hsv(fmod(hue + u * 0.25, 1.0), 0.65, 0.6)
-			screen_img.set_pixel(x, y, c)
-	screen_img.fill_rect(Rect2i(20, 110, int(40 + 25 * sin(t * 3.0)), 14), Color(1, 1, 1, 0.85))
+	var w := screen_img.get_width()
+	var h := screen_img.get_height()
+	screen_img.fill(Color(0.07, 0.065, 0.08))
+	# A phone-shaped app card, centered, standing in for the product itself.
+	var card := Rect2i(84, 10, 88, 128)
+	screen_img.fill_rect(card, Color(0.12, 0.12, 0.15))
+	screen_img.fill_rect(Rect2i(card.position.x + 4, card.position.y + 4, card.size.x - 8, 14), Color(1.0, 0.54, 0.24))
+	# Chat bubbles filling in one by one, as if the ad is a screen recording of the app being used.
+	var rows := [[0.55, false], [0.75, true], [0.4, false], [0.65, true]]
+	var reveal: float = fmod(t * 0.9, 1.0) * rows.size()
+	for i in range(rows.size()):
+		if float(i) > reveal:
+			continue
+		var frac: float = clampf(reveal - float(i), 0.0, 1.0)
+		var width_frac: float = rows[i][0]
+		var mine: bool = rows[i][1]
+		var bw := int(card.size.x * 0.72 * width_frac * frac)
+		if bw < 4:
+			continue
+		var by := card.position.y + 28 + i * 24
+		var bx := card.position.x + card.size.x - 6 - bw if mine else card.position.x + 6
+		var bc := Color(1.0, 0.6, 0.35) if mine else Color(0.75, 0.78, 0.85)
+		screen_img.fill_rect(Rect2i(bx, by, bw, 14), bc)
+	# Lower-third: the wordmark bar, always on through the ad (what makes it a Chomugiri ad and not
+	# a generic app demo).
+	screen_img.fill_rect(Rect2i(0, h - 28, w, 28), Color(0.05, 0.04, 0.035))
+	screen_img.fill_rect(Rect2i(14, h - 20, 118, 12), Color(1.0, 0.54, 0.24))
+	screen_img.fill_rect(Rect2i(150, h - 17, 92, 6), Color(0.85, 0.82, 0.78))
 
 
 func draw_tv_brand() -> void:
