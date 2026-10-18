@@ -22,6 +22,8 @@ export interface Classification {
   ops?: boolean;
   /** The job is done in a real browser on the bridge (open pages, read them, click, search the web). Implies `ops`. */
   browse?: boolean;
+  /** The job uses REA (reverse-engineer-anything) on the bridge — inspecting a binary, APK, JS bundle or site someone owns or is authorised to examine. Implies `ops`. */
+  rea?: boolean;
   /** Set when the deterministic pass was inconclusive. */
   needsModel?: boolean;
 }
@@ -90,6 +92,21 @@ const BROWSE_NOUN = /\b(website|web ?site|site|web ?page|page|url|link|portal|st
 const WEB_SEARCH = /\b(web ?search|search (?:the )?(?:web|internet|online)|internet (?:pe|par|per|se) (?:search|dhund\w*|dekh\w*)|google (?:kar\w*|pe|par|se)|online (?:search|dhund)\w*)\b/i;
 const BUILD_A_SITE = /\b(build|create|make|generate|design|develop|banao|bana|likho)\b[^.\n]{0,40}\b(website|web ?site|landing ?page|web ?page|site|page)\b/i;
 const NOT_BROWSING = /\b(download|install|clone|apk|gradle|curl|wget)\b/i;
+/**
+ * Reverse engineering a binary, APK, JS/Electron app, website bundle or similar —
+ * routed to the REA CLI on the bridge rather than the browser or plain terminal
+ * work, because it needs its own addendum (lawful-use scope, its command set).
+ */
+const REA_STRONG = /\b(reverse engineer|reverse-engineer|rea cli|decompile|disassemble|de-?obfuscat\w*|jadx|ghidra|hopper|ida pro|apktool)\b/i;
+const REA_VERB = /\b(reverse engineer|decompile|disassemble|inspect|analy[sz]e|extract|unpack|dump)\b/i;
+const REA_NOUN = /\b(apk|binary|firmware|bytecode|smali|bundle|\.exe|\.dll|\.so\b|electron app|obfuscat\w*|minifi\w* (?:js|bundle)|native (?:function|library))\b/i;
+export function wantsReverseEngineer(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (REA_STRONG.test(t)) return true;
+  return REA_VERB.test(t) && REA_NOUN.test(t);
+}
+
 export function wantsBrowse(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
@@ -204,7 +221,7 @@ export function detectSuite(text: string): string | undefined {
 
 export function classifyLocal(
   input: string,
-  opts: { hasAttachments?: boolean; previousLane?: Lane; previousOps?: boolean; previousBrowse?: boolean } = {},
+  opts: { hasAttachments?: boolean; previousLane?: Lane; previousOps?: boolean; previousBrowse?: boolean; previousRea?: boolean } = {},
 ): Classification {
   const text = input.trim();
   const suite = detectSuite(text);
@@ -226,12 +243,17 @@ export function classifyLocal(
     return { lane: 'B', confidence: 0.9, reason: 'using a real browser on the bridge — this is work, not a question', ops: true, browse: true };
   }
 
+  // 2b. A job for REA (reverse-engineer-anything) on the bridge.
+  if (wantsReverseEngineer(text)) {
+    return { lane: 'B', confidence: 0.9, reason: 'inspecting a binary/app with REA on the bridge — this is work, not a question', ops: true, rea: true };
+  }
+
   // 2. Work on the machine itself, and the short replies that carry it on ("Ha", a link, "ok bro").
   if (wantsTerminal(text)) {
     return { lane: 'B', confidence: 0.95, reason: 'running it on the terminal — this is work, not a question', ops: true };
   }
   if (opts.previousLane === 'B' && isFollowUp(text) && !INQUIRY_MARKERS.test(text)) {
-    return { lane: 'B', confidence: 0.85, reason: 'carrying on the task already under way', suite: opts.previousOps ? undefined : suite, ops: opts.previousOps, browse: opts.previousBrowse };
+    return { lane: 'B', confidence: 0.85, reason: 'carrying on the task already under way', suite: opts.previousOps ? undefined : suite, ops: opts.previousOps, browse: opts.previousBrowse, rea: opts.previousRea };
   }
 
   let score = 0;
