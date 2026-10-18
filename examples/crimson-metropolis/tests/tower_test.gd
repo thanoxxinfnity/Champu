@@ -70,6 +70,7 @@ func ride_to(i: int, what: String) -> void:
 func _init() -> void:
 	await process_frame
 	world = World.new()
+	world.with_life = false
 	root.add_child(world)
 	await process_frame
 	tower = world.tower

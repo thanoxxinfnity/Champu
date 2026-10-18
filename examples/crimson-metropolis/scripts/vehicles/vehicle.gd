@@ -14,6 +14,7 @@ extends VehicleBody3D
 signal entered(driver: Node)
 signal exited(driver: Node)
 signal crashed(impact: float)
+signal hijacked(thief: Node)
 
 const GROUND_TO_ORIGIN := 0.55        # the body's origin sits this high above flat ground at rest
 const WHEEL_RADIUS := 0.34
@@ -23,6 +24,7 @@ const CAM_DIST := 6.4
 
 var kind := "sedan"
 var cfg: Dictionary = {}
+var ai: Node = null                   # a traffic / police driver: the car can be taken from it (hijack)
 var driver: Node = null               # the Player, or an NPC (traffic cars are driven by their own AI)
 var is_player_driven := false
 var busy := false                     # entering / leaving: the controls are ignored
@@ -115,7 +117,7 @@ func _ready() -> void:
 	enter_trigger.radius = 1.0
 	enter_trigger.position = _door_out_local()
 	enter_trigger.enabled_check = func(_p): return driver == null and not busy
-	enter_trigger.callback = begin_enter
+	enter_trigger.callback = _try_enter
 	add_child(enter_trigger)
 	add_to_group("vehicles")
 
@@ -127,6 +129,19 @@ func _stand_in() -> Node3D:
 	mi.mesh = bm
 	add_child(mi)
 	return mi
+
+
+## Getting in: a parked car just opens; one with a driver at the wheel is hijacked — the driver is dragged out and runs.
+func _try_enter(player: Player) -> void:
+	if ai != null:
+		var thief_target := ai
+		ai = null
+		if thief_target.has_method("on_hijacked"):
+			thief_target.on_hijacked(player)
+		hijacked.emit(player)
+		get_tree().call_group("wanted_watch", "report_crime", &"hijack", global_position, player)
+		set_controls(0.0, 0.0, true)
+	begin_enter(player)
 
 
 func set_controls(throttle: float, steer: float, handbrake := false) -> void:
@@ -156,6 +171,11 @@ func _physics_process(delta: float) -> void:
 		throttle = 0.0
 		steer_in = 0.0
 
+	# A car shoved into another one at spawn or wedged in geometry can get an absurd depenetration impulse: keep it sane.
+	if linear_velocity.length() > 95.0:
+		linear_velocity = linear_velocity.normalized() * 95.0
+	if angular_velocity.length() > 18.0:
+		angular_velocity = angular_velocity.normalized() * 18.0
 	var fwd := forward_speed()
 	var top: float = cfg.top
 	var force := 0.0

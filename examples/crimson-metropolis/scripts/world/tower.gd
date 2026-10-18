@@ -26,7 +26,7 @@ var heli_pad: Node3D               # the middle of the helipad
 
 var _stone := Builder.mat(Color(0.78, 0.77, 0.74), 0.35, 0.1)
 var _dark := Builder.mat(Color(0.12, 0.12, 0.14), 0.45, 0.4)
-var _marble := Builder.mat(Color(0.86, 0.85, 0.82), 0.18, 0.1)
+var _marble := Builder.mat(Color(0.86, 0.85, 0.82), 0.5, 0.05)
 var _ceiling := Builder.mat(Color(0.95, 0.95, 0.93), 0.95)
 var _wood := Builder.mat(Color(0.3, 0.2, 0.13), 0.4)
 var _carpet := Builder.mat(Color(0.28, 0.3, 0.36), 1.0)
@@ -189,7 +189,7 @@ func _executive_floor() -> void:
 
 func _penthouse() -> void:
 	var y := stop_ys()[2]
-	_room(y, 6.4, Builder.mat(Color(0.72, 0.7, 0.66), 0.25))
+	_room(y, 6.4, Builder.mat(Color(0.72, 0.7, 0.66), 0.6))
 	var f := "res://assets/furniture/"
 	_place(f + "09_persian_rug.glb", 5.0, Vector3(4.0, y + 0.005, 4.0), 0.0, false, true, 0.12)
 	_place(f + "01_grey_sofa.glb", 3.0, Vector3(4.0, y, 8.0), 0.0)

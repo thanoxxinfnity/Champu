@@ -62,6 +62,7 @@ func leg(target: Vector2, what: String, floor_y := -1.0) -> void:
 func _init() -> void:
 	await process_frame
 	world = World.new()
+	world.with_life = false
 	root.add_child(world)
 	await process_frame
 	h = world.safehouse

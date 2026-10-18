@@ -9,7 +9,12 @@ var player: Player
 var lamp_pool: LampPool
 var safehouse: Safehouse
 var tower: Tower
+var director: Director
+var traffic: Traffic
+var wanted: Wanted
 var vehicles: Array[Vehicle] = []
+## Tests that only care about the buildings and doors turn the population, HUD and phone off.
+var with_life := true
 
 
 func _ready() -> void:
@@ -48,6 +53,24 @@ func _ready() -> void:
 	lamp_pool.name = "LampPool"
 	add_child(lamp_pool)
 	lamp_pool.follow = player
+
+	if with_life:
+		traffic = Traffic.new()
+		traffic.name = "Traffic"
+		add_child(traffic)
+		traffic.populate(self)
+		director = Director.new()
+		director.name = "Director"
+		add_child(director)
+		director.setup(self)
+		wanted = Wanted.new()
+		wanted.name = "Wanted"
+		wanted.state = director.state
+		wanted.world = self
+		wanted.traffic = traffic
+		wanted.hud = director.hud
+		wanted.director = director
+		add_child(wanted)
 
 
 ## The house's front wall centre: 14 m in from the sidewalk, so local z = -12 is the plot's street edge.
