@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { connect, listModels, chatStream, chatOnce, framedHeader, flattenMessages } from '../src/lib/antigravity/client.ts';
+import { connect, listModels, chatStream, chatOnce, framedHeader, flattenMessages, startLogin } from '../src/lib/antigravity/client.ts';
 import { chatFetch, setAg } from '../src/lib/antigravity/state.ts';
 
 const TOKEN = 'abc123def456';
@@ -148,4 +148,27 @@ test('history is flattened into one prompt, system first', () => {
     { role: 'user', content: 'u2' },
   ]);
   assert.ok(t.indexOf('S') < t.indexOf('u1') && t.indexOf('a1') < t.indexOf('u2') && t.trim().endsWith('u2'));
+});
+
+test('sign-in: start-login, then the login address appears and is returned (with the framed header)', async () => {
+  let started = 0;
+  let polls = 0;
+  const server = http.createServer((req, res) => {
+    const ok = req.headers[HEADER] !== undefined;
+    if (!ok) { res.writeHead(401); return res.end('{}'); }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    if (req.url === '/api/auth/start-login') { started++; return res.end('{"success":true}'); }
+    if (req.url === '/api/auth/login-url') { polls++; return res.end(JSON.stringify({ loginUrl: polls < 3 ? '' : 'https://accounts.google.com/o/oauth2/auth?x=1', active: polls >= 3 })); }
+    res.end('{}');
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    const url = await startLogin({ bridgeUrl: `http://127.0.0.1:${server.address().port}`, token: TOKEN }, { pollMs: 5, waitMs: 3000 });
+    assert.equal(url, 'https://accounts.google.com/o/oauth2/auth?x=1');
+    assert.equal(started, 1);
+    assert.ok(polls >= 3);
+    await assert.rejects(() => startLogin({ bridgeUrl: `http://127.0.0.1:${server.address().port}`, token: TOKEN }, { pollMs: 5, waitMs: 20 }).then(() => { throw new Error('should not resolve'); }), (e) => true);
+  } finally {
+    server.close();
+  }
 });

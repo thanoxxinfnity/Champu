@@ -51,6 +51,30 @@ function authHeaders(cfg: AgConfig): Record<string, string> {
   return { [framedHeader(cfg.token)]: cfg.csrf || 'true' };
 }
 
+// ── sign-in (through the bridge) ─────────────────────────────────────────────
+
+/**
+ * Antigravity's Google sign-in, driven by the bridge: `POST /api/auth/start-login` makes the hub start a login, and the hub's login
+ * address then shows up at `GET /api/auth/login-url`. Open that address, sign in with Google there, and the hub holds the account.
+ */
+export async function startLogin(cfg: AgConfig, opts: { waitMs?: number; pollMs?: number } = {}): Promise<string> {
+  const base = trimUrl(cfg.bridgeUrl);
+  const headers = { 'Content-Type': 'application/json', ...authHeaders({ ...cfg, csrf: undefined }) };
+  const post = await fetch(`${base}/api/auth/start-login`, { method: 'POST', headers, body: '{}' });
+  if (post.status === 401 || post.status === 403) throw new AgError('The bridge refused the security token — copy it again from AntiGem.', post.status, 'unauthenticated');
+  if (!post.ok) throw new AgError(`start-login → HTTP ${post.status}`, post.status);
+  const deadline = Date.now() + (opts.waitMs ?? 15000);
+  for (;;) {
+    const res = await fetch(`${base}/api/auth/login-url`, { headers });
+    if (res.ok) {
+      const j = (await res.json()) as { loginUrl?: string };
+      if (j.loginUrl) return j.loginUrl;
+    }
+    if (Date.now() > deadline) throw new AgError('The hub did not return a sign-in address. Is the Antigravity hub running inside AntiGem?');
+    await new Promise((r) => setTimeout(r, opts.pollMs ?? 800));
+  }
+}
+
 // ── discovery ─────────────────────────────────────────────────────────────────
 
 export interface HubStatus {
