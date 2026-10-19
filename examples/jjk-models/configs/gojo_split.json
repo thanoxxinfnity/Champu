@@ -1,0 +1,53 @@
+{
+ "src": "raw/gojo_tv.glb",
+ "out": "raw/gojo_tv_split.glb",
+ "ratio": 0.32,
+ "smooth": 3,
+ "default": "pants",
+ "rules": [
+  {
+   "part": "shoeL",
+   "if": "(z < 0.075 and v < 0.35) and x > 0"
+  },
+  {
+   "part": "shoeR",
+   "if": "(z < 0.075 and v < 0.35) and x < 0"
+  },
+  {
+   "part": "shinL",
+   "if": "(z < 0.10 and s > 0.05) and x > 0"
+  },
+  {
+   "part": "shinR",
+   "if": "(z < 0.10 and s > 0.05) and x < 0"
+  },
+  {
+   "part": "hair",
+   "if": "z > 0.90 and (s < 0.30)"
+  },
+  {
+   "part": "head",
+   "if": "z > 0.80 and ax < 0.07"
+  },
+  {
+   "part": "armL",
+   "if": "(z > 0.62 and ax > 0.115 and s > 0.06 and v > 0.4) and x > 0"
+  },
+  {
+   "part": "armR",
+   "if": "(z > 0.62 and ax > 0.115 and s > 0.06 and v > 0.4) and x < 0"
+  },
+  {
+   "part": "top",
+   "if": "z > 0.655 and v < 0.30"
+  },
+  {
+   "part": "sash",
+   "if": "z > 0.47 and v < 0.30"
+  },
+  {
+   "part": "top",
+   "if": "z > 0.655"
+  }
+ ]
+}

@@ -103,8 +103,10 @@ def fit(parts, roles, cfg):
             cur = cur + tdir * hand_len * Lj
         P['thumb3' + side] = cur
         # legs
-        shoe = [o for n, o in parts.items() if roles[n] == 'shoe' + side]
+        shoe = [o for n, o in parts.items() if roles[n] in ('shoe' + side, 'leg' + side)]
         smn, smx = bounds(shoe)
+        if any(roles[n] == 'leg' + side for n in parts):  # leg parts include the whole leg: use only the foot's height
+            smx.z = smn.z + H * 0.09
         hip_x = cx + sx * H * f.get('hip_x', 0.085)
         P['thigh' + side] = Vector((hip_x, cy, P['pelvis'].z - H * 0.02))
         P['shin' + side] = Vector((hip_x, cy - H * 0.005, floor + H * f.get('knee', 0.27)))
@@ -181,6 +183,7 @@ ALLOWED = {
     'pants': ['hips', 'spine', 'thighL', 'thighR', 'shinL', 'shinR', 'footL', 'footR'],
     'skirt': ['hips', 'spine', 'thighL', 'thighR', 'shinL', 'shinR'],
     'sash': ['hips', 'spine'],
+    'outfit': ['hips', 'spine', 'chest', 'neck', 'shoulderL', 'shoulderR', 'upperarmL', 'upperarmR', 'thighL', 'thighR', 'shinL', 'shinR', 'footL', 'footR'],
     'body': ['hips', 'spine', 'chest', 'neck', 'head', 'thighL', 'thighR', 'shinL', 'shinR', 'footL', 'footR', 'toeL', 'toeR'],
 }
 
@@ -194,6 +197,8 @@ def allowed_for(role, bones):
     if role.startswith('arm'):
         return [b for b in bones if b.endswith(side) and b.split(side)[0].rstrip('0123') in
                 ('shoulder', 'upperarm', 'forearm', 'hand', 'thumb', 'index', 'middle', 'ring', 'pinky')]
+    if role.startswith('leg'):
+        return [b for b in bones if b in ('hips', 'thigh' + side, 'shin' + side, 'foot' + side, 'toe' + side)]
     if role.startswith('shoe'):
         return [b for b in bones if b in ('shin' + side, 'foot' + side, 'toe' + side)]
     if role.startswith('shin'):
@@ -239,7 +244,7 @@ def main():
         if roles.get(n) == 'arm':
             mn, mx = bounds([o])
             roles[n] = 'armL' if (mn.x + mx.x) > 0 else 'armR'
-        if roles.get(n) in ('shoe', 'shin'):
+        if roles.get(n) in ('shoe', 'shin', 'leg'):
             mn, mx = bounds([o])
             roles[n] += 'L' if (mn.x + mx.x) > 0 else 'R'
     P, H, floor = fit(parts, roles, cfg)

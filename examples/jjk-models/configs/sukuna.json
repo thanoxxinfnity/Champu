@@ -1,0 +1,4 @@
+{"name":"sukuna","src":"raw/sukuna_split_pbr.glb","out_dir":"models",
+ "parts":{"root.0":"arm","root.8":"arm","root.3":"hair","root.5":"head","root.4":"head","root.7":"outfit","root.2":"sash","root.6":"sash",
+          "root.1":"shoe","root.9":"shoe"},
+ "frac":{"shoulder_x":0.12,"tip_z":0.5}}
