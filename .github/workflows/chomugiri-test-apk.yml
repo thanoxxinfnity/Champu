@@ -2,7 +2,7 @@ name: Chomugiri test APK (installs beside the real app)
 
 # The real Chomugiri APK is signed with a private keystore that is not in CI. This builds the same app signed with the public
 # sideload key and a different application id (com.chomugiri.workspace.ag), so it installs NEXT TO the real one — your chats and
-# keys in the real app are untouched — and can be thrown away. Use it to try new features such as the Antigravity connector.
+# keys in the real app are untouched — and can be thrown away. Use it to try new features without touching the real app.
 on:
   # Manual only: the signed release APK (releases/Chomugiri.apk) is the normal way to get a build now.
   workflow_dispatch: {}
@@ -33,7 +33,6 @@ jobs:
       - name: Type check and unit tests
         run: |
           npx tsc --noEmit
-          node --experimental-strip-types --test scripts/test-antigravity.mjs
 
       - name: Build the web app and export it into the APK
         run: |
@@ -80,6 +79,5 @@ jobs:
           name: Chomugiri test build (installs beside the real app)
           body: |
             Built from ${{ github.sha }}. Signed with the public sideload key, application id com.chomugiri.workspace.ag, so it installs
-            next to the real Chomugiri and does not touch its data. Enable "install from unknown sources". Contains the experimental
-            Antigravity connector (Settings → Connectors).
+            next to the real Chomugiri and does not touch its data. Enable "install from unknown sources".
           files: android/app/build/outputs/apk/release/Chomugiri.apk
