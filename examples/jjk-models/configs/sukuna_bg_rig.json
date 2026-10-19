@@ -1,0 +1,33 @@
+{
+ "head": null,
+ "arm_min_z": 0.3,
+ "arm_min_x": 0.2,
+ "frac": {
+  "shoulder_x": 0.11,
+  "shoulder_z": 0.8,
+  "tip_z": 0.5,
+  "elbow_at": 0.5,
+  "hand_frac": 0.2,
+  "hip_x": 0.075
+ },
+ "body_sway": [
+  {
+   "name": "hakamaCuff",
+   "z0": -0.95,
+   "z1": -0.62,
+   "n": 5,
+   "k": 2,
+   "split_x": true
+  },
+  {
+   "name": "obiTail",
+   "z0": -0.22,
+   "z1": 0.02,
+   "n": 2,
+   "k": 3,
+   "front_only": true,
+   "xmax": 0.12
+  }
+ ],
+ "garments": {}
+}

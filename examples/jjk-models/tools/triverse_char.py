@@ -94,7 +94,7 @@ def gen(name):
     if os.path.exists(dest):
         print(f'[{name}] already downloaded')
         return True
-    img = os.path.join(REF, f'{name}.png')
+    img = os.path.join(REF, f'{name}.png') if os.path.exists(os.path.join(REF, f'{name}.png')) else os.path.join(REF, f'{name}.jpg')
     for i, key in enumerate(KEYS):
         up = upload_image(key, img)
         fk = (up.get('data') or {}).get('file_key') or (up.get('data') or {}).get('key')

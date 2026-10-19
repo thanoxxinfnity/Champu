@@ -26,7 +26,8 @@ for o in objs.values():
     o.matrix_world.identity()
 for o in [o for o in bpy.data.objects if o.type != 'MESH']:
     bpy.data.objects.remove(o, do_unlink=True)
-body, head = objs['body'], objs[cfg.get('head', 'head')]
+body = objs['body']
+head = objs.get(cfg.get('head')) if cfg.get('head') else None   # None: the head is part of the body mesh (bust graft)
 garments = {n: o for n, o in objs.items() if n in cfg['garments'] or n.rstrip('LR') in cfg['garments']}
 
 # ── skeleton measured from the body ─────────────────────────────────────────────
@@ -185,8 +186,9 @@ def weight(obj, allowed, power=3.0):
 
 
 weight(body, all_bones)   # distance weights over every bone, sway bones included
-rs.rigid(head, arm, 'head')
-head.vertex_groups['head'].add([v.index for v in head.data.vertices], 1.0, 'REPLACE')
+if head is not None:
+    rs.rigid(head, arm, 'head')
+    head.vertex_groups['head'].add([v.index for v in head.data.vertices], 1.0, 'REPLACE')
 for oname, o in garments.items():
     gname = oname.rstrip('LR') if oname.rstrip('LR') in cfg['garments'] else oname
     gcfg = cfg['garments'][gname]
@@ -194,7 +196,7 @@ for oname, o in garments.items():
     allowed = allowed + [b for n in sway_of.get(oname, []) for b in all_bones if b.startswith(n)]
     allowed = list(dict.fromkeys(b for b in allowed if b in segs))
     weight(o, allowed)
-for o in [body, head] + list(garments.values()):
+for o in [x for x in [body, head] if x is not None] + list(garments.values()):
     for p in o.data.polygons:
         p.use_smooth = True
 arm.name = os.path.basename(out_base) + '_rig'
