@@ -59,6 +59,36 @@ def quote():
         print(f'key {i + 1}: cost {d.get("cost_credits")} available {d.get("available_credits")} ({r.get("message")})')
 
 
+def gen_text(name, prompt):
+    """text -> textured model (used for the intact arena platform)."""
+    dest = os.path.join(RAW, f'{name}_tv.glb')
+    if os.path.exists(dest):
+        return True
+    for i, key in enumerate(KEYS):
+        r = call('POST', '/tasks/text-to-model', key, {'prompt': prompt, 'polygon_limit': 60000, 'texture_size': 2048, 'turbo': False,
+                                                       'client_order_id': f'jjk_{name}_{int(time.time())}', 'allow_duplicate': True})
+        if r.get('code') != 0:
+            print(f'[{name}] key {i + 1} submit failed: {str(r)[:200]}')
+            continue
+        d = r['data']
+        tid = d.get('task_uuid') or d.get('uuid') or d.get('id')
+        print(f'[{name}] task {tid}')
+        end = time.time() + 25 * 60
+        while time.time() < end:
+            time.sleep(10)
+            s = (call('GET', f'/tasks/{tid}', key).get('data') or {})
+            if s.get('status') == 'SUCCESS':
+                u = model_url(s.get('output'))
+                if u:
+                    download(u, dest)
+                    print(f'[{name}] saved {os.path.getsize(dest) // 1024} KB')
+                    return True
+                return False
+            if s.get('status') in ('FAILED', 'CANCELED', 'CANCELLED'):
+                break
+    return False
+
+
 def gen(name):
     dest = os.path.join(RAW, f'{name}_tv.glb')
     if os.path.exists(dest):
@@ -108,6 +138,8 @@ if __name__ == '__main__':
     cmd = sys.argv[1] if len(sys.argv) > 1 else 'quote'
     if cmd == 'quote':
         quote()
+    elif cmd == 'text':
+        sys.exit(0 if gen_text(sys.argv[2], sys.argv[3]) else 1)
     else:
         ok = all([gen(n) for n in sys.argv[2:]])
         sys.exit(0 if ok else 1)

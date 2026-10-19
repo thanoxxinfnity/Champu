@@ -1,4 +1,24 @@
-{"name":"mahoraga","src":"raw/mahoraga_split_pbr.glb","out_dir":"models",
- "parts":{"root.0":"arm","root.9":"arm","root.1":"torso","root.2":"head","root.3":"leg","root.8":"leg","root.4":"shin",
-          "root.5":"sash","root.6":"skirt","root.7":"sash","root.10":"rigid:chest"},
- "frac":{"shoulder_x":0.12,"tip_z":0.02,"elbow_at":0.5,"hand_frac":0.24,"hip_x":0.09}}
+{
+ "parts": {
+  "p_armL": "armL",
+  "p_armR": "armR",
+  "p_head": "head",
+  "p_torso": "torso",
+  "p_skirt": "skirt",
+  "p_sash": "sash",
+  "p_legL": "legL",
+  "p_legR": "legR",
+  "p_wheel": "rigid:head",
+  "p_xarm": "rigid:chest"
+ },
+ "frac": {
+  "shoulder_x": 0.12,
+  "tip_z": 0.02,
+  "elbow_at": 0.5,
+  "hand_frac": 0.24,
+  "hip_x": 0.09
+ },
+ "name": "mahoraga",
+ "src": "raw/mahoraga_tv_split.glb",
+ "out_dir": "models"
+}

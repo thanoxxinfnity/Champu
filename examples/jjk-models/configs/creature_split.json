@@ -1,0 +1,49 @@
+{
+ "src": "raw/creature_tv.glb",
+ "out": "raw/creature_tv_split.glb",
+ "ratio": 0.32,
+ "smooth": 3,
+ "default": "torso",
+ "rules": [
+  {
+   "part": "shoeL",
+   "if": "(z < 0.10 and v > 0.5) and x > 0"
+  },
+  {
+   "part": "shoeR",
+   "if": "(z < 0.10 and v > 0.5) and x < 0"
+  },
+  {
+   "part": "snake",
+   "if": "x < -0.10 and s < 0.35 and v > 0.45 and z > 0.30 and z < 0.88"
+  },
+  {
+   "part": "head",
+   "if": "z > 0.80 and ax < 0.12"
+  },
+  {
+   "part": "legL",
+   "if": "(z < 0.50 and h > 0.5 and h < 0.75) and x > 0"
+  },
+  {
+   "part": "legR",
+   "if": "(z < 0.50 and h > 0.5 and h < 0.75) and x < 0"
+  },
+  {
+   "part": "armL",
+   "if": "(ax > 0.13 and z > 0.50 and z < 0.85 and (s > 0.45 or v < 0.6)) and x > 0"
+  },
+  {
+   "part": "armR",
+   "if": "(ax > 0.13 and z > 0.50 and z < 0.85 and (s > 0.45 or v < 0.6)) and x < 0"
+  },
+  {
+   "part": "handL",
+   "if": "(ax > 0.28 and z > 0.5) and x > 0"
+  },
+  {
+   "part": "handR",
+   "if": "(ax > 0.28 and z > 0.5) and x < 0"
+  }
+ ]
+}

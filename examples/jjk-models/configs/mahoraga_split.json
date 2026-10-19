@@ -1,0 +1,45 @@
+{
+ "src": "raw/mahoraga_tv.glb",
+ "out": "raw/mahoraga_tv_split.glb",
+ "ratio": 0.32,
+ "smooth": 3,
+ "default": "torso",
+ "rules": [
+  {
+   "part": "wheel",
+   "if": "z > 0.93 and s > 0.30 and h > 0.07 and h < 0.18"
+  },
+  {
+   "part": "xarm",
+   "if": "y > 0.05 and z > 0.68 and ax > 0.06"
+  },
+  {
+   "part": "head",
+   "if": "z > 0.82 and ax < 0.13"
+  },
+  {
+   "part": "skirt",
+   "if": "z > 0.26 and z < 0.64 and v < 0.4 and h > 0.25 and h < 0.55"
+  },
+  {
+   "part": "sash",
+   "if": "z > 0.36 and z < 0.64 and ax < 0.10 and y < -0.03"
+  },
+  {
+   "part": "armL",
+   "if": "(ax > 0.14 and z > 0.30) and x > 0"
+  },
+  {
+   "part": "armR",
+   "if": "(ax > 0.14 and z > 0.30) and x < 0"
+  },
+  {
+   "part": "legL",
+   "if": "(z < 0.36) and x > 0"
+  },
+  {
+   "part": "legR",
+   "if": "(z < 0.36) and x < 0"
+  }
+ ]
+}

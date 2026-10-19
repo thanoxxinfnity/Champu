@@ -1,0 +1,24 @@
+{
+ "parts": {
+  "p_armL": "armL",
+  "p_armR": "armR",
+  "p_handL": "armL",
+  "p_handR": "armR",
+  "p_head": "head",
+  "p_torso": "torso",
+  "p_legL": "legL",
+  "p_legR": "legR",
+  "p_shoeL": "shoeL",
+  "p_shoeR": "shoeR",
+  "p_snake": "rigid:chest"
+ },
+ "frac": {
+  "shoulder_x": 0.12,
+  "tip_z": 0.85,
+  "hand_frac": 0.2,
+  "hip_x": 0.09
+ },
+ "name": "creature",
+ "src": "raw/creature_tv_split.glb",
+ "out_dir": "models"
+}
