@@ -1,0 +1,4 @@
+{"name":"gojo","src":"raw/gojo_split_pbr.glb","out_dir":"models",
+ "parts":{"root.0":"arm","root.10":"arm","root.3":"head","root.6":"hair","root.4":"torso","root.5":"pants","root.7":"sash",
+          "root.1":"shoe","root.9":"shoe","root.2":"shin","root.8":"shin"},
+ "frac":{"shoulder_x":0.11,"tip_z":0.5}}
