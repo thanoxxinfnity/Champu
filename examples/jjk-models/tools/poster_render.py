@@ -20,6 +20,8 @@ def fresh():
     s.render.engine = 'BLENDER_EEVEE_NEXT'
     s.render.resolution_x, s.render.resolution_y = 1600, 900
     s.view_settings.look = 'None'
+    s.render.film_transparent = True
+    s.render.image_settings.color_mode = 'RGBA'
     w = bpy.data.worlds.new('w')
     w.use_nodes = True
     bpy.context.scene.world = w
@@ -83,9 +85,9 @@ fresh(); s_ = add_char('sukuna', 0, 0, GUARD); light((1, 0.5, 0.4), (0.9, 0.2, 0
 # 3 face-off
 fresh(); add_char('gojo', -1.1, -90, STRIKE); add_char('sukuna', 1.1, 90, GUARD); light((0.9, 0.8, 1.0), (1.0, 0.3, 0.3), (0.08, 0.06, 0.16)); camera((0, -7.2, 0.0), (0, 0, 0.0), 36); shoot('03_faceoff')
 # 4 Gojo face
-fresh(); add_char('gojo', 0, -15, {}); light((1, 0.95, 0.9), (0.2, 0.6, 1.0), (0.05, 0.1, 0.25)); camera((0.25, -1.5, 0.78), (0, 0, 0.78), 70); shoot('04_gojo_face')
+fresh(); add_char('gojo', 0, -15, {}); light((1, 0.95, 0.9), (0.2, 0.6, 1.0), (0.05, 0.1, 0.25)); camera((0.25, -2.2, 0.78), (0, 0, 0.78), 70); shoot('04_gojo_face')
 # 5 Sukuna face
-fresh(); add_char('sukuna', 0, 15, {}); light((1, 0.8, 0.7), (1.0, 0.2, 0.1), (0.15, 0.02, 0.03)); camera((-0.25, -1.5, 0.78), (0, 0, 0.78), 70); shoot('05_sukuna_face')
+fresh(); add_char('sukuna', 0, 15, {}); light((1, 0.8, 0.7), (1.0, 0.2, 0.1), (0.15, 0.02, 0.03)); camera((-0.25, -2.2, 0.78), (0, 0, 0.78), 70); shoot('05_sukuna_face')
 # 6 wide dutch angle
 fresh(); add_char('gojo', -1.3, -55, STRIKE); add_char('sukuna', 1.3, 125, STRIKE); light((0.8, 0.9, 1.0), (1.0, 0.4, 0.2), (0.1, 0.05, 0.12)); camera((0, -7.5, -0.7), (0, 0, 0.1), 36); shoot('06_clash')
 print('POSTERS', out_dir)
