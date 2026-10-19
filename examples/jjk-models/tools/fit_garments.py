@@ -71,6 +71,14 @@ for name, g in list(fit['garments'].items()):
     obj = load(os.path.join(root, g['file']))[0]
     obj.name = name
     me = obj.data
+    # generated garments often arrive unwelded; smoothing / displacing unwelded seams tears them open, so weld first
+    wbm = bmesh.new()
+    wbm.from_mesh(me)
+    nv0 = len(wbm.verts)
+    bmesh.ops.remove_doubles(wbm, verts=wbm.verts, dist=g.get('weld', 5e-5))
+    print('WELD', name, nv0, '->', len(wbm.verts))
+    wbm.to_mesh(me)
+    wbm.free()
     if g.get('auto_y'):
         g['y'] = body_center_y(*g['auto_y'])
     if g.get('split_lr'):
@@ -101,7 +109,7 @@ for name, g in list(fit['garments'].items()):
     if g.get('rot_z'):
         me.transform(Matrix.Rotation(math.radians(g['rot_z']), 4, 'Z'))
     s = g['scale']
-    me.transform(Matrix.Diagonal((s, s, s, 1.0)))
+    me.transform(Matrix.Diagonal((s, s, s * g.get('sz', 1.0), 1.0)))
     me.transform(Matrix.Translation(Vector((g.get('x', 0.0), g.get('y', 0.0), g['z']))))
     if g.get('solidify'):
         bpy.context.view_layer.objects.active = obj
@@ -115,6 +123,15 @@ for name, g in list(fit['garments'].items()):
         m.factor = g['smooth'][0]
         m.iterations = int(g['smooth'][1])
         bpy.ops.object.modifier_apply(modifier='sm')
+    if g.get('displace'):
+        # smoothing shrinks the cloth; push it back out along its normals so the layers underneath never poke through
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bm.normal_update()
+        for v in bm.verts:
+            v.co += v.normal * g['displace']
+        bm.to_mesh(me)
+        bm.free()
     for mat in me.materials:
         b = mat.node_tree.nodes['Principled BSDF']
         b.inputs['Roughness'].default_value = 0.9     # cloth is matte: no foil-like highlights on the folds
@@ -142,6 +159,22 @@ for name, g in list(fit['garments'].items()):
                 if l.to_socket == b.inputs['Base Color']:
                     mat.node_tree.links.remove(l)
             b.inputs['Base Color'].default_value = (*g['flat_color'], 1)
+zones = fit.get('trim_zones') or ([[fit['trim_body'][0], fit['trim_body'][1], 0.35]] if fit.get('trim_body') else [])
+if zones:
+    # delete the skin that clothes hide (torso, hips, thighs): it would poke through folds and muscle ridges as skin-coloured streaks
+    bm = bmesh.new()
+    bm.from_mesh(bodies[0].data)
+    bm.faces.ensure_lookup_table()
+    kill = []
+    for f in bm.faces:
+        c = f.calc_center_median()
+        if any(z0 < c.z < z1 and abs(c.x) < xm for z0, z1, xm in zones):
+            kill.append(f)
+    bmesh.ops.delete(bm, geom=kill, context='FACES')
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS')
+    bm.to_mesh(bodies[0].data)
+    bm.free()
+    print('TRIMMED', len(kill))
 out = os.path.join(root, 'raw', base)
 bpy.ops.wm.save_as_mainfile(filepath=out + '.blend')
 bpy.ops.export_scene.gltf(filepath=out + '.glb', export_format='GLB', export_image_format='JPEG', export_yup=True)

@@ -1,0 +1,57 @@
+{
+ "head": "head",
+ "arm_min_z": -0.2,
+ "arm_min_x": 0.2,
+ "frac": {
+  "shoulder_x": 0.095,
+  "shoulder_z": 0.815,
+  "tip_z": 0.0,
+  "elbow_at": 0.47,
+  "hand_frac": 0.2,
+  "hip_x": 0.08
+ },
+ "garments": {
+  "tee": {
+   "bones": [
+    "hips",
+    "spine",
+    "chest",
+    "neck",
+    "shoulderL",
+    "shoulderR",
+    "upperarmL",
+    "upperarmR"
+   ],
+   "hem": {
+    "n": 6,
+    "frac": 0.2,
+    "k": 2
+   }
+  },
+  "hakama": {
+   "bones": [
+    "hips",
+    "spine",
+    "thighL",
+    "thighR",
+    "shinL",
+    "shinR",
+    "footL",
+    "footR"
+   ],
+   "hem": {
+    "n": 6,
+    "frac": 0.3,
+    "k": 2,
+    "split_x": true
+   }
+  },
+  "obi": {
+   "bones": [
+    "hips",
+    "spine"
+   ],
+   "tails": 2
+  }
+ }
+}

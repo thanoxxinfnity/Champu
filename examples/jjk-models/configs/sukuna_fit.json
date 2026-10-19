@@ -10,9 +10,10 @@
     0.6
    ],
    "smooth": [
-    0.8,
-    6
-   ]
+    0.5,
+    3
+   ],
+   "displace": 0.004
   },
   "gi": {
    "file": "raw/suk_gi.glb",
@@ -29,18 +30,20 @@
     0.6
    ],
    "smooth": [
-    0.9,
-    10
-   ]
+    0.5,
+    4
+   ],
+   "displace": 0.01
   },
   "obi": {
    "file": "raw/suk_obi.glb",
-   "scale": 0.215,
+   "scale": 0.23,
    "z": 0.0,
    "auto_y": [
     0.0,
     0.6
-   ]
+   ],
+   "displace": 0.014
   },
   "hakama": {
    "file": "raw/suk_hakama.glb",
@@ -57,9 +60,10 @@
     0.6
    ],
    "smooth": [
-    0.9,
-    10
-   ]
+    0.5,
+    4
+   ],
+   "displace": 0.012
   },
   "tabi": {
    "file": "raw/suk_tabi.glb",
@@ -79,5 +83,17 @@
    "rot_x": 90,
    "split_lr": true
   }
- }
+ },
+ "trim_zones": [
+  [
+   0.04,
+   0.64,
+   0.19
+  ],
+  [
+   -0.9,
+   0.04,
+   0.4
+  ]
+ ]
 }
