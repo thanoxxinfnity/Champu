@@ -1,2 +1,4 @@
 .godot/
 *.import
+*_albedo*.jpg
+*_metallic_roughness*.jpg

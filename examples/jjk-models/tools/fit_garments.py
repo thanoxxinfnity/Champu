@@ -79,6 +79,15 @@ for name, g in list(fit['garments'].items()):
     print('WELD', name, nv0, '->', len(wbm.verts))
     wbm.to_mesh(me)
     wbm.free()
+    tgt = int(g.get('tris', 0) * float(__import__('os').environ.get('LODSCALE', 1.0)))
+    if tgt and sum(len(p.vertices) - 2 for p in me.polygons) > tgt:
+        # reduce the clean, welded, un-thickened shell first; thickness and push-out come afterwards so the collapse never sees two layers
+        bpy.context.view_layer.objects.active = obj
+        dm = obj.modifiers.new('lod', 'DECIMATE')
+        dm.ratio = tgt / max(1, sum(len(p.vertices) - 2 for p in me.polygons))
+        dm.use_collapse_triangulate = True
+        bpy.ops.object.modifier_apply(modifier='lod')
+        print('LOD', name, '->', len(me.polygons))
     if g.get('auto_y'):
         g['y'] = body_center_y(*g['auto_y'])
     if g.get('split_lr'):
@@ -111,12 +120,6 @@ for name, g in list(fit['garments'].items()):
     s = g['scale']
     me.transform(Matrix.Diagonal((s, s, s * g.get('sz', 1.0), 1.0)))
     me.transform(Matrix.Translation(Vector((g.get('x', 0.0), g.get('y', 0.0), g['z']))))
-    if g.get('solidify'):
-        bpy.context.view_layer.objects.active = obj
-        m = obj.modifiers.new('thick', 'SOLIDIFY')
-        m.thickness = g['solidify']
-        m.offset = 0.0
-        bpy.ops.object.modifier_apply(modifier='thick')
     if g.get('smooth'):
         bpy.context.view_layer.objects.active = obj
         m = obj.modifiers.new('sm', 'SMOOTH')
@@ -132,6 +135,12 @@ for name, g in list(fit['garments'].items()):
             v.co += v.normal * g['displace']
         bm.to_mesh(me)
         bm.free()
+    if g.get('solidify'):
+        bpy.context.view_layer.objects.active = obj
+        m = obj.modifiers.new('thick', 'SOLIDIFY')
+        m.thickness = g['solidify']
+        m.offset = 0.0
+        bpy.ops.object.modifier_apply(modifier='thick')
     for mat in me.materials:
         b = mat.node_tree.nodes['Principled BSDF']
         b.inputs['Roughness'].default_value = 0.9     # cloth is matte: no foil-like highlights on the folds
@@ -175,6 +184,18 @@ if zones:
     bm.to_mesh(bodies[0].data)
     bm.free()
     print('TRIMMED', len(kill))
+for ob, key in ((bodies[0], 'body_tris'), (bodies[1], 'head_tris')):
+    t = int(fit.get(key, 0) * float(__import__('os').environ.get('LODSCALE', 1.0)))
+    n = sum(len(p.vertices) - 2 for p in ob.data.polygons)
+    if t and n > t:
+        bpy.context.view_layer.objects.active = ob
+        dm = ob.modifiers.new('lod', 'DECIMATE')
+        dm.ratio = t / n
+        dm.use_collapse_triangulate = True
+        bpy.ops.object.modifier_apply(modifier='lod')
+        for p in ob.data.polygons:
+            p.use_smooth = True
+        print('LOD', ob.name, n, '->', len(ob.data.polygons))
 out = os.path.join(root, 'raw', base)
 bpy.ops.wm.save_as_mainfile(filepath=out + '.blend')
 bpy.ops.export_scene.gltf(filepath=out + '.glb', export_format='GLB', export_image_format='JPEG', export_yup=True)
