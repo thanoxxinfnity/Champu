@@ -90,7 +90,7 @@ def gen_text(name, prompt):
 
 
 def gen(name):
-    dest = os.path.join(RAW, f'{name}_tv.glb')
+    dest = os.path.join(RAW, f'{name}{os.environ.get("TV_SUFFIX", "")}_tv.glb')
     if os.path.exists(dest):
         print(f'[{name}] already downloaded')
         return True
@@ -102,7 +102,7 @@ def gen(name):
             print(f'[{name}] key {i + 1} upload failed: {str(up)[:200]}')
             continue
         r = call('POST', '/tasks/image-to-model', key, {
-            'image_file': fk, 'polygon_limit': 100000, 'texture_size': 2048, 'turbo': False,
+            'image_file': fk, 'polygon_limit': int(os.environ.get('TV_POLY', 100000)), 'texture_size': int(os.environ.get('TV_TEX', 2048)), 'turbo': False,
             'client_order_id': f'jjk_{name}_{int(time.time())}', 'allow_duplicate': True})
         if r.get('code') != 0:
             print(f'[{name}] key {i + 1} submit failed: {str(r)[:240]}')
