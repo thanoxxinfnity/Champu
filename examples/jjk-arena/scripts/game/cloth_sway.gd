@@ -1,24 +1,27 @@
 class_name ClothSway
 extends Node
-## Moves the sway_* bones of a dressed character (cloth hems, belt tails) with a light verlet spring, so cloth lags behind the body, swings
-## and flutters in wind. Each chain is the bones named `sway_<piece><n>_1`, `_2`, ... below one parent bone.
+## Spring-bone cloth for a dressed character: the `sway_*` bones (cloth hems, belt tails, sleeve ends) lag behind the body, swing with the
+## motion and flutter in wind, so a hakama or a sash moves instead of being welded to the leg.
 ##
-## Cost: a few dozen bones, one small loop per physics frame; turn it off on Low (GraphicsSettings.use_cloth_sway).
+## Godot 4.3 has no built-in spring bones, so this is a small verlet solver. The key rule: the target each frame is read from the
+## *animated* pose (parent pose × bone rest), never from the pose this script wrote last frame — otherwise the chain feeds back on itself
+## and never settles. Cost is a few dozen bones per character; turn it off on Low (`GraphicsSettings.use_cloth_sway`).
 
 @export var skeleton: Skeleton3D
-@export var stiffness := 0.18        ## 0 = loose cloth, 1 = rigid
-@export var damping := 0.86
-@export var gravity := Vector3(0, -9.8, 0)
-@export var wind := Vector3.ZERO     ## world-space wind velocity; change it any time
-@export var gust := 0.0              ## extra random flutter strength
+@export var stiffness := 0.25        ## how hard cloth is pulled back to the animated pose (0 = free, 1 = rigid)
+@export var damping := 0.80          ## velocity kept per frame
+@export var gravity := Vector3(0, -6.0, 0)
+@export var wind := Vector3.ZERO     ## world-space wind; set it from the arena or a move's shockwave
+@export var gust := 0.0              ## extra turbulence on top of `wind`
 @export var enabled := true
 
 class Chain:
-	var bones: Array[int] = []
-	var rest_len: Array[float] = []
-	var pos: Array[Vector3] = []
+	var bones: PackedInt32Array = []
+	var parent := -1
+	var pos: Array[Vector3] = []      ## simulated tip position of each bone, world space
 	var prev: Array[Vector3] = []
-	var parent: int = -1
+	var length: Array[float] = []     ## rest length of each bone
+	var started := false
 
 var _chains: Array[Chain] = []
 var _t := 0.0
@@ -27,6 +30,7 @@ func _ready() -> void:
 	if skeleton != null:
 		build()
 
+## Find every `sway_<piece><i>_<n>` chain in the skeleton and prepare a solver state for it.
 func build() -> void:
 	_chains.clear()
 	var groups := {}
@@ -34,73 +38,76 @@ func build() -> void:
 		var n := skeleton.get_bone_name(i)
 		if not n.begins_with("sway_"):
 			continue
-		var key := n.substr(0, n.rfind("_"))     # sway_gi0_1 -> sway_gi0
+		var cut := n.rfind("_")
+		var key := n.substr(0, cut) if cut > 0 else n
 		if not groups.has(key):
 			groups[key] = []
 		groups[key].append(i)
 	for key in groups:
 		var ids: Array = groups[key]
-		ids.sort_custom(func(a: int, b: int) -> bool: return skeleton.get_bone_name(a) < skeleton.get_bone_name(b))
+		ids.sort_custom(func(a: int, b: int) -> bool: return skeleton.get_bone_name(a).naturalnocasecmp_to(skeleton.get_bone_name(b)) < 0)
 		var c := Chain.new()
 		c.parent = skeleton.get_bone_parent(ids[0])
 		for id in ids:
 			c.bones.append(id)
-			var w := _world_pos(id)
-			c.pos.append(w)
-			c.prev.append(w)
-		for j in ids.size():
-			var head := _world_pos(ids[j])
-			var tail := head + _bone_dir(ids[j]) * 0.05
-			c.rest_len.append(maxf(0.02, head.distance_to(tail)))
+			c.length.append(maxf(0.01, skeleton.get_bone_rest(id).origin.length()))
+			c.pos.append(Vector3.ZERO)
+			c.prev.append(Vector3.ZERO)
 		_chains.append(c)
 
 func chain_count() -> int:
 	return _chains.size()
 
-func _world_pos(bone: int) -> Vector3:
-	return skeleton.global_transform * skeleton.get_bone_global_pose(bone).origin
-
-func _bone_dir(bone: int) -> Vector3:
-	return (skeleton.global_transform.basis * skeleton.get_bone_global_pose(bone).basis * Vector3.UP).normalized()
-
 func _physics_process(delta: float) -> void:
-	if not enabled or skeleton == null:
+	if not enabled or skeleton == null or delta <= 0.0:
 		return
 	_t += delta
-	var f := wind + Vector3(sin(_t * 3.1), sin(_t * 2.3 + 1.0), cos(_t * 2.7)) * gust
+	var force := wind
+	if gust > 0.0:
+		force += Vector3(sin(_t * 3.1) + sin(_t * 7.7) * 0.4, sin(_t * 2.3 + 1.0) * 0.5, cos(_t * 2.7) + cos(_t * 6.1) * 0.4) * gust
 	for c in _chains:
-		_step(c, delta, f)
+		_solve(c, delta, force)
 
-func _step(c: Chain, delta: float, force: Vector3) -> void:
-	var anchor := _world_pos(c.parent) if c.parent >= 0 else Vector3.ZERO
+func _solve(c: Chain, delta: float, force: Vector3) -> void:
+	var skin := skeleton.global_transform
+	# start from the parent's animated pose; this is unaffected by what we wrote into the sway bones
+	var cur := skin * (skeleton.get_bone_global_pose(c.parent) if c.parent >= 0 else Transform3D.IDENTITY)
 	for j in c.bones.size():
-		var rest := _world_pos(c.bones[j])            # where the animation wants the bone
+		var bone := c.bones[j]
+		var rest := skeleton.get_bone_rest(bone)
+		var animated := cur * rest                       # where the bone's tip wants to be without any sway
+		var head := cur.origin
+		var target := animated.origin
+		if not c.started:
+			c.pos[j] = target
+			c.prev[j] = target
+		# verlet step
 		var p := c.pos[j]
 		var v := (p - c.prev[j]) * damping
 		c.prev[j] = p
 		p += v + (gravity + force) * delta * delta
-		# spring back towards the animated pose
-		p = p.lerp(rest, stiffness)
-		# keep the segment length to the previous point of the chain
-		var from := anchor if j == 0 else c.pos[j - 1]
-		var d := p - from
-		var want := c.rest_len[j]
-		if d.length() > 0.0001:
-			p = from + d.normalized() * want
+		p = p.lerp(target, clampf(stiffness, 0.0, 1.0))
+		# hold the bone's length so cloth stretches no further than it should
+		var dir := p - head
+		if dir.length() < 1e-5:
+			dir = (target - head)
+		if dir.length() < 1e-5:
+			dir = Vector3.DOWN * c.length[j]
+		p = head + dir.normalized() * c.length[j]
 		c.pos[j] = p
-		anchor = p
-		_apply(c.bones[j], p, from)
+		# rotate the bone so its rest direction points at the simulated tip, then walk the chain on with that rotation
+		var want_local := (cur.affine_inverse().basis * (p - head)).normalized()
+		var rest_dir := rest.origin.normalized()
+		if rest_dir.length_squared() < 1e-9:
+			rest_dir = Vector3.UP
+		var swing := Quaternion(rest_dir, want_local)
+		skeleton.set_bone_pose_rotation(bone, swing * rest.basis.get_rotation_quaternion())
+		cur = cur * Transform3D(Basis(swing) * rest.basis, rest.origin)
+	c.started = true
 
-## Rotate the bone so it points from `from` to `p`, in the parent's space, keeping the animated position.
-func _apply(bone: int, p: Vector3, from: Vector3) -> void:
-	var dir_world := (p - from)
-	if dir_world.length() < 0.0001:
-		return
-	var local_dir := (skeleton.global_transform.basis.inverse() * dir_world).normalized()
-	var parent := skeleton.get_bone_parent(bone)
-	var parent_basis := skeleton.get_bone_global_pose(parent).basis if parent >= 0 else Basis.IDENTITY
-	var rest_dir := (skeleton.get_bone_global_rest(bone).basis * Vector3.UP).normalized()
-	var target := (parent_basis.inverse() * local_dir).normalized()
-	var base_dir := (parent_basis.inverse() * rest_dir).normalized()
-	var q := Quaternion(base_dir, target)
-	skeleton.set_bone_pose_rotation(bone, q * skeleton.get_bone_rest(bone).basis.get_rotation_quaternion())
+## Snap every chain back onto the animated pose (use after a teleport or a round reset).
+func reset() -> void:
+	for c in _chains:
+		c.started = false
+		for j in c.bones.size():
+			skeleton.set_bone_pose_rotation(c.bones[j], skeleton.get_bone_rest(c.bones[j]).basis.get_rotation_quaternion())
