@@ -1,3 +1,6 @@
 *.blend1
 raw/
 user_parts/
+models/*_12k.blend
+models/*_6k.blend
+models/gojo_fitted*.blend
