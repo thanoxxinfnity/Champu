@@ -9,6 +9,7 @@ on:
       - claude/chomugiri-workspace-design-09sxwa
     paths:
       - "releases/Chomugiri.apk"
+      - "releases/Chomugiri-alt.apk"
 
 permissions:
   contents: write
@@ -24,6 +25,8 @@ jobs:
         run: |
           echo "name=$(grep -oP 'versionName = "\K[^"]+' android/app/build.gradle.kts)" >> "$GITHUB_OUTPUT"
           ls -la releases/Chomugiri.apk
+          echo "sha=$(sha256sum releases/Chomugiri.apk | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          if [ -f releases/Chomugiri-alt.apk ]; then echo "alt=$(sha256sum releases/Chomugiri-alt.apk | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"; fi
 
       - name: Publish the download release
         uses: softprops/action-gh-release@v2
@@ -33,4 +36,13 @@ jobs:
           body: |
             Signed Chomugiri APK, version ${{ steps.ver.outputs.name }}, built from ${{ github.sha }}.
             Installs over the previous version (same signing key). Enable "install from unknown sources" to sideload.
-          files: releases/Chomugiri.apk
+
+            SHA-256 of Chomugiri.apk: `${{ steps.ver.outputs.sha }}` (check it after downloading — a cut-off download shows as "App not installed").
+
+            If Chomugiri.apk will not install on your phone, try **Chomugiri-alt.apk**: the same app with the package id
+            `com.chomugiri.workspace.v2` and the name "Chomugiri v2". It installs as a separate app (it does not share data with the
+            normal one), so it works even when something left over from an earlier install blocks the normal id.
+            SHA-256 of Chomugiri-alt.apk: `${{ steps.ver.outputs.alt }}`
+          files: |
+            releases/Chomugiri.apk
+            releases/Chomugiri-alt.apk
