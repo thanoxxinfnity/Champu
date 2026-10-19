@@ -14,6 +14,7 @@ chin_from_top = float(a[3]) if len(a) > 3 else 0.218
 chin_frac = float(a[4]) if len(a) > 4 else 0.82
 body_cut = float(a[5]) if len(a) > 5 else 0.235
 head_cut = float(a[6]) if len(a) > 6 else 0.245
+neck_r = float(a[7]) if len(a) > 7 else 0.0   # >0: remove only a neck-sized column instead of a full-width plane cut
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 
@@ -68,7 +69,19 @@ hcx = (max(v.x for v in hx) + min(v.x for v in hx)) / 2
 hfy = min(v.y for v in hx)
 bfy = min(v.y for v in bx)
 head.data.transform(Matrix.Translation(Vector((bcx - hcx, bfy - hfy, top - ztop(head)))))
-cut(body, top - body_cut, keep_above=False)   # keep the part below the cut
+if neck_r > 0:
+    # keep the shoulders and shirt top; delete only the old head and the column of neck that the new head replaces
+    bm = bmesh.new()
+    bm.from_mesh(body.data)
+    bm.faces.ensure_lookup_table()
+    zc = top - body_cut
+    kill = [f for f in bm.faces if (lambda c: c.z > zc and abs(c.x) < neck_r and abs(c.y - bcy) < neck_r * 1.3 or c.z > top - 0.2)(f.calc_center_median())]
+    bmesh.ops.delete(bm, geom=kill, context='FACES')
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS')
+    bm.to_mesh(body.data)
+    bm.free()
+else:
+    cut(body, top - body_cut, keep_above=False)   # keep the part below the cut
 cut(head, top - head_cut, keep_above=True)    # keep the part above the cut
 for o in (body, head):
     for p in o.data.polygons:
