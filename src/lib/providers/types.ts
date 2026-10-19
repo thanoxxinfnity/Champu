@@ -6,7 +6,7 @@
  * never has to branch on vendor.
  */
 
-export type ProviderId = 'nim' | 'pollinations' | 'custom' | 'antigravity';
+export type ProviderId = 'nim' | 'pollinations' | 'custom';
 
 export type ModelCapability =
   | 'chat'

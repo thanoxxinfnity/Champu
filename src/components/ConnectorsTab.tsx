@@ -1,87 +1,99 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useWorkspace } from '@/lib/store';
-import { parseBridgeInput } from '@/lib/bridge/parse';
-import { startLogin } from '@/lib/antigravity/client';
+import { db, isBrowser, type EndpointRecord } from '@/lib/db/schema';
+import { uid } from '@/lib/db/history';
+import type { CapabilityProbe } from '@/lib/providers/custom';
 
 const inputStyle: React.CSSProperties = { borderColor: 'var(--line)', background: 'var(--surface)', color: 'var(--ink)' };
 const inputClass = 'mono w-full rounded-lg border px-2.5 py-2 text-[11.5px] outline-none placeholder:opacity-40';
 
+const GOOGLE_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const GOOGLE_KEY_PAGE = 'https://aistudio.google.com/apikey';
+const GOOGLE_LABEL = 'Google Gemini';
+
 /**
- * Connectors — other apps whose models Chomugiri can borrow.
+ * Connectors — one-tap setups for providers you already have an account with.
  *
- * Antigravity (through AntiGem): paste the bridge address and its token and every model the signed-in Antigravity account has
- * shows up in the model picker. Chats to those models run inside Antigravity's own agent sandbox, driven from this device.
+ * Google (Gemini): "Get your key" opens Google AI Studio, where you sign in with your Google account and create an API key (free tier
+ * included). Paste the key here, press Connect, and every Gemini model your key can use shows up in the model picker. It uses Google's
+ * documented Gemini API; the key stays on this device and is sent only to Google.
  */
 export function ConnectorsTab() {
-  const ag = useWorkspace((s) => s.antigravity);
-  const connect = useWorkspace((s) => s.connectAntigravity);
-  const disconnect = useWorkspace((s) => s.disconnectAntigravity);
-  const [combined, setCombined] = useState('');
+  const setEndpoints = useWorkspace((s) => s.setEndpoints);
+  const endpoints = useWorkspace((s) => s.endpoints);
+  const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
+  const connected = endpoints.find((e) => e.label === GOOGLE_LABEL && e.baseUrl.includes('generativelanguage.googleapis.com'));
+
+  const reload = useCallback(async () => {
+    if (!isBrowser()) return;
+    const rows = await db().endpoints.toArray().catch(() => [] as EndpointRecord[]);
+    setEndpoints(rows);
+  }, [setEndpoints]);
+
   useEffect(() => {
-    if (ag.config?.bridgeUrl && !combined) setCombined(ag.config.token ? `${ag.config.bridgeUrl}#${ag.config.token}` : ag.config.bridgeUrl);
-  }, [ag.config, combined]);
+    void reload();
+  }, [reload]);
 
-  /** Looks for the AntiGem bridge on this device: its /api/health answers without a token. */
-  const detect = async () => {
-    setNote('Looking for AntiGem on this device…');
-    for (const port of [1234, 8080, 1236, 8081, 1235]) {
-      try {
-        const res = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1500) });
-        if (res.ok) {
-          const { token } = parseBridgeInput(combined);
-          setCombined(`http://127.0.0.1:${port}${token ? `#${token}` : '#'}`);
-          setNote(`✔ Found a bridge on port ${port}. Now paste the token (copy it in AntiGem, then press "Paste token").`);
-          return;
-        }
-      } catch {
-        // not this port
-      }
-    }
-    setNote('No bridge found on this device. Is AntiGem running? Or paste a tunnel address instead.');
-  };
-
-  /** Reads the clipboard: a bare 12-character token is added to the address; a whole address#token replaces the field. */
-  const pasteToken = async () => {
+  const pasteKey = async () => {
     try {
       const text = (await navigator.clipboard.readText()).trim();
       if (!text) {
-        setNote('The clipboard is empty — copy the security token in AntiGem first.');
+        setNote('The clipboard is empty — copy the key on the Google page first.');
         return;
       }
-      if (/^[A-Za-z0-9]{8,16}$/.test(text)) {
-        const { url } = parseBridgeInput(combined);
-        setCombined(`${url || 'http://127.0.0.1:1234'}#${text}`);
-        setNote('✔ Token pasted. Press Connect.');
-      } else {
-        setCombined(text);
-        setNote('✔ Pasted. Press Connect.');
-      }
+      setKey(text);
+      setNote('✔ Pasted. Press Connect.');
     } catch {
       setNote('The browser would not let the app read the clipboard — long-press the box and paste by hand.');
     }
   };
 
-  const [loginUrl, setLoginUrl] = useState('');
-
-  /** Quick access to the Antigravity sign-in: the bridge starts a login, we get the Google sign-in address and open it. */
-  const signIn = async () => {
-    const { url, token } = parseBridgeInput(combined);
-    if (!url || !token) {
-      setNote('First fill the address and token (Find AntiGem → Paste token), then press Sign in.');
+  const connect = async () => {
+    const apiKey = key.trim();
+    if (!apiKey) {
+      setNote('Paste your Google API key first (Get your key → sign in → copy it).');
       return;
     }
     setBusy(true);
-    setNote('Asking AntiGem for the Antigravity sign-in page…');
+    setNote('Asking Google which models this key can use…');
     try {
-      const link = await startLogin({ bridgeUrl: url.replace(/^https:\/\/(127\.0\.0\.1|localhost)/, 'http://$1'), token });
-      setLoginUrl(link);
-      setNote('✔ Sign-in page ready. It opens now — sign in with Google there, come back here and press Connect.');
-      window.open(link, '_blank', 'noopener');
+      const res = await fetch('/api/endpoints/probe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseUrl: GOOGLE_BASE, apiKey, dialect: 'gemini' }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      const probe = (await res.json()) as CapabilityProbe & { error?: string };
+      if (!probe.ok || !probe.models?.length) {
+        setNote(`✘ Google did not accept that key${probe.error ? ` — ${probe.error}` : ''}. Copy it again from AI Studio.`);
+        return;
+      }
+      // Replace an earlier Google connection instead of stacking a second one.
+      if (connected) await db().endpoints.delete(connected.id);
+      const record: EndpointRecord = {
+        id: uid('ep'),
+        label: GOOGLE_LABEL,
+        baseUrl: GOOGLE_BASE,
+        apiKey,
+        headers: {},
+        dialect: 'gemini',
+        capabilities: probe.capabilities.length ? probe.capabilities : ['chat'],
+        models: probe.models.map((m) => ({ id: m.id, label: m.label, capabilities: m.capabilities })),
+        routes: probe.routes ?? [],
+        lastProbedAt: Date.now(),
+        probeOk: 1,
+        enabled: 1,
+        createdAt: Date.now(),
+      };
+      await db().endpoints.put(record);
+      await reload();
+      setKey('');
+      setNote(`✔ Connected — ${record.models.length} Google models added to the model picker.`);
     } catch (err) {
       setNote(`✘ ${(err as Error).message}`);
     } finally {
@@ -89,52 +101,59 @@ export function ConnectorsTab() {
     }
   };
 
-  const run = async () => {
-    const { url, token } = parseBridgeInput(combined);
-    if (!url) {
-      setNote('Paste the AntiGem bridge address first, like http://127.0.0.1:1234#YOURTOKEN');
-      return;
-    }
-    setBusy(true);
-    setNote(null);
-    try {
-      const n = await connect({ bridgeUrl: url.replace(/^https:\/\/(127\.0\.0\.1|localhost)/, 'http://$1'), token });
-      setNote(`✔ Connected — ${n} Antigravity model${n === 1 ? '' : 's'} added to the picker.`);
-    } catch (err) {
-      setNote(`✘ ${(err as Error).message}`);
-    } finally {
-      setBusy(false);
-    }
+  const disconnect = async () => {
+    if (!connected) return;
+    await db().endpoints.delete(connected.id);
+    await reload();
+    setNote('Disconnected. The key was removed from this device.');
   };
 
   return (
     <div className="space-y-4">
       <div className="rounded-lg border p-3" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
         <div className="flex items-center gap-2">
-          <h3 className="text-[13px] font-semibold tracking-tight">Antigravity</h3>
-          <span className="mono rounded px-1.5 py-0.5 text-[9.5px] uppercase tracking-wider" style={{ background: 'color-mix(in oklab, var(--accent) 14%, transparent)', color: 'var(--accent)' }}>
-            experimental
-          </span>
-          <span className="mono ml-auto text-[10.5px]" style={{ color: ag.connected ? 'var(--accent)' : 'var(--ink-faint)' }}>
-            {ag.connected ? `● connected · ${ag.models.length} models` : '○ not connected'}
+          <h3 className="text-[13px] font-semibold tracking-tight">Google · Gemini</h3>
+          <span className="mono ml-auto text-[10.5px]" style={{ color: connected ? 'var(--accent)' : 'var(--ink-faint)' }}>
+            {connected ? `● connected · ${connected.models.length} models` : '○ not connected'}
           </span>
         </div>
         <p className="mt-2 text-[11.5px] leading-[1.55]" style={{ color: 'var(--ink-dim)' }}>
-          Uses your own <strong>AntiGem</strong> app (github.com/Santoshkurmi/antigem). Start it, sign in to Antigravity there, press <em>Find AntiGem</em>, copy the security token in AntiGem and press <em>Paste token</em>, then press <em>Sign in to Antigravity</em> — it opens the Google sign-in page for you. Every Antigravity model then appears in the model picker, and those chats run in
-          Antigravity&rsquo;s own agent sandbox — nothing is sent through our servers.
+          Sign in with your Google account, get a key, paste it here — then every Gemini model your key can use appears in the model picker.
+          The key stays on this device and is sent only to Google.
         </p>
 
+        <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-[11.5px] leading-[1.55]" style={{ color: 'var(--ink-dim)' }}>
+          <li>Press <em>Get your key</em> — Google AI Studio opens.</li>
+          <li>Sign in with Google, press <em>Create API key</em>, copy it.</li>
+          <li>Come back, press <em>Paste key</em>, then <em>Connect</em>.</li>
+        </ol>
+
         <div className="mt-3 space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <a
+              href={GOOGLE_KEY_PAGE}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="press mono rounded-lg px-3 py-1.5 text-[11px] font-medium"
+              style={{ background: 'var(--accent)', color: 'var(--accent-ink, #000)' }}
+            >
+              Get your key ↗
+            </a>
+            <button type="button" onClick={() => void pasteKey()} className="press mono rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>
+              Paste key
+            </button>
+          </div>
           <label className="block">
             <span className="mono block text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-faint)' }}>
-              AntiGem bridge — address#token
+              Google API key
             </span>
             <input
               className={`${inputClass} mt-1`}
               style={inputStyle}
-              value={combined}
-              onChange={(e) => setCombined(e.target.value)}
-              placeholder="http://127.0.0.1:1234#abc123def456"
+              type="password"
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              placeholder="AIza…"
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
@@ -144,48 +163,30 @@ export function ConnectorsTab() {
             <button
               type="button"
               disabled={busy}
-              onClick={() => void run()}
+              onClick={() => void connect()}
               className="press mono rounded-lg px-3 py-1.5 text-[11px] font-medium"
               style={{ background: 'var(--accent)', color: 'var(--accent-ink, #000)', opacity: busy ? 0.6 : 1 }}
             >
-              {busy ? 'connecting…' : ag.connected ? 'Reconnect' : 'Connect'}
+              {busy ? 'connecting…' : connected ? 'Reconnect' : 'Connect'}
             </button>
-            <button type="button" onClick={() => void detect()} className="press mono rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>
-              Find AntiGem
-            </button>
-            <button type="button" disabled={busy} onClick={() => void signIn()} className="press mono rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
-              Sign in to Antigravity
-            </button>
-            <button type="button" onClick={() => void pasteToken()} className="press mono rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>
-              Paste token
-            </button>
-            {ag.connected && (
-              <button type="button" onClick={() => { disconnect(); setNote(null); }} className="press mono rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>
+            {connected && (
+              <button type="button" onClick={() => void disconnect()} className="press mono rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>
                 Disconnect
               </button>
             )}
           </div>
-          {loginUrl && (
-            <p className="text-[10.5px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
-              If the page did not open:{' '}
-              <a href={loginUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>open the sign-in page</a>
-              {' · '}
-              <button type="button" className="underline" onClick={() => void navigator.clipboard?.writeText(loginUrl)}>copy link</button>
-            </p>
-          )}
-          {(note || ag.error) && (
-            <p className="text-[11px] leading-[1.5]" style={{ color: (note ?? ag.error).startsWith('✔') ? 'var(--accent)' : 'var(--ink-dim)' }}>
-              {note ?? ag.error}
+          {note && (
+            <p className="text-[11px] leading-[1.5]" style={{ color: note.startsWith('✔') ? 'var(--accent)' : 'var(--ink-dim)' }}>
+              {note}
             </p>
           )}
         </div>
 
-        {ag.connected && ag.models.length > 0 && (
+        {connected && connected.models.length > 0 && (
           <ul className="mt-3 grid grid-cols-1 gap-1 sm:grid-cols-2">
-            {ag.models.map((m) => (
-              <li key={m.id} className="mono truncate rounded border px-2 py-1 text-[10.5px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }} title={m.note}>
-                {m.label.replace('Antigravity · ', '')}
-                {m.emitsReasoning ? ' · thinking' : ''}
+            {connected.models.slice(0, 40).map((m) => (
+              <li key={m.id} className="mono truncate rounded border px-2 py-1 text-[10.5px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }} title={m.id}>
+                {m.label || m.id}
               </li>
             ))}
           </ul>
@@ -193,9 +194,8 @@ export function ConnectorsTab() {
       </div>
 
       <div className="rounded-lg border p-3 text-[10.5px] leading-[1.55]" style={{ borderColor: 'var(--line)', color: 'var(--ink-faint)' }}>
-        <strong style={{ color: 'var(--ink-dim)' }}>Honest status:</strong> this connector speaks the same hub protocol AntiGem uses, but it has only been tested against
-        a stand-in hub, not a live Antigravity daemon. If a step fails, the message above says which call the hub rejected — send that and it can be fixed quickly. It
-        needs the bridge reachable from this device (same phone, same Wi-Fi, or a tunnel). Browsers only let the app call the hub if the hub allows cross-origin requests; if the message says the request was blocked, that is the cause and a small proxy is the fix.
+        This uses Google&rsquo;s official Gemini API (the key from AI Studio, free tier included). It is a normal custom endpoint, so you can also see and edit it under
+        Custom Endpoints. Anthropic and OpenAI-style providers work the same way there.
       </div>
     </div>
   );

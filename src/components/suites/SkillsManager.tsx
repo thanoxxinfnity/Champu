@@ -1,6 +1,5 @@
 'use client';
 
-import { chatFetch } from '@/lib/antigravity/state';
 import { useCallback, useEffect, useState } from 'react';
 import { withKeys } from '@/lib/keys';
 import { db, isBrowser, type SkillRecord } from '@/lib/db/schema';
@@ -203,7 +202,7 @@ export function SkillsManager() {
 
       // No timeout at all meant a stalled provider hung the "generating"
       // state forever.
-      const res = await chatFetch('/api/chat', withKeys({
+      const res = await fetch('/api/chat', withKeys({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

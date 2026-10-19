@@ -12,8 +12,6 @@ import { getSetting, setSetting } from '@/lib/db/history';
 import { keyHeaders, loadKeys, loadVercel, saveVercel } from '@/lib/keys';
 import { updateRunProgress } from '@/lib/shell/run-state';
 import { endpointModels } from '@/lib/providers/endpoint-models';
-import { connect as agConnect, listModels as agListModels, type AgConfig } from '@/lib/antigravity/client';
-import { setAg } from '@/lib/antigravity/state';
 
 /**
  * Workspace state.
@@ -238,11 +236,6 @@ interface WorkspaceState {
   loadModels: (force?: boolean) => Promise<void>;
   setSelection: (selection: ModelSelection) => void;
 
-  // ── Antigravity connector (experimental) ─────────────────────────────────
-  antigravity: { config: AgConfig | null; enabled: boolean; connected: boolean; error: string; models: ModelDescriptor[] };
-  /** Saves the connection, (re)connects to the hub and puts its models in the switcher. Resolves with the model count. */
-  connectAntigravity: (cfg: AgConfig) => Promise<number>;
-  disconnectAntigravity: () => void;
   // ── Custom endpoints ──────────────────────────────────────────────────────
   endpoints: EndpointRecord[];
   setEndpoints: (endpoints: EndpointRecord[]) => void;
@@ -448,7 +441,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
       // The catalogue is server-side and knows nothing about custom endpoints,
       // which live on the device — so they are added back on every reload.
-      const withCustom = [...models, ...endpointModels(get().endpoints), ...get().antigravity.models];
+      const withCustom = [...models, ...endpointModels(get().endpoints)];
       set({ models: withCustom, modelWarnings: data.warnings ?? [] });
 
       // If the persisted selection no longer exists, fall back to something real
@@ -481,37 +474,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     void setSetting('selection', selection);
   },
 
-  antigravity: { config: null, enabled: false, connected: false, error: '', models: [] },
-  connectAntigravity: async (cfg) => {
-    const clean: AgConfig = { bridgeUrl: cfg.bridgeUrl.trim(), token: cfg.token.trim(), hubUrl: cfg.hubUrl?.trim() || undefined };
-    set((s) => ({ antigravity: { ...s.antigravity, config: clean, error: '' } }));
-    try {
-      const live = await agConnect(clean);
-      const { descriptors, map } = await agListModels(live);
-      setAg({ config: live, enabled: true, models: map });
-      set((s) => ({
-        antigravity: { config: live, enabled: true, connected: true, error: '', models: descriptors },
-        models: [...s.models.filter((m) => m.provider !== 'antigravity'), ...descriptors],
-      }));
-      void setSetting('antigravity', { bridgeUrl: clean.bridgeUrl, token: clean.token, hubUrl: clean.hubUrl ?? null, enabled: true });
-      return descriptors.length;
-    } catch (err) {
-      setAg({ config: null, enabled: false, models: {} });
-      set((s) => ({ antigravity: { ...s.antigravity, connected: false, enabled: false, error: (err as Error).message, models: [] }, models: s.models.filter((m) => m.provider !== 'antigravity') }));
-      throw err;
-    }
-  },
-  disconnectAntigravity: () => {
-    setAg({ config: null, enabled: false, models: {} });
-    set((s) => ({
-      antigravity: { config: s.antigravity.config, enabled: false, connected: false, error: '', models: [] },
-      models: s.models.filter((m) => m.provider !== 'antigravity'),
-    }));
-    const c = get().antigravity.config;
-    void setSetting('antigravity', c ? { bridgeUrl: c.bridgeUrl, token: c.token, hubUrl: c.hubUrl ?? null, enabled: false } : null);
-    // A selection that pointed at an Antigravity model falls back to the first real one on the next catalogue load.
-    if (get().selection.provider === 'antigravity') void get().loadModels(true);
-  },
   endpoints: [],
   capabilityTabs: [],
   mediaHidden: [],
@@ -875,11 +837,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     get().startHeartbeat();
     await get().loadModels();
 
-    // Antigravity comes back on its own when it was connected last time; a hub that is not up yet just shows as disconnected.
-    const ag = await getSetting<{ bridgeUrl: string; token: string; hubUrl: string | null; enabled: boolean } | null>('antigravity', null);
-    if (ag?.bridgeUrl) {
-      set((s) => ({ antigravity: { ...s.antigravity, config: { bridgeUrl: ag.bridgeUrl, token: ag.token, hubUrl: ag.hubUrl ?? undefined } } }));
-      if (ag.enabled) void get().connectAntigravity({ bridgeUrl: ag.bridgeUrl, token: ag.token }).catch(() => undefined);
-    }
+    // Clears a setting written by an earlier build; nothing reads it any more.
+    void setSetting('antigravity', null);
   },
 }));

@@ -1,6 +1,5 @@
 'use client';
 
-import { chatFetch } from '@/lib/antigravity/state';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useWorkspace } from '@/lib/store';
 import { withKeys } from '@/lib/keys';
@@ -103,7 +102,7 @@ export function CanvasBoard() {
 
   // ── Model ─────────────────────────────────────────────────────────────────
   const ask = async (system: string, user: string): Promise<string> => {
-    const res = await chatFetch('/api/chat', withKeys({
+    const res = await fetch('/api/chat', withKeys({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
