@@ -34,15 +34,13 @@ jobs:
           tag_name: chomugiri-latest
           name: Chomugiri v${{ steps.ver.outputs.name }} (latest)
           body: |
-            Signed Chomugiri APK, version ${{ steps.ver.outputs.name }}, built from ${{ github.sha }}.
-            Installs over the previous version (same signing key). Enable "install from unknown sources" to sideload.
+            **Install `Chomugiri.apk` — that is the real app** (version ${{ steps.ver.outputs.name }}, built from ${{ github.sha }}).
+            It updates an existing Chomugiri in place (same signing key). Enable "install from unknown sources" to sideload.
+            SHA-256: `${{ steps.ver.outputs.sha }}` — compare it after downloading; a cut-off download shows as "App not installed".
 
-            SHA-256 of Chomugiri.apk: `${{ steps.ver.outputs.sha }}` (check it after downloading — a cut-off download shows as "App not installed").
-
-            If Chomugiri.apk will not install on your phone, try **Chomugiri-alt.apk**: the same app with the package id
-            `com.chomugiri.workspace.v2` and the name "Chomugiri v2". It installs as a separate app (it does not share data with the
-            normal one), so it works even when something left over from an earlier install blocks the normal id.
-            SHA-256 of Chomugiri-alt.apk: `${{ steps.ver.outputs.alt }}`
+            `Chomugiri-alt.apk` is a **spare (ignore it unless needed), only for when Chomugiri.apk refuses to install**: the same app under another
+            package id (`com.chomugiri.workspace.v2`, shown as "Chomugiri v2"). It is a separate app and does not share chats with the real one.
+            SHA-256: `${{ steps.ver.outputs.alt }}`
           files: |
             releases/Chomugiri.apk
             releases/Chomugiri-alt.apk
