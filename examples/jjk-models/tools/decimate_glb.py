@@ -2,7 +2,7 @@
 
 Every mesh is collapse-decimated in proportion to its share of the triangles (keeping UVs and materials), normals are smoothed, and the
 textures are downscaled to max_tex (default 1024) before export, so the file stays small enough to ship in an APK."""
-import bpy, sys
+import bpy, bmesh, sys
 
 a = sys.argv[sys.argv.index('--') + 1:]
 src, dst, target = a[0], a[1], int(a[2])
@@ -14,6 +14,14 @@ total = sum(len(o.data.polygons) for o in meshes)
 ratio = min(1.0, target / max(1, total))
 print('DECIMATE', len(meshes), 'meshes', total, '->', int(total * ratio))
 for o in meshes:
+    # many generated meshes arrive as unwelded triangle soup; weld first or the collapse leaves cracks everywhere
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    before = len(bm.verts)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=float(__import__('os').environ.get('WELD', 2e-5)))
+    print('WELD', o.name, before, '->', len(bm.verts))
+    bm.to_mesh(o.data)
+    bm.free()
     n = len(o.data.polygons)
     if n * ratio >= n:
         continue

@@ -1,0 +1,10 @@
+{"head": "head", "arm_min_z": 0.3,
+ "frac": {"shoulder_x": 0.11, "shoulder_z": 0.80, "tip_z": 0.5, "elbow_at": 0.5, "hand_frac": 0.2, "hip_x": 0.075},
+ "garments": {
+  "undershirt": {"bones": ["hips","spine","chest","neck","shoulderL","shoulderR","upperarmL","upperarmR"]},
+  "gi": {"bones": ["hips","spine","chest","neck","shoulderL","shoulderR","upperarmL","upperarmR"], "hem": {"n": 6, "frac": 0.22, "k": 2}},
+  "obi": {"bones": ["hips","spine"], "tails": 2},
+  "hakama": {"bones": ["hips","spine","thighL","thighR","shinL","shinR","footL","footR"], "hem": {"n": 6, "frac": 0.30, "k": 2, "split_x": true}},
+  "tabi": {"bones": ["shinL","shinR","footL","footR","toeL","toeR"]},
+  "geta": {"bones": ["footL","footR","toeL","toeR"]}
+ }}

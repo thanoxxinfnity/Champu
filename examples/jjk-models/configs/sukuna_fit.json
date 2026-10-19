@@ -1,0 +1,83 @@
+{
+ "garments": {
+  "undershirt": {
+   "file": "raw/suk_undershirt.glb",
+   "scale": 0.36,
+   "z": 0.365,
+   "solidify": 0.005,
+   "auto_y": [
+    0.0,
+    0.6
+   ],
+   "smooth": [
+    0.8,
+    6
+   ]
+  },
+  "gi": {
+   "file": "raw/suk_gi.glb",
+   "scale": 0.365,
+   "z": 0.325,
+   "solidify": 0.006,
+   "tint": [
+    1.3,
+    1.3,
+    1.3
+   ],
+   "auto_y": [
+    0.0,
+    0.6
+   ],
+   "smooth": [
+    0.9,
+    10
+   ]
+  },
+  "obi": {
+   "file": "raw/suk_obi.glb",
+   "scale": 0.215,
+   "z": 0.0,
+   "auto_y": [
+    0.0,
+    0.6
+   ]
+  },
+  "hakama": {
+   "file": "raw/suk_hakama.glb",
+   "scale": 0.5,
+   "z": -0.4,
+   "solidify": 0.006,
+   "tint": [
+    1.3,
+    1.3,
+    1.3
+   ],
+   "auto_y": [
+    0.0,
+    0.6
+   ],
+   "smooth": [
+    0.9,
+    10
+   ]
+  },
+  "tabi": {
+   "file": "raw/suk_tabi.glb",
+   "scale": 0.19,
+   "z": -0.81,
+   "tint": [
+    1.3,
+    1.3,
+    1.3
+   ],
+   "split_lr": true
+  },
+  "geta": {
+   "file": "raw/suk_geta.glb",
+   "scale": 0.17,
+   "z": -0.985,
+   "rot_x": 90,
+   "split_lr": true
+  }
+ }
+}

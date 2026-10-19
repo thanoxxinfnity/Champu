@@ -82,6 +82,13 @@ def drop_far_islands(obj, max_ax=0.42):
 
 
 drop_far_islands(bpy.data.objects['gojo_top'])
+# give the cloth a little thickness so open edges (collar, sleeves) are not paper-thin / hollow when seen from inside
+for o in [bpy.data.objects['gojo_top'], bpy.data.objects['gojo_pants']]:
+    bpy.context.view_layer.objects.active = o
+    m = o.modifiers.new('thick', 'SOLIDIFY')
+    m.thickness = 0.006
+    m.offset = 0.0
+    bpy.ops.object.modifier_apply(modifier='thick')
 
 # ── bend the top's sleeves from T-pose down to the body's A-pose ────────────────
 top = bpy.data.objects['gojo_top']
