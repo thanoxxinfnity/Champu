@@ -122,6 +122,37 @@ def tail_chains(gname, obj, count, k):
         sway_of.setdefault(gname, []).append(nm)
 
 
+def region_chains(rname, obj, z0, z1, n, k, split_x=False, front_only=False, xmax=9.0):
+    # sway chains for cloth that is part of the body mesh (single-mesh models): vertices in a height band, grouped around the limb
+    pts = [(obj.matrix_world @ v.co) for v in obj.data.vertices]
+    cy0 = sum(p.y for p in pts) / len(pts)
+    sel = [p for p in pts if z0 <= p.z <= z1 and abs(p.x) <= xmax and (not front_only or p.y < cy0 - 0.02)]
+    groups = {}
+    for p in sel:
+        groups.setdefault(('L' if p.x > 0 else 'R') if split_x else '', []).append(p)
+    for key, g in groups.items():
+        cx = sum(p.x for p in g) / len(g)
+        cy = sum(p.y for p in g) / len(g)
+        buckets = [[] for _ in range(n)]
+        for p in g:
+            ang = (math.atan2(p.y - cy, p.x - cx) + math.tau) % math.tau
+            buckets[int(ang / math.tau * n) % n].append(p)
+        for i, b in enumerate(buckets):
+            if len(b) < 4:
+                continue
+            mx = sum(p.x for p in b) / len(b)
+            my = sum(p.y for p in b) / len(b)
+            top = Vector((mx, my, z1 - (z1 - z0) * 0.55))
+            bot = Vector((mx, my, min(p.z for p in b)))
+            chain = [top.lerp(bot, j / k) for j in range(k + 1)]
+            nm = f'sway_{rname}{key}{i}_'
+            sway[nm] = (chain, nearest_base(top))
+            sway_of.setdefault('body', []).append(nm)
+
+
+for r in cfg.get('body_sway', []):
+    region_chains(r['name'], body, r['z0'], r['z1'], r['n'], r['k'], r.get('split_x', False), r.get('front_only', False), r.get('xmax', 9.0))
+
 for gname, gcfg in cfg['garments'].items():
     for oname, o in garments.items():
         if oname.rstrip('LR') != gname and oname != gname:
@@ -153,7 +184,7 @@ def weight(obj, allowed, power=3.0):
     obj.parent = arm
 
 
-weight(body, all_bones)
+weight(body, all_bones)   # distance weights over every bone, sway bones included
 rs.rigid(head, arm, 'head')
 head.vertex_groups['head'].add([v.index for v in head.data.vertices], 1.0, 'REPLACE')
 for oname, o in garments.items():
