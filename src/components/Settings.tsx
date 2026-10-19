@@ -1,7 +1,6 @@
 'use client';
 
 import { VoiceTab } from './VoiceTab';
-import { ConnectorsTab } from './ConnectorsTab';
 
 import { useCallback, useEffect, useState } from 'react';
 import { DIALECT_LABELS, dialectFromUrl, type Dialect } from '@/lib/providers/dialects';
@@ -16,7 +15,7 @@ import { isShellHosted, loadKeys, maskKey, nimConfigured, saveKeys, validateNimK
 import { normalizeBase } from '@/lib/providers/model-list';
 import { parseBridgeInput } from '@/lib/bridge/parse';
 
-type Tab = 'guide' | 'keys' | 'connectors' | 'bridge' | 'secrets' | 'endpoints' | 'media' | 'deploy' | 'drive' | 'voice' | 'guard';
+type Tab = 'guide' | 'keys' | 'bridge' | 'secrets' | 'endpoints' | 'media' | 'deploy' | 'drive' | 'voice' | 'guard';
 
 function Field({
   label,
@@ -2018,7 +2017,6 @@ function ImageModelField() {
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'guide', label: 'Setup Guide' },
   { id: 'keys', label: 'API Keys' },
-  { id: 'connectors', label: 'Connectors' },
   { id: 'bridge', label: 'Terminal Bridge' },
   { id: 'secrets', label: 'Secrets' },
   { id: 'endpoints', label: 'Custom Endpoints' },
@@ -2084,7 +2082,6 @@ export function Settings({ open, onClose }: { open: boolean; onClose: () => void
         <div className="flex-1 overflow-y-auto p-4">
           {tab === 'guide' && <GuideTab />}
           {tab === 'keys' && <KeysTab />}
-          {tab === 'connectors' && <ConnectorsTab />}
           {tab === 'bridge' && <BridgeTab />}
           {tab === 'secrets' && <SecretsTab />}
           {tab === 'endpoints' && <EndpointsTab />}
