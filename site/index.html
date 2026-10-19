@@ -153,6 +153,7 @@
           <li><strong>Light, dark, or auto</strong> — a hand-drawn paper look in both, with fonts built into the app so it looks the same offline.</li>
           <li><strong>Drafts</strong>, a <strong>/</strong> command palette, your own custom skills, and image or file attachments.</li>
           <li><strong>Runs in the background</strong> — put the app away and a long build keeps going.</li>
+          <li><strong>Antigravity connector (experimental)</strong> — Settings → Connectors: connect your own <a href="https://github.com/Santoshkurmi/antigem" rel="noopener">AntiGem</a> bridge and the models of your Antigravity account appear in the model picker. Everything runs between your phone and your own device; nothing goes through our servers. Tested against a stand-in hub so far, not yet against a live Antigravity daemon.</li>
           <li><strong>Back up to your own Google Drive</strong> — off by default; connect it and flip one switch in Settings and every image, video, audio clip and 3D model you generate is also saved to a <code>Chomugiri</code> folder in your own Drive, under your own account, with the narrowest access Google offers (it can only see files it made itself).</li>
         </ul>
 
@@ -170,6 +171,7 @@
           <details class="fix">
             <summary>It says “App not installed”?</summary>
             <p>Android only installs an update over an app that was signed with the <em>same key</em>. Very early test builds of Chomugiri used a different key, so if your phone still has one of those, Android refuses. Open Settings → Apps → Chomugiri → Uninstall, then install again (export anything you want to keep first — chats live on the phone). Also check that you have about 100 MB of free space.</p>
+            <p>Still “App not installed”? A download that stopped early looks the same, so compare the file with the release page’s SHA-256, and check Settings → Dual apps / Second Space for a leftover copy. As a way round it, install <a href="https://github.com/thanoxxinfnity/Champu/releases/download/chomugiri-latest/Chomugiri-alt.apk" rel="noopener"><code>Chomugiri-alt.apk</code></a> — the same app and the same signing key under a different package id (<code>com.chomugiri.workspace.v2</code>, shown as “Chomugiri v2”). It installs as a separate app, so it does not carry over the chats of the normal one.</p>
           </details>
         </div>
       </div>
