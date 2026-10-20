@@ -15,12 +15,9 @@ cam = bpy.data.objects.new('c', bpy.data.cameras.new('c')); bpy.context.scene.co
 cam.data.type = 'ORTHO'; cam.data.ortho_scale = 0.38
 cam.location = (hand.x + 0.06, hand.y - 5, hand.z + 0.02); cam.rotation_euler = (math.pi / 2, 0, 0)
 sc = bpy.context.scene; sc.render.engine = 'BLENDER_EEVEE_NEXT'; sc.render.resolution_x = 520; sc.render.resolution_y = 420
-def pose(curl):
-    for pb in arm.pose.bones:
-        pb.rotation_mode = 'XYZ'; pb.rotation_euler = (0, 0, 0)
-    for n in fing:
-        pb = arm.pose.bones[n]
-        pb.rotation_euler = Euler((math.radians(-curl if not n.startswith('thumb') else -curl * 0.5), 0, 0))
-for tag, c in (('open', 0), ('half', 40), ('fist', 85)):
-    pose(c)
+sys.path.insert(0, __import__('os').path.dirname(__import__('os').path.abspath(__file__)))
+import hand_pose
+for tag, nm in (('open', 'open'), ('half', 'guard'), ('fist', 'fist')):
+    hand_pose.clear_pose(arm)
+    hand_pose.pose_hand(arm, 'L', nm)
     sc.render.filepath = f'/tmp/cm/_h_{tag}.png'; bpy.ops.render.render(write_still=True)
