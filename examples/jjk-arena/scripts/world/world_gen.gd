@@ -34,8 +34,7 @@ static func height(x: float, z: float) -> float:
 	var m := smoothstep(2000.0, 2750.0, r)
 	h += m * (60.0 + 420.0 * pow(absf(_ridge.get_noise_2d(x, z)), 0.8) * 2.0)
 	var d := Vector2(x, z).distance_to(LAKE_C)
-	h -= (1.0 - smoothstep(LAKE_R * 0.5, LAKE_R * 1.25, d)) * 9.0
-	return h
+	return lerpf(h, -9.0, 1.0 - smoothstep(LAKE_R * 0.5, LAKE_R * 1.25, d))
 
 static func in_city(x: float, z: float) -> bool:
 	return radius(x, z) < 1750.0 and Vector2(x, z).distance_to(LAKE_C) > LAKE_R * 1.3

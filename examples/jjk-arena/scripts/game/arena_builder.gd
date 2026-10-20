@@ -33,6 +33,7 @@ static func prop(path: String, size: float, by_width := false) -> Node3D:
 	var ref := maxf(b.size.x, b.size.z) if by_width else b.size.y
 	var k := size / maxf(ref, 0.0001)
 	holder.set_meta("height", b.size.y * k)
+	holder.set_meta("width", clampf(maxf(b.size.x, b.size.z) * k, 4.0, 40.0))
 	inst.scale = Vector3.ONE * k
 	var c := b.get_center()
 	inst.position = Vector3(-c.x * k, -b.position.y * k, -c.z * k)

@@ -16,10 +16,10 @@ func _init() -> void:
 	var b: Node3D = world.get_tree().get_nodes_in_group("buildings")[0]
 	var p := b.global_position
 	var out := (Vector3(p.x, 0, p.z)).normalized()
-	cam.global_position = p - out * 42.0 + Vector3(0, 9, 0)
+	cam.global_position = p - out * 34.0 + Vector3(0, 6, 0)
 	cam.look_at(p + Vector3(0, 10, 0))
 	BuildingCollapse.run(b, dm, world, 1.0, RandomNumberGenerator.new())
-	var marks := [0.8, 2.0, 3.6, 7.0, 20.0, 34.0]
+	var marks := [1.2, 2.2, 3.4, 5.0, 9.0, 26.0]
 	var t := 0.0
 	var i := 0
 	while i < marks.size():

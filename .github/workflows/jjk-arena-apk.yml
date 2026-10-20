@@ -81,6 +81,12 @@ jobs:
           godot --headless --fixed-fps 60 -s tests/rig_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
           grep -q 'ALL OK' /tmp/out.txt
 
+      - name: "Open world: layout, streaming, collision"
+        timeout-minutes: 8
+        run: |
+          godot --headless --fixed-fps 60 -s tests/world_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+
       - name: Give this build a higher version number than the last
         run: |
           sed -i "s/^version\/code=.*/version\/code=$((1000 + GITHUB_RUN_NUMBER))/" export_presets.cfg

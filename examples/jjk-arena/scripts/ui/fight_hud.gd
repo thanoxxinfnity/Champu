@@ -18,6 +18,7 @@ var _shown := [100.0, 100.0]
 var _flash := [0.0, 0.0]
 var _last := [100.0, 100.0]
 var _t := 0.0
+var open_world := false     ## no round timer or round pips in the open world
 
 func _ready() -> void:
 	layer = 15
@@ -96,6 +97,7 @@ func _process(delta: float) -> void:
 		_shown[i] = lerpf(_shown[i], hp[i], clampf(18.0 * delta, 0.0, 1.0))
 		_trail[i] = hp[i] if hp[i] > _trail[i] else move_toward(_trail[i], hp[i], 22.0 * delta)
 		_flash[i] = maxf(0.0, _flash[i] - delta)
+	_timer.visible = not open_world
 	_timer.text = str(maxi(0, int(ceil(match_ctl.time_left))))
 	_bars.queue_redraw()
 
@@ -149,8 +151,10 @@ func _draw_bars() -> void:
 			_bars.draw_string(ThemeDB.fallback_font, Vector2(fx, ey + 10.0), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 1, 1, 0.6 + 0.4 * sin(_t * 8.0)))
 		# round pips
 		var wins: int = match_ctl.wins.get(fs[i], 0)
-		for r in match_ctl.rounds_to_win:
+		for r in (0 if open_world else match_ctl.rounds_to_win):
 			var px := (x1 - dir * (14.0 + r * 18.0))
 			_bars.draw_circle(Vector2(px, y + h + 18.0), 6.0, UiKit.ACCENT if r < wins else Color(1, 1, 1, 0.25))
 	# timer plate
+	if open_world:
+		return
 	_bars.draw_colored_polygon(PackedVector2Array([Vector2(mid - 50, 8), Vector2(mid + 50, 8), Vector2(mid + 38, 62), Vector2(mid - 38, 62)]), Color(0, 0, 0, 0.6))

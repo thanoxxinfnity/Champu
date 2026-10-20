@@ -27,11 +27,11 @@ func _ready() -> void:
 	for i in 4:
 		var m := StandardMaterial3D.new()
 		m.albedo_texture = tex
-		m.albedo_color = [Color(0.75, 0.78, 0.85), Color(0.8, 0.7, 0.62), Color(0.62, 0.68, 0.74), Color(0.7, 0.72, 0.7)][i]
+		m.albedo_color = [Color(0.55, 0.58, 0.64), Color(0.62, 0.52, 0.45), Color(0.42, 0.48, 0.55), Color(0.5, 0.5, 0.48)][i]
 		m.emission_enabled = true
 		m.emission_texture = emi
 		m.emission = Color(1.0, 0.82, 0.5)
-		m.emission_energy_multiplier = 1.1
+		m.emission_energy_multiplier = 0.3
 		m.uv1_triplanar = true
 		m.uv1_world_triplanar = true
 		m.uv1_scale = Vector3.ONE / 22.0
@@ -208,6 +208,7 @@ func _building(b: Dictionary) -> Node3D:
 	var s: Vector3 = b["size"]
 	holder.position = p
 	holder.set_meta("height", s.y)
+	holder.set_meta("width", maxf(s.x, s.z))
 	holder.add_to_group("buildings")
 	var m := MeshInstance3D.new()
 	var box := BoxMesh.new()

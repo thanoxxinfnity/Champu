@@ -41,9 +41,13 @@ func _init() -> void:
 	# collision
 	wm.update(Vector3.ZERO)
 	wm.build_all_now()
-	var b0: Node3D = near[0]
+	await process_frame
+	var fresh := root.get_tree().get_nodes_in_group("buildings").filter(func(n): return is_instance_valid(n) and not n.is_queued_for_deletion())
+	ok(fresh.size() > 0, "buildings are back after returning downtown")
+	var b0: Node3D = fresh[0]
 	var inside := b0.global_position + Vector3(0, 1, 0)
 	var pushed := wm.resolve(inside)
-	ok(Vector2(pushed.x, pushed.z).distance_to(Vector2(inside.x, inside.z)) > 0.1 or near.size() > 0, "footprints push a walker out")
+	ok(Vector2(pushed.x, pushed.z).distance_to(Vector2(inside.x, inside.z)) > 0.1, "footprints push a walker out of a building")
+	ok(is_equal_approx(wm.ground(0, 0), WorldGen.height(0, 0)), "fighters stand on the generated ground")
 	print("ALL OK" if fails == 0 else "FAILED %d" % fails)
 	quit(1 if fails else 0)

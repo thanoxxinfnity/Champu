@@ -22,6 +22,8 @@ var _void: InfiniteVoidManager
 var _shrine: ShrineDomain
 var _env: Environment
 var _impact: ImpactFx
+var _open := false
+var _map: WorldMap
 var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
@@ -30,6 +32,8 @@ func _ready() -> void:
 		_args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 	if _args.has("graphics"):
 		_mode = GraphicsSettings.mode_names().find(_args["graphics"]) as GraphicsSettings.Mode
+	if _args.has("open"):
+		_open = true
 	if _args.has("autostart"):
 		_pick = _args["autostart"]
 		_begin_loading()
@@ -86,8 +90,10 @@ func _show_menu() -> void:
 	var fight := UiKit.button("FIGHT", Vector2(0, 62), 26)
 	fight.pressed.connect(_begin_loading)
 	col.add_child(fight)
-	var ow := UiKit.button("OPEN WORLD  (coming next)", Vector2(0, 46), 16)
-	ow.disabled = true
+	var ow := UiKit.button("OPEN WORLD", Vector2(0, 56), 22)
+	ow.pressed.connect(func():
+		_open = true
+		_begin_loading())
 	col.add_child(ow)
 
 # ---------------------------------------------------------------- loading
@@ -132,9 +138,16 @@ func _make_fighter(id: String, at: Vector3, tag: String) -> Fighter:
 
 func _start_fight() -> void:
 	var enemy_id := "sukuna" if _pick != "sukuna" else "gojo_open"
-	var built := ArenaBuilder.build(_mode != GraphicsSettings.Mode.LOW)
+	var built: Dictionary
+	if _open:
+		built = _build_open_world()
+	else:
+		built = ArenaBuilder.build(_mode != GraphicsSettings.Mode.LOW)
 	_world = built["root"]
 	add_child(_world)
+	if _open:
+		_map.update(Vector3.ZERO)
+		_map.build_all_now()
 	_fight_nodes.append(_world)
 	_dm = DestructionManager.new()
 	_world.add_child(_dm)
@@ -162,10 +175,18 @@ func _start_fight() -> void:
 	add_child(ai)
 	_fight_nodes.append(ai)
 	var mc := MatchController.new()
+	if _open:
+		mc.round_time = 99999.0
+		mc.rounds_to_win = 999
+		mc.spawn_a = Vector3(0, 0, 0)
+		mc.spawn_b = Vector3(0, 0, -40)
+		for f in [_player, enemy]:
+			f.ground_fn = _map.ground
 	add_child(mc)
 	_fight_nodes.append(mc)
 	mc.setup(_player, enemy)
 	var hud := FightHud.new()
+	hud.open_world = _open
 	add_child(hud)
 	hud.bind(_player, enemy, mc, Roster.find(_pick)["moves"], Roster.find(enemy_id)["moves"])
 	_fight_nodes.append(hud)
@@ -183,7 +204,11 @@ func _start_fight() -> void:
 		f.move_phase.connect(func(name: String, phase: int): _on_move_phase(f, moves, name, phase))
 		f.domain_used.connect(func(): _on_domain(f, moves))
 	mc.round_ended.connect(func(_w):
-		await get_tree().create_timer(2.8).timeout
+		await get_tree().create_timer(2.8 if not _open else 4.0).timeout
+		if _open and is_instance_valid(mc):
+			# open world: the beaten fighter respawns somewhere near the player and the hunt goes on
+			mc.spawn_a = _player.global_position
+			mc.spawn_b = _player.global_position + Vector3(randf_range(-60, 60), 0, randf_range(-60, 60))
 		if is_instance_valid(mc) and not mc.running and mc.wins.values().all(func(n): return n < mc.rounds_to_win):
 			mc.start_round())
 	mc.match_ended.connect(func(_w):
@@ -193,6 +218,17 @@ func _start_fight() -> void:
 	_auto = _args.get("script", "")
 
 func _physics_process(_d: float) -> void:
+	if _open and _map != null:
+		for n in _fight_nodes:
+			if n is Fighter:
+				var f := n as Fighter
+				f.position = _map.resolve(f.position)
+				var lim := WorldGen.HALF - 150.0
+				f.position.x = clampf(f.position.x, -lim, lim)
+				f.position.z = clampf(f.position.z, -lim, lim)
+		if _player != null:
+			_map.update(_player.global_position)
+		return
 	for n in _fight_nodes:
 		if n is Fighter:
 			var p: Vector3 = n.position
@@ -383,6 +419,8 @@ func _on_move_phase(f: Fighter, moves: String, name: String, phase: int) -> void
 		_impact.speed_lines(0.5)
 		if name == "world_slash":
 			_impact.screen_cut()
+		if name in ["ultimate", "purple200", "world_slash"]:
+			_destroy_ahead(f, 80.0 if name != "ultimate" else 55.0, 22.0 if name != "ultimate" else 16.0)
 
 const MOVE_TITLES := {
 	"gojo_ultimate": "HOLLOW PURPLE", "gojo_purple200": "HOLLOW PURPLE 200%", "gojo_domain": "DOMAIN EXPANSION\nINFINITE VOID",
@@ -418,3 +456,60 @@ func _hud_flash(text: String) -> void:
 	for n in _fight_nodes:
 		if n is FightHud:
 			(n as FightHud).flash(text, 1.2)
+
+## Open world: the streamed 5.6 km city with sky, sun and fog; the fight systems run on top of it unchanged.
+func _build_open_world() -> Dictionary:
+	var root := Node3D.new()
+	root.name = "OpenWorld"
+	_map = WorldMap.new()
+	_map.view_chunks = [2, 3, 4, 5, 5, 3][_mode]
+	root.add_child(_map)
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-42, -35, 0)
+	sun.light_color = Color(1.0, 0.9, 0.78)
+	sun.light_energy = 1.3
+	sun.shadow_enabled = true
+	root.add_child(sun)
+	var env := Environment.new()
+	var sky_mat := ProceduralSkyMaterial.new()
+	sky_mat.sky_top_color = Color(0.12, 0.2, 0.42)
+	sky_mat.sky_horizon_color = Color(0.7, 0.55, 0.5)
+	sky_mat.ground_horizon_color = Color(0.35, 0.3, 0.3)
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
+	env.sky = sky
+	env.background_mode = Environment.BG_SKY
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_energy = 1.1
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_exposure = 1.05
+	env.glow_enabled = true
+	env.glow_intensity = 0.6
+	env.fog_enabled = true
+	env.fog_light_color = Color(0.6, 0.55, 0.6)
+	env.fog_density = 0.0028 if _map.view_chunks <= 3 else 0.0018
+	var we := WorldEnvironment.new()
+	we.environment = env
+	root.add_child(we)
+	return {"root": root, "sun": sun, "env": env}
+
+## Beams and world slashes bring down whatever towers stand in their path, hit or miss.
+func _destroy_ahead(f: Fighter, length: float, width: float) -> void:
+	var fwd := -f.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	var hits := []
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if not is_instance_valid(b) or not b.is_inside_tree() or b.has_meta("collapsed"):
+			continue
+		var to: Vector3 = b.global_position - f.global_position
+		to.y = 0.0
+		var along := to.dot(fwd)
+		if along < 0.0 or along > length:
+			continue
+		if (to - fwd * along).length() < width + float(b.get_meta("width", 10.0)) * 0.5:
+			hits.append([along, b])
+	hits.sort_custom(func(a, c): return a[0] < c[0])
+	var q := GraphicsSettings.preset(_mode)
+	for i in mini(4, hits.size()):
+		BuildingCollapse.run(hits[i][1], _dm, _world, 1.0 if q["particles"] > 0.5 else 0.5, _rng)

@@ -63,6 +63,7 @@ var _kb := Vector3.ZERO
 var facing := Vector3.FORWARD
 var flying := false
 var fly_height := 3.2
+var ground_fn: Callable      ## (x, z) -> ground height; empty = flat floor at y = 0 (the arena)
 var _fly_prev := false
 
 ## What the pose animator needs: attack kind ("light1".."light3", "heavy", "special", "ultimate"), phase 0-2 and progress 0..1 inside it.
@@ -124,7 +125,8 @@ func _physics_process(delta: float) -> void:
 	_kb = _kb.move_toward(Vector3.ZERO, 18.0 * delta) if state != State.DODGE else _kb
 	if state == State.HIT:
 		velocity = _kb
-	var target_y := fly_height if flying else 0.0
+	var floor_y: float = ground_fn.call(global_position.x, global_position.z) if ground_fn.is_valid() else 0.0
+	var target_y := floor_y + (fly_height if flying else 0.0)
 	velocity.y = clampf((target_y - global_position.y) * 5.0, -14.0, 9.0)
 	move_and_slide()
 
