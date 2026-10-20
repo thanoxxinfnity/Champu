@@ -12,3 +12,16 @@
 - `sedan.glb` — "Abandoned Generic Sedan 2 - Game Ready" by Rashad Ibrahimli, licence CC Attribution — https://sketchfab.com/3d-models/abandoned-generic-sedan-2-game-ready-db2df46c49f9441286c84c66208ef7ac
 - `barrier.glb` — "Low Poly Road Closed Barrier - Game Ready" by Rashad Ibrahimli, licence CC Attribution — https://sketchfab.com/3d-models/low-poly-road-closed-barrier-game-ready-af50e8d36c7e481c8ddc375ce751c1d6
 - `game_center.glb` — "Game Center Tokyo" by Naitogosuto, licence CC Attribution — https://sketchfab.com/3d-models/game-center-tokyo-6bb38c16c91c4ea5bdb2895c7f2389bc
+- `npc/npc_chibi_rigged.glb` — "Free Pack - Chibi Base Mesh (Rigged)" by PolyOne Studio, licence CC Attribution — https://sketchfab.com/3d-models/free-pack-chibi-base-mesh-rigged-fed4fb329f224f1594f631eae8d2626b
+- `npc/npc_samurai_dance.glb` — "Dance | Japanese Samurai Ninja Hat" by YadroGames, licence CC Attribution — https://sketchfab.com/3d-models/dance-japanese-samurai-ninja-hat-8560f555469a46e085952a890ce9785b
+- `npc/npc_worker_girl.glb` — "Girl with clothes. Worker set" by cattleya, licence CC Attribution — https://sketchfab.com/3d-models/girl-with-clothes-worker-set-4cf10e2dde6d4b12b6dccd25a4cf3b77
+- `npc/npc_female_base.glb` — "Low Poly Female Base Mesh" by Mesh-Base, licence CC Attribution — https://sketchfab.com/3d-models/low-poly-female-base-mesh-583d7e9c0de945beb30004eabac92a26
+- `npc/npc_female_jacket.glb` — "Female Leather Jacket - Free Model" by CG StudioX, licence CC Attribution — https://sketchfab.com/3d-models/female-leather-jacket-free-model-1dc7708fd7bd4ea1b035f4c48dbd7868
+- `props/ruin_building2.glb` — "Apocalypse Building Type 2" by Kasugay𓅂, licence CC Attribution — https://sketchfab.com/3d-models/apocalypse-building-type-2-b188650d09754465a0d6a7d20586bec4
+- `props/ruin_building3.glb` — "Apocalypse Building Type 3" by Kasugay𓅂, licence CC Attribution — https://sketchfab.com/3d-models/apocalypse-building-type-3-89f06bd1f50b489b96048f9189cade0d
+- `props/ruin_building1.glb` — "Apocalypse Building Type 1" by Kasugay𓅂, licence CC Attribution — https://sketchfab.com/3d-models/apocalypse-building-type-1-5202dd09b9224df8bf193518ba590f32
+- `props/damaged_house.glb` — "Abandoned Low Poly Damaged House" by ASAD MEHMOOD, licence CC Attribution — https://sketchfab.com/3d-models/abandoned-low-poly-damaged-house-e3113388b1e543ee906bbfb9e9aaf31d
+- `props/burned_cars.glb` — "Burned-out Cars" by Renafox, licence CC Attribution — https://sketchfab.com/3d-models/burned-out-cars-701066df6b914fd08318524c7ccd96a7
+- `props/lamp_post.glb` — "Low-Poly Lamp Post" by Memorie, licence CC Attribution — https://sketchfab.com/3d-models/low-poly-lamp-post-c466684e819a4428b6d8ed50537615e4
+- `props/street_lights.glb` — "Various Low-Poly Street Lights" by KMB3D, licence CC Attribution — https://sketchfab.com/3d-models/various-low-poly-street-lights-1173b0c4d9b0400bbeaafbee0e94ca59
+- `props/forest_trees.glb` — "Low Poly Forest Tree Pack" by 99.Miles, licence CC Attribution — https://sketchfab.com/3d-models/low-poly-forest-tree-pack-5ff5a51e74324845a4e4905f182dfb2b
