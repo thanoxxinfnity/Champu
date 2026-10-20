@@ -17,6 +17,10 @@ var _player: Fighter
 var _controls: FightControls
 var _auto := ""
 var _dm: DestructionManager
+var _cam: ThirdPersonCamera
+var _void: InfiniteVoidManager
+var _shrine: ShrineDomain
+var _env: Environment
 var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
@@ -135,10 +139,17 @@ func _start_fight() -> void:
 	GraphicsSettings.apply(_mode, get_viewport(), built["env"], built["sun"], _dm)
 	_player = _make_fighter(_pick, Vector3(-3, 0, 0), "Player")
 	var enemy := _make_fighter(enemy_id, Vector3(3, 0, 0), "Enemy")
-	var cam := FightCamera.new()
-	cam.a = _player
-	cam.b = enemy
+	var cam := ThirdPersonCamera.new()
+	cam.target = _player
+	cam.lock = enemy
 	add_child(cam)
+	_cam = cam
+	_void = InfiniteVoidManager.new()
+	_void.enemy_group = &"void_target"
+	_world.add_child(_void)
+	_shrine = ShrineDomain.new()
+	_world.add_child(_shrine)
+	_env = built["env"]
 	_fight_nodes.append(cam)
 	var ai := FightAI.new()
 	ai.fighter = enemy
@@ -151,7 +162,7 @@ func _start_fight() -> void:
 	mc.setup(_player, enemy)
 	var hud := FightHud.new()
 	add_child(hud)
-	hud.bind(_player, enemy, mc)
+	hud.bind(_player, enemy, mc, Roster.find(_pick)["moves"], Roster.find(enemy_id)["moves"])
 	_fight_nodes.append(hud)
 	_controls = FightControls.new()
 	_controls.fighter = _player
@@ -162,6 +173,9 @@ func _start_fight() -> void:
 		f.hit_dealt.connect(func(t: Fighter, m: Dictionary, dmg: float):
 			cam.shake = minf(1.0, cam.shake + dmg * 0.03)
 			_on_hit(t, m))
+		var moves: String = Roster.find(_pick if f == _player else enemy_id)["moves"]
+		f.move_phase.connect(func(name: String, phase: int): _on_move_phase(f, moves, name, phase))
+		f.domain_used.connect(func(): _on_domain(f, moves))
 	mc.round_ended.connect(func(_w):
 		await get_tree().create_timer(2.8).timeout
 		if is_instance_valid(mc) and not mc.running and mc.wins.values().all(func(n): return n < mc.rounds_to_win):
@@ -226,6 +240,34 @@ func _run_script() -> void:
 				_controls.tap("ultimate")
 			elif t > 17.5 and t < 22.0 and int(t * 3.0) % 2 == 0:
 				_controls.tap("light")
+		"demo2":
+			if t < 3.5:
+				if int(t * 3.0) % 2 == 0:
+					_controls.tap("light")
+			elif t > 3.8 and t < 4.0:
+				_player.energy = 100.0
+				_controls.tap("special")
+			elif t > 6.0 and t < 6.2:
+				_player.energy = 100.0
+				_controls.tap("domain")
+			elif t > 7.6 and t < 11.5:
+				if int(t * 3.0) % 2 == 0:
+					_controls.tap("light")
+			elif t > 13.0 and t < 13.2:
+				_player.energy = 100.0
+				_controls.tap("ultimate")
+			elif t > 15.5 and t < 15.7:
+				_controls.tap("fly")
+			elif t > 16.5 and t < 19.0:
+				_controls.stick = Vector2(0.8, 0.5)
+			elif t >= 19.0 and t < 19.2:
+				_controls.stick = Vector2.ZERO
+		"domain":
+			if t > 0.5 and t < 0.7:
+				_player.energy = 100.0
+				_controls.tap("domain")
+			elif t > 2.5 and int(t * 3.0) % 2 == 0:
+				_controls.tap("light")
 		"ult":
 			if t > 0.5 and t < 0.7:
 				_player.energy = 100.0
@@ -260,5 +302,58 @@ func _on_hit(target: Fighter, move: Dictionary) -> void:
 		fire.intensity = 1.0 if q["particles"] > 0.5 else 0.5
 		fire.position = at + Vector3(0, 0.3, 0)
 		_world.add_child(fire)
-	elif float(move.get("damage", 0.0)) >= 12.0:
-		_dm.blast(at, 1.6, 0.35)
+	else:
+		var heavy := float(move.get("damage", 0.0)) >= 12.0
+		MoveVfx.hit_spark(_world, target.global_position + Vector3.UP * 1.25, heavy)
+		if heavy:
+			_dm.blast(at, 1.6, 0.35)
+
+## Character-specific effects as a move winds up (phase 0) and fires (phase 1).
+func _on_move_phase(f: Fighter, moves: String, name: String, phase: int) -> void:
+	if phase > 1:
+		return
+	var o := f.opponent
+	match [moves, name]:
+		["gojo", "special"]:
+			MoveVfx.gojo_red(_world, f, o, phase)
+		["gojo", "ultimate"]:
+			MoveVfx.gojo_purple(_world, f, o, phase)
+		["sukuna", "special"]:
+			MoveVfx.sukuna_dismantle(_world, f, o, phase)
+		["sukuna", "ultimate"]:
+			MoveVfx.sukuna_fuga(_world, f, o, phase)
+		[_, "domain"]:
+			if phase == 0:
+				MoveVfx.hit_spark(_world, MoveVfx.hand_pos(f), true)
+	if name == "ultimate" and phase == 1 and _cam != null:
+		_cam.shake = 1.0
+
+## Domain Expansion: Gojo opens Infinite Void (the opponent freezes completely), Sukuna raises the Malevolent Shrine (endless slashes).
+func _on_domain(f: Fighter, moves: String) -> void:
+	var o := f.opponent
+	if o == null:
+		return
+	_hud_flash("DOMAIN EXPANSION")
+	if moves == "gojo":
+		o.add_to_group("void_target")
+		_void.activate(f.global_position)
+		var hidden: Array[Node3D] = []
+		for c in _world.get_children():
+			if c is Node3D and c != _void and c != _dm and c != _shrine and not (c is DirectionalLight3D) and (c as Node3D).visible:
+				(c as Node3D).visible = false
+				hidden.append(c)
+		get_tree().create_timer(5.0).timeout.connect(func() -> void:
+			for h in hidden:
+				if is_instance_valid(h):
+					h.visible = true
+			if is_instance_valid(_void) and _void.active:
+				_void.deactivate()
+			if is_instance_valid(o):
+				o.remove_from_group("void_target"))
+	else:
+		_shrine.activate(f, _env, f == _player)
+
+func _hud_flash(text: String) -> void:
+	for n in _fight_nodes:
+		if n is FightHud:
+			(n as FightHud).flash(text, 1.2)

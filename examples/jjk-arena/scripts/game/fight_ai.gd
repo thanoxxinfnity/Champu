@@ -23,7 +23,7 @@ func _physics_process(delta: float) -> void:
 		return
 	var f := fighter
 	var o := f.opponent
-	var i := {"move": Vector2.ZERO, "light": false, "heavy": false, "special": false, "ultimate": false, "dodge": false, "block": false}
+	var i := {"move": Vector2.ZERO, "light": false, "heavy": false, "special": false, "ultimate": false, "dodge": false, "block": false, "domain": false}
 	if not f.is_alive() or not o.is_alive():
 		f.intent = i
 		return
@@ -79,7 +79,10 @@ func _choose_mode(dist: float) -> void:
 func _pick_attack(i: Dictionary, dist: float) -> void:
 	var f := fighter
 	if f.energy >= 100.0 and level >= Level.NORMAL and _rng.randf() < 0.5:
-		i["ultimate"] = true
+		if _rng.randf() < 0.4:
+			i["domain"] = true
+		else:
+			i["ultimate"] = true
 	elif f.energy >= 35.0 and dist > 2.2 and _rng.randf() < 0.4:
 		i["special"] = true
 	elif _rng.randf() < 0.3:

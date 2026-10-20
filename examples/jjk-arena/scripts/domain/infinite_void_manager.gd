@@ -56,7 +56,7 @@ func _ready() -> void:
 	add_child(streaks)
 
 	post_layer = CanvasLayer.new()
-	post_layer.layer = 90
+	post_layer.layer = 10   # under the HUD (15) and the touch controls (20)
 	var rect := ColorRect.new()
 	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE

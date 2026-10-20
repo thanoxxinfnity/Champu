@@ -4,7 +4,9 @@ extends CanvasLayer
 ## up in `fighter.intent`, the same dictionary the AI fills in. Short taps are held for a few frames so one press always reaches a physics tick.
 
 var fighter: Fighter
-var camera: FightCamera
+var camera: Node3D   ## FightCamera or ThirdPersonCamera (anything with world_dir / orbit)
+var _look_id := -1
+var _look_last := Vector2.ZERO
 var stick := Vector2.ZERO
 var _root: Control
 var _base: Control
@@ -35,6 +37,7 @@ func _ready() -> void:
 	_btn("dodge", "DODGE", Vector2(-380, -150), 70)
 	_btn("block", "GUARD", Vector2(-380, -250), 70, true)
 	_btn("fly", "FLY", Vector2(-90, -380), 66)
+	_btn("domain", "DOMAIN", Vector2(-200, -380), 74)
 
 func _disc(d: float, c: Color) -> Control:
 	var p := Panel.new()
@@ -88,11 +91,21 @@ func _input(e: InputEvent) -> void:
 			_knob.position = _origin - _knob.size * 0.5
 			_base.visible = true
 			_knob.visible = true
+		elif e.pressed and _look_id == -1 and e.position.x >= get_viewport().get_visible_rect().size.x * 0.45 and e.position.y < get_viewport().get_visible_rect().size.y * 0.5:
+			_look_id = e.index
+			_look_last = e.position
+		elif not e.pressed and e.index == _look_id:
+			_look_id = -1
 		elif not e.pressed and e.index == _stick_id:
 			_stick_id = -1
 			stick = Vector2.ZERO
 			_base.visible = false
 			_knob.visible = false
+	elif e is InputEventScreenDrag and e.index == _look_id:
+		var dl: Vector2 = e.position - _look_last
+		_look_last = e.position
+		if camera != null and camera.has_method("orbit"):
+			camera.call("orbit", dl.x * 0.006, dl.y * 0.004)
 	elif e is InputEventScreenDrag and e.index == _stick_id:
 		var d: Vector2 = (e.position - _origin).limit_length(STICK_R)
 		stick = d / STICK_R
@@ -113,7 +126,7 @@ func _process(_delta: float) -> void:
 	if Input.is_key_pressed(KEY_S): kb.y -= 1.0
 	if kb.length() > 0.1:
 		s = kb.limit_length(1.0)
-	var mv := camera.world_dir(s) if camera != null else Vector2(s.x, -s.y)
+	var mv: Vector2 = camera.call("world_dir", s) if camera != null else Vector2(s.x, -s.y)
 	var i := fighter.intent
 	i["move"] = mv
 	i["light"] = _until.get("light", 0.0) > now or Input.is_key_pressed(KEY_J)
@@ -123,3 +136,4 @@ func _process(_delta: float) -> void:
 	i["dodge"] = _until.get("dodge", 0.0) > now or Input.is_key_pressed(KEY_SPACE)
 	i["block"] = _held.get("block", false) or Input.is_key_pressed(KEY_SHIFT)
 	i["fly"] = _until.get("fly", 0.0) > now or Input.is_key_pressed(KEY_F)
+	i["domain"] = _until.get("domain", 0.0) > now or Input.is_key_pressed(KEY_U)

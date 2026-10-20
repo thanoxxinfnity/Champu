@@ -127,12 +127,14 @@ func _ready() -> void:
 	am.roughness = 1.0
 	_ash.material_override = am
 	_ash.position.y = radius * 0.1
+	_ash.scale = Vector3.ONE * 0.01
 	add_child(_ash)
 
 func _process(delta: float) -> void:
 	_age += delta
 	var t := _age / burn_time
 	_light.light_energy = (1.6 + sin(_age * 17.0) * 0.4 + sin(_age * 29.0) * 0.3) * clampf(1.4 - t * 1.4, 0.0, 1.0) * intensity
+	_ash.scale = Vector3.ONE * clampf((t - 0.35) * 2.5, 0.01, 1.0)   # ash builds up as the fire eats the fuel
 	if t > 0.55:
 		_flame.emitting = false        # burnt down: only smoke and embers are left
 	if t > 0.8:

@@ -8,6 +8,8 @@ signal damaged(amount: float)
 signal state_changed(state: int)
 signal ko
 signal ultimate_used(move: Dictionary)
+signal move_phase(move_name: String, phase: int)   ## 0 wind-up, 1 active (the projectile / slash leaves now), 2 recover
+signal domain_used
 
 enum State { IDLE, MOVE, ATTACK, HIT, DODGE, BLOCK, KO }
 
@@ -15,6 +17,7 @@ const MOVES := {
 	"light": {"damage": 6.0, "startup": 0.08, "active": 0.10, "recover": 0.18, "range": 1.6, "arc": 0.7, "cost": 0.0, "gain": 4.0, "stun": 0.25, "knock": 2.5},
 	"heavy": {"damage": 14.0, "startup": 0.22, "active": 0.12, "recover": 0.38, "range": 1.9, "arc": 0.6, "cost": 0.0, "gain": 8.0, "stun": 0.5, "knock": 6.0},
 	"special": {"damage": 22.0, "startup": 0.30, "active": 0.14, "recover": 0.45, "range": 6.0, "arc": 0.35, "cost": 35.0, "gain": 0.0, "stun": 0.7, "knock": 8.0},
+	"domain": {"damage": 0.0, "startup": 0.90, "active": 0.10, "recover": 0.50, "range": 0.0, "arc": 0.0, "cost": 100.0, "gain": 0.0, "stun": 0.0, "knock": 0.0},
 	"ultimate": {"damage": 45.0, "startup": 0.60, "active": 0.20, "recover": 0.80, "range": 9.0, "arc": 0.25, "cost": 100.0, "gain": 0.0, "stun": 1.2, "knock": 14.0},
 }
 const COMBO_WINDOW := 0.45
@@ -29,7 +32,7 @@ var health := MAX_HEALTH
 var energy := 0.0
 var state := State.IDLE
 var opponent: Fighter
-var intent := {"move": Vector2.ZERO, "light": false, "heavy": false, "special": false, "ultimate": false, "dodge": false, "block": false}
+var intent := {"move": Vector2.ZERO, "light": false, "heavy": false, "special": false, "ultimate": false, "dodge": false, "block": false, "domain": false}
 
 var _timer := 0.0
 var _phase := 0            # 0 startup, 1 active, 2 recover
@@ -123,8 +126,8 @@ func _free_state(_delta: float) -> void:
 		_dodge_cd = DODGE_COOLDOWN
 		_set_state(State.DODGE)
 		return
-	for name in ["ultimate", "special", "heavy", "light"]:
-		if intent[name] and _try_start(name):
+	for name in ["domain", "ultimate", "special", "heavy", "light"]:
+		if intent.get(name, false) and _try_start(name):
 			return
 	var mv: Vector2 = intent["move"]
 	if mv.length() > 0.1:
@@ -153,6 +156,7 @@ func _try_start(name: String) -> bool:
 	_set_state(State.ATTACK)
 	if name == "ultimate":
 		ultimate_used.emit(m)
+	move_phase.emit(name, 0)
 	return true
 
 func _attack_state(delta: float) -> void:
@@ -162,13 +166,17 @@ func _attack_state(delta: float) -> void:
 		_try_hit()
 	if _timer <= 0.0:
 		_phase += 1
+		if _phase <= 2:
+			move_phase.emit(_move_name, _phase)
+		if _phase == 1 and _move_name == "domain":
+			domain_used.emit()
 		match _phase:
 			1: _timer = float(_move["active"])
 			2: _timer = float(_move["recover"])
 			_: _set_state(State.IDLE)
 
 func _try_hit() -> void:
-	if opponent == null or not opponent.is_alive():
+	if opponent == null or not opponent.is_alive() or float(_move["range"]) <= 0.0:
 		return
 	var to := opponent.global_position - global_position
 	to.y = 0.0
@@ -199,6 +207,13 @@ func receive_hit(attacker: Fighter, move: Dictionary, dmg: float) -> float:
 		if health <= 0.0:
 			_die()
 		return dmg
+	if state == State.ATTACK and (_move_name == "domain" or _move_name == "ultimate"):
+		# super armour: a domain or ultimate being cast takes the damage but is not interrupted
+		health = maxf(0.0, health - dmg * 0.7)
+		damaged.emit(dmg * 0.7)
+		if health <= 0.0:
+			_die()
+		return dmg * 0.7
 	health = maxf(0.0, health - dmg)
 	damaged.emit(dmg)
 	energy = minf(MAX_ENERGY, energy + dmg * 0.25)
@@ -209,6 +224,10 @@ func receive_hit(attacker: Fighter, move: Dictionary, dmg: float) -> float:
 	else:
 		_set_state(State.HIT)
 	return dmg
+
+## Damage that does not come from a melee swing (domain slashes, projectiles that already resolved their aim).
+func take_damage(attacker: Fighter, dmg: float, stun := 0.15, knock := 1.0) -> float:
+	return receive_hit(attacker, {"damage": dmg, "stun": stun, "knock": knock, "cost": 0.0}, dmg)
 
 func _die() -> void:
 	flying = false

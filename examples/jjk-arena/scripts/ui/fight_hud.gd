@@ -1,16 +1,23 @@
 class_name FightHud
 extends CanvasLayer
-## Health and cursed-energy bars for both fighters, round timer, round pips and the big centre banner.
+## Anime-fighter HUD: slanted health bars with a white "damage trail" that drains after a hit, a glowing cursed-energy bar split into four
+## segments (DOMAIN READY when full), round portraits, the round timer in the centre and the big banner (ROUND 1 / KO / WINS).
+
+const FACES := {"gojo": "res://assets/loading/r_04_gojo_face.jpg", "sukuna": "res://assets/loading/r_05_sukuna_face.jpg"}
 
 var a: Fighter
 var b: Fighter
 var match_ctl: MatchController
-var _hp: Array[ProgressBar] = []
-var _en: Array[ProgressBar] = []
+var _bars: Control
 var _timer: Label
 var _banner: Label
-var _pips: Array[Label] = []
 var _names: Array[Label] = []
+var _faces: Array[TextureRect] = []
+var _trail := [100.0, 100.0]
+var _shown := [100.0, 100.0]
+var _flash := [0.0, 0.0]
+var _last := [100.0, 100.0]
+var _t := 0.0
 
 func _ready() -> void:
 	layer = 15
@@ -18,88 +25,132 @@ func _ready() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
+	_bars = Control.new()
+	_bars.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_bars.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_bars.draw.connect(_draw_bars)
+	root.add_child(_bars)
 	for side in 2:
-		var left := side == 0
-		var box := VBoxContainer.new()
-		box.set_anchors_preset(Control.PRESET_TOP_LEFT if left else Control.PRESET_TOP_RIGHT)
-		box.offset_left = 24.0 if left else -24.0 - 420.0
-		box.offset_right = 24.0 + 420.0 if left else -24.0
-		box.offset_top = 16.0
-		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		root.add_child(box)
-		var nm := UiKit.label("", 20)
-		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if left else HORIZONTAL_ALIGNMENT_RIGHT
-		box.add_child(nm)
+		var face := TextureRect.new()
+		face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		face.size = Vector2(74, 74)
+		face.position = Vector2(14, 10) if side == 0 else Vector2(0, 10)
+		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root.add_child(face)
+		_faces.append(face)
+		var nm := UiKit.label("", 19)
+		nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root.add_child(nm)
 		_names.append(nm)
-		var hp := _bar(Color(0.9, 0.2, 0.2), 22, not left)
-		box.add_child(hp)
-		_hp.append(hp)
-		var en := _bar(Color(0.3, 0.6, 1.0), 10, not left)
-		box.add_child(en)
-		_en.append(en)
-		var pip := UiKit.label("", 18, UiKit.ACCENT)
-		pip.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if left else HORIZONTAL_ALIGNMENT_RIGHT
-		box.add_child(pip)
-		_pips.append(pip)
-	_timer = UiKit.label("60", 40)
-	_timer.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_timer.offset_left = -50.0
-	_timer.offset_right = 50.0
-	_timer.offset_top = 12.0
+	_timer = UiKit.label("60", 38)
 	_timer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_timer.size = Vector2(100, 50)
 	root.add_child(_timer)
-	_banner = UiKit.label("", 72, UiKit.ACCENT)
+	_banner = UiKit.label("", 78, UiKit.ACCENT)
 	_banner.set_anchors_preset(Control.PRESET_CENTER)
-	_banner.offset_left = -400.0
-	_banner.offset_right = 400.0
-	_banner.offset_top = -80.0
+	_banner.offset_left = -500.0
+	_banner.offset_right = 500.0
+	_banner.offset_top = -90.0
 	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_banner.add_theme_constant_override("outline_size", 10)
 	root.add_child(_banner)
 
-func _bar(c: Color, h: int, flip: bool) -> ProgressBar:
-	var p := ProgressBar.new()
-	p.custom_minimum_size = Vector2(420, h)
-	p.show_percentage = false
-	p.max_value = 100.0
-	p.value = 100.0
-	p.fill_mode = ProgressBar.FILL_END_TO_BEGIN if flip else ProgressBar.FILL_BEGIN_TO_END
-	var fg := StyleBoxFlat.new()
-	fg.bg_color = c
-	fg.set_corner_radius_all(4)
-	var bg := StyleBoxFlat.new()
-	bg.bg_color = Color(0, 0, 0, 0.55)
-	bg.set_corner_radius_all(4)
-	bg.set_border_width_all(2)
-	bg.border_color = Color(1, 1, 1, 0.5)
-	p.add_theme_stylebox_override("fill", fg)
-	p.add_theme_stylebox_override("background", bg)
-	return p
-
-func bind(fa: Fighter, fb: Fighter, mc: MatchController) -> void:
+func bind(fa: Fighter, fb: Fighter, mc: MatchController, moves_a := "gojo", moves_b := "sukuna") -> void:
 	a = fa
 	b = fb
 	match_ctl = mc
-	_names[0].text = fa.fighter_name
-	_names[1].text = fb.fighter_name
+	_names[0].text = fa.fighter_name.to_upper()
+	_names[1].text = fb.fighter_name.to_upper()
+	_faces[0].texture = load(FACES.get(moves_a, FACES["gojo"]))
+	_faces[1].texture = load(FACES.get(moves_b, FACES["sukuna"]))
 	mc.round_started.connect(func(n: int): flash("ROUND %d" % n, 1.4))
-	mc.round_ended.connect(func(w: Fighter): flash("KO!" if w != null and not w.opponent.is_alive() else "TIME", 1.6))
-	mc.match_ended.connect(func(w: Fighter): flash("%s WINS" % w.fighter_name, 99.0))
+	mc.round_ended.connect(func(w: Fighter): flash("K.O." if w != null and not w.opponent.is_alive() else "TIME", 1.6))
+	mc.match_ended.connect(func(w: Fighter): flash("%s WINS" % w.fighter_name.to_upper(), 99.0))
 
 func flash(text: String, secs: float) -> void:
 	_banner.text = text
 	_banner.modulate.a = 1.0
+	_banner.scale = Vector2.ONE
+	_banner.pivot_offset = _banner.size * 0.5
+	var t := create_tween()
+	t.tween_property(_banner, "scale", Vector2.ONE, 0.25).from(Vector2.ONE * 1.8).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	if secs < 90.0:
-		var t := create_tween()
 		t.tween_interval(secs)
 		t.tween_property(_banner, "modulate:a", 0.0, 0.4)
 
-func _process(_d: float) -> void:
+func _process(delta: float) -> void:
 	if a == null or match_ctl == null:
 		return
-	_hp[0].value = a.health
-	_hp[1].value = b.health
-	_en[0].value = a.energy
-	_en[1].value = b.energy
+	_t += delta
+	var vw := _bars.size.x
+	_faces[1].position.x = vw - 88.0
+	_names[0].position = Vector2(96, 64)
+	_names[1].position = Vector2(vw - 96.0 - _names[1].size.x, 64)
+	_timer.position = Vector2(vw * 0.5 - 50.0, 12)
+	var hp := [a.health, b.health]
+	for i in 2:
+		if hp[i] < _last[i]:
+			_flash[i] = 0.25
+		_last[i] = hp[i]
+		_shown[i] = lerpf(_shown[i], hp[i], clampf(18.0 * delta, 0.0, 1.0))
+		_trail[i] = hp[i] if hp[i] > _trail[i] else move_toward(_trail[i], hp[i], 22.0 * delta)
+		_flash[i] = maxf(0.0, _flash[i] - delta)
 	_timer.text = str(maxi(0, int(ceil(match_ctl.time_left))))
-	_pips[0].text = "●".repeat(match_ctl.wins.get(a, 0)) + "○".repeat(maxi(0, match_ctl.rounds_to_win - match_ctl.wins.get(a, 0)))
-	_pips[1].text = "●".repeat(match_ctl.wins.get(b, 0)) + "○".repeat(maxi(0, match_ctl.rounds_to_win - match_ctl.wins.get(b, 0)))
+	_bars.queue_redraw()
+
+## A slanted bar from x0 to x1 (x1 < x0 for the right side), filled to `k` (0..1) from the outside edge inward.
+func _slant(x0: float, x1: float, y: float, h: float, k: float, c: Color) -> void:
+	var dir := signf(x1 - x0)
+	var w := absf(x1 - x0) * clampf(k, 0.0, 1.0)
+	var sl := h * 0.6
+	var xa := x0
+	var xb := x0 + dir * w
+	if w <= 0.5:
+		return
+	_bars.draw_colored_polygon(PackedVector2Array([Vector2(xa, y), Vector2(xb + dir * sl, y), Vector2(xb, y + h), Vector2(xa - dir * sl, y + h)]), c)
+
+func _draw_bars() -> void:
+	if a == null:
+		return
+	var vw := _bars.size.x
+	var mid := vw * 0.5
+	var fs := [a, b]
+	for i in 2:
+		var x0 := 92.0 if i == 0 else vw - 92.0
+		var x1 := mid - 70.0 if i == 0 else mid + 70.0
+		var y := 20.0
+		var h := 24.0
+		_slant(x0, x1, y - 3, h + 6, 1.0, Color(0, 0, 0, 0.6))
+		_slant(x0, x1, y, h, _trail[i] / 100.0, Color(1, 1, 1, 0.85))
+		var hk: float = _shown[i] / 100.0
+		var col := Color(0.95, 0.75, 0.15).lerp(Color(0.95, 0.15, 0.12), clampf(1.0 - hk * 1.6, 0.0, 1.0))
+		if _flash[i] > 0.0:
+			col = col.lerp(Color.WHITE, _flash[i] * 3.0)
+		_slant(x0, x1, y, h, hk, col)
+		_slant(x0, x1, y, h * 0.35, hk, Color(1, 1, 1, 0.25))
+		# cursed energy: four segments
+		var e: float = fs[i].energy / 100.0
+		var ey := y + h + 8.0
+		var seg := absf(x1 - x0) * 0.62 / 4.0
+		var dir := signf(x1 - x0)
+		for s in 4:
+			var sx := x0 + dir * (s * seg + 4.0)
+			var fill := clampf(e * 4.0 - s, 0.0, 1.0)
+			var ex := sx + dir * (seg - 6.0)
+			_slant(sx, ex, ey, 10.0, 1.0, Color(0, 0, 0, 0.55))
+			var ec := Color(0.3, 0.6, 1.0) if i == 0 else Color(1.0, 0.3, 0.3)
+			if e >= 1.0:
+				ec = ec.lerp(Color.WHITE, 0.35 + 0.35 * sin(_t * 8.0))
+			_slant(sx, ex, ey, 10.0, fill, ec)
+		if e >= 1.0:
+			var txt := "DOMAIN READY"
+			var fx := x0 + dir * (seg * 4.0 + 14.0) - (0.0 if i == 0 else 120.0)
+			_bars.draw_string(ThemeDB.fallback_font, Vector2(fx, ey + 10.0), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 1, 1, 0.6 + 0.4 * sin(_t * 8.0)))
+		# round pips
+		var wins: int = match_ctl.wins.get(fs[i], 0)
+		for r in match_ctl.rounds_to_win:
+			var px := (x1 - dir * (14.0 + r * 18.0))
+			_bars.draw_circle(Vector2(px, y + h + 18.0), 6.0, UiKit.ACCENT if r < wins else Color(1, 1, 1, 0.25))
+	# timer plate
+	_bars.draw_colored_polygon(PackedVector2Array([Vector2(mid - 50, 8), Vector2(mid + 50, 8), Vector2(mid + 38, 62), Vector2(mid - 38, 62)]), Color(0, 0, 0, 0.6))
