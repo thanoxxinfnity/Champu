@@ -44,7 +44,25 @@ void fragment() {
 	float dz = min(g.y, cell - g.y);
 	float on_road = max(1.0 - smoothstep(road * 0.5 - 0.6, road * 0.5 + 0.6, dx), 1.0 - smoothstep(road * 0.5 - 0.6, road * 0.5 + 0.6, dz));
 	vec3 asphalt = vec3(0.10, 0.10, 0.11) * (0.9 + 0.2 * noise(p * 1.7));
+	// cracks and oil stains on the asphalt
+	asphalt *= 1.0 - 0.35 * smoothstep(0.62, 0.66, noise(p * 0.9)) - 0.25 * step(0.985, noise(p * 6.0));
+	// sidewalks: a light paving band with tile joints along every road
+	float side_x = step(road * 0.5, dx) * (1.0 - step(road * 0.5 + 4.5, dx));
+	float side_z = step(road * 0.5, dz) * (1.0 - step(road * 0.5 + 4.5, dz));
+	float sidewalk = max(side_x, side_z) * (1.0 - on_road);
+	vec2 tile = fract(p / 1.5);
+	float joint = step(0.94, max(tile.x, tile.y));
+	vec3 paving = mix(vec3(0.52, 0.51, 0.49), vec3(0.40, 0.39, 0.38), joint) * (0.9 + 0.15 * noise(p * 0.7));
+	col = mix(col, paving, sidewalk * city);
+	// curb line
+	float curb = max((1.0 - smoothstep(0.0, 0.35, abs(dx - road * 0.5))), (1.0 - smoothstep(0.0, 0.35, abs(dz - road * 0.5))));
+	col = mix(col, vec3(0.7, 0.7, 0.68), curb * city * 0.8);
 	col = mix(col, asphalt, on_road * city);
+	// zebra crossings in front of every intersection
+	float near_x = step(road * 0.5 + 0.5, dz) * (1.0 - step(road * 0.5 + 5.0, dz)) * (1.0 - step(road * 0.5, dx));
+	float near_z = step(road * 0.5 + 0.5, dx) * (1.0 - step(road * 0.5 + 5.0, dx)) * (1.0 - step(road * 0.5, dz));
+	float zebra = near_x * step(0.5, fract(p.x / 1.6)) + near_z * step(0.5, fract(p.y / 1.6));
+	col = mix(col, vec3(0.85, 0.85, 0.82), clamp(zebra, 0.0, 1.0) * city * 0.9);
 	// centre lines
 	float line_x = (1.0 - smoothstep(0.12, 0.2, dx)) * step(0.5, fract(p.y / 8.0));
 	float line_z = (1.0 - smoothstep(0.12, 0.2, dz)) * step(0.5, fract(p.x / 8.0));
