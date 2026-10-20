@@ -327,15 +327,15 @@ static func sukuna_world_slash(world: Node3D, caster: Node3D, target: Node3D, ph
 		var n := _root(world, caster.global_position + fwd * 30.0 + Vector3.UP * 4.0, 2.2)
 		var mi := MeshInstance3D.new()
 		var q := QuadMesh.new()
-		q.size = Vector2(90.0, 0.25)
+		q.size = Vector2(90.0, 0.12)
 		mi.mesh = q
-		var m := glow_mat(Color(1.0, 0.97, 0.97), 5.0)
+		var m := glow_mat(Color(1.0, 0.97, 0.97), 2.2)
 		mi.material_override = m
 		n.add_child(mi)
 		n.look_at(n.global_position + fwd.cross(Vector3.UP), Vector3.UP)
 		mi.rotation.z = -0.35
 		var tw := n.create_tween()
-		tw.tween_property(mi, "scale", Vector3(1, 6.0, 1), 0.08).from(Vector3(0.02, 1, 1))
+		tw.tween_property(mi, "scale", Vector3(1, 2.5, 1), 0.08).from(Vector3(0.02, 1, 1))
 		tw.tween_property(m, "albedo_color:a", 0.0, 1.5)
 		_trench(world, caster.global_position + fwd * 1.0, fwd, 60.0, Color(1.0, 0.9, 0.9))
 		if target != null:

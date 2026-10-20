@@ -274,6 +274,30 @@ func _run_script() -> void:
 				_controls.tap("domain")
 			elif t > 2.5 and int(t * 3.0) % 2 == 0:
 				_controls.tap("light")
+		"demo3":
+			if t < 2.5:
+				if int(t * 3.0) % 2 == 0:
+					_controls.tap("light")
+			elif t > 2.8 and t < 3.0:
+				_player.energy = 100.0
+				_controls.tap("skill2")
+			elif t > 4.6 and t < 4.8:
+				_player.energy = 100.0
+				_controls.tap("special")
+			elif t > 6.5 and t < 6.7:
+				_player.energy = 100.0
+				_controls.tap("domain")
+			elif t > 8.2 and t < 10.8:
+				if int(t * 3.0) % 2 == 0:
+					_controls.tap("light")
+			elif t > 12.0 and t < 12.2:
+				_player.energy = 100.0
+				_player.health = maxf(_player.health, 60.0)
+				_controls.tap("ultimate")
+			elif t > 15.5 and t < 15.7:
+				_player.energy = 100.0
+				_player.health = minf(_player.health, 45.0)
+				_controls.tap("ultimate")
 		"skill2":
 			if t > 0.5 and t < 0.7:
 				_player.energy = 100.0
