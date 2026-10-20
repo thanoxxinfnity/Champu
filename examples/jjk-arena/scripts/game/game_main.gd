@@ -162,6 +162,10 @@ func _start_fight() -> void:
 		f.hit_dealt.connect(func(t: Fighter, m: Dictionary, dmg: float):
 			cam.shake = minf(1.0, cam.shake + dmg * 0.03)
 			_on_hit(t, m))
+	mc.round_ended.connect(func(_w):
+		await get_tree().create_timer(2.8).timeout
+		if is_instance_valid(mc) and not mc.running and mc.wins.values().all(func(n): return n < mc.rounds_to_win):
+			mc.start_round())
 	mc.match_ended.connect(func(_w):
 		await get_tree().create_timer(3.5).timeout
 		_show_menu())
