@@ -128,6 +128,15 @@ if not fingers:
     print('FINGERS not found')
 bm.free()
 
+# ---- tuck the bare legs a little inside the wide trousers so a swaying hem never shows skin poking through
+for v in body.data.vertices:
+    p = v.co
+    if H * 0.09 < p.z < H * 0.46 and abs(p.x) > 0.005:
+        c = leg_center(p.z) if False else None
+        axis_x = thigh.x * (1 if p.x > 0 else -1) + (knee.x - thigh.x) * 0.0
+        k2 = 0.78
+        p.x = axis_x + (p.x - axis_x) * k2
+        p.y = p.y * k2
 # ---- armature
 spine_top = Vector((0, 0, H * 0.70)); chest_top = Vector((0, 0, sh.z - 0.02)); neck_top = Vector((0, 0, H * 0.87))
 bpy.ops.object.armature_add(location=(0, 0, 0))
@@ -160,6 +169,38 @@ for side, sg in (('L', 1), ('R', -1)):
         for j in range(3):
             a = r + (t - r) * (j / 3.0); b = r + (t - r) * ((j + 1) / 3.0)
             bone('%s%d%s' % (fn, j, side), m(a), m(b), p, j > 0); p = '%s%d%s' % (fn, j, side)
+# ---- cloth chains: four hanging chains round each trouser leg (front/back/outer/inner) and two for the sash bow tails.
+CV = np.concatenate([np.array([v.co[:] for v in o.data.vertices]) for o in cloth]) if cloth else V
+def ring(side_x, z):
+    s = CV[(CV[:, 2] > z - 0.02) & (CV[:, 2] < z + 0.02) & ((CV[:, 0] * np.sign(side_x)) > 0.0)]
+    if len(s) < 6:
+        return Vector((side_x, 0, z)), 0.12
+    c = Vector((float(np.median(s[:, 0])), float(np.median(s[:, 1])), z))
+    r = float(np.percentile(np.linalg.norm(s[:, :2] - np.array([c.x, c.y]), axis=1), 80))
+    return c, max(0.06, r)
+SWAY_TOP, SWAY_BOT = H * 0.40, H * 0.07
+chain_dirs = {'F': Vector((0, -1, 0)), 'B': Vector((0, 1, 0)), 'O': Vector((1, 0, 0)), 'I': Vector((-1, 0, 0))}
+leg_chains = []
+for side, sg in (('L', 1), ('R', -1)):
+    for ci, (cn, d) in enumerate(chain_dirs.items()):
+        dd = Vector((d.x * sg, d.y, 0))
+        pts = []
+        for j in range(4):
+            z = SWAY_TOP + (SWAY_BOT - SWAY_TOP) * j / 3.0
+            c, r = ring(thigh.x * sg, z)
+            pts.append(c + dd * r * 0.85)
+        p = 'thigh' + side
+        names = []
+        for j in range(3):
+            n = 'sway_leg%s%s_%d' % (side, cn, j)
+            bone(n, pts[j], pts[j + 1], p, j > 0); p = n; names.append(n)
+        leg_chains.append((side, dd, names, pts))
+bow_front = float(CV[(CV[:, 2] > H * 0.55) & (CV[:, 2] < H * 0.64) & (np.abs(CV[:, 0]) < 0.12)][:, 1].min()) if len(CV) else -0.15
+bow_chains = []
+for bi, bx in enumerate((-0.035, 0.035)):
+    a = Vector((bx, bow_front + 0.01, H * 0.635)); b2 = Vector((bx * 1.4, bow_front + 0.005, H * 0.585)); c2 = Vector((bx * 1.6, bow_front + 0.01, H * 0.53))
+    bone('sway_bow%d_0' % bi, a, b2, 'hips'); bone('sway_bow%d_1' % bi, b2, c2, 'sway_bow%d_0' % bi, True)
+    bow_chains.append(('sway_bow%d_0' % bi, 'sway_bow%d_1' % bi, a, b2, c2))
 for b in eb:
     b.roll = 0.0
 bpy.ops.object.mode_set(mode='OBJECT')
@@ -174,6 +215,55 @@ def bind(o):
 for o in [body] + cloth:
     bind(o)
     print('BOUND', o.name, len(o.vertex_groups))
+# heat weights spread onto the cloth chains too; drop those everywhere first (skin must not follow cloth), then add them back on the cloth only
+for o in [body] + cloth:
+    for g in [g for g in o.vertex_groups if g.name.startswith('sway_')]:
+        o.vertex_groups.remove(g)
+    for v in o.data.vertices:
+        if sum(g.weight for g in v.groups) < 1e-4:
+            side = 'L' if v.co.x > 0 else 'R'
+            n = 'shin' + side if v.co.z < H * 0.3 else ('thigh' + side if v.co.z < H * 0.5 else 'hips')
+            (o.vertex_groups.get(n) or o.vertex_groups.new(name=n)).add([v.index], 1.0, 'REPLACE')
+# hand the lower trouser legs and the bow tails over to the cloth chains (blended in from the top of each chain)
+def seg_t(p, a, b):
+    ab = b - a
+    return max(0.0, min(1.0, (p - a).dot(ab) / max(ab.length_squared, 1e-9)))
+for o in cloth:
+    groups = {g.name: g for g in o.vertex_groups}
+    def G(n):
+        return groups.get(n) or o.vertex_groups.new(name=n)
+    for v in o.data.vertices:
+        p = v.co
+        # bow tails: in front of the belt, near the middle
+        if abs(p.x) < 0.11 and p.y < bow_front + 0.035 and H * 0.52 < p.z < H * 0.64:
+            ch = min(bow_chains, key=lambda c: abs(p.x - c[2].x))
+            w = max(0.0, min(1.0, (H * 0.63 - p.z) / (H * 0.07)))
+            if w <= 0.0:
+                continue
+            for g in list(v.groups):
+                o.vertex_groups[g.group].add([v.index], g.weight * (1.0 - w), 'REPLACE')
+            name = ch[0] if p.z > ch[3].z else ch[1]
+            G(name).add([v.index], w, 'ADD')
+            continue
+        if p.z > SWAY_TOP or p.z < H * 0.085 or abs(p.x) < 0.01:      # shoes (below the hem) stay on the feet
+            continue
+        side = 'L' if p.x > 0 else 'R'
+        chains = [c for c in leg_chains if c[0] == side]
+        c0, _ = ring(thigh.x * (1 if side == 'L' else -1), p.z)
+        rd = Vector((p.x - c0.x, p.y - c0.y, 0)).normalized()
+        # two nearest chains by angle, weighted by how close the vertex is in angle
+        sc = sorted(chains, key=lambda c: -rd.dot(c[1]))[:2]
+        ws = [max(0.05, rd.dot(c[1]) + 1.0) for c in sc]
+        tot = sum(ws)
+        blend = 0.6 * max(0.0, min(1.0, (SWAY_TOP - p.z) / (H * 0.08)))   # cloth chains take up to 60 %; the rest keeps following the leg
+        if blend <= 0.0:
+            continue
+        for g in list(v.groups):
+            o.vertex_groups[g.group].add([v.index], g.weight * (1.0 - blend), 'REPLACE')
+        for c, w in zip(sc, ws):
+            pts = c[3]
+            j = min(2, max(0, int((SWAY_TOP - p.z) / ((SWAY_TOP - SWAY_BOT) / 3.0))))
+            G(c[2][j]).add([v.index], blend * w / tot, 'ADD')
 # trousers, belt and the sash bow never follow the arms or fingers (heat weights leak into the bow from the nearby hands)
 ARMISH = ('shoulder', 'upperarm', 'forearm', 'hand', 'thumb', 'index', 'middle', 'ring', 'pinky')
 for o in cloth:

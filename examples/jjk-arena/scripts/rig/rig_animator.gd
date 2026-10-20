@@ -17,6 +17,7 @@ var _rest_dir: Array[Vector3] = []
 var _order: Array[int] = []
 var _fists := {}              ## "L"/"R" -> BoneAttachment3D
 var fists_on := false
+var flat_fists := false       ## match an unshaded (anime) character
 var _finger := {}             ## "R"/"L" -> {"index": [bone ids 0..2], ...}
 const FINGERS := ["thumb", "index", "middle", "ring", "pinky"]
 
@@ -39,6 +40,10 @@ func load_model(path: String) -> bool:
 				idx[n] = i
 				break
 	_cache_rest()
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		var m0 = (mi as MeshInstance3D).get_active_material(0)
+		if m0 is BaseMaterial3D and (m0 as BaseMaterial3D).shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED:
+			flat_fists = true
 	for side in ["L", "R"]:
 		var m := {}
 		for f in FINGERS:
@@ -134,6 +139,15 @@ func set_fists(on: bool) -> void:
 			skeleton.add_child(att)
 			var mesh: Node3D = res.instantiate()
 			att.add_child(mesh)
+			if flat_fists:
+				for mi in mesh.find_children("*", "MeshInstance3D", true, false):
+					for si in (mi as MeshInstance3D).mesh.get_surface_count():
+						var m := (mi as MeshInstance3D).get_active_material(si) as StandardMaterial3D
+						if m != null:
+							m = m.duplicate()
+							m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+							m.albedo_color = Color(1.25, 1.15, 1.1)
+							(mi as MeshInstance3D).set_surface_override_material(si, m)
 			mesh.transform = _rest_g[fa].affine_inverse() * world
 			_fists[s] = att
 		if _fists.has(s):
