@@ -111,8 +111,8 @@ func _init() -> void:
 	check(rw.size() == 1 and rw[0] == a3, "time-out goes to the fighter with more health")
 
 	# AI beats a passive opponent
-	var a4 := make("AI", Vector3(0, 0, 0))
-	var b4 := make("Dummy", Vector3(4, 0, 0))
+	var a4 := make("AI", Vector3(0, 0, 30))   # away from the fighters left over from the cases above
+	var b4 := make("Dummy", Vector3(4, 0, 30))
 	a4.opponent = b4
 	b4.opponent = a4
 	var ai := FightAI.new()
