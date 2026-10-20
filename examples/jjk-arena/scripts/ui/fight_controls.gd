@@ -34,38 +34,48 @@ func _ready() -> void:
 	_knob = _disc(STICK_R * 0.85, Color(1, 1, 1, 0.30))
 	_knob.visible = false
 	_root.add_child(_knob)
-	_btn("light", "PUNCH", Vector2(-170, -150), 86)
-	_btn("heavy", "KICK", Vector2(-270, -80), 78)
-	_btn("special", "SKILL", Vector2(-120, -260), 78)
-	_btn("skill2", "SKILL 2", Vector2(-330, -360), 70)
-	_btn("ultimate", "ULT", Vector2(-250, -240), 72)
-	_btn("dodge", "DODGE", Vector2(-380, -150), 70)
-	_btn("block", "GUARD", Vector2(-380, -250), 70, true)
-	_btn("fly", "FLY", Vector2(-90, -380), 66)
-	_btn("domain", "DOMAIN", Vector2(-200, -380), 74)
+	_btn("light", "fist", Vector2(-170, -150), 46)
+	_btn("heavy", "foot", Vector2(-270, -80), 40)
+	_btn("special", "red", Vector2(-120, -260), 40)
+	_btn("skill2", "blue", Vector2(-330, -360), 36)
+	_btn("ultimate", "purple", Vector2(-250, -240), 38)
+	_btn("dodge", "dash", Vector2(-380, -150), 36)
+	_btn("block", "shield", Vector2(-380, -250), 36, true)
+	_btn("fly", "fly", Vector2(-90, -380), 34)
+	_btn("domain", "void", Vector2(-200, -380), 38)
 	_relabel()
 
-const LABELS := {
-	"gojo": {"special": "RED", "skill2": "BLUE", "ultimate": "PURPLE", "domain": "VOID"},
-	"sukuna": {"special": "DISMANTLE", "skill2": "CLEAVE", "ultimate": "FUGA", "domain": "SHRINE"},
+const GLYPHS := {
+	"gojo": {"special": "red", "skill2": "blue", "ultimate": "purple", "domain": "void"},
+	"sukuna": {"special": "dismantle", "skill2": "cleave", "ultimate": "fuga", "domain": "shrine"},
 }
+const TINTS := {"special": Color(1.0, 0.35, 0.3), "skill2": Color(0.35, 0.6, 1.0), "ultimate": Color(0.75, 0.45, 1.0), "domain": Color(1.0, 0.85, 0.4)}
+const COSTS := {"special": 35.0, "skill2": 25.0, "ultimate": 100.0, "domain": 100.0}
 
 func _relabel() -> void:
 	if _root == null:
 		return
-	for id in LABELS.get(moveset, {}):
-		var b := _root.get_node_or_null(id.capitalize())
+	for id in GLYPHS.get(moveset, {}):
+		var b := _root.get_node_or_null(id.capitalize()) as GlyphButton
 		if b != null:
-			(b as Button).text = LABELS[moveset][id]
+			b.glyph = GLYPHS[moveset][id]
+			b.tint = TINTS[id]
+			b.queue_redraw()
 
 func _process_labels() -> void:
-	# the ultimate turns into the low-health super (200% Purple / World-Cutting Slash) below half health
+	# energy rings on the technique buttons; the ultimate becomes the low-health super (200% Purple / World-Cutting Slash)
 	if fighter == null or _root == null:
 		return
-	var b := _root.get_node_or_null("Ultimate") as Button
-	if b != null:
-		var low := fighter.health < Fighter.MAX_HEALTH * 0.5
-		b.text = ("200%" if moveset == "gojo" else "WORLD\nSLASH") if low else LABELS.get(moveset, {}).get("ultimate", "ULT")
+	for id in COSTS:
+		var b := _root.get_node_or_null(id.capitalize()) as GlyphButton
+		if b != null:
+			b.set_fill(clampf(fighter.energy / COSTS[id], 0.0, 1.0))
+	var u := _root.get_node_or_null("Ultimate") as GlyphButton
+	if u != null:
+		var want: String = "super" if fighter.health < Fighter.MAX_HEALTH * 0.5 else GLYPHS.get(moveset, {}).get("ultimate", "purple")
+		if u.glyph != want:
+			u.glyph = want
+			u.queue_redraw()
 
 func _disc(d: float, c: Color) -> Control:
 	var p := Panel.new()
@@ -79,29 +89,18 @@ func _disc(d: float, c: Color) -> Control:
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return p
 
-func _btn(id: String, text: String, off: Vector2, d: float, hold := false) -> void:
-	var b := Button.new()
+func _btn(id: String, glyph: String, off: Vector2, r: float, hold := false) -> void:
+	var b := GlyphButton.new()
 	b.name = id.capitalize()
-	b.text = text
-	b.focus_mode = Control.FOCUS_NONE
-	b.size = Vector2(d, d)
-	b.add_theme_font_size_override("font_size", 13)
-	var n := StyleBoxFlat.new()
-	n.bg_color = Color(0.1, 0.1, 0.13, 0.55)
-	n.set_corner_radius_all(int(d * 0.5))
-	n.set_border_width_all(2)
-	n.border_color = Color(1, 1, 1, 0.4)
-	var h := n.duplicate() as StyleBoxFlat
-	h.bg_color = Color(UiKit.ACCENT.r, UiKit.ACCENT.g, UiKit.ACCENT.b, 0.75)
-	for s in ["normal", "hover", "pressed"]:
-		b.add_theme_stylebox_override(s, h if s == "pressed" else n)
+	b.glyph = glyph
+	b.radius = r
 	b.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	b.offset_left = off.x
 	b.offset_top = off.y
-	b.offset_right = off.x + d
-	b.offset_bottom = off.y + d
-	b.button_down.connect(func(): _press(id, hold, true))
-	b.button_up.connect(func(): _press(id, hold, false))
+	b.offset_right = off.x + r * 2.0
+	b.offset_bottom = off.y + r * 2.0
+	b.pressed_down.connect(func(): _press(id, hold, true))
+	b.released.connect(func(): _press(id, hold, false))
 	_root.add_child(b)
 
 func _press(id: String, hold: bool, down: bool) -> void:

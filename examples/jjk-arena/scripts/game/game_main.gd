@@ -409,7 +409,8 @@ func _on_move_phase(f: Fighter, moves: String, name: String, phase: int) -> void
 			MoveVfx.sukuna_world_slash(_world, f, o, phase)
 	var big := name in ["ultimate", "purple200", "world_slash", "domain"]
 	if big and phase == 0:
-		_hud_flash(MOVE_TITLES.get(moves + "_" + name, ""))
+		if name != "domain":
+			_hud_flash(MOVE_TITLES.get(moves + "_" + name, ""))
 		if name != "ultimate" and _cam != null:
 			_cam.cinematic(f, 1.0)
 	if big and phase == 1:
@@ -432,6 +433,7 @@ func _on_domain(f: Fighter, moves: String) -> void:
 	var o := f.opponent
 	if o == null:
 		return
+	MoveVfx.domain_burst(_world, f, Color(0.35, 0.6, 1.0) if moves == "gojo" else Color(0.9, 0.08, 0.06))
 	if moves == "gojo":
 		o.add_to_group("void_target")
 		_void.activate(f.global_position)
@@ -461,6 +463,8 @@ func _hud_flash(text: String) -> void:
 func _build_open_world() -> Dictionary:
 	var root := Node3D.new()
 	root.name = "OpenWorld"
+	for n in ModelCatalog.TOWERS + ModelCatalog.MIDRISE + ModelCatalog.TREES:
+		ModelCatalog.entry(n)        # load every model now, behind the loading screen, so streaming never hitches on a first use
 	_map = WorldMap.new()
 	_map.view_chunks = [2, 3, 4, 5, 5, 3][_mode]
 	root.add_child(_map)

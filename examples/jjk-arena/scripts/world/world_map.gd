@@ -139,6 +139,7 @@ func _build_chunk(k: Vector2i) -> void:
 	var oz := k.y * CHUNK
 	node.add_child(_terrain(ox, oz))
 	var feet := []
+	var batch := {}                       # "model#part" -> {mesh, xforms: [], markers: [[marker, idx]]}
 	# blocks whose centre falls inside this chunk
 	var b0x := floori(ox / WorldGen.CELL)
 	var b1x := floori((ox + CHUNK) / WorldGen.CELL)
@@ -151,26 +152,18 @@ func _build_chunk(k: Vector2i) -> void:
 			if cx < ox or cx >= ox + CHUNK or cz < oz or cz >= oz + CHUNK:
 				continue
 			for b in WorldGen.block_buildings(bx, bz):
-				node.add_child(_building(b))
-				var s: Vector3 = b["size"]
-				var p: Vector3 = b["pos"]
-				feet.append({"rect": Rect2(p.x - s.x * 0.5, p.z - s.z * 0.5, s.x, s.z), "top": p.y + s.y})
+				_place_building(node, b, bx, bz, feet, batch)
 	_footprints[k] = feet
+	_flush_batch(node, batch)
 	if props_enabled:
 		_street_props(node, ox, oz, k)
-	var trees := WorldGen.chunk_trees(k.x, k.y, CHUNK, 90)
+	var trees := WorldGen.chunk_trees(k.x, k.y, CHUNK, 70)
 	if not trees.is_empty():
-		var mm := MultiMesh.new()
-		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = _tree_mesh
-		mm.instance_count = trees.size()
-		for i in trees.size():
-			var t: Vector3 = trees[i]
-			var sc := 0.7 + WorldGen.hash2(int(t.x), int(t.z), 8) * 1.1
-			mm.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3(sc, sc, sc)), t + Vector3(0, 5.0 * sc, 0)))
-		var mi := MultiMeshInstance3D.new()
-		mi.multimesh = mm
-		node.add_child(mi)
+		var tb := {}
+		for t in trees:
+			var h := WorldGen.hash2(int(t.x), int(t.z), 8)
+			_add_tree(tb, t, 7.0 + h * 6.0, h)
+		_flush_batch(node, tb)
 
 func _terrain(ox: float, oz: float) -> MeshInstance3D:
 	var n := GRID + 1
@@ -348,6 +341,7 @@ const CAR_COLORS := [Color(0.75, 0.1, 0.1), Color(0.9, 0.9, 0.92), Color(0.1, 0.
 func _street_props(node: Node3D, ox: float, oz: float, k: Vector2i) -> void:
 	var X := {"pole": [], "head": [], "car": [], "cab": [], "wheels": [], "trunk": [], "crown": [], "tlight": [], "bench": [], "bin": [], "grass": []}
 	var C := {"car": [], "crown": []}
+	var TB := {}
 	var cell := WorldGen.CELL
 	var half := WorldGen.ROAD * 0.5
 	var b0x := floori(ox / cell)
@@ -369,9 +363,7 @@ func _street_props(node: Node3D, ox: float, oz: float, k: Vector2i) -> void:
 				for t in 6:
 					var px := cx + (WorldGen.hash2(bx, bz, 400 + t) - 0.5) * 50.0
 					var pz := cz + (WorldGen.hash2(bx, bz, 500 + t) - 0.5) * 50.0
-					X["trunk"].append(Transform3D(Basis.IDENTITY, Vector3(px, y + 1.3, pz)))
-					X["crown"].append(Transform3D(Basis.from_scale(Vector3.ONE * (1.0 + WorldGen.hash2(bx, bz, 600 + t))), Vector3(px, y + 3.6, pz)))
-					C["crown"].append(Color(0.12, 0.3 + 0.1 * WorldGen.hash2(bx, bz, t), 0.1))
+					_add_tree(TB, Vector3(px, y, pz), 8.0 + WorldGen.hash2(bx, bz, 600 + t) * 6.0, WorldGen.hash2(bx, bz, t))
 				X["bench"].append(Transform3D(Basis.IDENTITY, Vector3(cx, y + 0.25, cz - 8.0)))
 			# four sidewalks around the block
 			var edges := [[Vector3(x0, 0, z0), Vector3(1, 0, 0), x1 - x0], [Vector3(x0, 0, z1), Vector3(1, 0, 0), x1 - x0],
@@ -391,9 +383,7 @@ func _street_props(node: Node3D, ox: float, oz: float, k: Vector2i) -> void:
 						X["pole"].append(Transform3D(Basis.IDENTITY, p + Vector3(0, 3.5, 0)))
 						X["head"].append(Transform3D(face, p + Vector3(0, 7.0, 0) + out * 0.6))
 					elif h < 0.55:
-						X["trunk"].append(Transform3D(Basis.IDENTITY, p + Vector3(0, 1.3, 0)))
-						X["crown"].append(Transform3D(Basis.from_scale(Vector3.ONE * (0.8 + h * 0.6)), p + Vector3(0, 3.5, 0)))
-						C["crown"].append(Color(0.13, 0.32 + 0.12 * h, 0.1))
+						_add_tree(TB, p, 6.0 + h * 4.0, h)
 					elif h < 0.68:
 						X["bench"].append(Transform3D(face, p + Vector3(0, 0.25, 0)))
 					elif h < 0.78:
@@ -416,3 +406,95 @@ func _street_props(node: Node3D, ox: float, oz: float, k: Vector2i) -> void:
 				X["tlight"].append(Transform3D(Basis.IDENTITY, c + Vector3(0, 5.2, 0)))
 	for key in X:
 		_mm(node, _props[key], X[key], C.get(key, []))
+	_flush_batch(node, TB)
+
+## Add one tree (a real model, picked by `pick` 0..1) of `height` meters at `at` to a batch.
+func _add_tree(batch: Dictionary, at: Vector3, height: float, pick: float) -> void:
+	var name: String = ModelCatalog.TREES[int(pick * ModelCatalog.TREES.size()) % ModelCatalog.TREES.size()]
+	var e := ModelCatalog.entry(name)
+	if e.is_empty():
+		return
+	var s: float = height / maxf(e["size"].y, 0.01)
+	var xf := Transform3D(Basis(Vector3.UP, pick * TAU).scaled(Vector3.ONE * s), at)
+	_batch_parts(batch, name, e, xf, null)
+
+func _batch_parts(batch: Dictionary, name: String, e: Dictionary, xf: Transform3D, marker: Node3D) -> void:
+	var parts: Array = e["parts"]
+	for i in parts.size():
+		var key := "%s#%d" % [name, i]
+		if not batch.has(key):
+			batch[key] = {"mesh": parts[i][0], "xforms": [], "markers": []}
+		var slot: Dictionary = batch[key]
+		if marker != null:
+			slot["markers"].append([marker, slot["xforms"].size()])
+		slot["xforms"].append(xf * (parts[i][1] as Transform3D))
+
+func _flush_batch(node: Node3D, batch: Dictionary) -> void:
+	for key in batch:
+		var slot: Dictionary = batch[key]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = slot["mesh"]
+		mm.instance_count = slot["xforms"].size()
+		for i in mm.instance_count:
+			mm.set_instance_transform(i, slot["xforms"][i])
+		var mi := MultiMeshInstance3D.new()
+		mi.multimesh = mm
+		node.add_child(mi)
+		for m in slot["markers"]:
+			var marker: Node3D = m[0]
+			var list: Array = marker.get_meta("mm", [])
+			list.append([mm, m[1]])
+			marker.set_meta("mm", list)
+
+## A real building model on this footprint. The visible copy is part of the chunk's MultiMeshes; a light marker node carries its size and,
+## when it has to collapse, swaps itself for a full node copy (`materialize`) so the tween can tilt and sink it.
+func _place_building(node: Node3D, b: Dictionary, bx: int, bz: int, feet: Array, batch: Dictionary) -> void:
+	var p: Vector3 = b["pos"]
+	var fs: Vector3 = b["size"]
+	var tall := fs.y > 40.0
+	var list: Array = ModelCatalog.TOWERS if tall else ModelCatalog.MIDRISE
+	var name: String = list[int(WorldGen.hash2(bx * 3 + int(p.x), bz * 5 + int(p.z), 77) * list.size()) % list.size()]
+	var e := ModelCatalog.entry(name)
+	if e.is_empty():
+		node.add_child(_building(b))
+		var s0: Vector3 = b["size"]
+		feet.append({"rect": Rect2(p.x - s0.x * 0.5, p.z - s0.z * 0.5, s0.x, s0.z), "top": p.y + s0.y})
+		return
+	var size: Vector3 = e["size"]
+	var foot := minf(fs.x, fs.z) / maxf(minf(size.x, size.z), 0.2)
+	var sc := minf(maxf(fs.x, fs.z), foot) * 0.95
+	if tall:
+		sc = maxf(sc, fs.y / maxf(size.y, 0.3) * 0.6)      # towers keep some of their planned height
+		sc = minf(sc, maxf(fs.x, fs.z) * 1.6)
+	var rot := (int(WorldGen.hash2(bx, bz, int(p.x)) * 4.0) % 4) * PI * 0.5
+	var marker := Node3D.new()
+	marker.position = p
+	marker.rotation.y = rot
+	marker.add_to_group("buildings")
+	var h: float = size.y * sc
+	var sx: float = size.x * sc
+	var sz: float = size.z * sc
+	if int(round(rot / (PI * 0.5))) % 2 == 1:
+		var t := sx
+		sx = sz
+		sz = t
+	marker.set_meta("height", h)
+	marker.set_meta("width", maxf(sx, sz))
+	marker.set_meta("model", name)
+	marker.set_meta("scale", sc)
+	marker.set_meta("materialize", _materialize.bind(marker))
+	node.add_child(marker)
+	_batch_parts(batch, name, e, Transform3D(Basis(Vector3.UP, rot).scaled(Vector3.ONE * sc), p), marker)
+	feet.append({"rect": Rect2(p.x - sx * 0.5, p.z - sz * 0.5, sx, sz), "top": p.y + h})
+
+func _materialize(marker: Node3D) -> void:
+	if marker.has_meta("solid"):
+		return
+	marker.set_meta("solid", true)
+	for pair in marker.get_meta("mm", []):
+		(pair[0] as MultiMesh).set_instance_transform(pair[1], Transform3D(Basis.from_scale(Vector3.ONE * 0.0001), Vector3(0, -500, 0)))
+	var copy := ModelCatalog.instance(marker.get_meta("model"))
+	if copy != null:
+		copy.scale = Vector3.ONE * float(marker.get_meta("scale"))
+		marker.add_child(copy)

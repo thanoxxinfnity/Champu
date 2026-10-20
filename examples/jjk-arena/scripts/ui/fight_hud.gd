@@ -36,7 +36,7 @@ func _ready() -> void:
 		face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 		face.size = Vector2(74, 74)
-		face.position = Vector2(14, 10) if side == 0 else Vector2(0, 10)
+		face.position = Vector2(12, 8) if side == 0 else Vector2(0, 8)
 		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		root.add_child(face)
 		_faces.append(face)
@@ -102,7 +102,7 @@ func _process(delta: float) -> void:
 	_bars.queue_redraw()
 
 ## A slanted bar from x0 to x1 (x1 < x0 for the right side), filled to `k` (0..1) from the outside edge inward.
-func _slant(x0: float, x1: float, y: float, h: float, k: float, c: Color) -> void:
+func _slant(x0: float, x1: float, y: float, h: float, k: float, c: Color, outline := false) -> void:
 	var dir := signf(x1 - x0)
 	var w := absf(x1 - x0) * clampf(k, 0.0, 1.0)
 	var sl := h * 0.6
@@ -110,7 +110,12 @@ func _slant(x0: float, x1: float, y: float, h: float, k: float, c: Color) -> voi
 	var xb := x0 + dir * w
 	if w <= 0.5:
 		return
-	_bars.draw_colored_polygon(PackedVector2Array([Vector2(xa, y), Vector2(xb + dir * sl, y), Vector2(xb, y + h), Vector2(xa - dir * sl, y + h)]), c)
+	var pts := PackedVector2Array([Vector2(xa, y), Vector2(xb + dir * sl, y), Vector2(xb, y + h), Vector2(xa - dir * sl, y + h)])
+	if outline:
+		pts.append(pts[0])
+		_bars.draw_polyline(pts, c, 2.0, true)
+	else:
+		_bars.draw_colored_polygon(pts, c)
 
 func _draw_bars() -> void:
 	if a == null:
@@ -119,42 +124,53 @@ func _draw_bars() -> void:
 	var mid := vw * 0.5
 	var fs := [a, b]
 	for i in 2:
-		var x0 := 92.0 if i == 0 else vw - 92.0
-		var x1 := mid - 70.0 if i == 0 else mid + 70.0
-		var y := 20.0
-		var h := 24.0
-		_slant(x0, x1, y - 3, h + 6, 1.0, Color(0, 0, 0, 0.6))
-		_slant(x0, x1, y, h, _trail[i] / 100.0, Color(1, 1, 1, 0.85))
+		var left := i == 0
+		var x0 := 100.0 if left else vw - 100.0
+		var x1 := mid - 66.0 if left else mid + 66.0
+		var dir := signf(x1 - x0)
+		var y := 18.0
+		var h := 22.0
+		# back plate and portrait frame
+		_slant(x0 - dir * 92.0, x1 + dir * 6.0, 6.0, 66.0, 1.0, Color(0.02, 0.02, 0.04, 0.55))
+		var fx := 12.0 if left else vw - 88.0
+		_bars.draw_rect(Rect2(fx - 2, 8, 78, 78), UiKit.ACCENT if left else Color(0.85, 0.2, 0.25), false, 3.0)
+		# health: dark well, red damage trail, gradient fill, gloss, outline
+		_slant(x0, x1, y, h, 1.0, Color(0.0, 0.0, 0.0, 0.7))
+		_slant(x0, x1, y, h, _trail[i] / 100.0, Color(0.85, 0.12, 0.08, 0.95))
 		var hk: float = _shown[i] / 100.0
-		var col := Color(0.95, 0.75, 0.15).lerp(Color(0.95, 0.15, 0.12), clampf(1.0 - hk * 1.6, 0.0, 1.0))
+		var col := Color(0.98, 0.82, 0.25).lerp(Color(1.0, 0.3, 0.15), clampf(1.0 - hk * 1.4, 0.0, 1.0))
+		if hk < 0.25:
+			col = col.lerp(Color(1, 0.1, 0.1), 0.5 + 0.5 * sin(_t * 9.0))
 		if _flash[i] > 0.0:
 			col = col.lerp(Color.WHITE, _flash[i] * 3.0)
 		_slant(x0, x1, y, h, hk, col)
-		_slant(x0, x1, y, h * 0.35, hk, Color(1, 1, 1, 0.25))
-		# cursed energy: four segments
+		_slant(x0, x1, y + h * 0.62, h * 0.38, hk, Color(0, 0, 0, 0.22))
+		_slant(x0, x1, y + 2.0, h * 0.28, hk, Color(1, 1, 1, 0.35))
+		_slant(x0, x1, y, h, 1.0, Color(1, 1, 1, 0.85), true)
+		# cursed energy: four glowing segments
 		var e: float = fs[i].energy / 100.0
 		var ey := y + h + 8.0
 		var seg := absf(x1 - x0) * 0.62 / 4.0
-		var dir := signf(x1 - x0)
-		for s in 4:
-			var sx := x0 + dir * (s * seg + 4.0)
-			var fill := clampf(e * 4.0 - s, 0.0, 1.0)
+		for sgi in 4:
+			var sx := x0 + dir * (sgi * seg + 4.0)
+			var fill := clampf(e * 4.0 - sgi, 0.0, 1.0)
 			var ex := sx + dir * (seg - 6.0)
-			_slant(sx, ex, ey, 10.0, 1.0, Color(0, 0, 0, 0.55))
-			var ec := Color(0.3, 0.6, 1.0) if i == 0 else Color(1.0, 0.3, 0.3)
+			_slant(sx, ex, ey, 9.0, 1.0, Color(0, 0, 0, 0.6))
+			var ec := Color(0.3, 0.65, 1.0) if left else Color(1.0, 0.3, 0.35)
 			if e >= 1.0:
-				ec = ec.lerp(Color.WHITE, 0.35 + 0.35 * sin(_t * 8.0))
-			_slant(sx, ex, ey, 10.0, fill, ec)
+				ec = ec.lerp(Color.WHITE, 0.3 + 0.3 * sin(_t * 8.0))
+			_slant(sx, ex, ey, 9.0, fill, ec)
+			_slant(sx, ex, ey, 9.0, 1.0, Color(1, 1, 1, 0.35), true)
 		if e >= 1.0:
-			var txt := "DOMAIN READY"
-			var fx := x0 + dir * (seg * 4.0 + 14.0) - (0.0 if i == 0 else 120.0)
-			_bars.draw_string(ThemeDB.fallback_font, Vector2(fx, ey + 10.0), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 1, 1, 0.6 + 0.4 * sin(_t * 8.0)))
+			var gx := x0 + dir * (seg * 4.0 + 14.0) - (0.0 if left else 24.0)
+			_bars.draw_circle(Vector2(gx + 10.0, ey + 4.5), 6.0 + 2.0 * sin(_t * 8.0), Color(1, 0.9, 0.5, 0.85))
 		# round pips
 		var wins: int = match_ctl.wins.get(fs[i], 0)
 		for r in (0 if open_world else match_ctl.rounds_to_win):
 			var px := (x1 - dir * (14.0 + r * 18.0))
-			_bars.draw_circle(Vector2(px, y + h + 18.0), 6.0, UiKit.ACCENT if r < wins else Color(1, 1, 1, 0.25))
+			_bars.draw_circle(Vector2(px, y + h + 22.0), 6.0, UiKit.ACCENT if r < wins else Color(1, 1, 1, 0.25))
 	# timer plate
 	if open_world:
 		return
-	_bars.draw_colored_polygon(PackedVector2Array([Vector2(mid - 50, 8), Vector2(mid + 50, 8), Vector2(mid + 38, 62), Vector2(mid - 38, 62)]), Color(0, 0, 0, 0.6))
+	_bars.draw_colored_polygon(PackedVector2Array([Vector2(mid - 52, 6), Vector2(mid + 52, 6), Vector2(mid + 40, 64), Vector2(mid - 40, 64)]), Color(0.02, 0.02, 0.04, 0.75))
+	_bars.draw_polyline(PackedVector2Array([Vector2(mid - 52, 6), Vector2(mid + 52, 6), Vector2(mid + 40, 64), Vector2(mid - 40, 64), Vector2(mid - 52, 6)]), Color(1, 1, 1, 0.6), 2.0, true)

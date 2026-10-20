@@ -25,6 +25,8 @@ static func run(building: Node3D, dm: DestructionManager, parent: Node3D, fire_s
 	if building == null or not building.is_inside_tree() or building.has_meta("collapsed"):
 		return
 	building.set_meta("collapsed", true)
+	if building.has_meta("materialize"):
+		(building.get_meta("materialize") as Callable).call()     # swap the batched copy for a real node so it can fall
 	var h: float = building.get_meta("height", 20.0)
 	var w := _footprint(building)
 	var base := building.global_position

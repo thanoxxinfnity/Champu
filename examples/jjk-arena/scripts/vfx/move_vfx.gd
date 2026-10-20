@@ -341,3 +341,31 @@ static func sukuna_world_slash(world: Node3D, caster: Node3D, target: Node3D, ph
 		if target != null:
 			slash_burst(world, target.global_position + Vector3.UP * 1.0, 12, 4.0)
 			_shockwave(world, target.global_position + Vector3.UP, Color(1, 0.9, 0.9), 10.0)
+
+## Domain opening: a dark sphere bursts out of the caster's hand sign and sweeps over the arena, chased by a bright ring and a flash,
+## just before the domain itself takes over the scene.
+static func domain_burst(world: Node3D, caster: Node3D, c: Color) -> void:
+	var at := caster.global_position + Vector3.UP * 1.4
+	var n := _root(world, at, 1.6)
+	var dark := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 1.0
+	sm.height = 2.0
+	dark.mesh = sm
+	var dm := StandardMaterial3D.new()
+	dm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	dm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	dm.albedo_color = Color(0.0, 0.0, 0.02, 0.85)
+	dm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	dark.material_override = dm
+	n.add_child(dark)
+	var rim := _sphere(n, 1.02, c, 2.5)
+	(rim.material_override as StandardMaterial3D).albedo_color.a = 0.6
+	var l := _light(n, c, 10.0, 30.0)
+	var tw := n.create_tween().set_parallel(true)
+	tw.tween_property(dark, "scale", Vector3.ONE * 60.0, 0.9).from(Vector3.ONE * 0.1).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_IN)
+	tw.tween_property(rim, "scale", Vector3.ONE * 62.0, 0.9).from(Vector3.ONE * 0.1).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_IN)
+	tw.tween_property(dm, "albedo_color:a", 0.0, 0.4).set_delay(0.9)
+	tw.tween_property(rim.material_override, "albedo_color:a", 0.0, 0.4).set_delay(0.8)
+	tw.tween_property(l, "light_energy", 0.0, 1.2)
+	_shockwave(world, Vector3(at.x, 0.2, at.z), c, 24.0)
