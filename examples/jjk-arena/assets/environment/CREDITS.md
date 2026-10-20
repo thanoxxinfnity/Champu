@@ -25,3 +25,22 @@
 - `props/lamp_post.glb` — "Low-Poly Lamp Post" by Memorie, licence CC Attribution — https://sketchfab.com/3d-models/low-poly-lamp-post-c466684e819a4428b6d8ed50537615e4
 - `props/street_lights.glb` — "Various Low-Poly Street Lights" by KMB3D, licence CC Attribution — https://sketchfab.com/3d-models/various-low-poly-street-lights-1173b0c4d9b0400bbeaafbee0e94ca59
 - `props/forest_trees.glb` — "Low Poly Forest Tree Pack" by 99.Miles, licence CC Attribution — https://sketchfab.com/3d-models/low-poly-forest-tree-pack-5ff5a51e74324845a4e4905f182dfb2b
+- `city/chicago_real.glb` — "Realistic chicago buildings" by 99.Miles, licence CC Attribution — https://sketchfab.com/3d-models/realistic-chicago-buildings-c4a3993ef1e84e6d9d5a15c78da88aae
+- `city/chicago.glb` — "Chicago buildings" by 99.Miles, licence CC Attribution — https://sketchfab.com/3d-models/chicago-buildings-950b3d8a998c41ecb06e6ba85da3e1f6
+- `city/soviet_apartment.glb` — "LOW POLY - SOVIET  APARTMENT BUILDING 8K" by Colin.Greenall, licence CC Attribution — https://sketchfab.com/3d-models/low-poly-soviet-apartment-building-8k-05229ac1d1f94e6c8cacaad91110c602
+- `city/asian_tower.glb` — "LOW POLY - ASIAN TOWER BLOCK" by Colin.Greenall, licence CC Attribution — https://sketchfab.com/3d-models/low-poly-asian-tower-block-694adf5094fa41f99a245ed822293f47
+- `city/washington_st.glb` — "317 Washington Street" by hamma085, licence CC Attribution — https://sketchfab.com/3d-models/317-washington-street-1c16cac26e2b484387ac1311e0f5b57e
+- `city/midcity_set.glb` — "Midcity Buildings Set - Low Poly model" by Daniel Zhabotinsky, licence CC Attribution — https://sketchfab.com/3d-models/midcity-buildings-set-low-poly-model-d5cbc471d20c4c9da31c3df656648916
+- `city/european_pack.glb` — "European Buildings Asset Pack 2" by 3DBuilder, licence CC Attribution — https://sketchfab.com/3d-models/european-buildings-asset-pack-2-43bcba64950045d586fd571b46b573f5
+- `city/residential9.glb` — "9 storey residential building (updated)" by bean(alwayshasbean), licence CC Attribution — https://sketchfab.com/3d-models/9-storey-residential-building-updated-4407c6bd0d944a9c8ad0b9c08e65a1da
+- `city/oak_a.glb` — "Oak tree" by massive-graphisme, licence CC Attribution — https://sketchfab.com/3d-models/oak-tree-3dc59560f2d24345bdbe65c44636453b
+- `city/oak_b.glb` — "Oak tree" by evolveduk, licence CC Attribution — https://sketchfab.com/3d-models/oak-tree-6468dd4d3eb240ef902b9057d9913606
+- `city/maple.glb` — "Maple tree" by atrodler, licence CC Attribution — https://sketchfab.com/3d-models/maple-tree-4b27adcf92f644bdabf8ecc6c5bef399
+- `city/oak_game.glb` — "Oak Tree | Game Ready" by Maple, licence CC Attribution — https://sketchfab.com/3d-models/oak-tree-game-ready-2f4ae6b907fd4741abda5d1b71c83b10
+- `city/tree_real.glb` — "Realistic Tree" by Daniel, licence CC Attribution — https://sketchfab.com/3d-models/realistic-tree-d989c0f801d847b9a74992ec4ddcfdfc
+- `city/singapore_tower.glb` — "Singapore Office Skyscraper [FREE]" by 99.Miles, licence CC Attribution — https://sketchfab.com/3d-models/singapore-office-skyscraper-free-2305f0fe03ba44229a1f768dcb48bd8f
+- `city/montgomery_tower.glb` — "Montgomery Ward Tower Building" by hamma085, licence CC Attribution — https://sketchfab.com/3d-models/montgomery-ward-tower-building-8c753bdec75e41aeb1af609148735305
+- `city/rand_tower.glb` — "Rand Tower" by hamma085, licence CC Attribution — https://sketchfab.com/3d-models/rand-tower-9ecf85f8298b49aca24a02d673ded5a9
+- `city/highrise_office.glb` — "High Rise Office Building" by Arsen Ismailov, licence CC Attribution — https://sketchfab.com/3d-models/high-rise-office-building-3db1659ca3984bdbb18d9d3838095bea
+- `city/residential_tower.glb` — "residental tower office  apartment building" by zigurat architecture studio, licence CC Attribution — https://sketchfab.com/3d-models/residental-tower-office-apartment-building-1fc97eaa61664237b20b7b32dbb3a059
+- `city/newyork.glb` — "New York Buildings" by sumitmangela, licence CC Attribution — https://sketchfab.com/3d-models/new-york-buildings-e7922fe0f7b14ed786f84529f9217dac
