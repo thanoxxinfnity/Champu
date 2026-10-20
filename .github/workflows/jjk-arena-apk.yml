@@ -1,0 +1,112 @@
+name: JJK Arena APK
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - claude/chomugiri-workspace-design-09sxwa
+    paths:
+      - "examples/jjk-arena/**"
+      - "examples/sideload.keystore"
+      - ".github/workflows/jjk-arena-apk.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container:
+      image: barichello/godot-ci:4.3
+    # GitHub Actions forces HOME=/github/home inside a `container:` job, which hides this image's
+    # baked-in export templates and Java SDK config (both live under /root). Point HOME back.
+    env:
+      HOME: /root
+    defaults:
+      run:
+        working-directory: examples/jjk-arena
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import the project
+        run: |
+          godot --headless --import || true
+          godot --headless --editor --quit-after 2 || true
+
+      # A script that fails to load prints errors and still exits 0, so every gate also checks for the verdict line.
+      - name: "Fight logic: states, hits, combo, KO"
+        timeout-minutes: 8
+        run: |
+          godot --headless --fixed-fps 60 -s tests/fight_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: "Roster and domains"
+        timeout-minutes: 8
+        run: |
+          godot --headless --fixed-fps 60 -s tests/roster_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: "Graphics modes"
+        timeout-minutes: 8
+        run: |
+          godot --headless --fixed-fps 60 -s tests/graphics_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: "Cloth sway"
+        timeout-minutes: 8
+        run: |
+          godot --headless --fixed-fps 60 -s tests/cloth_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: "Destruction: mesh swap and slicing"
+        timeout-minutes: 8
+        run: |
+          godot --headless --fixed-fps 60 -s tests/destruction_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: "Finisher dismemberment"
+        timeout-minutes: 8
+        run: |
+          godot --headless --fixed-fps 60 -s tests/dismember_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: "Infinite Void domain"
+        timeout-minutes: 8
+        run: |
+          godot --headless --fixed-fps 60 -s tests/void_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: "Loading screen"
+        timeout-minutes: 8
+        run: |
+          godot --headless --fixed-fps 60 -s tests/loading_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+      - name: "Rig animator: poses, fists, flying"
+        timeout-minutes: 8
+        run: |
+          godot --headless --fixed-fps 60 -s tests/rig_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
+
+      - name: Give this build a higher version number than the last
+        run: |
+          sed -i "s/^version\/code=.*/version\/code=$((1000 + GITHUB_RUN_NUMBER))/" export_presets.cfg
+          grep -n "^version/" export_presets.cfg
+
+      - name: Export Android APK
+        env:
+          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/examples/sideload.keystore
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: chomugames
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: chomugames
+        run: |
+          mkdir -pv build
+          godot --headless --export-release "Android" build/JjkArena.apk
+          ls -la build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: JjkArena-apk
+          path: examples/jjk-arena/build/JjkArena.apk
+          retention-days: 60
+
+      - name: Publish a download release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: jjk-arena-apk
+          name: JJK Arena (latest build)
+          body: Auto-built from ${{ github.sha }}. Sideload APK — enable "install from unknown sources" to install.
+          files: examples/jjk-arena/build/JjkArena.apk
