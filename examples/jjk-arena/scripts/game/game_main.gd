@@ -462,7 +462,7 @@ func _on_domain(f: Fighter, moves: String) -> void:
 			if c is Node3D and c != _void and c != _dm and c != _shrine and not (c is DirectionalLight3D) and (c as Node3D).visible:
 				(c as Node3D).visible = false
 				hidden.append(c)
-		get_tree().create_timer(5.0).timeout.connect(func() -> void:
+		get_tree().create_timer(8.0).timeout.connect(func() -> void:
 			for h in hidden:
 				if is_instance_valid(h):
 					h.visible = true
