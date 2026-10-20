@@ -41,6 +41,20 @@ var _combo_t := 0.0
 var _dodge_cd := 0.0
 var _kb := Vector3.ZERO
 var facing := Vector3.FORWARD
+var flying := false
+var fly_height := 3.2
+var _fly_prev := false
+
+## What the pose animator needs: attack kind ("light1".."light3", "heavy", "special", "ultimate"), phase 0-2 and progress 0..1 inside it.
+func attack_info() -> Dictionary:
+	if state != State.ATTACK:
+		return {}
+	var total: float = [float(_move["startup"]), float(_move["active"]), float(_move["recover"])][clampi(_phase, 0, 2)]
+	var kind := _move_name if _move_name != "light" else "light%d" % clampi(_combo, 1, 3)
+	return {"kind": kind, "phase": _phase, "k": 1.0 - clampf(_timer / maxf(total, 0.001), 0.0, 1.0)}
+
+func hit_progress() -> float:
+	return 1.0 - clampf(_timer / 0.4, 0.0, 1.0)
 
 func _ready() -> void:
 	add_to_group("fighter")
@@ -65,6 +79,10 @@ func _physics_process(delta: float) -> void:
 	energy = minf(MAX_ENERGY, energy + 1.5 * delta)
 	if opponent != null and opponent.is_alive() and state != State.HIT:
 		face(opponent.global_position)
+	var want_fly: bool = intent.get("fly", false)
+	if want_fly and not _fly_prev:
+		flying = not flying
+	_fly_prev = want_fly
 	match state:
 		State.IDLE, State.MOVE:
 			_free_state(delta)
@@ -86,6 +104,8 @@ func _physics_process(delta: float) -> void:
 	_kb = _kb.move_toward(Vector3.ZERO, 18.0 * delta) if state != State.DODGE else _kb
 	if state == State.HIT:
 		velocity = _kb
+	var target_y := fly_height if flying else 0.0
+	velocity.y = clampf((target_y - global_position.y) * 5.0, -14.0, 9.0)
 	move_and_slide()
 
 func _free_state(_delta: float) -> void:
@@ -108,7 +128,7 @@ func _free_state(_delta: float) -> void:
 			return
 	var mv: Vector2 = intent["move"]
 	if mv.length() > 0.1:
-		velocity = Vector3(mv.x, 0, mv.y).normalized() * move_speed
+		velocity = Vector3(mv.x, 0, mv.y).normalized() * move_speed * (1.9 if flying else 1.0)
 		_set_state(State.MOVE)
 	else:
 		velocity = Vector3.ZERO
@@ -191,6 +211,7 @@ func receive_hit(attacker: Fighter, move: Dictionary, dmg: float) -> float:
 	return dmg
 
 func _die() -> void:
+	flying = false
 	_set_state(State.KO)
 	velocity = Vector3.ZERO
 	ko.emit()
