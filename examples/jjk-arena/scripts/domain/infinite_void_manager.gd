@@ -157,6 +157,9 @@ func deactivate() -> void:
 	if not active:
 		return
 	active = false
+	# drop the sphere and the mirror floor at once: fading them out showed a black dome for half a second
+	sphere.visible = false
+	floor_mesh.visible = false
 	if _tween:
 		_tween.kill()
 	_tween = create_tween().set_parallel(true)

@@ -45,7 +45,7 @@ void fragment() {
 	float on_road = max(1.0 - smoothstep(road * 0.5 - 0.6, road * 0.5 + 0.6, dx), 1.0 - smoothstep(road * 0.5 - 0.6, road * 0.5 + 0.6, dz));
 	vec3 asphalt = vec3(0.10, 0.10, 0.11) * (0.9 + 0.2 * noise(p * 1.7));
 	// cracks and oil stains on the asphalt
-	asphalt *= 1.0 - 0.35 * smoothstep(0.62, 0.66, noise(p * 0.9)) - 0.25 * step(0.985, noise(p * 6.0));
+	asphalt *= 1.0 - 0.18 * smoothstep(0.7, 0.74, noise(p * 0.9)) - 0.25 * step(0.985, noise(p * 6.0));
 	// sidewalks: a light paving band with tile joints along every road
 	float side_x = step(road * 0.5, dx) * (1.0 - step(road * 0.5 + 4.5, dx));
 	float side_z = step(road * 0.5, dz) * (1.0 - step(road * 0.5 + 4.5, dz));
