@@ -18,7 +18,23 @@ const MOVES := {
 	"heavy": {"damage": 14.0, "startup": 0.22, "active": 0.12, "recover": 0.38, "range": 1.9, "arc": 0.6, "cost": 0.0, "gain": 8.0, "stun": 0.5, "knock": 6.0},
 	"special": {"damage": 22.0, "startup": 0.30, "active": 0.14, "recover": 0.45, "range": 6.0, "arc": 0.35, "cost": 35.0, "gain": 0.0, "stun": 0.7, "knock": 8.0},
 	"domain": {"damage": 0.0, "startup": 0.90, "active": 0.10, "recover": 0.50, "range": 0.0, "arc": 0.0, "cost": 100.0, "gain": 0.0, "stun": 0.0, "knock": 0.0},
+	"skill2": {"damage": 18.0, "startup": 0.26, "active": 0.12, "recover": 0.40, "range": 6.0, "arc": 0.4, "cost": 25.0, "gain": 0.0, "stun": 0.6, "knock": 5.0},
 	"ultimate": {"damage": 45.0, "startup": 0.60, "active": 0.20, "recover": 0.80, "range": 9.0, "arc": 0.25, "cost": 100.0, "gain": 0.0, "stun": 1.2, "knock": 14.0},
+}
+## Per-character overrides on top of MOVES. "ultimate_low" replaces the ultimate when the user is below half health.
+const SETS := {
+	"gojo": {
+		"special": {"range": 7.0, "damage": 22.0, "knock": 9.0},                                          # Reversal: Red — blows the target away
+		"skill2": {"range": 8.0, "damage": 16.0, "knock": -7.0, "stun": 0.8},                            # Lapse: Blue — drags the target in
+		"ultimate": {"range": 14.0, "arc": 0.35},                                                        # Hollow Purple
+		"ultimate_low": {"name": "purple200", "damage": 62.0, "range": 40.0, "arc": 0.5, "startup": 1.1, "unblockable": true, "knock": 18.0},
+	},
+	"sukuna": {
+		"special": {"range": 8.0, "damage": 20.0, "knock": 4.0},                                         # Dismantle — ranged slashes
+		"skill2": {"range": 2.8, "damage": 24.0, "knock": 3.0, "startup": 0.18, "arc": 0.6},             # Cleave — close-range, scales to the body
+		"ultimate": {"range": 12.0, "arc": 0.3},                                                         # Fuga
+		"ultimate_low": {"name": "world_slash", "damage": 65.0, "range": 40.0, "arc": 0.6, "startup": 1.2, "unblockable": true, "knock": 16.0},
+	},
 }
 const COMBO_WINDOW := 0.45
 const DODGE_TIME := 0.28
@@ -28,11 +44,12 @@ const MAX_ENERGY := 100.0
 
 @export var move_speed := 5.5
 @export var fighter_name := "Fighter"
+@export var moveset := "gojo"
 var health := MAX_HEALTH
 var energy := 0.0
 var state := State.IDLE
 var opponent: Fighter
-var intent := {"move": Vector2.ZERO, "light": false, "heavy": false, "special": false, "ultimate": false, "dodge": false, "block": false, "domain": false}
+var intent := {"move": Vector2.ZERO, "light": false, "heavy": false, "special": false, "ultimate": false, "dodge": false, "block": false, "domain": false, "skill2": false}
 
 var _timer := 0.0
 var _phase := 0            # 0 startup, 1 active, 2 recover
@@ -126,7 +143,7 @@ func _free_state(_delta: float) -> void:
 		_dodge_cd = DODGE_COOLDOWN
 		_set_state(State.DODGE)
 		return
-	for name in ["domain", "ultimate", "special", "heavy", "light"]:
+	for name in ["domain", "ultimate", "special", "skill2", "heavy", "light"]:
 		if intent.get(name, false) and _try_start(name):
 			return
 	var mv: Vector2 = intent["move"]
@@ -137,13 +154,24 @@ func _free_state(_delta: float) -> void:
 		velocity = Vector3.ZERO
 		_set_state(State.IDLE)
 
+func move_for(name: String) -> Dictionary:
+	var m: Dictionary = MOVES[name].duplicate()
+	var set: Dictionary = SETS.get(moveset, {})
+	if name == "ultimate" and health < MAX_HEALTH * 0.5 and set.has("ultimate_low"):
+		m.merge(set["ultimate_low"], true)
+	elif set.has(name):
+		m.merge(set[name], true)
+	if not m.has("name"):
+		m["name"] = name
+	return m
+
 func _try_start(name: String) -> bool:
-	var m: Dictionary = MOVES[name]
+	var m := move_for(name)
 	if energy < float(m["cost"]):
 		return false
 	energy -= float(m["cost"])
 	_move = m
-	_move_name = name
+	_move_name = m["name"]
 	_phase = 0
 	_timer = float(m["startup"])
 	_hit_done = false
@@ -156,7 +184,7 @@ func _try_start(name: String) -> bool:
 	_set_state(State.ATTACK)
 	if name == "ultimate":
 		ultimate_used.emit(m)
-	move_phase.emit(name, 0)
+	move_phase.emit(_move_name, 0)
 	return true
 
 func _attack_state(delta: float) -> void:
@@ -198,7 +226,7 @@ func receive_hit(attacker: Fighter, move: Dictionary, dmg: float) -> float:
 	var kb_dir := (global_position - attacker.global_position)
 	kb_dir.y = 0.0
 	kb_dir = kb_dir.normalized() if kb_dir.length() > 0.01 else -facing
-	if state == State.BLOCK and move != MOVES["ultimate"]:
+	if state == State.BLOCK and not move.get("unblockable", false) and float(move.get("cost", 0.0)) < 100.0:
 		dmg *= 0.2
 		_kb = kb_dir * float(move["knock"]) * 0.3
 		health = maxf(0.0, health - dmg)
@@ -207,7 +235,7 @@ func receive_hit(attacker: Fighter, move: Dictionary, dmg: float) -> float:
 		if health <= 0.0:
 			_die()
 		return dmg
-	if state == State.ATTACK and (_move_name == "domain" or _move_name == "ultimate"):
+	if state == State.ATTACK and float(_move.get("cost", 0.0)) >= 100.0:
 		# super armour: a domain or ultimate being cast takes the damage but is not interrupted
 		health = maxf(0.0, health - dmg * 0.7)
 		damaged.emit(dmg * 0.7)

@@ -77,7 +77,41 @@ static func walk(t: float, speed: float) -> Dictionary:
 	p["lean"] = 10.0 + 6.0 * speed
 	return p
 
+## Signature poses: Gojo's finger point for Red, open palm for Blue, arms wide then thrust for Purple; Sukuna's swipe for Dismantle,
+## palm strike for Cleave, the bow draw of Fuga, the World-Cutting Slash's two-handed sign then a full-body sweep, and both domain hand signs.
+const SIG_WINDUP := {
+	"gojo_special": {"twist": 18.0, "lean": 2.0, "uR": Vector3(0.55, -0.1, 0.55), "fR": Vector3(-0.1, 0.9, 0.3), "uL": Vector3(0.3, -0.9, 0.2), "fL": Vector3(0.2, -0.3, 0.9)},
+	"gojo_skill2": {"twist": -12.0, "uL": Vector3(0.6, -0.3, 0.4), "fL": Vector3(0.2, 0.5, 0.8), "uR": Vector3(0.3, -0.9, 0.0), "fR": Vector3(0.1, -0.6, 0.6)},
+	"gojo_ultimate": {"lean": -8.0, "uL": Vector3(1.0, 0.1, 0.1), "fL": Vector3(0.6, 0.6, 0.4), "uR": Vector3(1.0, 0.1, 0.1), "fR": Vector3(0.6, 0.6, 0.4), "crouch": 0.06},
+	"gojo_purple200": {"lean": -12.0, "uL": Vector3(1.0, 0.3, 0.0), "fL": Vector3(0.5, 0.8, 0.1), "uR": Vector3(1.0, 0.3, 0.0), "fR": Vector3(0.5, 0.8, 0.1), "crouch": 0.1, "head": -10.0},
+	"gojo_domain": {"lean": 0.0, "head": 4.0, "uR": Vector3(0.45, -0.35, 0.6), "fR": Vector3(-0.55, 0.8, 0.2), "uL": Vector3(0.25, -0.95, 0.1), "fL": Vector3(0.1, -1.0, 0.2), "crouch": 0.02},
+	"sukuna_special": {"twist": 26.0, "lean": 4.0, "uR": Vector3(-0.3, 0.6, 0.5), "fR": Vector3(-0.8, 0.4, 0.2), "crouch": 0.08},
+	"sukuna_skill2": {"twist": 22.0, "uR": Vector3(0.4, -0.6, -0.6), "fR": Vector3(0.0, 0.2, 1.0), "crouch": 0.14, "lean": 10.0},
+	"sukuna_ultimate": {"twist": 30.0, "uL": Vector3(0.0, 0.1, 1.0), "fL": Vector3(0.0, 0.1, 1.0), "uR": Vector3(0.7, 0.1, -0.2), "fR": Vector3(-0.9, 0.2, 0.3), "crouch": 0.08},
+	"sukuna_world_slash": {"lean": 4.0, "head": 8.0, "uL": Vector3(0.2, -0.4, 0.9), "fL": Vector3(-0.8, 0.5, 0.3), "uR": Vector3(0.2, -0.4, 0.9), "fR": Vector3(-0.8, 0.5, 0.3), "crouch": 0.05},
+	"sukuna_domain": {"lean": 6.0, "head": 10.0, "uL": Vector3(0.25, -0.5, 0.85), "fL": Vector3(-0.85, 0.35, 0.4), "uR": Vector3(0.25, -0.5, 0.85), "fR": Vector3(-0.85, 0.35, 0.4), "crouch": 0.04},
+}
+const SIG_STRIKE := {
+	"gojo_special": {"twist": -24.0, "lean": 10.0, "uR": Vector3(-0.1, 0.15, 1.0), "fR": Vector3(-0.05, 0.2, 1.0), "hz": 0.15},
+	"gojo_skill2": {"twist": 20.0, "lean": 8.0, "uL": Vector3(-0.1, 0.1, 1.0), "fL": Vector3(-0.1, 0.25, 1.0), "hz": 0.1},
+	"gojo_ultimate": {"lean": 14.0, "twist": -20.0, "uR": Vector3(-0.05, 0.1, 1.0), "fR": Vector3(0.0, 0.1, 1.0), "uL": Vector3(0.7, -0.2, -0.6), "fL": Vector3(0.6, -0.3, -0.7), "hz": 0.25, "crouch": 0.12},
+	"gojo_purple200": {"lean": 16.0, "twist": -26.0, "uR": Vector3(-0.05, 0.2, 1.0), "fR": Vector3(0.0, 0.2, 1.0), "uL": Vector3(0.8, -0.1, -0.5), "fL": Vector3(0.7, -0.2, -0.6), "hz": 0.3, "crouch": 0.16},
+	"gojo_domain": {"lean": 0.0, "head": 4.0, "uR": Vector3(0.45, -0.35, 0.6), "fR": Vector3(-0.55, 0.8, 0.2), "uL": Vector3(0.25, -0.95, 0.1), "fL": Vector3(0.1, -1.0, 0.2)},
+	"sukuna_special": {"twist": -30.0, "lean": 14.0, "uR": Vector3(0.9, -0.3, 0.4), "fR": Vector3(0.9, -0.4, 0.3), "hz": 0.15, "crouch": 0.1},
+	"sukuna_skill2": {"twist": -26.0, "lean": 16.0, "uR": Vector3(-0.1, -0.05, 1.0), "fR": Vector3(-0.05, 0.0, 1.0), "hz": 0.3, "crouch": 0.16,
+		"tL": Vector3(0.15, -0.8, 0.6), "sL": Vector3(0.1, -1.0, 0.0)},
+	"sukuna_ultimate": {"twist": -10.0, "lean": 8.0, "uL": Vector3(0.0, 0.1, 1.0), "fL": Vector3(0.0, 0.1, 1.0), "uR": Vector3(0.1, 0.05, 1.0), "fR": Vector3(0.0, 0.05, 1.0), "hz": 0.1},
+	"sukuna_world_slash": {"twist": -40.0, "lean": 22.0, "roll": -10.0, "uR": Vector3(0.95, -0.6, 0.3), "fR": Vector3(0.9, -0.7, 0.2), "uL": Vector3(0.6, -0.4, -0.5), "fL": Vector3(0.4, -0.2, -0.8), "hz": 0.35, "crouch": 0.18},
+	"sukuna_domain": {"lean": 6.0, "head": 10.0, "uL": Vector3(0.25, -0.5, 0.85), "fL": Vector3(-0.85, 0.35, 0.4), "uR": Vector3(0.25, -0.5, 0.85), "fR": Vector3(-0.85, 0.35, 0.4)},
+}
+
 static func windup(kind: String) -> Dictionary:
+	if SIG_WINDUP.has(kind):
+		return SIG_WINDUP[kind]
+	if kind.contains("_") and not kind.begins_with("light"):
+		kind = kind.split("_", true, 1)[1]
+		if kind == "skill2" or kind == "purple200" or kind == "world_slash":
+			kind = "special" if kind == "skill2" else "ultimate"
 	match kind:
 		"light1": return {"twist": 14.0, "uR": Vector3(0.4, -0.5, 0.0), "fR": Vector3(0.1, 0.6, 0.6), "crouch": 0.09}
 		"light2": return {"twist": -16.0, "uL": Vector3(0.7, -0.3, -0.1), "fL": Vector3(0.5, 0.4, 0.6), "crouch": 0.09}
@@ -89,6 +123,12 @@ static func windup(kind: String) -> Dictionary:
 			"uR": Vector3(0.5, 1.0, 0.0), "fR": Vector3(0.2, 1.0, 0.0)}
 
 static func strike(kind: String) -> Dictionary:
+	if SIG_STRIKE.has(kind):
+		return SIG_STRIKE[kind]
+	if kind.contains("_") and not kind.begins_with("light"):
+		kind = kind.split("_", true, 1)[1]
+		if kind == "skill2" or kind == "purple200" or kind == "world_slash":
+			kind = "special" if kind == "skill2" else "ultimate"
 	match kind:
 		"light1": return {"twist": -28.0, "lean": 12.0, "uR": Vector3(-0.15, 0.05, 1.0), "fR": Vector3(-0.1, 0.05, 1.0), "hz": 0.18, "crouch": 0.08}
 		"light2": return {"twist": 30.0, "lean": 12.0, "uL": Vector3(-0.2, 0.0, 1.0), "fL": Vector3(-0.3, 0.0, 1.0), "hz": 0.18, "crouch": 0.08}
@@ -146,3 +186,10 @@ static func fly_fast(t: float) -> Dictionary:
 static func fly_takeoff(k: float) -> Dictionary:
 	return mix({"crouch": 0.22, "lean": 14.0, "tL": Vector3(0.3, -0.7, 0.7), "sL": Vector3(0.1, -0.6, -0.8), "tR": Vector3(0.0, -0.7, 0.7), "sR": Vector3(0.0, -0.6, -0.8)},
 		fly_hover(0.0), clampf(k, 0.0, 1.0))
+
+## Caught in Infinite Void: the brain is flooded with information — limp arms, head tipped back, a constant tremble.
+static func stunned(t: float) -> Dictionary:
+	var j := sin(t * 47.0) * 0.03
+	return {"lean": -10.0 + sin(t * 31.0) * 1.5, "head": -24.0, "roll": 4.0 + sin(t * 23.0) * 2.0, "crouch": 0.03,
+		"uL": Vector3(0.3, -0.95, 0.05 + j), "fL": Vector3(0.2, -1.0, 0.1), "uR": Vector3(0.3, -0.95, 0.05 - j), "fR": Vector3(0.2, -1.0, 0.1),
+		"tL": Vector3(0.1, -1.0, 0.02), "sL": Vector3(0.05, -1.0, 0.0), "tR": Vector3(0.1, -1.0, -0.02), "sR": Vector3(0.05, -1.0, 0.0)}

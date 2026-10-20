@@ -3,7 +3,7 @@ config_version=5
 
 [application]
 
-config/name="JJK Arena"
+config/name="Cursed Clash"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 

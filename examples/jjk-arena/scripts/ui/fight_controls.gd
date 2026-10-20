@@ -4,6 +4,10 @@ extends CanvasLayer
 ## up in `fighter.intent`, the same dictionary the AI fills in. Short taps are held for a few frames so one press always reaches a physics tick.
 
 var fighter: Fighter
+var moveset := "gojo":
+	set(v):
+		moveset = v
+		_relabel()
 var camera: Node3D   ## FightCamera or ThirdPersonCamera (anything with world_dir / orbit)
 var _look_id := -1
 var _look_last := Vector2.ZERO
@@ -33,11 +37,35 @@ func _ready() -> void:
 	_btn("light", "PUNCH", Vector2(-170, -150), 86)
 	_btn("heavy", "KICK", Vector2(-270, -80), 78)
 	_btn("special", "SKILL", Vector2(-120, -260), 78)
+	_btn("skill2", "SKILL 2", Vector2(-330, -360), 70)
 	_btn("ultimate", "ULT", Vector2(-250, -240), 72)
 	_btn("dodge", "DODGE", Vector2(-380, -150), 70)
 	_btn("block", "GUARD", Vector2(-380, -250), 70, true)
 	_btn("fly", "FLY", Vector2(-90, -380), 66)
 	_btn("domain", "DOMAIN", Vector2(-200, -380), 74)
+	_relabel()
+
+const LABELS := {
+	"gojo": {"special": "RED", "skill2": "BLUE", "ultimate": "PURPLE", "domain": "VOID"},
+	"sukuna": {"special": "DISMANTLE", "skill2": "CLEAVE", "ultimate": "FUGA", "domain": "SHRINE"},
+}
+
+func _relabel() -> void:
+	if _root == null:
+		return
+	for id in LABELS.get(moveset, {}):
+		var b := _root.get_node_or_null(id.capitalize())
+		if b != null:
+			(b as Button).text = LABELS[moveset][id]
+
+func _process_labels() -> void:
+	# the ultimate turns into the low-health super (200% Purple / World-Cutting Slash) below half health
+	if fighter == null or _root == null:
+		return
+	var b := _root.get_node_or_null("Ultimate") as Button
+	if b != null:
+		var low := fighter.health < Fighter.MAX_HEALTH * 0.5
+		b.text = ("200%" if moveset == "gojo" else "WORLD\nSLASH") if low else LABELS.get(moveset, {}).get("ultimate", "ULT")
 
 func _disc(d: float, c: Color) -> Control:
 	var p := Panel.new()
@@ -57,7 +85,7 @@ func _btn(id: String, text: String, off: Vector2, d: float, hold := false) -> vo
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
 	b.size = Vector2(d, d)
-	b.add_theme_font_size_override("font_size", 15)
+	b.add_theme_font_size_override("font_size", 13)
 	var n := StyleBoxFlat.new()
 	n.bg_color = Color(0.1, 0.1, 0.13, 0.55)
 	n.set_corner_radius_all(int(d * 0.5))
@@ -137,3 +165,5 @@ func _process(_delta: float) -> void:
 	i["block"] = _held.get("block", false) or Input.is_key_pressed(KEY_SHIFT)
 	i["fly"] = _until.get("fly", 0.0) > now or Input.is_key_pressed(KEY_F)
 	i["domain"] = _until.get("domain", 0.0) > now or Input.is_key_pressed(KEY_U)
+	i["skill2"] = _until.get("skill2", 0.0) > now or Input.is_key_pressed(KEY_O)
+	_process_labels()

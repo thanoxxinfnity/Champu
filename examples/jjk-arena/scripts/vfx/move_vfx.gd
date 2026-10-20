@@ -98,7 +98,7 @@ static func gojo_red(world: Node3D, caster: Node3D, target: Node3D, phase: int) 
 		tw.parallel().tween_property(l, "light_energy", 0.0, 0.3)
 
 ## Hollow Purple — Blue on one side, Red on the other, they collide into a purple mass that tears forward through everything.
-static func gojo_purple(world: Node3D, caster: Node3D, target: Node3D, phase: int) -> void:
+static func gojo_purple(world: Node3D, caster: Node3D, target: Node3D, phase: int, power := 1.0) -> void:
 	var fwd := -caster.global_transform.basis.z
 	var side := fwd.cross(Vector3.UP).normalized()
 	var center := caster.global_position + Vector3.UP * 1.5 + fwd * 1.0
@@ -114,8 +114,8 @@ static func gojo_purple(world: Node3D, caster: Node3D, target: Node3D, phase: in
 		tw.tween_property(red, "position", Vector3.ZERO, 0.58).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	elif phase == 1:
 		var n := _root(world, center, 1.4)
-		var orb := _sphere(n, 1.1, Color(0.6, 0.15, 1.0), 3.5)
-		var core := _sphere(n, 0.6, Color(1.0, 0.9, 1.0), 4.0)
+		var orb := _sphere(n, 1.1 * power, Color(0.6, 0.15, 1.0), 3.5)
+		var core := _sphere(n, 0.6 * power, Color(1.0, 0.9, 1.0), 4.0)
 		var l := _light(n, Color(0.6, 0.2, 1.0), 8.0, 16.0)
 		var end := center + fwd * 40.0
 		var tw := n.create_tween()
@@ -238,3 +238,106 @@ static func _trench(world: Node3D, from: Vector3, dir: Vector3, length: float, c
 	tw.tween_property(mi, "scale", Vector3(1, 1, 1), 0.5).from(Vector3(1, 1, 0.02))
 	tw.tween_interval(1.5)
 	tw.tween_property(m, "albedo_color:a", 0.0, 2.0)
+
+## Lapse: Blue — a point of negative space appears at the target and drags everything (dust, debris, the enemy) into it.
+static func gojo_blue(world: Node3D, caster: Node3D, target: Node3D, phase: int) -> void:
+	if phase == 0:
+		var n := _root(world, hand_pos(caster), 0.3)
+		var b := _sphere(n, 0.15, Color(0.2, 0.5, 1.0), 4.0)
+		n.create_tween().tween_property(b, "scale", Vector3.ONE * 1.8, 0.25).from(Vector3.ONE * 0.3)
+		_light(n, Color(0.3, 0.5, 1.0), 2.5, 4.0)
+	elif phase == 1 and target != null:
+		var at := target.global_position + Vector3.UP * 1.2
+		var n := _root(world, at, 1.3)
+		var orb := _sphere(n, 0.5, Color(0.15, 0.4, 1.0), 4.0)
+		var ring := _billboard(n, 5.0, Color(0.3, 0.55, 1.0), DestructionVfx.spark_texture())
+		var p := GPUParticles3D.new()
+		p.amount = 40
+		p.lifetime = 0.6
+		p.local_coords = true
+		var pm := ParticleProcessMaterial.new()
+		pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE_SURFACE
+		pm.emission_sphere_radius = 3.5
+		pm.radial_accel_min = -30.0
+		pm.radial_accel_max = -20.0
+		pm.gravity = Vector3.ZERO
+		pm.scale_min = 0.08
+		pm.scale_max = 0.2
+		p.process_material = pm
+		var q := QuadMesh.new()
+		var qm := glow_mat(Color(0.5, 0.75, 1.0), 2.5)
+		qm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		qm.albedo_texture = DestructionVfx.spark_texture()
+		q.material = qm
+		p.draw_pass_1 = q
+		n.add_child(p)
+		var l := _light(n, Color(0.3, 0.5, 1.0), 6.0, 10.0)
+		var tw := n.create_tween().set_parallel(true)
+		tw.tween_property(ring, "scale", Vector3.ONE * 0.1, 0.9).from(Vector3.ONE * 1.2)
+		tw.tween_property(orb, "scale", Vector3.ONE * 2.2, 0.5).from(Vector3.ONE * 0.4)
+		tw.chain().tween_property(orb, "scale", Vector3.ONE * 0.05, 0.25)
+		tw.tween_property(l, "light_energy", 0.0, 1.2)
+
+## Cleave — a single cut that adapts to the target's toughness: a tight net of slashes on the body and a spray of red.
+static func sukuna_cleave(world: Node3D, caster: Node3D, target: Node3D, phase: int) -> void:
+	if phase == 0:
+		var n := _root(world, hand_pos(caster), 0.25)
+		var b := _billboard(n, 0.7, Color(1.0, 0.25, 0.2), DestructionVfx.spark_texture())
+		n.create_tween().tween_property(b, "scale", Vector3.ONE * 1.6, 0.18).from(Vector3.ONE * 0.4)
+	elif phase == 1 and target != null:
+		var at := target.global_position + Vector3.UP * 1.1
+		slash_burst(world, at, 9, 1.5)
+		var n := _root(world, at, 1.0)
+		var p := GPUParticles3D.new()
+		p.amount = 36
+		p.lifetime = 0.7
+		p.one_shot = true
+		p.explosiveness = 0.95
+		var pm := ParticleProcessMaterial.new()
+		pm.direction = Vector3.UP
+		pm.spread = 80.0
+		pm.initial_velocity_min = 2.0
+		pm.initial_velocity_max = 6.0
+		pm.gravity = Vector3(0, -12, 0)
+		pm.scale_min = 0.04
+		pm.scale_max = 0.1
+		pm.color = Color(0.6, 0.02, 0.02)
+		p.process_material = pm
+		var sm := SphereMesh.new()
+		sm.radius = 0.5
+		sm.height = 1.0
+		var mm := StandardMaterial3D.new()
+		mm.albedo_color = Color(0.55, 0.02, 0.02)
+		mm.vertex_color_use_as_albedo = true
+		sm.material = mm
+		p.draw_pass_1 = sm
+		n.add_child(p)
+		p.emitting = true
+
+## World-Cutting Slash — the slash that cuts space itself: a white plane through the whole world along Sukuna's aim.
+static func sukuna_world_slash(world: Node3D, caster: Node3D, target: Node3D, phase: int) -> void:
+	if phase == 0:
+		var n := _root(world, caster.global_position + Vector3.UP * 1.3, 1.2)
+		var b := _billboard(n, 3.0, Color(1.0, 0.9, 0.9), DestructionVfx.spark_texture())
+		var tw := n.create_tween()
+		tw.tween_property(b, "scale", Vector3.ONE * 0.2, 1.1).from(Vector3.ONE * 1.5)
+		_light(n, Color(1, 0.9, 0.9), 3.0, 6.0)
+	elif phase == 1:
+		var fwd := -caster.global_transform.basis.z
+		var n := _root(world, caster.global_position + fwd * 30.0 + Vector3.UP * 4.0, 2.2)
+		var mi := MeshInstance3D.new()
+		var q := QuadMesh.new()
+		q.size = Vector2(90.0, 0.25)
+		mi.mesh = q
+		var m := glow_mat(Color(1.0, 0.97, 0.97), 5.0)
+		mi.material_override = m
+		n.add_child(mi)
+		n.look_at(n.global_position + fwd.cross(Vector3.UP), Vector3.UP)
+		mi.rotation.z = -0.35
+		var tw := n.create_tween()
+		tw.tween_property(mi, "scale", Vector3(1, 6.0, 1), 0.08).from(Vector3(0.02, 1, 1))
+		tw.tween_property(m, "albedo_color:a", 0.0, 1.5)
+		_trench(world, caster.global_position + fwd * 1.0, fwd, 60.0, Color(1.0, 0.9, 0.9))
+		if target != null:
+			slash_burst(world, target.global_position + Vector3.UP * 1.0, 12, 4.0)
+			_shockwave(world, target.global_position + Vector3.UP, Color(1, 0.9, 0.9), 10.0)

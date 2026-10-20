@@ -29,6 +29,8 @@ func setup(f: Fighter, model_path: String, sway := true) -> bool:
 func _target_pose() -> Dictionary:
 	var f := fighter
 	var speed := clampf(Vector2(f.velocity.x, f.velocity.z).length() / maxf(f.move_speed, 0.1), 0.0, 1.5)
+	if f.get_meta("stunned", false):
+		return PoseLib.stunned(_t)
 	match f.state:
 		Fighter.State.KO:
 			return PoseLib.ko(_ko_t / 0.6)
@@ -41,7 +43,10 @@ func _target_pose() -> Dictionary:
 		Fighter.State.ATTACK:
 			var info := f.attack_info()
 			if not info.is_empty():
-				return PoseLib.attack(info["kind"], info["phase"], info["k"])
+				var kind: String = info["kind"]
+				if not kind.begins_with("light") and kind != "heavy":
+					kind = f.moveset + "_" + kind
+				return PoseLib.attack(kind, info["phase"], info["k"])
 	if f.flying:
 		var clip := AnimClip.load_clip("fly_fast_side" if speed > 0.25 else "fly_hover_gojo")
 		if clip != null:

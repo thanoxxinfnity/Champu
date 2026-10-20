@@ -21,6 +21,7 @@ var _cam: ThirdPersonCamera
 var _void: InfiniteVoidManager
 var _shrine: ShrineDomain
 var _env: Environment
+var _impact: ImpactFx
 var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
@@ -56,8 +57,8 @@ func _show_menu() -> void:
 	col.offset_bottom = 230.0
 	col.add_theme_constant_override("separation", 12)
 	_menu.add_child(col)
-	col.add_child(UiKit.label("JJK ARENA", 64, UiKit.ACCENT))
-	col.add_child(UiKit.label("Gojo vs Sukuna — fan fighting game", 18))
+	col.add_child(UiKit.label("CURSED CLASH", 66, UiKit.ACCENT))
+	col.add_child(UiKit.label("SHIBUYA SHOWDOWN  ·  Gojo vs Sukuna (fan game)", 18))
 	col.add_child(UiKit.label("Choose your fighter", 20))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
@@ -115,6 +116,7 @@ func _make_fighter(id: String, at: Vector3, tag: String) -> Fighter:
 	var c := Roster.find(id)
 	var f := Fighter.new()
 	f.fighter_name = c["name"]
+	f.moveset = c["moves"]
 	f.name = tag
 	f.collision_layer = 0
 	f.collision_mask = 0
@@ -150,6 +152,9 @@ func _start_fight() -> void:
 	_shrine = ShrineDomain.new()
 	_world.add_child(_shrine)
 	_env = built["env"]
+	_impact = ImpactFx.new()
+	add_child(_impact)
+	_fight_nodes.append(_impact)
 	_fight_nodes.append(cam)
 	var ai := FightAI.new()
 	ai.fighter = enemy
@@ -167,6 +172,7 @@ func _start_fight() -> void:
 	_controls = FightControls.new()
 	_controls.fighter = _player
 	_controls.camera = cam
+	_controls.moveset = Roster.find(_pick)["moves"]
 	add_child(_controls)
 	_fight_nodes.append(_controls)
 	for f in [_player, enemy]:
@@ -268,6 +274,15 @@ func _run_script() -> void:
 				_controls.tap("domain")
 			elif t > 2.5 and int(t * 3.0) % 2 == 0:
 				_controls.tap("light")
+		"skill2":
+			if t > 0.5 and t < 0.7:
+				_player.energy = 100.0
+				_controls.tap("skill2")
+		"lowult":
+			if t > 0.5 and t < 0.7:
+				_player.energy = 100.0
+				_player.health = 40.0
+				_controls.tap("ultimate")
 		"ult":
 			if t > 0.5 and t < 0.7:
 				_player.energy = 100.0
@@ -289,6 +304,7 @@ func _on_hit(target: Fighter, move: Dictionary) -> void:
 	var cost: float = move.get("cost", 0.0)
 	var q := GraphicsSettings.preset(_mode)
 	if cost >= 100.0:
+		_impact.hitstop(0.12, 0.05)
 		_dm.blast(at, 7.0, 1.4)
 		var near: Array = get_tree().get_nodes_in_group("buildings").filter(func(b): return b.is_inside_tree() and not b.has_meta("collapsed"))
 		near.sort_custom(func(a, b): return a.global_position.distance_to(at) < b.global_position.distance_to(at))
@@ -305,6 +321,7 @@ func _on_hit(target: Fighter, move: Dictionary) -> void:
 	else:
 		var heavy := float(move.get("damage", 0.0)) >= 12.0
 		MoveVfx.hit_spark(_world, target.global_position + Vector3.UP * 1.25, heavy)
+		_impact.hitstop(0.07 if heavy else 0.035, 0.08)
 		if heavy:
 			_dm.blast(at, 1.6, 0.35)
 
@@ -316,24 +333,43 @@ func _on_move_phase(f: Fighter, moves: String, name: String, phase: int) -> void
 	match [moves, name]:
 		["gojo", "special"]:
 			MoveVfx.gojo_red(_world, f, o, phase)
+		["gojo", "skill2"]:
+			MoveVfx.gojo_blue(_world, f, o, phase)
 		["gojo", "ultimate"]:
 			MoveVfx.gojo_purple(_world, f, o, phase)
+		["gojo", "purple200"]:
+			MoveVfx.gojo_purple(_world, f, o, phase, 2.2)
 		["sukuna", "special"]:
 			MoveVfx.sukuna_dismantle(_world, f, o, phase)
+		["sukuna", "skill2"]:
+			MoveVfx.sukuna_cleave(_world, f, o, phase)
 		["sukuna", "ultimate"]:
 			MoveVfx.sukuna_fuga(_world, f, o, phase)
-		[_, "domain"]:
-			if phase == 0:
-				MoveVfx.hit_spark(_world, MoveVfx.hand_pos(f), true)
-	if name == "ultimate" and phase == 1 and _cam != null:
-		_cam.shake = 1.0
+		["sukuna", "world_slash"]:
+			MoveVfx.sukuna_world_slash(_world, f, o, phase)
+	var big := name in ["ultimate", "purple200", "world_slash", "domain"]
+	if big and phase == 0:
+		_hud_flash(MOVE_TITLES.get(moves + "_" + name, ""))
+		if name != "ultimate" and _cam != null:
+			_cam.cinematic(f, 1.0)
+	if big and phase == 1:
+		if _cam != null:
+			_cam.shake = 1.0
+		_impact.impact_frame(2 if name != "ultimate" else 1)
+		_impact.speed_lines(0.5)
+		if name == "world_slash":
+			_impact.screen_cut()
+
+const MOVE_TITLES := {
+	"gojo_ultimate": "HOLLOW PURPLE", "gojo_purple200": "HOLLOW PURPLE 200%", "gojo_domain": "DOMAIN EXPANSION\nINFINITE VOID",
+	"sukuna_ultimate": "FUGA", "sukuna_world_slash": "WORLD-CUTTING SLASH", "sukuna_domain": "DOMAIN EXPANSION\nMALEVOLENT SHRINE",
+}
 
 ## Domain Expansion: Gojo opens Infinite Void (the opponent freezes completely), Sukuna raises the Malevolent Shrine (endless slashes).
 func _on_domain(f: Fighter, moves: String) -> void:
 	var o := f.opponent
 	if o == null:
 		return
-	_hud_flash("DOMAIN EXPANSION")
 	if moves == "gojo":
 		o.add_to_group("void_target")
 		_void.activate(f.global_position)
@@ -352,6 +388,7 @@ func _on_domain(f: Fighter, moves: String) -> void:
 				o.remove_from_group("void_target"))
 	else:
 		_shrine.activate(f, _env, f == _player)
+	_impact.impact_frame(2)
 
 func _hud_flash(text: String) -> void:
 	for n in _fight_nodes:
