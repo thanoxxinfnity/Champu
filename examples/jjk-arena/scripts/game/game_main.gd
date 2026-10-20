@@ -16,6 +16,8 @@ var _shot_clock := -1.0
 var _player: Fighter
 var _controls: FightControls
 var _auto := ""
+var _dm: DestructionManager
+var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -128,7 +130,9 @@ func _start_fight() -> void:
 	_world = built["root"]
 	add_child(_world)
 	_fight_nodes.append(_world)
-	GraphicsSettings.apply(_mode, get_viewport(), built["env"], built["sun"], null)
+	_dm = DestructionManager.new()
+	_world.add_child(_dm)
+	GraphicsSettings.apply(_mode, get_viewport(), built["env"], built["sun"], _dm)
 	_player = _make_fighter(_pick, Vector3(-3, 0, 0), "Player")
 	var enemy := _make_fighter(enemy_id, Vector3(3, 0, 0), "Enemy")
 	var cam := FightCamera.new()
@@ -155,7 +159,9 @@ func _start_fight() -> void:
 	add_child(_controls)
 	_fight_nodes.append(_controls)
 	for f in [_player, enemy]:
-		f.hit_dealt.connect(func(_t, _m, dmg: float): cam.shake = minf(1.0, cam.shake + dmg * 0.03))
+		f.hit_dealt.connect(func(t: Fighter, m: Dictionary, dmg: float):
+			cam.shake = minf(1.0, cam.shake + dmg * 0.03)
+			_on_hit(t, m))
 	mc.match_ended.connect(func(_w):
 		await get_tree().create_timer(3.5).timeout
 		_show_menu())
@@ -191,8 +197,39 @@ func _run_script() -> void:
 		"fly":
 			if t > 0.5 and t < 0.7:
 				_controls.tap("fly")
+		"ult":
+			if t > 0.5 and t < 0.7:
+				_player.energy = 100.0
+				_controls.tap("ultimate")
+		"skill":
+			if t > 0.5 and t < 0.7:
+				_player.energy = 100.0
+				_controls.tap("special")
 		"mix":
 			if t > 0.5 and t < 0.7:
 				_controls.tap("fly")
 			elif t > 2.0 and int(t * 4.0) % 2 == 0:
 				_controls.tap("light")
+
+## Effects of a landed move: sparks on heavy hits, a burst and a small fire on a skill, towers coming down on an ultimate.
+func _on_hit(target: Fighter, move: Dictionary) -> void:
+	var at := target.global_position
+	at.y = 0.0
+	var cost: float = move.get("cost", 0.0)
+	var q := GraphicsSettings.preset(_mode)
+	if cost >= 100.0:
+		_dm.blast(at, 7.0, 1.4)
+		var near: Array = get_tree().get_nodes_in_group("buildings").filter(func(b): return b.is_inside_tree() and not b.has_meta("collapsed"))
+		near.sort_custom(func(a, b): return a.global_position.distance_to(at) < b.global_position.distance_to(at))
+		for i in mini(3, near.size()):
+			BuildingCollapse.run(near[i], _dm, _world, 1.0 if q["particles"] > 0.5 else 0.5, _rng)
+	elif cost >= 30.0:
+		_dm.blast(at, 3.5, 0.9)
+		var fire := FireFx.new()
+		fire.radius = 1.4
+		fire.burn_time = 7.0
+		fire.intensity = 1.0 if q["particles"] > 0.5 else 0.5
+		fire.position = at + Vector3(0, 0.3, 0)
+		_world.add_child(fire)
+	elif float(move.get("damage", 0.0)) >= 12.0:
+		_dm.blast(at, 1.6, 0.35)

@@ -151,6 +151,10 @@ func on_ultimate_hit(origin: Vector3, radius := 6.0) -> void:
 	_burst(origin, radius, 1.0)
 	swapped.emit(origin)
 
+## Public effect burst (dust, rubble, sparks, ground mark) without any mesh swap: specials and landed ultimates use this.
+func blast(origin: Vector3, radius := 3.0, power := 0.6) -> void:
+	_burst(origin, radius, power)
+
 func reset_arena() -> void:
 	swapped_to_heavy = false
 	if intact != null:

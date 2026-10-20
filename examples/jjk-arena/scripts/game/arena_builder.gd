@@ -32,6 +32,7 @@ static func prop(path: String, size: float, by_width := false) -> Node3D:
 		return holder
 	var ref := maxf(b.size.x, b.size.z) if by_width else b.size.y
 	var k := size / maxf(ref, 0.0001)
+	holder.set_meta("height", b.size.y * k)
 	inst.scale = Vector3.ONE * k
 	var c := b.get_center()
 	inst.position = Vector3(-c.x * k, -b.position.y * k, -c.z * k)
@@ -82,6 +83,7 @@ static func build(rich := true) -> Dictionary:
 			continue
 		p.position = Vector3(cos(a) * r, 0, sin(a) * r)
 		p.rotation.y = -a + PI * 0.5 + rng.randf_range(-0.3, 0.3)
+		p.add_to_group("buildings")
 		root.add_child(p)
 	if rich:
 		var city := prop(ENV + "neon_city.glb", 70.0, true)
