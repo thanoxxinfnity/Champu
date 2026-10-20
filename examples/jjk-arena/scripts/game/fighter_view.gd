@@ -31,6 +31,8 @@ func _target_pose() -> Dictionary:
 	var speed := clampf(Vector2(f.velocity.x, f.velocity.z).length() / maxf(f.move_speed, 0.1), 0.0, 1.5)
 	if f.get_meta("stunned", false):
 		return PoseLib.stunned(_t)
+	if f.get_meta("brace", false):
+		return PoseLib.block()
 	match f.state:
 		Fighter.State.KO:
 			return PoseLib.ko(_ko_t / 0.6)

@@ -23,6 +23,9 @@ var _shrine: ShrineDomain
 var _env: Environment
 var _impact: ImpactFx
 var _open := false
+var _cut: Cutscene
+var _ai: FightAI
+var _enemy: Fighter
 var _map: WorldMap
 var _rng := RandomNumberGenerator.new()
 
@@ -170,6 +173,8 @@ func _start_fight() -> void:
 	_fight_nodes.append(_impact)
 	_fight_nodes.append(cam)
 	var ai := FightAI.new()
+	_ai = ai
+	_enemy = enemy
 	ai.fighter = enemy
 	ai.level = _level
 	add_child(ai)
@@ -196,6 +201,12 @@ func _start_fight() -> void:
 	_controls.moveset = Roster.find(_pick)["moves"]
 	add_child(_controls)
 	_fight_nodes.append(_controls)
+	_cut = Cutscene.new()
+	_cut.camera = cam
+	_cut.freeze = [_player, enemy, ai]
+	_cut.hide_layers = [hud, _controls]
+	add_child(_cut)
+	_fight_nodes.append(_cut)
 	for f in [_player, enemy]:
 		f.hit_dealt.connect(func(t: Fighter, m: Dictionary, dmg: float):
 			cam.shake = minf(1.0, cam.shake + dmg * 0.03)
@@ -408,11 +419,16 @@ func _on_move_phase(f: Fighter, moves: String, name: String, phase: int) -> void
 		["sukuna", "world_slash"]:
 			MoveVfx.sukuna_world_slash(_world, f, o, phase)
 	var big := name in ["ultimate", "purple200", "world_slash", "domain"]
-	if big and phase == 0:
-		if name != "domain":
-			_hud_flash(MOVE_TITLES.get(moves + "_" + name, ""))
-		if name != "ultimate" and _cam != null:
-			_cam.cinematic(f, 1.0)
+	if big and phase == 0 and _cut != null and not _cut.playing:
+		match [moves, name]:
+			["gojo", "domain"]:
+				_cut.play(_shots_void(f, o))
+			["sukuna", "domain"]:
+				_cut.play(_shots_shrine(f, o))
+			["gojo", "ultimate"], ["gojo", "purple200"]:
+				_cut.play(_shots_purple(f, o))
+			["sukuna", "ultimate"], ["sukuna", "world_slash"]:
+				_cut.play(_shots_sukuna_super(f, o, name))
 	if big and phase == 1:
 		if _cam != null:
 			_cam.shake = 1.0
@@ -433,6 +449,10 @@ func _on_domain(f: Fighter, moves: String) -> void:
 	var o := f.opponent
 	if o == null:
 		return
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - float(f.get_meta("domain_at", -99.0)) < 4.0:
+		return                      # the cutscene already opened it; the move's own trigger arrives afterwards
+	f.set_meta("domain_at", now)
 	MoveVfx.domain_burst(_world, f, Color(0.35, 0.6, 1.0) if moves == "gojo" else Color(0.9, 0.08, 0.06))
 	if moves == "gojo":
 		o.add_to_group("void_target")
@@ -451,7 +471,7 @@ func _on_domain(f: Fighter, moves: String) -> void:
 			if is_instance_valid(o):
 				o.remove_from_group("void_target"))
 	else:
-		_shrine.activate(f, _env, f == _player)
+		_shrine.activate(f, _env, not (_cut != null and _cut.playing) and f == _player)
 	_impact.impact_frame(2)
 
 func _hud_flash(text: String) -> void:
@@ -517,3 +537,66 @@ func _destroy_ahead(f: Fighter, length: float, width: float) -> void:
 	var q := GraphicsSettings.preset(_mode)
 	for i in mini(4, hits.size()):
 		BuildingCollapse.run(hits[i][1], _dm, _world, 1.0 if q["particles"] > 0.5 else 0.5, _rng)
+
+# ---------------------------------------------------------------- cinematics (staged like the console game: cut-ins, close-ups, flashes)
+const CUT := "res://assets/cutin/"
+
+func _face(f: Node3D, dist: float, side := 0.35, up := 1.65) -> Array:
+	var fwd := -f.global_transform.basis.z
+	var sv := fwd.cross(Vector3.UP).normalized()
+	var face := f.global_position + Vector3.UP * up
+	return [face + fwd * dist + sv * side, face]
+
+func _shots_void(f: Fighter, o: Fighter) -> Array:
+	return [
+		{"t": 0.9, "img": CUT + "gojo_sign.jpg", "zoom": [1.0, 1.12], "pivot": Vector2(0.3, 0.3), "tint": Color(0.1, 0.3, 0.9, 0.12)},
+		{"t": 0.75, "img": CUT + "gojo_eye.jpg", "zoom": [1.0, 1.45], "pivot": Vector2(0.52, 0.5)},
+		{"t": 1.3, "flash": Color(1, 1, 1, 1), "lines": Color(0.85, 0.95, 1.0, 0.8),
+			"start": func(): _on_domain(f, "gojo"),
+			"cam": func(k: float) -> Array:
+				var a := k * 2.2
+				var c := f.global_position + Vector3.UP * 1.3
+				return [c + Vector3(sin(a) * 3.6, 0.6 + k * 0.8, cos(a) * 3.6), c]},
+		{"t": 0.95, "lines": Color(1, 1, 1, 0.9), "cam": func(k: float) -> Array: return _face(o, 1.4 - k * 0.3, 0.2, 1.6)},
+		{"t": 1.1, "img": CUT + "gojo_cosmic.jpg", "zoom": [1.12, 1.0], "pivot": Vector2(0.5, 0.35), "sparkle": Color(0.55, 0.85, 1.0, 1.0)},
+	]
+
+func _shots_shrine(f: Fighter, o: Fighter) -> Array:
+	return [
+		{"t": 0.9, "img": CUT + "sukuna_sign.jpg", "zoom": [1.0, 1.1], "pivot": Vector2(0.45, 0.5), "tint": Color(0.6, 0.0, 0.0, 0.15)},
+		{"t": 1.5, "flash": Color(1, 0.2, 0.15, 0.8),
+			"start": func(): _on_domain(f, "sukuna"),
+			"cam": func(k: float) -> Array:
+				var fwd := -f.global_transform.basis.z
+				var base := f.global_position
+				return [base + fwd * (7.5 - k * 1.5) + Vector3.UP * (0.6 + k * 0.6), base + Vector3.UP * (2.0 + k * 4.0) - fwd * 6.0]},
+		{"t": 0.7, "start": func(): o.set_meta("brace", true), "cam": func(k: float) -> Array: return _face(o, 2.6 - k * 0.4, -0.6, 1.3)},
+		{"t": 1.0, "web": true, "lines": Color(0.1, 0.0, 0.0, 0.6),
+			"start": func():
+				for i in 4:
+					MoveVfx.slash_burst(_world, o.global_position + Vector3.UP * (0.6 + i * 0.4), 5, 3.0),
+			"cam": func(k: float) -> Array: return _face(o, 3.2, 1.2, 1.2)},
+		{"t": 0.15, "black": true},
+		{"t": 1.0, "img": CUT + "sukuna_grin.jpg", "zoom": [1.0, 1.12], "pivot": Vector2(0.5, 0.4), "tint": Color(0.5, 0.0, 0.0, 0.12),
+			"start": func(): o.remove_meta("brace")},
+	]
+
+func _shots_purple(f: Fighter, o: Fighter) -> Array:
+	return [
+		{"t": 0.55, "img": CUT + "gojo_sign.jpg", "zoom": [1.05, 1.15], "pivot": Vector2(0.3, 0.3)},
+		{"t": 0.45, "img": CUT + "gojo_eye.jpg", "zoom": [1.1, 1.5], "pivot": Vector2(0.52, 0.5)},
+		{"t": 1.1, "lines": Color(0.75, 0.5, 1.0, 0.7),
+			"cam": func(k: float) -> Array:
+				var r := _face(f, 1.6, 0.9, 1.45)
+				return [r[0] + Vector3.UP * k * 0.2, (r[1] as Vector3) - f.global_transform.basis.z * 0.9]},
+		{"t": 0.12, "flash": Color(1, 1, 1, 1), "black": false, "cam": func(k: float) -> Array: return _face(f, 3.0, 2.0, 1.4)},
+	]
+
+func _shots_sukuna_super(f: Fighter, o: Fighter, name: String) -> Array:
+	var shots := [
+		{"t": 0.6, "img": CUT + ("sukuna_sign.jpg" if name == "world_slash" else "sukuna_grin.jpg"), "zoom": [1.0, 1.12], "pivot": Vector2(0.5, 0.45), "tint": Color(0.5, 0.0, 0.0, 0.12)},
+		{"t": 0.8, "lines": Color(1, 0.4, 0.3, 0.6), "cam": func(k: float) -> Array: return _face(f, 1.8 - k * 0.3, 0.8, 1.45)},
+	]
+	if name == "world_slash":
+		shots.append({"t": 0.4, "web": true, "flash": Color(1, 1, 1, 0.9), "cam": func(k: float) -> Array: return _face(o, 3.0, -1.0, 1.3)})
+	return shots

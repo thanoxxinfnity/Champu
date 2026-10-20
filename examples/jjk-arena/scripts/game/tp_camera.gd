@@ -22,6 +22,20 @@ func _ready() -> void:
 
 var _cine: Node3D
 var _cine_t := 0.0
+var _ov := false
+var _ov_pos := Vector3.ZERO
+var _ov_look := Vector3.ZERO
+
+## Hard camera control for cutscenes.
+func set_override(pos: Vector3, look: Vector3) -> void:
+	_ov = true
+	_ov_pos = pos
+	_ov_look = look
+
+func clear_override() -> void:
+	if _ov:
+		_ov = false
+		_pos = global_position
 
 ## Cut to a close-up of `who`'s face for `secs` (domain hand sign, low-health supers), then ease back behind the player.
 func cinematic(who: Node3D, secs: float) -> void:
@@ -41,6 +55,10 @@ func world_dir(stick: Vector2) -> Vector2:
 
 func _process(delta: float) -> void:
 	if target == null:
+		return
+	if _ov:
+		global_position = _ov_pos
+		look_at(_ov_look, Vector3.UP)
 		return
 	_manual_t = maxf(0.0, _manual_t - delta)
 	if _cine != null and _cine_t > 0.0 and is_instance_valid(_cine):
