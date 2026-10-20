@@ -32,5 +32,12 @@ func _init() -> void:
 		a.skeleton.force_update_all_bone_transforms()
 		var hips: float = a.skeleton.get_bone_global_pose(a.idx["hips"]).origin.y
 		ok(hips < a.rest_origin("hips").y - 0.4, "%s: KO drops the hips to the floor" % id)
+	var fast := AnimClip.load_clip("fly_fast_side")
+	var hover := AnimClip.load_clip("fly_hover_gojo")
+	ok(fast != null and hover != null, "video-derived flight clips load")
+	if fast != null:
+		ok(fast.frames.size() > 40 and fast.duration() > 4.0, "fast-flight clip has %d frames" % fast.frames.size())
+		var lean: float = fast.sample(1.0)["lean"]
+		ok(lean > 20.0, "fast flight leans forward (%.0f deg)" % lean)
 	print("ALL OK" if fails == 0 else "FAILED %d" % fails)
 	quit(1 if fails else 0)
