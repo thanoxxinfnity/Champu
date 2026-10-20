@@ -4,6 +4,18 @@ extends RefCounted
 
 const ACCENT := Color(1.0, 0.54, 0.24)
 const INK := Color(0.93, 0.93, 0.95)
+static var _font: FontFile
+static var _title: FontFile
+
+static func ui_font() -> FontFile:
+	if _font == null:
+		_font = load("res://assets/fonts/Rajdhani-Bold.ttf")
+	return _font
+
+static func title_font() -> FontFile:
+	if _title == null:
+		_title = load("res://assets/fonts/Anton-Regular.ttf")
+	return _title
 
 
 static func panel_style(alpha := 0.88, radius := 14) -> StyleBoxFlat:
@@ -25,6 +37,7 @@ static func button(text: String, size := Vector2(0, 44), font := 18) -> Button:
 	b.custom_minimum_size = size
 	b.focus_mode = Control.FOCUS_NONE
 	b.add_theme_font_size_override("font_size", font)
+	b.add_theme_font_override("font", title_font() if font >= 24 else ui_font())
 	var n := StyleBoxFlat.new()
 	n.bg_color = Color(0.14, 0.14, 0.17, 0.95)
 	n.set_corner_radius_all(8)
@@ -43,6 +56,7 @@ static func label(text: String, size := 18, color := INK) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_font_override("font", title_font() if size >= 40 else ui_font())
 	l.add_theme_color_override("font_color", color)
 	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 	l.add_theme_constant_override("outline_size", 4)

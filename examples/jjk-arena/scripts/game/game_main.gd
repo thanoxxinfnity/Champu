@@ -44,60 +44,101 @@ func _ready() -> void:
 		_show_menu()
 
 # ---------------------------------------------------------------- menu
+const CARDS := {"gojo_open": "res://assets/ui/card_gojo.jpg", "gojo_blindfold": "res://assets/ui/card_gojo.jpg", "sukuna": "res://assets/ui/card_sukuna.jpg"}
+const BADGES := {"gojo": ["purple", "void"], "sukuna": ["fuga", "shrine", "slash"]}
+
 func _show_menu() -> void:
 	_clear_fight()
 	_menu = Control.new()
 	_menu.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_menu)
 	var bg := TextureRect.new()
-	bg.texture = load("res://assets/loading/01_versus.jpg")
+	bg.texture = load("res://assets/ui/title_bg.jpg")
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	bg.modulate = Color(0.55, 0.55, 0.6)
+	bg.modulate = Color(0.62, 0.62, 0.68)
 	_menu.add_child(bg)
+	var logo := TextureRect.new()
+	logo.texture = load("res://assets/ui/logo.png")
+	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+	logo.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	logo.position = Vector2(40, 18)
+	logo.size = Vector2(500, 230)
+	_menu.add_child(logo)
+	# character cards
+	var cards := HBoxContainer.new()
+	cards.position = Vector2(60, 262)
+	cards.add_theme_constant_override("separation", 14)
+	_menu.add_child(cards)
+	var picks := {}
+	var badge_row := HBoxContainer.new()
+	badge_row.add_theme_constant_override("separation", 8)
+	var refresh_badges := func():
+		for c in badge_row.get_children():
+			c.queue_free()
+		for key in BADGES.get(Roster.find(_pick)["moves"], []):
+			var t := TextureRect.new()
+			t.texture = load("res://assets/ui/badge_%s.png" % key)
+			t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			t.custom_minimum_size = Vector2(92, 92)
+			badge_row.add_child(t)
+	for id in PICKS:
+		var card := TextureButton.new()
+		card.texture_normal = load(CARDS[id])
+		card.ignore_texture_size = true
+		card.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_COVERED
+		card.custom_minimum_size = Vector2(150, 250)
+		card.focus_mode = Control.FOCUS_NONE
+		var tag := UiKit.label("BLINDFOLD" if id == "gojo_blindfold" else ("OPEN EYES" if id == "gojo_open" else ""), 15, Color(1, 1, 1))
+		tag.position = Vector2(8, 6)
+		card.add_child(tag)
+		card.pressed.connect(func():
+			_pick = id
+			for k in picks:
+				picks[k].modulate = Color(1, 1, 1) if k == id else Color(0.5, 0.5, 0.55)
+				picks[k].scale = Vector2.ONE * (1.06 if k == id else 1.0)
+			refresh_badges.call())
+		picks[id] = card
+		card.modulate = Color(1, 1, 1) if id == _pick else Color(0.5, 0.5, 0.55)
+		cards.add_child(card)
+	badge_row.position = Vector2(60, 528)
+	_menu.add_child(badge_row)
+	refresh_badges.call()
+	# right-hand menu
 	var col := VBoxContainer.new()
-	col.set_anchors_preset(Control.PRESET_CENTER_LEFT)
-	col.offset_left = 60.0
-	col.offset_top = -230.0
-	col.offset_right = 520.0
+	col.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	col.offset_left = -400.0
+	col.offset_right = -50.0
+	col.offset_top = -170.0
 	col.offset_bottom = 230.0
 	col.add_theme_constant_override("separation", 12)
 	_menu.add_child(col)
-	col.add_child(UiKit.label("CURSED CLASH", 66, UiKit.ACCENT))
-	col.add_child(UiKit.label("SHIBUYA SHOWDOWN  ·  Gojo vs Sukuna (fan game)", 18))
-	col.add_child(UiKit.label("Choose your fighter", 20))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	col.add_child(row)
-	var picks := {}
-	for id in PICKS:
-		var b := UiKit.button(Roster.find(id)["name"], Vector2(150, 56), 15)
-		b.pressed.connect(func():
-			_pick = id
-			for k in picks:
-				picks[k].modulate = Color(1, 1, 1) if k == id else Color(0.6, 0.6, 0.6))
-		picks[id] = b
-		b.modulate = Color(1, 1, 1) if id == _pick else Color(0.6, 0.6, 0.6)
-		row.add_child(b)
-	var g := UiKit.button("Graphics: %s" % GraphicsSettings.mode_names()[_mode], Vector2(0, 46), 16)
-	g.pressed.connect(func():
-		_mode = ((_mode + 1) % 6) as GraphicsSettings.Mode
-		g.text = "Graphics: %s" % GraphicsSettings.mode_names()[_mode])
-	col.add_child(g)
-	var d := UiKit.button("AI level: %s" % ["Easy", "Normal", "Hard"][_level], Vector2(0, 46), 16)
-	d.pressed.connect(func():
-		_level = ((_level + 1) % 3) as FightAI.Level
-		d.text = "AI level: %s" % ["Easy", "Normal", "Hard"][_level])
-	col.add_child(d)
-	var fight := UiKit.button("FIGHT", Vector2(0, 62), 26)
+	var fight := UiKit.button("FIGHT", Vector2(0, 70), 34)
 	fight.pressed.connect(_begin_loading)
 	col.add_child(fight)
-	var ow := UiKit.button("OPEN WORLD", Vector2(0, 56), 22)
+	var ow := UiKit.button("OPEN WORLD", Vector2(0, 60), 26)
 	ow.pressed.connect(func():
 		_open = true
 		_begin_loading())
 	col.add_child(ow)
+	var g := UiKit.button("GRAPHICS:  %s" % GraphicsSettings.mode_names()[_mode].to_upper(), Vector2(0, 48), 18)
+	g.pressed.connect(func():
+		_mode = ((_mode + 1) % 6) as GraphicsSettings.Mode
+		g.text = "GRAPHICS:  %s" % GraphicsSettings.mode_names()[_mode].to_upper())
+	col.add_child(g)
+	var d := UiKit.button("AI LEVEL:  %s" % ["EASY", "NORMAL", "HARD"][_level], Vector2(0, 48), 18)
+	d.pressed.connect(func():
+		_level = ((_level + 1) % 3) as FightAI.Level
+		d.text = "AI LEVEL:  %s" % ["EASY", "NORMAL", "HARD"][_level])
+	col.add_child(d)
+	var foot := UiKit.label("Fan game · not affiliated with the anime's owners", 13, Color(1, 1, 1, 0.6))
+	foot.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	foot.offset_left = -420.0
+	foot.offset_top = -34.0
+	_menu.add_child(foot)
 
 # ---------------------------------------------------------------- loading
 func _begin_loading() -> void:

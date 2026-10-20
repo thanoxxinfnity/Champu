@@ -6,6 +6,11 @@ config_version=5
 config/name="Cursed Clash"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
+config/icon="res://assets/ui/icon_512.png"
+boot_splash/bg_color=Color(0.024, 0.016, 0.047, 1)
+boot_splash/image="res://assets/ui/boot_splash.png"
+boot_splash/fullsize=true
+boot_splash/use_filter=true
 
 [display]
 
@@ -18,3 +23,7 @@ window/handheld/orientation=4
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
+
+[gui]
+
+theme/custom_font="res://assets/fonts/Rajdhani-Bold.ttf"

@@ -3,7 +3,7 @@ extends CanvasLayer
 ## Anime-fighter HUD: slanted health bars with a white "damage trail" that drains after a hit, a glowing cursed-energy bar split into four
 ## segments (DOMAIN READY when full), round portraits, the round timer in the centre and the big banner (ROUND 1 / KO / WINS).
 
-const FACES := {"gojo": "res://assets/loading/r_04_gojo_face.jpg", "sukuna": "res://assets/loading/r_05_sukuna_face.jpg"}
+const FACES := {"gojo": "res://assets/ui/card_gojo.jpg", "sukuna": "res://assets/ui/card_sukuna.jpg"}
 
 var a: Fighter
 var b: Fighter
@@ -35,6 +35,7 @@ func _ready() -> void:
 		var face := TextureRect.new()
 		face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		face.clip_contents = true
 		face.size = Vector2(74, 74)
 		face.position = Vector2(12, 8) if side == 0 else Vector2(0, 8)
 		face.mouse_filter = Control.MOUSE_FILTER_IGNORE

@@ -6,9 +6,8 @@ extends Control
 signal finished
 
 const IMAGES := [
-	"res://assets/loading/01_versus.jpg", "res://assets/loading/02_clash_a.jpg", "res://assets/loading/03_clash_b.jpg",
-	"res://assets/loading/r_01_gojo_hero.jpg", "res://assets/loading/r_02_sukuna_hero.jpg", "res://assets/loading/r_03_faceoff.jpg",
-	"res://assets/loading/r_04_gojo_face.jpg", "res://assets/loading/r_05_sukuna_face.jpg", "res://assets/loading/r_06_clash.jpg",
+	"res://assets/ui/poster_1.jpg", "res://assets/loading/01_versus.jpg", "res://assets/ui/poster_2.jpg", "res://assets/loading/02_clash_a.jpg",
+	"res://assets/ui/poster_3.jpg", "res://assets/ui/poster_4.jpg", "res://assets/loading/03_clash_b.jpg", "res://assets/ui/poster_5.jpg",
 ]
 const TIPS := [
 	"Block cuts damage by 80%, but an ultimate breaks through it.",
