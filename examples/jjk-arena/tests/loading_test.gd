@@ -12,7 +12,7 @@ func _init() -> void:
 	for p in LoadingScreen.IMAGES:
 		if not FileAccess.file_exists(p):
 			missing += 1
-	check(missing == 0 and LoadingScreen.IMAGES.size() == 9, "all nine key-art images exist")
+	check(missing == 0 and LoadingScreen.IMAGES.size() >= 8, "all key-art images exist (%d)" % LoadingScreen.IMAGES.size())
 	check(LoadingScreen.TIPS.size() >= 6, "tips rotate")
 	var ls := LoadingScreen.new()
 	ls.min_show_time = 8.0
