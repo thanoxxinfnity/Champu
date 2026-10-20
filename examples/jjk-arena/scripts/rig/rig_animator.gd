@@ -17,6 +17,8 @@ var _rest_dir: Array[Vector3] = []
 var _order: Array[int] = []
 var _fists := {}              ## "L"/"R" -> BoneAttachment3D
 var fists_on := false
+var _finger := {}             ## "R"/"L" -> {"index": [bone ids 0..2], ...}
+const FINGERS := ["thumb", "index", "middle", "ring", "pinky"]
 
 func load_model(path: String) -> bool:
 	var scene = load(path)
@@ -37,6 +39,14 @@ func load_model(path: String) -> bool:
 				idx[n] = i
 				break
 	_cache_rest()
+	for side in ["L", "R"]:
+		var m := {}
+		for f in FINGERS:
+			var ids := []
+			for j in 3:
+				ids.append(skeleton.find_bone("%s%d%s" % [f, j, side]))
+			m[f] = ids
+		_finger[side] = m
 	return idx.has("hips") and idx.has("upperarmL")
 
 func _cache_rest() -> void:
@@ -66,6 +76,18 @@ func apply(pose: Dictionary) -> void:
 	for k in pose:
 		if idx.has(k):
 			by_index[idx[k]] = pose[k]
+	# finger curls: pose["curl"] = {"R": {"index": [deg, deg, deg], ...}, "L": {...}} bend each joint toward the palm
+	var curl := {}
+	if pose.has("curl"):
+		for side in pose["curl"]:
+			var sgn := 1.0 if side == "R" else -1.0
+			for f in pose["curl"][side]:
+				var ids: Array = _finger.get(side, {}).get(f, [])
+				var angs: Array = pose["curl"][side][f]
+				for j in mini(ids.size(), angs.size()):
+					if ids[j] >= 0:
+						var axis: Vector3 = (_rest_g[ids[j]].basis.inverse() * Vector3(0, 0, 1)).normalized()
+						curl[ids[j]] = Quaternion(axis, deg_to_rad(float(angs[j])) * sgn)
 	var new_b: Array[Basis] = []
 	new_b.resize(_rest_g.size())
 	for i in _order:
@@ -82,6 +104,8 @@ func apply(pose: Dictionary) -> void:
 				nb = Basis(Quaternion(dir, deg_to_rad(spec[1]))) * nb
 		else:
 			nb = parent_b * rest_local
+			if curl.has(i):
+				nb = nb * Basis(curl[i])
 		new_b[i] = nb
 		skeleton.set_bone_pose_rotation(i, (parent_b.inverse() * nb).get_rotation_quaternion())
 	if pose.has("hips_pos") and idx.has("hips"):

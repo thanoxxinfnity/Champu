@@ -8,6 +8,7 @@ const DEFAULT := {
 	"uL": Vector3(0.30, -0.80, 0.50), "fL": Vector3(0.10, 0.60, 0.80),
 	"uR": Vector3(0.30, -0.80, 0.55), "fR": Vector3(0.10, 0.60, 0.80),
 	"tL": Vector3(0.12, -1.0, 0.30), "sL": Vector3(0.10, -1.0, -0.10), "ftL": Vector3(0.0, -0.25, 1.0),
+	"hL": Vector3.ZERO, "hR": Vector3.ZERO,     # hand direction; zero = follow the forearm
 	"tR": Vector3(0.12, -1.0, -0.20), "sR": Vector3(0.10, -1.0, -0.05), "ftR": Vector3(0.0, -0.25, 1.0),
 }
 
@@ -19,6 +20,8 @@ static func mix(a: Dictionary, b: Dictionary, w: float) -> Dictionary:
 	for k in b:
 		keys[k] = true
 	for k in keys:
+		if not DEFAULT.has(k):
+			continue
 		var va = a.get(k, DEFAULT[k])
 		var vb = b.get(k, DEFAULT[k])
 		out[k] = va.lerp(vb, w) if va is Vector3 else lerpf(va, vb, w)
@@ -29,7 +32,9 @@ static func _mir(v: Vector3) -> Vector3:
 
 static func build(p: Dictionary) -> Dictionary:
 	var q := DEFAULT.duplicate()
-	q.merge(p, true)
+	for k in p:
+		if DEFAULT.has(k):
+			q[k] = p[k]
 	var lean: float = q["lean"]
 	var tw: float = q["twist"]
 	var roll: float = q["roll"]
@@ -45,8 +50,8 @@ static func build(p: Dictionary) -> Dictionary:
 	pose["forearmL"] = q["fL"]
 	pose["upperarmR"] = _mir(q["uR"])
 	pose["forearmR"] = _mir(q["fR"])
-	pose["handL"] = q["fL"]
-	pose["handR"] = _mir(q["fR"])
+	pose["handL"] = q["hL"] if (q["hL"] as Vector3).length() > 0.3 else q["fL"]
+	pose["handR"] = _mir(q["hR"] if (q["hR"] as Vector3).length() > 0.3 else q["fR"])
 	pose["thighL"] = q["tL"]
 	pose["shinL"] = q["sL"]
 	pose["footL"] = q["ftL"]
@@ -193,3 +198,25 @@ static func stunned(t: float) -> Dictionary:
 	return {"lean": -10.0 + sin(t * 31.0) * 1.5, "head": -24.0, "roll": 4.0 + sin(t * 23.0) * 2.0, "crouch": 0.03,
 		"uL": Vector3(0.3, -0.95, 0.05 + j), "fL": Vector3(0.2, -1.0, 0.1), "uR": Vector3(0.3, -0.95, 0.05 - j), "fR": Vector3(0.2, -1.0, 0.1),
 		"tL": Vector3(0.1, -1.0, 0.02), "sL": Vector3(0.05, -1.0, 0.0), "tR": Vector3(0.1, -1.0, -0.02), "sR": Vector3(0.05, -1.0, 0.0)}
+
+## Gojo's Infinite Void sign: right hand up by the face, index and middle finger raised and crossed, the rest folded.
+static func gojo_sign() -> Dictionary:
+	var p: Dictionary = SIG_WINDUP["gojo_domain"].duplicate()
+	p["uR"] = Vector3(0.08, -0.5, 0.86)
+	p["fR"] = Vector3(-0.62, 0.78, 0.1)
+	p["head"] = 6.0
+	p["hR"] = Vector3(-0.15, 1.0, 0.25)
+	p["curl"] = {"R": {"index": [-6, 4, 4], "middle": [10, 6, 4], "ring": [75, 95, 70], "pinky": [80, 95, 70], "thumb": [25, 35, 25]}}
+	return p
+
+## Sukuna's Malevolent Shrine seal: both hands pressed together in front of the chest, fingers straight up.
+static func sukuna_seal() -> Dictionary:
+	var p: Dictionary = SIG_WINDUP["sukuna_domain"].duplicate()
+	p["uL"] = Vector3(0.05, -0.5, 0.86)
+	p["fL"] = Vector3(-1.0, 0.22, 0.08)
+	p["uR"] = Vector3(0.05, -0.5, 0.86)
+	p["fR"] = Vector3(-1.0, 0.22, 0.08)
+	p["hL"] = Vector3(-0.2, 1.0, 0.15)
+	p["hR"] = Vector3(-0.2, 1.0, 0.15)
+	p["curl"] = {"R": {"thumb": [10, 10, 5]}, "L": {"thumb": [10, 10, 5]}}
+	return p

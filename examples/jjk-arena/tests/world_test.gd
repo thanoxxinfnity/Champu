@@ -9,7 +9,7 @@ func ok(c: bool, w: String) -> void:
 
 func _init() -> void:
 	ok(is_equal_approx(WorldGen.height(100, 100), WorldGen.height(100, 100)), "height is deterministic")
-	ok(absf(WorldGen.height(0, 0)) < 0.5, "downtown is flat")
+	ok(absf(WorldGen.height(0, 0)) < 12.0, "downtown is only gently rolling")
 	ok(WorldGen.height(2600, 0) > 80.0 or WorldGen.height(0, 2600) > 80.0, "mountains close the map")
 	ok(WorldGen.height(WorldGen.LAKE_C.x, WorldGen.LAKE_C.y) < -4.0, "the lake is a basin")
 	var count := 0

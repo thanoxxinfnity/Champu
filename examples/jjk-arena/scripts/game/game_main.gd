@@ -539,7 +539,6 @@ func _destroy_ahead(f: Fighter, length: float, width: float) -> void:
 		BuildingCollapse.run(hits[i][1], _dm, _world, 1.0 if q["particles"] > 0.5 else 0.5, _rng)
 
 # ---------------------------------------------------------------- cinematics (staged like the console game: cut-ins, close-ups, flashes)
-const CUT := "res://assets/cutin/"
 
 func _face(f: Node3D, dist: float, side := 0.35, up := 1.65) -> Array:
 	var fwd := -f.global_transform.basis.z
@@ -547,55 +546,112 @@ func _face(f: Node3D, dist: float, side := 0.35, up := 1.65) -> Array:
 	var face := f.global_position + Vector3.UP * up
 	return [face + fwd * dist + sv * side, face]
 
+func _hand_shot(f: Node3D, side_sign := -1.0) -> Array:
+	# close on the raised hand with the face behind it
+	var fwd := -f.global_transform.basis.z
+	var sv := fwd.cross(Vector3.UP).normalized()
+	var hand := f.global_position + Vector3.UP * 1.62 + sv * side_sign * 0.12 + fwd * 0.18
+	return [hand + fwd * 0.62 + sv * side_sign * 0.18 + Vector3.UP * 0.04, hand]
+
+func _eye_shot(f: Node3D, k: float) -> Array:
+	var fwd := -f.global_transform.basis.z
+	var eye := f.global_position + Vector3.UP * 1.78 + fwd * 0.08
+	return [eye + fwd * lerpf(0.55, 0.38, k) + Vector3.UP * 0.01, eye]
+
+func _sparkles(at: Node3D, c: Color, secs: float) -> void:
+	var p := GPUParticles3D.new()
+	p.amount = 60
+	p.lifetime = 1.2
+	p.local_coords = false
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.9
+	pm.gravity = Vector3(0, 0.3, 0)
+	pm.scale_min = 0.02
+	pm.scale_max = 0.07
+	p.process_material = pm
+	var q := QuadMesh.new()
+	var m := MoveVfx.glow_mat(c, 3.0)
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.albedo_texture = DestructionVfx.spark_texture()
+	q.material = m
+	p.draw_pass_1 = q
+	_world.add_child(p)
+	p.global_position = at.global_position + Vector3.UP * 1.6
+	get_tree().create_timer(secs).timeout.connect(func():
+		if is_instance_valid(p):
+			p.queue_free())
+
+func _end_sign(f: Fighter) -> void:
+	f.remove_meta("pose_override")
+	f.remove_meta("show_hands")
+
+## Infinite Void on the real rig (~3.3 s): finger-sign close-up -> the eye -> the void bursts open -> the enemy's brain floods -> Gojo among the stars.
 func _shots_void(f: Fighter, o: Fighter) -> Array:
 	return [
-		{"t": 0.9, "img": CUT + "gojo_sign.jpg", "zoom": [1.0, 1.12], "pivot": Vector2(0.3, 0.3), "tint": Color(0.1, 0.3, 0.9, 0.12)},
-		{"t": 0.75, "img": CUT + "gojo_eye.jpg", "zoom": [1.0, 1.45], "pivot": Vector2(0.52, 0.5)},
-		{"t": 1.3, "flash": Color(1, 1, 1, 1), "lines": Color(0.85, 0.95, 1.0, 0.8),
+		{"t": 0.8, "tint": Color(0.1, 0.3, 0.9, 0.1),
+			"start": func():
+				f.set_meta("show_hands", true)
+				f.set_meta("pose_override", PoseLib.gojo_sign()),
+			"cam": func(k: float) -> Array: return _hand_shot(f, -1.0)},
+		{"t": 0.5, "tint": Color(0.2, 0.5, 1.0, 0.12), "cam": func(k: float) -> Array: return _eye_shot(f, k)},
+		{"t": 0.9, "flash": Color(1, 1, 1, 1), "lines": Color(0.85, 0.95, 1.0, 0.8),
 			"start": func(): _on_domain(f, "gojo"),
 			"cam": func(k: float) -> Array:
-				var a := k * 2.2
-				var c := f.global_position + Vector3.UP * 1.3
-				return [c + Vector3(sin(a) * 3.6, 0.6 + k * 0.8, cos(a) * 3.6), c]},
-		{"t": 0.95, "lines": Color(1, 1, 1, 0.9), "cam": func(k: float) -> Array: return _face(o, 1.4 - k * 0.3, 0.2, 1.6)},
-		{"t": 1.1, "img": CUT + "gojo_cosmic.jpg", "zoom": [1.12, 1.0], "pivot": Vector2(0.5, 0.35), "sparkle": Color(0.55, 0.85, 1.0, 1.0)},
+				var a := k * 2.0
+				var c := f.global_position + Vector3.UP * 1.4
+				return [c + Vector3(sin(a) * 3.2, 0.4 + k * 0.8, cos(a) * 3.2), c]},
+		{"t": 0.6, "lines": Color(1, 1, 1, 0.9), "cam": func(k: float) -> Array: return _face(o, 1.2 - k * 0.25, 0.15, 1.65)},
+		{"t": 0.55,
+			"start": func():
+				_sparkles(f, Color(0.5, 0.85, 1.0), 1.0)
+				_end_sign(f),
+			"cam": func(k: float) -> Array: return _face(f, 1.1 - k * 0.2, 0.25, 1.7)},
 	]
 
+## Malevolent Shrine (~3.3 s): the seal -> the shrine rises -> Gojo braces -> the cuts -> Sukuna's face in red light.
 func _shots_shrine(f: Fighter, o: Fighter) -> Array:
 	return [
-		{"t": 0.9, "img": CUT + "sukuna_sign.jpg", "zoom": [1.0, 1.1], "pivot": Vector2(0.45, 0.5), "tint": Color(0.6, 0.0, 0.0, 0.15)},
-		{"t": 1.5, "flash": Color(1, 0.2, 0.15, 0.8),
+		{"t": 0.8, "tint": Color(0.6, 0.0, 0.0, 0.12),
+			"start": func():
+				f.set_meta("show_hands", true)
+				f.set_meta("pose_override", PoseLib.sukuna_seal()),
+			"cam": func(k: float) -> Array:
+				var r := _hand_shot(f, 0.0)
+				return [(r[0] as Vector3) + (-f.global_transform.basis.z) * 0.35 - Vector3.UP * 0.05, (r[1] as Vector3) - Vector3.UP * 0.12]},
+		{"t": 1.0, "flash": Color(1, 0.2, 0.15, 0.8),
 			"start": func(): _on_domain(f, "sukuna"),
 			"cam": func(k: float) -> Array:
 				var fwd := -f.global_transform.basis.z
 				var base := f.global_position
 				return [base + fwd * (7.5 - k * 1.5) + Vector3.UP * (0.6 + k * 0.6), base + Vector3.UP * (2.0 + k * 4.0) - fwd * 6.0]},
-		{"t": 0.7, "start": func(): o.set_meta("brace", true), "cam": func(k: float) -> Array: return _face(o, 2.6 - k * 0.4, -0.6, 1.3)},
-		{"t": 1.0, "web": true, "lines": Color(0.1, 0.0, 0.0, 0.6),
+		{"t": 0.5, "start": func(): o.set_meta("brace", true), "cam": func(k: float) -> Array: return _face(o, 2.4 - k * 0.4, -0.6, 1.3)},
+		{"t": 0.6, "web": true, "lines": Color(0.1, 0.0, 0.0, 0.6),
 			"start": func():
 				for i in 4:
 					MoveVfx.slash_burst(_world, o.global_position + Vector3.UP * (0.6 + i * 0.4), 5, 3.0),
-			"cam": func(k: float) -> Array: return _face(o, 3.2, 1.2, 1.2)},
-		{"t": 0.15, "black": true},
-		{"t": 1.0, "img": CUT + "sukuna_grin.jpg", "zoom": [1.0, 1.12], "pivot": Vector2(0.5, 0.4), "tint": Color(0.5, 0.0, 0.0, 0.12),
-			"start": func(): o.remove_meta("brace")},
+			"cam": func(k: float) -> Array: return _face(o, 3.0, 1.2, 1.2)},
+		{"t": 0.45, "tint": Color(0.5, 0.0, 0.0, 0.15),
+			"start": func():
+				o.remove_meta("brace")
+				_end_sign(f),
+			"cam": func(k: float) -> Array: return _face(f, 1.0 - k * 0.15, -0.2, 1.72)},
 	]
 
+## Hollow Purple (~1.2 s): Blue and Red gather at the hands -> the eye -> flash, then the shot leaves.
 func _shots_purple(f: Fighter, o: Fighter) -> Array:
 	return [
-		{"t": 0.55, "img": CUT + "gojo_sign.jpg", "zoom": [1.05, 1.15], "pivot": Vector2(0.3, 0.3)},
-		{"t": 0.45, "img": CUT + "gojo_eye.jpg", "zoom": [1.1, 1.5], "pivot": Vector2(0.52, 0.5)},
-		{"t": 1.1, "lines": Color(0.75, 0.5, 1.0, 0.7),
+		{"t": 0.6, "lines": Color(0.75, 0.5, 1.0, 0.6),
 			"cam": func(k: float) -> Array:
-				var r := _face(f, 1.6, 0.9, 1.45)
-				return [r[0] + Vector3.UP * k * 0.2, (r[1] as Vector3) - f.global_transform.basis.z * 0.9]},
-		{"t": 0.12, "flash": Color(1, 1, 1, 1), "black": false, "cam": func(k: float) -> Array: return _face(f, 3.0, 2.0, 1.4)},
+				var r := _face(f, 1.7, 0.9, 1.45)
+				return [(r[0] as Vector3) + Vector3.UP * k * 0.2, (r[1] as Vector3) - f.global_transform.basis.z * 0.9]},
+		{"t": 0.45, "tint": Color(0.5, 0.3, 1.0, 0.12), "cam": func(k: float) -> Array: return _eye_shot(f, k)},
+		{"t": 0.12, "flash": Color(1, 1, 1, 1), "cam": func(k: float) -> Array: return _face(f, 3.0, 2.0, 1.4)},
 	]
 
 func _shots_sukuna_super(f: Fighter, o: Fighter, name: String) -> Array:
 	var shots := [
-		{"t": 0.6, "img": CUT + ("sukuna_sign.jpg" if name == "world_slash" else "sukuna_grin.jpg"), "zoom": [1.0, 1.12], "pivot": Vector2(0.5, 0.45), "tint": Color(0.5, 0.0, 0.0, 0.12)},
-		{"t": 0.8, "lines": Color(1, 0.4, 0.3, 0.6), "cam": func(k: float) -> Array: return _face(f, 1.8 - k * 0.3, 0.8, 1.45)},
+		{"t": 0.7, "lines": Color(1, 0.4, 0.3, 0.6), "tint": Color(0.5, 0.0, 0.0, 0.1), "cam": func(k: float) -> Array: return _face(f, 1.6 - k * 0.3, 0.8, 1.5)},
 	]
 	if name == "world_slash":
 		shots.append({"t": 0.4, "web": true, "flash": Color(1, 1, 1, 0.9), "cam": func(k: float) -> Array: return _face(o, 3.0, -1.0, 1.3)})

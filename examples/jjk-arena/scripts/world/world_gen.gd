@@ -10,6 +10,7 @@ const LAKE_C := Vector2(-1300.0, 1100.0)
 const LAKE_R := 330.0
 
 static var _hill := FastNoiseLite.new()
+static var _city := FastNoiseLite.new()
 static var _ridge := FastNoiseLite.new()
 static var _ready_noise := false
 
@@ -22,6 +23,9 @@ static func _init_noise() -> void:
 	_ridge.seed = 29
 	_ridge.frequency = 0.0021
 	_ridge.fractal_octaves = 4
+	_city.seed = 41
+	_city.frequency = 0.0011
+	_city.fractal_octaves = 2
 
 static func radius(x: float, z: float) -> float:
 	return Vector2(x, z).length()
@@ -30,6 +34,8 @@ static func height(x: float, z: float) -> float:
 	_init_noise()
 	var r := radius(x, z)
 	var h := 0.0
+	# the city itself rolls: gentle hills and dips (up to ~30 m) so streets climb and drop like a real hilly town; downtown core stays flatter
+	h += (1.0 - smoothstep(1500.0, 2100.0, r)) * (_city.get_noise_2d(x, z) * 0.5 + 0.5) * lerpf(10.0, 32.0, smoothstep(150.0, 700.0, r))
 	h += smoothstep(1300.0, 2300.0, r) * (_hill.get_noise_2d(x, z) * 0.5 + 0.5) * 38.0
 	var m := smoothstep(2000.0, 2750.0, r)
 	h += m * (60.0 + 420.0 * pow(absf(_ridge.get_noise_2d(x, z)), 0.8) * 2.0)
@@ -93,7 +99,9 @@ static func block_buildings(bx: int, bz: int) -> Array:
 		var px := cx - inner * 0.25 * (1.0 if n > 1 else 0.0) + gx * inner * 0.5 * (1.0 if n > 1 else 0.0)
 		var pz := cz - inner * 0.25 * (1.0 if n > 2 else 0.0) + gz * inner * 0.5 * (1.0 if n > 2 else 0.0)
 		var hh := lerpf(hmin, hmax, pow(hash2(bx * 7 + i, bz * 13 + i, 3), 1.6))
-		out.append({"pos": Vector3(px, height(px, pz), pz), "size": Vector3(w * lerpf(0.7, 1.0, hash2(bx, bz, 20 + i)), hh, w * lerpf(0.7, 1.0, hash2(bx, bz, 40 + i))),
+		var half_w := inner * 0.22
+		var base := minf(minf(height(px - half_w, pz - half_w), height(px + half_w, pz - half_w)), minf(height(px - half_w, pz + half_w), height(px + half_w, pz + half_w))) - 0.6
+		out.append({"pos": Vector3(px, base, pz), "size": Vector3(w * lerpf(0.7, 1.0, hash2(bx, bz, 20 + i)), hh, w * lerpf(0.7, 1.0, hash2(bx, bz, 40 + i))),
 			"kind": int(hash2(bx, bz, 60 + i) * 4.0)})
 	return out
 

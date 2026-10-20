@@ -72,7 +72,13 @@ func attack_info() -> Dictionary:
 		return {}
 	var total: float = [float(_move["startup"]), float(_move["active"]), float(_move["recover"])][clampi(_phase, 0, 2)]
 	var kind := _move_name if _move_name != "light" else "light%d" % clampi(_combo, 1, 3)
-	return {"kind": kind, "phase": _phase, "k": 1.0 - clampf(_timer / maxf(total, 0.001), 0.0, 1.0)}
+	var k := 1.0 - clampf(_timer / maxf(total, 0.001), 0.0, 1.0)
+	var durs := [float(_move["startup"]), float(_move["active"]), float(_move["recover"])]
+	var whole: float = durs[0] + durs[1] + durs[2]
+	var done := 0.0
+	for i in clampi(_phase, 0, 2):
+		done += durs[i]
+	return {"kind": kind, "phase": _phase, "k": k, "p": clampf((done + k * durs[clampi(_phase, 0, 2)]) / maxf(whole, 0.001), 0.0, 1.0)}
 
 func hit_progress() -> float:
 	return 1.0 - clampf(_timer / 0.4, 0.0, 1.0)

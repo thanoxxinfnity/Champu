@@ -359,12 +359,12 @@ func _street_props(node: Node3D, ox: float, oz: float, k: Vector2i) -> void:
 			var z1 := (bz + 1) * cell - half - 1.6
 			var empty := WorldGen.block_buildings(bx, bz).is_empty()
 			if empty:
-				X["grass"].append(Transform3D(Basis.IDENTITY, Vector3(cx, y + 0.05, cz)))
+				node.add_child(_park_patch(cx, cz))
 				for t in 6:
 					var px := cx + (WorldGen.hash2(bx, bz, 400 + t) - 0.5) * 50.0
 					var pz := cz + (WorldGen.hash2(bx, bz, 500 + t) - 0.5) * 50.0
-					_add_tree(TB, Vector3(px, y, pz), 8.0 + WorldGen.hash2(bx, bz, 600 + t) * 6.0, WorldGen.hash2(bx, bz, t))
-				X["bench"].append(Transform3D(Basis.IDENTITY, Vector3(cx, y + 0.25, cz - 8.0)))
+					_add_tree(TB, Vector3(px, WorldGen.height(px, pz), pz), 8.0 + WorldGen.hash2(bx, bz, 600 + t) * 6.0, WorldGen.hash2(bx, bz, t))
+				X["bench"].append(Transform3D(Basis.IDENTITY, Vector3(cx, WorldGen.height(cx, cz - 8.0) + 0.25, cz - 8.0)))
 			# four sidewalks around the block
 			var edges := [[Vector3(x0, 0, z0), Vector3(1, 0, 0), x1 - x0], [Vector3(x0, 0, z1), Vector3(1, 0, 0), x1 - x0],
 				[Vector3(x0, 0, z0), Vector3(0, 0, 1), z1 - z0], [Vector3(x1, 0, z0), Vector3(0, 0, 1), z1 - z0]]
@@ -377,7 +377,8 @@ func _street_props(node: Node3D, ox: float, oz: float, k: Vector2i) -> void:
 				var d := 6.0
 				var n := 0
 				while d < length - 4.0:
-					var p := start + dir * d + Vector3(0, y, 0)
+					var p := start + dir * d
+					p.y = WorldGen.height(p.x, p.z)
 					var h := WorldGen.hash2(bx * 4 + e, bz * 4 + n, 700)
 					if n % 3 == 0:
 						X["pole"].append(Transform3D(Basis.IDENTITY, p + Vector3(0, 3.5, 0)))
@@ -401,7 +402,7 @@ func _street_props(node: Node3D, ox: float, oz: float, k: Vector2i) -> void:
 					n += 1
 			# traffic light on the corner
 			if WorldGen.hash2(bx, bz, 950) < 0.6:
-				var c := Vector3(x0 - 0.5, y, z0 - 0.5)
+				var c := Vector3(x0 - 0.5, WorldGen.height(x0 - 0.5, z0 - 0.5), z0 - 0.5)
 				X["pole"].append(Transform3D(Basis.from_scale(Vector3(1, 0.7, 1)), c + Vector3(0, 2.45, 0)))
 				X["tlight"].append(Transform3D(Basis.IDENTITY, c + Vector3(0, 5.2, 0)))
 	for key in X:
@@ -498,3 +499,24 @@ func _materialize(marker: Node3D) -> void:
 	if copy != null:
 		copy.scale = Vector3.ONE * float(marker.get_meta("scale"))
 		marker.add_child(copy)
+
+## Park lawn that follows the slope (a small grid draped over the terrain) instead of a flat plane that would sink into a hillside.
+func _park_patch(cx: float, cz: float) -> MeshInstance3D:
+	var half := (WorldGen.CELL - WorldGen.ROAD - 9.0) * 0.5
+	var n := 8
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for iz in n:
+		for ix in n:
+			var quad := []
+			for c in [[0, 0], [1, 0], [0, 1], [1, 0], [1, 1], [0, 1]]:
+				var x: float = cx - half + (ix + c[0]) * half * 2.0 / n
+				var z: float = cz - half + (iz + c[1]) * half * 2.0 / n
+				quad.append(Vector3(x, WorldGen.height(x, z) + 0.08, z))
+			for v in quad:
+				st.set_normal(Vector3.UP)
+				st.add_vertex(v)
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = _props["grass"].material
+	return mi
