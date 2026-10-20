@@ -6,8 +6,8 @@ extends Camera3D
 var target: Node3D            ## the player
 var lock: Node3D              ## the opponent (null = free camera)
 var yaw := 0.0
-var pitch := -0.14
-var distance := 3.0
+var pitch := -0.1
+var distance := 2.0
 var shake := 0.0
 var lock_on := true
 var _pos := Vector3.ZERO
@@ -77,18 +77,18 @@ func _process(delta: float) -> void:
 		if to.length() > 0.5:
 			var want := atan2(-to.x, -to.z)
 			yaw = lerp_angle(yaw, want, clampf(3.0 * delta, 0.0, 1.0))
-	var pivot := target.global_position + Vector3.UP * 1.55
+	var pivot := target.global_position + Vector3.UP * 1.5
 	var back := Vector3(sin(yaw) * cos(pitch), -sin(pitch), cos(yaw) * cos(pitch))
 	var right := Vector3(cos(yaw), 0, -sin(yaw))
 	var dist := distance
 	if lock != null and is_instance_valid(lock):
-		dist += clampf(target.global_position.distance_to(lock.global_position) * 0.1, 0.0, 1.8)
-	var want_pos := pivot + back * dist + right * 0.85
+		dist += clampf(target.global_position.distance_to(lock.global_position) * 0.06, 0.0, 0.7)
+	var want_pos := pivot + back * dist + right * 0.55
 	_pos = want_pos if _pos == Vector3.ZERO else _pos.lerp(want_pos, clampf(10.0 * delta, 0.0, 1.0))
 	shake = maxf(0.0, shake - 2.5 * delta)
 	var off := Vector3(_rng.randf_range(-1, 1), _rng.randf_range(-1, 1), _rng.randf_range(-1, 1)) * shake * 0.18
 	global_position = _pos + off
-	var look := pivot + right * 0.6
+	var look := pivot + right * 0.4
 	if lock != null and is_instance_valid(lock) and lock_on:
 		look = look.lerp(lock.global_position + Vector3.UP * 1.2, 0.35)
 	look_at(look, Vector3.UP)
