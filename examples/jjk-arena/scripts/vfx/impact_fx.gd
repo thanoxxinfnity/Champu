@@ -32,7 +32,8 @@ func impact_frame(flashes := 2) -> void:
 		await _real_timer(0.05).timeout
 		_mat.set_shader_parameter("invert", 0.0)
 		await _real_timer(0.04).timeout
-	if float(_mat.get_shader_parameter("lines")) <= 0.0:
+	var ln = _mat.get_shader_parameter("lines")
+	if ln == null or float(ln) <= 0.0:
 		_rect.visible = false
 
 func speed_lines(secs: float) -> void:

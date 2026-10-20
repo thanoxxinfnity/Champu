@@ -44,3 +44,6 @@
 - `city/highrise_office.glb` — "High Rise Office Building" by Arsen Ismailov, licence CC Attribution — https://sketchfab.com/3d-models/high-rise-office-building-3db1659ca3984bdbb18d9d3838095bea
 - `city/residential_tower.glb` — "residental tower office  apartment building" by zigurat architecture studio, licence CC Attribution — https://sketchfab.com/3d-models/residental-tower-office-apartment-building-1fc97eaa61664237b20b7b32dbb3a059
 - `city/newyork.glb` — "New York Buildings" by sumitmangela, licence CC Attribution — https://sketchfab.com/3d-models/new-york-buildings-e7922fe0f7b14ed786f84529f9217dac
+
+# Characters
+- `characters/gojo_free.glb` — "Gojo Satoru ( vs. Sukuna ) free v2" by jjkcharactersresource (ridho.mnf), licence CC Attribution — https://sketchfab.com/3d-models/3b6661e3a052442b92e1330ed98dc3f0 — rigged for this game with tools/rig_free_model.py

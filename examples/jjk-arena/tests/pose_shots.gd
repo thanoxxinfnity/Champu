@@ -10,7 +10,7 @@ func _init() -> void:
 	var path := "res://assets/characters/%s.glb" % which
 	var poses := [["stance", PoseLib.stance(0.0)], ["walk", PoseLib.walk(0.3, 1.0)], ["jab", PoseLib.attack("light1", 1, 1.0)],
 		["hook", PoseLib.attack("light2", 1, 1.0)], ["kick", PoseLib.attack("heavy", 1, 1.0)], ["cast", PoseLib.attack("special", 1, 1.0)],
-		["block", PoseLib.block()], ["hit", PoseLib.hit(0.0)], ["ko", PoseLib.ko(1.0)], ["hover", PoseLib.fly_hover(0.0)], ["fly", PoseLib.fly_fast(0.0)]]
+		["block", PoseLib.block()], ["hit", PoseLib.hit(0.0)], ["ko", PoseLib.ko(1.0)], ["hover", PoseLib.fly_hover(0.0)], ["fly", PoseLib.fly_fast(0.0)], ["sign", PoseLib.gojo_sign()]]
 	var world := Node3D.new()
 	root.add_child(world)
 	var env := WorldEnvironment.new()
@@ -32,8 +32,11 @@ func _init() -> void:
 			push_error("model failed")
 			quit(1)
 			return
-		a.set_fists(true)
-		a.apply(PoseLib.build(poses[i][1]))
+		a.set_fists(poses[i][0] != "sign")
+		var bp := PoseLib.build(poses[i][1])
+		if poses[i][1].has("curl"):
+			bp["curl"] = poses[i][1]["curl"]
+		a.apply(bp)
 		rigs.append(a)
 	var cam := Camera3D.new()
 	world.add_child(cam)

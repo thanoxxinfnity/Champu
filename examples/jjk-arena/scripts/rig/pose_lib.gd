@@ -206,7 +206,7 @@ static func gojo_sign() -> Dictionary:
 	p["fR"] = Vector3(-0.62, 0.78, 0.1)
 	p["head"] = 6.0
 	p["hR"] = Vector3(-0.15, 1.0, 0.25)
-	p["curl"] = {"R": {"index": [-6, 4, 4], "middle": [10, 6, 4], "ring": [75, 95, 70], "pinky": [80, 95, 70], "thumb": [25, 35, 25]}}
+	p["curl"] = {"R": {"index": [-6, 4, 4], "middle": [10, 6, 4], "ring": [75, 95, 70], "pinky": [80, 95, 70], "thumb": [55, 60, 45]}}
 	return p
 
 ## Sukuna's Malevolent Shrine seal: both hands pressed together in front of the chest, fingers straight up.
