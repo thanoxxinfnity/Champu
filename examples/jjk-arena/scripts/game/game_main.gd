@@ -184,6 +184,8 @@ func _process(delta: float) -> void:
 	_shot_clock += delta
 	if _auto != "" and _player != null:
 		_run_script()
+	if _args.has("quit_t") and _shot_clock >= float(_args["quit_t"]):
+		get_tree().quit()
 	if _args.has("shot") and _shot_clock >= float(_args.get("shot_t", "4")):
 		get_viewport().get_texture().get_image().save_png(_args["shot"])
 		get_tree().quit()
@@ -197,6 +199,29 @@ func _run_script() -> void:
 		"fly":
 			if t > 0.5 and t < 0.7:
 				_controls.tap("fly")
+		"demo":
+			_player.energy = maxf(_player.energy, 40.0) if t > 6.0 and t < 7.0 else _player.energy
+			if t < 5.5:
+				if int(t * 3.0) % 2 == 0:
+					_controls.tap("light")
+			elif t < 6.4:
+				_controls.tap("heavy")
+			elif t > 7.0 and t < 7.3:
+				_player.energy = 100.0
+				_controls.tap("special")
+			elif t > 9.0 and t < 9.2:
+				_controls.tap("fly")
+			elif t > 11.5 and t < 14.0:
+				_controls.stick = Vector2(0.9, 0.0)
+			elif t >= 14.0 and t < 14.2:
+				_controls.stick = Vector2.ZERO
+			elif t > 15.0 and t < 15.2:
+				_controls.tap("fly")
+			elif t > 17.0 and t < 17.2:
+				_player.energy = 100.0
+				_controls.tap("ultimate")
+			elif t > 17.5 and t < 22.0 and int(t * 3.0) % 2 == 0:
+				_controls.tap("light")
 		"ult":
 			if t > 0.5 and t < 0.7:
 				_player.energy = 100.0
