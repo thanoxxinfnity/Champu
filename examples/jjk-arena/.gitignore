@@ -2,3 +2,6 @@
 *.import
 *_albedo*.jpg
 *_metallic_roughness*.jpg
+assets/environment/**/*_[0-9]*.png
+assets/environment/**/*_[0-9]*.jpg
+assets/environment/**/*_[0-9]*.jpeg
