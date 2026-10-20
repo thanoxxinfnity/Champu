@@ -14,12 +14,13 @@ var _was_ko := false
 ## Punches and kicks come from real motion capture (CMU database, tools/bvh_to_pose.py); techniques keep their hand-made signature poses.
 const MOCAP_ATTACKS := {"light1": "mc_jab", "light2": "mc_cross", "light3": "mc_hook", "heavy": "mc_kick_round", "sukuna_heavy": "mc_kick_front"}
 
-func setup(f: Fighter, model_path: String, sway := true) -> bool:
+func setup(f: Fighter, model_path: String, sway := true, curl_fists := false) -> bool:
 	fighter = f
 	rig = RigAnimator.new()
 	add_child(rig)
 	if not rig.load_model(model_path):
 		return false
+	rig.curl_fists = curl_fists
 	rig.set_fists(true)
 	if sway:
 		cloth = ClothSway.new()
@@ -27,46 +28,7 @@ func setup(f: Fighter, model_path: String, sway := true) -> bool:
 		add_child(cloth)
 		cloth.build()
 	_cur = PoseLib.stance(0.0)
-	_setup_damage()
 	return true
-
-var _dmg_mats: Array[ShaderMaterial] = []
-var _tear := 0.0
-
-## Swap the shirt (body mesh) and trouser materials for the battle-damage shader, keeping their own textures.
-func _setup_damage() -> void:
-	var sh: Shader = load("res://shaders/battle_damage.gdshader")
-	for mi in rig.model.find_children("*", "MeshInstance3D", true, false):
-		var m := mi as MeshInstance3D
-		if m.mesh == null or m.get_parent() is BoneAttachment3D:
-			continue
-		var n := String(m.name).to_lower()
-		var is_body := n.contains("body")
-		var is_cloth := n.contains("cloth")
-		if not (is_body or is_cloth):
-			continue
-		for si in m.mesh.get_surface_count():
-			var src := m.get_active_material(si) as StandardMaterial3D
-			if src == null or src.albedo_texture == null:
-				continue
-			var sm := ShaderMaterial.new()
-			sm.shader = sh
-			sm.set_shader_parameter("albedo_tex", src.albedo_texture)
-			sm.set_shader_parameter("albedo_color", src.albedo_color)
-			sm.set_shader_parameter("is_shirt_mesh", is_body)
-			sm.set_shader_parameter("seed", float(get_instance_id() % 97))
-			m.set_surface_override_material(si, sm)
-			_dmg_mats.append(sm)
-
-func _update_damage(delta: float) -> void:
-	if _dmg_mats.is_empty():
-		return
-	var want := clampf(1.0 - fighter.health / Fighter.MAX_HEALTH, 0.0, 1.0)
-	if fighter.has_meta("tear_override"):
-		want = fighter.get_meta("tear_override")
-	_tear = move_toward(_tear, want, delta * 0.8)
-	for m in _dmg_mats:
-		m.set_shader_parameter("tear", _tear)
 
 func _target_pose() -> Dictionary:
 	var f := fighter
@@ -120,7 +82,6 @@ func _process(delta: float) -> void:
 	if fighter == null or rig == null:
 		return
 	_t += delta
-	_update_damage(delta)
 	if cloth != null:
 		var v := fighter.velocity
 		cloth.wind = Vector3(-v.x, 0.0, -v.z) * 0.6 + Vector3(0.6, 0, 0.3)

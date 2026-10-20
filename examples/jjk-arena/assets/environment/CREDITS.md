@@ -47,3 +47,4 @@
 
 # Characters
 - `characters/gojo_free.glb` — "Gojo Satoru ( vs. Sukuna ) free v2" by jjkcharactersresource (ridho.mnf), licence CC Attribution — https://sketchfab.com/3d-models/3b6661e3a052442b92e1330ed98dc3f0 — rigged for this game with tools/rig_free_model.py
+- `characters/meguna.glb` — "Shinjuku Showdown Megumi (Sukuna) 3d Model" by kesaaaa2 (DeviantArt; the author allows any use) — Gi + Haori outfit from the author's Unity package, rig and weights by the author; adapted for the game with jjk-models/tools/prep_meguna.py (outline shell removed, face bones folded into the head, game bone names, cloth chains, 1024 px textures)

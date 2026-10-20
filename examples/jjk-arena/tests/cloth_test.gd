@@ -44,5 +44,27 @@ func _init() -> void:
 	for i in 30:
 		cs._physics_process(1.0 / 60.0)
 	check(skel.get_bone_pose_rotation(tip).is_equal_approx(before), "disabled sway does nothing (Low mode)")
+	# the real Sukuna (Meguna): the author's dynamic bones arrive as sway chains, hair holds stiffer than the haori hem
+	var rig := RigAnimator.new()
+	root.add_child(rig)
+	check(rig.load_model("res://assets/characters/meguna.glb"), "Meguna loads")
+	var mc := ClothSway.new()
+	mc.skeleton = rig.skeleton
+	root.add_child(mc)
+	mc.build()
+	check(mc.chain_count() >= 30, "Meguna has %d cloth/hair chains (haori hem, sleeves, trouser hems, hair)" % mc.chain_count())
+	var hem := rig.skeleton.find_bone("sway_LTopsHemA_0")
+	var hair := rig.skeleton.find_bone("sway_FhairB_0")
+	check(hem >= 0 and hair >= 0, "haori hem and fringe chains are named for ClothSway")
+	var stiff := {}
+	for c in mc._chains:
+		stiff[c.bones[0]] = c.stiffness
+	check(stiff.get(hair, 0.0) > stiff.get(hem, 1.0), "hair is stiffer than the haori hem")
+	var hem_rest := rig.skeleton.get_bone_pose_rotation(hem)
+	mc.wind = Vector3(0, 0, 12)
+	for i in 40:
+		rig.position.x += 0.05
+		mc._physics_process(1.0 / 60.0)
+	check(rig.skeleton.get_bone_pose_rotation(hem).angle_to(hem_rest) > 0.05, "the haori hem swings when he moves")
 	print("ALL OK" if fails == 0 else "FAILED: %d" % fails)
 	quit(fails)

@@ -1,5 +1,5 @@
 extends SceneTree
-## xvfb-run -a godot --rendering-driver opengl3 --resolution 2400x420 --path . -s tests/clip_shots.gd -- gojo_whole fly_fast_side
+## xvfb-run -a godot --rendering-driver opengl3 --resolution 2400x420 --path . -s tests/clip_shots.gd -- gojo_free fly_fast_side
 ## Samples a video-derived clip at 8 moments, front and side, on the real rig -> /tmp/cm/clip_<name>_{front,side}.png
 
 func _init() -> void:

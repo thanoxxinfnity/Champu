@@ -27,3 +27,11 @@ textures/vram_compression/import_etc2_astc=true
 [gui]
 
 theme/custom_font="res://assets/fonts/Rajdhani-Bold.ttf"
+
+[importer_defaults]
+
+texture={
+"compress/mode": 2,
+"detect_3d/compress_to": 0,
+"process/size_limit": 2048
+}

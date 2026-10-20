@@ -19,6 +19,10 @@ var _queue: Array[Vector2i] = []
 var _water: MeshInstance3D
 var built_count := 0
 var props_enabled := true
+## Tree budget, set from the graphics mode: the real tree models are 7k-20k triangles each, so phones keep fewer, lighter, nearer trees.
+var tree_keep := 1.0                    ## share of tree spots that get a tree
+var tree_range := 0.0                   ## hide a chunk's trees beyond this distance (0 = never)
+var light_trees := false                ## skip the 20k-triangle tree model
 var _props := {}                        ## prop name -> Mesh (shared by every chunk's MultiMesh)
 
 func _ready() -> void:
@@ -163,7 +167,7 @@ func _build_chunk(k: Vector2i) -> void:
 		for t in trees:
 			var h := WorldGen.hash2(int(t.x), int(t.z), 8)
 			_add_tree(tb, t, 7.0 + h * 6.0, h)
-		_flush_batch(node, tb)
+		_flush_batch(node, tb, tree_range)
 
 func _terrain(ox: float, oz: float) -> MeshInstance3D:
 	var n := GRID + 1
@@ -407,11 +411,14 @@ func _street_props(node: Node3D, ox: float, oz: float, k: Vector2i) -> void:
 				X["tlight"].append(Transform3D(Basis.IDENTITY, c + Vector3(0, 5.2, 0)))
 	for key in X:
 		_mm(node, _props[key], X[key], C.get(key, []))
-	_flush_batch(node, TB)
+	_flush_batch(node, TB, tree_range)
 
 ## Add one tree (a real model, picked by `pick` 0..1) of `height` meters at `at` to a batch.
 func _add_tree(batch: Dictionary, at: Vector3, height: float, pick: float) -> void:
-	var name: String = ModelCatalog.TREES[int(pick * ModelCatalog.TREES.size()) % ModelCatalog.TREES.size()]
+	if tree_keep < 1.0 and WorldGen.hash2(int(at.x * 3.0), int(at.z * 3.0), 913) >= tree_keep:
+		return
+	var kinds: Array = ModelCatalog.TREES.filter(func(n: String) -> bool: return not (light_trees and n == "tree_real"))
+	var name: String = kinds[int(pick * kinds.size()) % kinds.size()]
 	var e := ModelCatalog.entry(name)
 	if e.is_empty():
 		return
@@ -430,7 +437,7 @@ func _batch_parts(batch: Dictionary, name: String, e: Dictionary, xf: Transform3
 			slot["markers"].append([marker, slot["xforms"].size()])
 		slot["xforms"].append(xf * (parts[i][1] as Transform3D))
 
-func _flush_batch(node: Node3D, batch: Dictionary) -> void:
+func _flush_batch(node: Node3D, batch: Dictionary, range_end := 0.0) -> void:
 	for key in batch:
 		var slot: Dictionary = batch[key]
 		var mm := MultiMesh.new()
@@ -441,6 +448,7 @@ func _flush_batch(node: Node3D, batch: Dictionary) -> void:
 			mm.set_instance_transform(i, slot["xforms"][i])
 		var mi := MultiMeshInstance3D.new()
 		mi.multimesh = mm
+		mi.visibility_range_end = range_end
 		node.add_child(mi)
 		for m in slot["markers"]:
 			var marker: Node3D = m[0]

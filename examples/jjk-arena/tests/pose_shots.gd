@@ -1,9 +1,9 @@
 extends SceneTree
-## xvfb-run -a godot --rendering-driver opengl3 --path . -s tests/pose_shots.gd -- gojo_whole
+## xvfb-run -a godot --rendering-driver opengl3 --resolution 3600x800 --path . -s tests/pose_shots.gd -- gojo_free
 ## Contact sheet of fighting poses (front + side) to check the pose table against the real rig.
 
 func _init() -> void:
-	var which := "gojo_whole"
+	var which := "gojo_free"
 	var args := OS.get_cmdline_user_args()
 	if args.size() > 0:
 		which = args[0]
@@ -32,6 +32,7 @@ func _init() -> void:
 			push_error("model failed")
 			quit(1)
 			return
+		a.curl_fists = which == "meguna"
 		a.set_fists(poses[i][0] != "sign")
 		var bp := PoseLib.build(poses[i][1])
 		if poses[i][1].has("curl"):
@@ -42,7 +43,8 @@ func _init() -> void:
 	world.add_child(cam)
 	cam.current = true
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
-	cam.size = 2.6
+	cam.keep_aspect = Camera3D.KEEP_WIDTH      # run with --resolution 3600x800 to see all poses side by side
+	cam.size = n * 1.5
 	await process_frame
 	for view in ["front", "side"]:
 		for i in n:

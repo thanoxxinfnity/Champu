@@ -5,7 +5,7 @@ extends RefCounted
 const CHARACTERS := [
 	{"id": "gojo_open", "name": "Gojo (open eyes)", "model": "res://assets/characters/gojo_free.glb", "domain": "infinite_void", "moves": "gojo"},
 	{"id": "gojo_blindfold", "name": "Gojo (blindfold)", "model": "res://assets/characters/gojo_blindfold_tv.glb", "domain": "infinite_void", "moves": "gojo"},
-	{"id": "sukuna", "name": "Sukuna", "model": "res://assets/characters/sukuna_FINAL.glb", "domain": "malevolent_shrine", "moves": "sukuna"},
+	{"id": "sukuna", "name": "Sukuna", "model": "res://assets/characters/meguna.glb", "domain": "malevolent_shrine", "moves": "sukuna", "curl_fists": true},
 	{"id": "mahoraga", "name": "Mahoraga", "model": "res://assets/characters/mahoraga_rigged.glb", "domain": "", "moves": "mahoraga"},
 	{"id": "red_creature", "name": "Red Beast", "model": "res://assets/characters/creature_rigged.glb", "domain": "", "moves": "beast"},
 ]

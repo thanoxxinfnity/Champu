@@ -15,9 +15,9 @@ const Q_HIGH := 2
 
 const PRESETS := {
 	Mode.LOW: {"name": "Low", "scale": 0.60, "msaa": 0, "shadow_size": 0, "shadows": false, "glow": false,
-		"particles": 0.35, "debris": 0.25, "character_lod": 6000, "tex_cap": 512, "fps": 30, "aniso": 1, "sway": false, "fog": false},
+		"particles": 0.35, "debris": 0.25, "character_lod": 6000, "tex_cap": 512, "fps": 30, "aniso": 1, "sway": true, "fog": false, "lod": 8.0},
 	Mode.STANDARD: {"name": "Standard", "scale": 0.75, "msaa": 0, "shadow_size": 1024, "shadows": true, "glow": false,
-		"particles": 0.60, "debris": 0.50, "character_lod": 12000, "tex_cap": 1024, "fps": 45, "aniso": 2, "sway": true, "fog": true},
+		"particles": 0.60, "debris": 0.50, "character_lod": 12000, "tex_cap": 1024, "fps": 45, "aniso": 2, "sway": true, "fog": true, "lod": 3.0},
 	Mode.HIGH: {"name": "High", "scale": 0.90, "msaa": 1, "shadow_size": 2048, "shadows": true, "glow": true,
 		"particles": 0.80, "debris": 0.75, "character_lod": 12000, "tex_cap": 2048, "fps": 60, "aniso": 4, "sway": true, "fog": true},
 	Mode.ULTRA: {"name": "Ultra", "scale": 1.00, "msaa": 2, "shadow_size": 4096, "shadows": true, "glow": true,
@@ -59,6 +59,8 @@ static func apply(mode: int, viewport: Viewport, env: Environment = null, sun: D
 	viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 	viewport.scaling_3d_scale = p["scale"]
 	viewport.msaa_3d = int(p["msaa"]) as Viewport.MSAA
+	# the imported meshes carry automatic LODs; a higher threshold swaps to the coarse ones sooner (big saving on far buildings and trees)
+	viewport.mesh_lod_threshold = float(p.get("lod", 1.0))
 	# anisotropy is a project setting in 4.3, not a Viewport property
 	ProjectSettings.set_setting("rendering/textures/default_filters/anisotropic_filtering_level", _aniso_level(int(p["aniso"])))
 	Engine.max_fps = int(p["fps"])

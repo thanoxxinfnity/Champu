@@ -5,3 +5,7 @@
 assets/environment/**/*_[0-9]*.png
 assets/environment/**/*_[0-9]*.jpg
 assets/environment/**/*_[0-9]*.jpeg
+# 2D art keeps its own (lossless) import settings; every other texture uses the VRAM-compressed project default
+!assets/ui/*.import
+!assets/loading/*.import
+!icon.svg.import

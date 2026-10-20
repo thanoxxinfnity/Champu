@@ -1,6 +1,6 @@
 extends Node
 ## Entry point: title menu (character, mode, graphics, difficulty) -> loading screen -> fight. Everything is built in code.
-## Test hooks (user args after `--`): `autostart=<roster id>` skips the menu; `shot=<png>` saves a screenshot after `shot_t=<seconds>` and quits;
+## Test hooks (user args after `--`): `memlog=1` prints memory and draw stats every second; `autostart=<roster id>` skips the menu; `shot=<png>` saves a screenshot after `shot_t=<seconds>` and quits;
 ## `script=<name>` replays a canned input script for the player (jab, fly).
 
 const PICKS := ["gojo_open", "gojo_blindfold", "sukuna"]
@@ -176,7 +176,7 @@ func _make_fighter(id: String, at: Vector3, tag: String) -> Fighter:
 	_fight_nodes.append(f)
 	var v := FighterView.new()
 	f.add_child(v)
-	if not v.setup(f, c["model"], GraphicsSettings.use_cloth_sway(_mode)):
+	if not v.setup(f, c["model"], GraphicsSettings.use_cloth_sway(_mode), c.get("curl_fists", false)):
 		push_error("could not load " + c["model"])
 	return f
 
@@ -296,11 +296,83 @@ func _process(delta: float) -> void:
 	_shot_clock += delta
 	if _auto != "" and _player != null:
 		_run_script()
+	if _args.has("memlog") and int(_shot_clock) != int(_shot_clock - delta):
+		print("MEM t=%d static=%.0fMB video=%.0fMB tex=%.0fMB buf=%.0fMB objects=%d nodes=%d fps=%d prims=%d draws=%d" % [int(_shot_clock),
+			Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0, Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0,
+			Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED) / 1048576.0, Performance.get_monitor(Performance.RENDER_BUFFER_MEM_USED) / 1048576.0,
+			Performance.get_monitor(Performance.OBJECT_COUNT), Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
+			Performance.get_monitor(Performance.TIME_FPS), Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME),
+			Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)])
+	if _args.has("memlog") and int(_shot_clock) == 8 and int(_shot_clock - delta) == 7:
+		_dump_textures()
 	if _args.has("quit_t") and _shot_clock >= float(_args["quit_t"]):
 		get_tree().quit()
 	if _args.has("shot") and _shot_clock >= float(_args.get("shot_t", "4")):
 		get_viewport().get_texture().get_image().save_png(_args["shot"])
 		get_tree().quit()
+
+## memlog: which textures the live scene holds, biggest first (width x height and the resource path), to find what eats video memory.
+func _dump_textures() -> void:
+	var seen := {}
+	for n in get_tree().root.find_children("*", "GeometryInstance3D", true, false):
+		var mats: Array = []
+		if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
+			var mi := n as MeshInstance3D
+			for si in mi.mesh.get_surface_count():
+				mats.append(mi.get_active_material(si))
+		elif n is MultiMeshInstance3D and (n as MultiMeshInstance3D).multimesh != null and (n as MultiMeshInstance3D).multimesh.mesh != null:
+			var mm := (n as MultiMeshInstance3D).multimesh.mesh
+			for si in mm.get_surface_count():
+				mats.append(mm.surface_get_material(si))
+		mats.append((n as GeometryInstance3D).material_override)
+		for m in mats:
+			if m is BaseMaterial3D:
+				for t in [m.albedo_texture, m.normal_texture, m.roughness_texture, m.metallic_texture, m.emission_texture, m.orm_texture]:
+					if t != null:
+						seen[t] = true
+			elif m is ShaderMaterial and m.shader != null:
+				for u in m.shader.get_shader_uniform_list():
+					var v = m.get_shader_parameter(u["name"])
+					if v is Texture2D:
+						seen[v] = true
+	var tri := {}
+	for n in get_tree().root.find_children("*", "GeometryInstance3D", true, false):
+		if not (n as Node3D).is_visible_in_tree():
+			continue
+		var mesh: Mesh = null
+		var count := 1
+		if n is MeshInstance3D:
+			mesh = (n as MeshInstance3D).mesh
+		elif n is MultiMeshInstance3D and (n as MultiMeshInstance3D).multimesh != null:
+			mesh = (n as MultiMeshInstance3D).multimesh.mesh
+			count = (n as MultiMeshInstance3D).multimesh.visible_instance_count
+			if count < 0:
+				count = (n as MultiMeshInstance3D).multimesh.instance_count
+		if mesh == null:
+			continue
+		var t := 0
+		for si in mesh.get_surface_count():
+			var a := mesh.surface_get_arrays(si)
+			var ix = a[Mesh.ARRAY_INDEX]
+			t += (ix.size() if ix != null else (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()) / 3
+		var key := "%s %s" % [n.get_class(), mesh.resource_path if mesh.resource_path != "" else String(n.name)]
+		tri[key] = tri.get(key, 0) + t * count
+	var trows := []
+	for k in tri:
+		trows.append([tri[k], k])
+	trows.sort_custom(func(a, b): return a[0] > b[0])
+	for r in trows.slice(0, 25):
+		print("TRI %8d %s" % r)
+	var rows := []
+	var total := 0.0
+	for t in seen:
+		var mb: float = t.get_width() * t.get_height() * 1.33 / 1048576.0
+		total += mb
+		rows.append([mb, "%dx%d %s" % [t.get_width(), t.get_height(), t.resource_path]])
+	rows.sort_custom(func(a, b): return a[0] > b[0])
+	print("TEX count=%d est_at_1Bpp=%.0fMB" % [rows.size(), total])
+	for r in rows.slice(0, 30):
+		print("TEX  ", r[1])
 
 func _run_script() -> void:
 	var t := _shot_clock
@@ -528,6 +600,10 @@ func _build_open_world() -> Dictionary:
 		ModelCatalog.entry(n)        # load every model now, behind the loading screen, so streaming never hitches on a first use
 	_map = WorldMap.new()
 	_map.view_chunks = [2, 3, 4, 5, 5, 3][_mode]
+	var eff := GraphicsSettings.auto_mode() if _mode == GraphicsSettings.Mode.AUTO else int(_mode)
+	_map.tree_keep = [0.3, 0.5, 0.75, 1.0, 1.0][eff]
+	_map.tree_range = [170.0, 260.0, 0.0, 0.0, 0.0][eff]
+	_map.light_trees = eff <= GraphicsSettings.Mode.STANDARD
 	root.add_child(_map)
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-42, -35, 0)

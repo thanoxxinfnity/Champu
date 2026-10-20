@@ -18,6 +18,9 @@ var _order: Array[int] = []
 var _fists := {}              ## "L"/"R" -> BoneAttachment3D
 var fists_on := false
 var flat_fists := false       ## match an unshaded (anime) character
+var curl_fists := false       ## close the model's own fingers into a fist instead of swapping in fist meshes (models with good finger weights)
+const THUMB_SIGN := -1.0
+const FIST_CURL := {"thumb": [30.0, 45.0, 40.0], "index": [80.0, 95.0, 70.0], "middle": [82.0, 95.0, 70.0], "ring": [84.0, 95.0, 70.0], "pinky": [86.0, 95.0, 70.0]}
 var _finger := {}             ## "R"/"L" -> {"index": [bone ids 0..2], ...}
 const FINGERS := ["thumb", "index", "middle", "ring", "pinky"]
 
@@ -83,15 +86,25 @@ func apply(pose: Dictionary) -> void:
 			by_index[idx[k]] = pose[k]
 	# finger curls: pose["curl"] = {"R": {"index": [deg, deg, deg], ...}, "L": {...}} bend each joint toward the palm
 	var curl := {}
-	if pose.has("curl"):
-		for side in pose["curl"]:
+	var curls: Dictionary = pose.get("curl", {})
+	if fists_on and curl_fists:
+		curls = curls.duplicate()
+		for side in ["L", "R"]:
+			if not curls.has(side):
+				curls[side] = FIST_CURL
+	if not curls.is_empty():
+		for side in curls:
 			var sgn := 1.0 if side == "R" else -1.0
-			for f in pose["curl"][side]:
+			for f in curls[side]:
 				var ids: Array = _finger.get(side, {}).get(f, [])
-				var angs: Array = pose["curl"][side][f]
+				var angs: Array = curls[side][f]
 				for j in mini(ids.size(), angs.size()):
 					if ids[j] >= 0:
-						var axis: Vector3 = (_rest_g[ids[j]].basis.inverse() * Vector3(0, 0, 1)).normalized()
+						# fingers fold about the model's forward axis; a curl-fist thumb folds about the hand's long axis, across the palm
+						var about := Vector3(0, 0, 1)
+						if f == "thumb" and curl_fists and idx.has("hand" + side):
+							about = _rest_dir[idx["hand" + side]] * THUMB_SIGN
+						var axis: Vector3 = (_rest_g[ids[j]].basis.inverse() * about).normalized()
 						curl[ids[j]] = Quaternion(axis, deg_to_rad(float(angs[j])) * sgn)
 	var new_b: Array[Basis] = []
 	new_b.resize(_rest_g.size())
@@ -116,13 +129,15 @@ func apply(pose: Dictionary) -> void:
 	if pose.has("hips_pos") and idx.has("hips"):
 		var h: int = idx["hips"]
 		skeleton.set_bone_pose_position(h, skeleton.get_bone_rest(h).origin + pose["hips_pos"])
-	if fists_on:
+	if fists_on and not curl_fists:
 		for s in ["L", "R"]:
 			skeleton.set_bone_pose_scale(idx["hand" + s], Vector3.ONE * 0.001)
 
 ## Closed-fist meshes (models/fist_L.glb, fist_R.glb) riding on the forearm bones; the hand and finger bones collapse into the wrist.
 func set_fists(on: bool) -> void:
 	fists_on = on
+	if curl_fists:
+		return
 	for s in ["L", "R"]:
 		if on and not _fists.has(s):
 			var res = load("res://assets/characters/fist_%s.glb" % s)
