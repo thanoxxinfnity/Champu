@@ -49,5 +49,8 @@ func _init() -> void:
 	var pushed := wm.resolve(inside)
 	ok(Vector2(pushed.x, pushed.z).distance_to(Vector2(inside.x, inside.z)) > 0.1, "footprints push a walker out of a building")
 	ok(is_equal_approx(wm.ground(0, 0), WorldGen.height(0, 0)), "fighters stand on the generated ground")
+	ok(WorldGen.district(1500.0, 0.0) == "midrise" and WorldGen.in_city(2000.0, 0.0), "the city reaches past 2 km from the centre")
+	wm._build_far()
+	ok(wm.far_count() > 2000, "the far skyline covers the whole city (%d blocks, one draw call)" % wm.far_count())
 	print("ALL OK" if fails == 0 else "FAILED %d" % fails)
 	quit(1 if fails else 0)

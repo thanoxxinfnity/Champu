@@ -1,11 +1,12 @@
 class_name WorldGen
 extends RefCounted
 ## The open-world layout, all pure functions of (x, z) so any chunk can be rebuilt at any time and always matches its neighbours.
-## 5.6 km square: a flat downtown in the middle, mid-rise districts around it, suburbs, forest, a lake, and mountains closing the map.
+## 5.6 km square: a 4.3 km-wide city (downtown towers in the middle, mid-rise districts, suburbs), a lake, a thin forest belt and mountains closing the map.
 
 const HALF := 2800.0              ## map is [-HALF, HALF] on both axes
 const CELL := 96.0                ## city block pitch (block + road)
 const ROAD := 16.0
+const CITY_R := 2150.0            ## the city fills everything inside this radius: downtown towers to 1 km, mid-rise to 1.65 km, then suburbs
 const LAKE_C := Vector2(-1300.0, 1100.0)
 const LAKE_R := 330.0
 
@@ -35,25 +36,25 @@ static func height(x: float, z: float) -> float:
 	var r := radius(x, z)
 	var h := 0.0
 	# the city itself rolls: gentle hills and dips (up to ~30 m) so streets climb and drop like a real hilly town; downtown core stays flatter
-	h += (1.0 - smoothstep(1500.0, 2100.0, r)) * (_city.get_noise_2d(x, z) * 0.5 + 0.5) * lerpf(10.0, 32.0, smoothstep(150.0, 700.0, r))
-	h += smoothstep(1300.0, 2300.0, r) * (_hill.get_noise_2d(x, z) * 0.5 + 0.5) * 38.0
-	var m := smoothstep(2000.0, 2750.0, r)
+	h += (1.0 - smoothstep(1900.0, 2400.0, r)) * (_city.get_noise_2d(x, z) * 0.5 + 0.5) * lerpf(10.0, 32.0, smoothstep(150.0, 700.0, r))
+	h += smoothstep(1800.0, 2500.0, r) * (_hill.get_noise_2d(x, z) * 0.5 + 0.5) * 38.0
+	var m := smoothstep(2350.0, 2900.0, r)
 	h += m * (60.0 + 420.0 * pow(absf(_ridge.get_noise_2d(x, z)), 0.8) * 2.0)
 	var d := Vector2(x, z).distance_to(LAKE_C)
 	return lerpf(h, -9.0, 1.0 - smoothstep(LAKE_R * 0.5, LAKE_R * 1.25, d))
 
 static func in_city(x: float, z: float) -> bool:
-	return radius(x, z) < 1750.0 and Vector2(x, z).distance_to(LAKE_C) > LAKE_R * 1.3
+	return radius(x, z) < CITY_R and Vector2(x, z).distance_to(LAKE_C) > LAKE_R * 1.3
 
 static func district(x: float, z: float) -> String:
 	var r := radius(x, z)
-	if r < 650.0:
+	if r < 1000.0:
 		return "downtown"
-	if r < 1250.0:
+	if r < 1650.0:
 		return "midrise"
-	if r < 1750.0:
+	if r < CITY_R:
 		return "suburb"
-	if r < 2300.0:
+	if r < 2450.0:
 		return "forest"
 	return "mountain"
 
@@ -82,9 +83,9 @@ static func block_buildings(bx: int, bz: int) -> Array:
 			hmin = 45.0
 			hmax = 190.0
 		"midrise":
-			n = 2 + int(hash2(bx, bz, 1) * 3.0)
-			hmin = 18.0
-			hmax = 60.0
+			n = 3 + int(hash2(bx, bz, 1) * 2.0)
+			hmin = 20.0
+			hmax = 75.0
 		_:
 			n = 2 + int(hash2(bx, bz, 1) * 3.0)
 			hmin = 6.0

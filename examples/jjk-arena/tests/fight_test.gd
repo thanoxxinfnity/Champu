@@ -125,6 +125,48 @@ func _init() -> void:
 		tick(both2, 1)
 		if not b4.is_alive():
 			break
-	check(b4.health < 100.0, "AI approaches and damages a passive opponent (hp %.1f)" % b4.health)
+	check(b4.health < Fighter.MAX_HEALTH, "AI approaches and damages a passive opponent (hp %.1f)" % b4.health)
+	# heavy launches, the target lands (bounce), lies down untouchable, gets up
+	var c := make("C", Vector3(0, 0, 60))
+	var d := make("D", Vector3(1.2, 0, 60))
+	c.opponent = d
+	d.opponent = c
+	var cd := [c, d]
+	c.intent["heavy"] = true
+	tick(cd, 2)
+	c.intent["heavy"] = false
+	var top := 0.0
+	var saw_air := false
+	for i in 40:
+		tick(cd, 1)
+		top = maxf(top, d.global_position.y)
+		saw_air = saw_air or d.knock == "air"
+	check(saw_air and top > 1.0, "heavy launches the target into the air (%.1f m)" % top)
+	var saw_down := false
+	for i in 120:
+		tick(cd, 1)
+		if d.knock == "down":
+			saw_down = true
+			break
+	check(saw_down and d.global_position.y < 0.1, "launched target lands and is knocked down")
+	var hp := d.health
+	c.intent["light"] = true
+	tick(cd, 2)
+	c.intent["light"] = false
+	tick(cd, 20)
+	check(d.health == hp, "a knocked-down fighter cannot be hit")
+	tick(cd, 90)
+	check(d.knock == "" and d.state != Fighter.State.HIT, "and gets back up")
+	# flying overhead is out of punching reach
+	d.reset_round(Vector3(1.0, 6.0, 60))
+	c.reset_round(Vector3(0, 0, 60))
+	d.flying = true
+	d.global_position = Vector3(1.0, 6.0, 60)
+	hp = d.health
+	c.intent["light"] = true
+	tick(cd, 2)
+	c.intent["light"] = false
+	tick(cd, 30)
+	check(d.health == hp, "a punch does not reach a fighter flying 6 m up")
 	print("ALL OK" if fails == 0 else "FAILED: %d" % fails)
 	quit(fails)

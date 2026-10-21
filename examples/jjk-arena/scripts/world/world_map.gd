@@ -24,6 +24,12 @@ var tree_keep := 1.0                    ## share of tree spots that get a tree
 var tree_range := 0.0                   ## hide a chunk's trees beyond this distance (0 = never)
 var light_trees := false                ## skip the 20k-triangle tree model
 var _props := {}                        ## prop name -> Mesh (shared by every chunk's MultiMesh)
+## The far skyline: every city building outside the streamed chunks, drawn as a lit window block in one MultiMesh (one draw call,
+## 12 triangles each), so the whole city is on the horizon even when only ~250 m around the player is real.
+var far_min_height := 0.0               ## skip blocks lower than this in the skyline (Low keeps only the tall ones)
+var _far: MultiMeshInstance3D
+var _far_list := []                     ## [Transform3D, Vector2i chunk, Color]
+var _far_dirty := true
 
 func _ready() -> void:
 	_terrain_mat = ShaderMaterial.new()
@@ -69,6 +75,52 @@ func _ready() -> void:
 	_water.material_override = wm
 	_water.position = Vector3(WorldGen.LAKE_C.x, -3.2, WorldGen.LAKE_C.y)
 	add_child(_water)
+	_build_far.call_deferred()
+
+func _build_far() -> void:
+	_far_list.clear()
+	var n := int(ceil(WorldGen.CITY_R / WorldGen.CELL))
+	for bx in range(-n, n + 1):
+		for bz in range(-n, n + 1):
+			for b in WorldGen.block_buildings(bx, bz):
+				var sz: Vector3 = b["size"]
+				if sz.y < far_min_height:
+					continue
+				var p: Vector3 = b["pos"]
+				var xf := Transform3D(Basis.from_scale(sz), p + Vector3(0, sz.y * 0.5, 0))
+				var tint: Color = [Color(0.55, 0.58, 0.64), Color(0.62, 0.52, 0.45), Color(0.42, 0.48, 0.55), Color(0.5, 0.5, 0.48)][int(b["kind"]) % 4]
+				_far_list.append([xf, _key(p), tint])
+	var box := BoxMesh.new()
+	var m: StandardMaterial3D = _wall_mats[0].duplicate()
+	m.albedo_color = Color.WHITE
+	m.vertex_color_use_as_albedo = true
+	box.material = m
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = box
+	mm.instance_count = _far_list.size()
+	for i in _far_list.size():
+		mm.set_instance_color(i, _far_list[i][2])
+	_far = MultiMeshInstance3D.new()
+	_far.multimesh = mm
+	_far.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_far.custom_aabb = AABB(Vector3(-WorldGen.HALF, -50, -WorldGen.HALF), Vector3(WorldGen.HALF * 2.0, 400, WorldGen.HALF * 2.0))
+	add_child(_far)
+	_far_dirty = true
+
+## Hide the skyline blocks that stand in a chunk whose real buildings are loaded.
+func _refresh_far() -> void:
+	_far_dirty = false
+	if _far == null:
+		return
+	var mm := _far.multimesh
+	var gone := Transform3D(Basis.from_scale(Vector3.ONE * 0.0001), Vector3(0, -500, 0))
+	for i in _far_list.size():
+		mm.set_instance_transform(i, gone if _chunks.has(_far_list[i][1]) else _far_list[i][0])
+
+func far_count() -> int:
+	return _far_list.size()
 
 static func _window_texture(emission: bool) -> ImageTexture:
 	var n := 128
@@ -111,6 +163,7 @@ func update(at: Vector3) -> void:
 			_chunks[k].queue_free()
 			_chunks.erase(k)
 			_footprints.erase(k)
+			_far_dirty = true
 	_queue = _queue.filter(func(k: Vector2i) -> bool: return want.has(k) and not _chunks.has(k))
 	for k in want:
 		if not _chunks.has(k) and not _queue.has(k):
@@ -122,6 +175,9 @@ func _process(_d: float) -> void:
 		var k: Vector2i = _queue.pop_front()
 		if not _chunks.has(k):
 			_build_chunk(k)
+			_far_dirty = true
+	if _far_dirty:
+		_refresh_far()
 
 ## Build every queued chunk right now (used when the world starts, so the player lands on ground).
 func build_all_now() -> void:
@@ -129,6 +185,7 @@ func build_all_now() -> void:
 		var k: Vector2i = _queue.pop_front()
 		if not _chunks.has(k):
 			_build_chunk(k)
+	_far_dirty = true
 
 func chunk_count() -> int:
 	return _chunks.size()
@@ -225,6 +282,15 @@ func _building(b: Dictionary) -> Node3D:
 ## Terrain height at a point (the fighters stand on this).
 func ground(x: float, z: float) -> float:
 	return maxf(WorldGen.height(x, z), -2.5)
+
+## True when `p` is inside a building (or under the ground): used to keep the camera out of walls.
+func blocked(p: Vector3) -> bool:
+	if p.y < ground(p.x, p.z) + 0.2:
+		return true
+	for f in _footprints.get(_key(p), []):
+		if p.y < f["top"] and (f["rect"] as Rect2).has_point(Vector2(p.x, p.z)):
+			return true
+	return false
 
 ## Push a ground-level position out of any building footprint it overlaps (flying above the roof is fine).
 func resolve(p: Vector3) -> Vector3:

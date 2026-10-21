@@ -24,6 +24,7 @@ func _gui_input(e: InputEvent) -> void:
 			_down = true
 			_flash = 1.0
 			pressed_down.emit()
+			Sound.play("click", -16.0, 1.2)
 		elif not e.pressed and _down:
 			_down = false
 			released.emit()
@@ -80,6 +81,11 @@ func _icon(c: Vector2, s: float, w: Color) -> void:
 			_l(c + Vector2(0, -s), c + Vector2(0, -s * 0.2), w)
 			_l(c + Vector2(-s * 0.25, -s * 0.7), c + Vector2(0, -s), w)
 			_l(c + Vector2(s * 0.25, -s * 0.7), c + Vector2(0, -s), w)
+		"up", "down":
+			var sg := -1.0 if glyph == "up" else 1.0
+			for k in 2:
+				var y0 := sg * (s * 0.1 - k * s * 0.55)
+				draw_polyline(PackedVector2Array([c + Vector2(-s * 0.6, y0 - sg * s * 0.35), c + Vector2(0, y0 + sg * s * 0.25), c + Vector2(s * 0.6, y0 - sg * s * 0.35)]), w, 3.0, true)
 		"blue":
 			draw_arc(c, s * 0.45, 0, TAU, 24, w, 3.0, true)
 			for i in 4:

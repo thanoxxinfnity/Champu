@@ -10,6 +10,7 @@ signal ko
 signal ultimate_used(move: Dictionary)
 signal move_phase(move_name: String, phase: int)   ## 0 wind-up, 1 active (the projectile / slash leaves now), 2 recover
 signal domain_used
+signal landed_hard            ## a launched fighter hits the ground (bounce or knockdown)
 
 enum State { IDLE, MOVE, ATTACK, HIT, DODGE, BLOCK, KO }
 
@@ -39,7 +40,7 @@ const SETS := {
 const COMBO_WINDOW := 0.45
 const DODGE_TIME := 0.28
 const DODGE_COOLDOWN := 0.8
-const MAX_HEALTH := 100.0
+const MAX_HEALTH := 250.0      ## long enough for combos, comebacks and a domain or two per round
 const MAX_ENERGY := 100.0
 
 @export var move_speed := 5.5
@@ -62,7 +63,21 @@ var _dodge_cd := 0.0
 var _kb := Vector3.ZERO
 var facing := Vector3.FORWARD
 var flying := false
-var fly_height := 3.2
+var fly_height := 3.2        ## take-off height above the ground
+var fly_speed := 9.0         ## top flight speed (the open world raises it)
+var max_alt := 10.0          ## highest flight above the ground (the open world raises it)
+var lock_range := 18.0       ## face the opponent inside this distance; beyond it, face where you fly or run
+var _vy := 0.0
+var _hv := Vector3.ZERO      ## smoothed horizontal flight velocity: flight accelerates and drifts instead of snapping
+var _lift := 0.0             ## take-off boost time left
+## Launch and knockdown: a heavy hit throws a grounded target up (it can be juggled), big techniques knock it flat. "" / "air" / "down" / "getup".
+var knock := ""
+var _avy := 0.0
+var _down_t := 0.0
+var _bounced := false
+const GRAVITY := 24.0
+const DOWN_TIME := 0.75
+const GETUP_TIME := 0.45
 var ground_fn: Callable      ## (x, z) -> ground height; empty = flat floor at y = 0 (the arena)
 var _fly_prev := false
 
@@ -104,11 +119,17 @@ func _physics_process(delta: float) -> void:
 	_combo_t = maxf(0.0, _combo_t - delta)
 	_dodge_cd = maxf(0.0, _dodge_cd - delta)
 	energy = minf(MAX_ENERGY, energy + 1.5 * delta)
-	if opponent != null and opponent.is_alive() and state != State.HIT:
+	var engaged := opponent != null and opponent.is_alive() and global_position.distance_to(opponent.global_position) < (6.0 if flying else lock_range)
+	if engaged and state != State.HIT:
 		face(opponent.global_position)
+	elif state == State.MOVE and Vector2(velocity.x, velocity.z).length() > 0.5:
+		face(global_position + Vector3(velocity.x, 0, velocity.z))
 	var want_fly: bool = intent.get("fly", false)
 	if want_fly and not _fly_prev:
 		flying = not flying
+		if flying:
+			_lift = 0.45
+			_hv = Vector3(velocity.x, 0, velocity.z)
 	_fly_prev = want_fly
 	match state:
 		State.IDLE, State.MOVE:
@@ -117,7 +138,17 @@ func _physics_process(delta: float) -> void:
 			_attack_state(delta)
 		State.HIT:
 			_timer -= delta
-			if _timer <= 0.0:
+			if knock == "down":
+				_down_t -= delta
+				if _down_t <= 0.0:
+					knock = "getup"
+					_down_t = GETUP_TIME
+			elif knock == "getup":
+				_down_t -= delta
+				if _down_t <= 0.0:
+					knock = ""
+					_set_state(State.IDLE)
+			elif knock == "" and _timer <= 0.0:
 				_set_state(State.IDLE)
 		State.DODGE:
 			_timer -= delta
@@ -132,8 +163,39 @@ func _physics_process(delta: float) -> void:
 	if state == State.HIT:
 		velocity = _kb
 	var floor_y: float = ground_fn.call(global_position.x, global_position.z) if ground_fn.is_valid() else 0.0
-	var target_y := floor_y + (fly_height if flying else 0.0)
-	velocity.y = clampf((target_y - global_position.y) * 5.0, -14.0, 9.0)
+	if knock == "air":
+		# launched: a ballistic arc; landing bounces once, then he is down
+		_avy -= GRAVITY * delta
+		velocity.y = _avy
+		move_and_slide()
+		if global_position.y <= floor_y + 0.02 and _avy < 0.0:
+			global_position.y = floor_y
+			if not _bounced and _avy < -7.0:
+				_bounced = true
+				_avy = 3.5
+				landed_hard.emit()
+			else:
+				knock = "down"
+				_down_t = DOWN_TIME
+				_kb *= 0.3
+				landed_hard.emit()
+		return
+	if flying:
+		# climb / dive from the controls, a take-off kick, never below 1.5 m or above max_alt
+		var want_vy := float(intent.get("climb", 0.0)) * fly_speed * 0.8
+		var above := global_position.y - floor_y
+		if _lift > 0.0:
+			_lift -= delta
+			want_vy = maxf(want_vy, (fly_height - above) * 6.0)
+		if above < 1.5:
+			want_vy = maxf(want_vy, (1.5 - above) * 8.0)
+		elif above > max_alt:
+			want_vy = minf(want_vy, (max_alt - above) * 3.0)
+		_vy = move_toward(_vy, want_vy, 30.0 * delta)
+		velocity.y = _vy
+	else:
+		_vy = 0.0
+		velocity.y = clampf((floor_y - global_position.y) * 5.0, -16.0, 9.0)
 	move_and_slide()
 
 func _free_state(_delta: float) -> void:
@@ -155,8 +217,14 @@ func _free_state(_delta: float) -> void:
 		if intent.get(name, false) and _try_start(name):
 			return
 	var mv: Vector2 = intent["move"]
+	if flying:
+		var want := Vector3(mv.x, 0, mv.y).limit_length(1.0) * fly_speed
+		_hv = _hv.move_toward(want, fly_speed * (2.2 if want.length() > 0.1 else 1.6) * _delta)
+		velocity = _hv
+		_set_state(State.MOVE if _hv.length() > 0.6 else State.IDLE)
+		return
 	if mv.length() > 0.1:
-		velocity = Vector3(mv.x, 0, mv.y).normalized() * move_speed * (1.9 if flying else 1.0)
+		velocity = Vector3(mv.x, 0, mv.y).normalized() * move_speed
 		_set_state(State.MOVE)
 	else:
 		velocity = Vector3.ZERO
@@ -215,6 +283,8 @@ func _try_hit() -> void:
 	if opponent == null or not opponent.is_alive() or float(_move["range"]) <= 0.0:
 		return
 	var to := opponent.global_position - global_position
+	if absf(to.y) > float(_move["range"]) * 0.6 + 1.2:
+		return                               # far above or below: a punch cannot reach someone flying overhead
 	to.y = 0.0
 	if to.length() > float(_move["range"]):
 		return
@@ -229,8 +299,8 @@ func _try_hit() -> void:
 func receive_hit(attacker: Fighter, move: Dictionary, dmg: float) -> float:
 	if state == State.KO:
 		return 0.0
-	if state == State.DODGE:
-		return 0.0                     # i-frames
+	if state == State.DODGE or knock == "down" or knock == "getup":
+		return 0.0                     # i-frames: dodging, lying down, getting up
 	var kb_dir := (global_position - attacker.global_position)
 	kb_dir.y = 0.0
 	kb_dir = kb_dir.normalized() if kb_dir.length() > 0.01 else -facing
@@ -255,11 +325,28 @@ func receive_hit(attacker: Fighter, move: Dictionary, dmg: float) -> float:
 	energy = minf(MAX_ENERGY, energy + dmg * 0.25)
 	_kb = kb_dir * float(move["knock"])
 	_timer = float(move["stun"])
+	var k := float(move["knock"])
 	if health <= 0.0:
 		_die()
-	else:
-		_set_state(State.HIT)
+		return dmg
+	if not flying:
+		if knock == "air":
+			_avy = maxf(_avy, 4.5)              # juggle: every hit in the air pops him up again
+			_kb *= 0.5
+		elif move.get("name", "") == "heavy" or move.get("launch", false):
+			_launch(9.5)                         # launcher
+			_kb = kb_dir * 1.5
+		elif absf(k) >= 8.0:
+			_launch(5.0)                         # blown away: a low, long arc that ends flat on the ground
+	_set_state(State.HIT)
 	return dmg
+
+func _launch(vy: float) -> void:
+	knock = "air"
+	_avy = vy
+	_bounced = false
+	if is_inside_tree():
+		global_position.y += 0.05
 
 ## Damage that does not come from a melee swing (domain slashes, projectiles that already resolved their aim).
 func take_damage(attacker: Fighter, dmg: float, stun := 0.15, knock := 1.0) -> float:
@@ -267,6 +354,8 @@ func take_damage(attacker: Fighter, dmg: float, stun := 0.15, knock := 1.0) -> f
 
 func _die() -> void:
 	flying = false
+	_hv = Vector3.ZERO
+	knock = ""
 	_set_state(State.KO)
 	velocity = Vector3.ZERO
 	ko.emit()
@@ -279,6 +368,8 @@ func _set_state(s: int) -> void:
 
 func reset_round(at: Vector3) -> void:
 	health = MAX_HEALTH
+	knock = ""
+	flying = false
 	energy = 0.0
 	if is_inside_tree():
 		global_position = at

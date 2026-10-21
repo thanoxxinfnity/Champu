@@ -4,7 +4,7 @@ shader_type spatial;
 
 uniform float cell = 96.0;
 uniform float road = 16.0;
-uniform float city_r = 1750.0;
+uniform float city_r = 2150.0;
 uniform vec2 lake_c = vec2(-1300.0, 1100.0);
 uniform float lake_r = 330.0;
 

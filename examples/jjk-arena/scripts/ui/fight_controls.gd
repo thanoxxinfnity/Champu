@@ -42,6 +42,8 @@ func _ready() -> void:
 	_btn("dodge", "dash", Vector2(-380, -150), 36)
 	_btn("block", "shield", Vector2(-380, -250), 36, true)
 	_btn("fly", "fly", Vector2(-90, -380), 34)
+	_btn("up", "up", Vector2(-86, -462), 28, true)       # shown only in flight: hold to climb / dive
+	_btn("down", "down", Vector2(-160, -462), 28, true)
 	_btn("domain", "void", Vector2(-200, -380), 38)
 	_relabel()
 
@@ -163,6 +165,14 @@ func _process(_delta: float) -> void:
 	i["dodge"] = _until.get("dodge", 0.0) > now or Input.is_key_pressed(KEY_SPACE)
 	i["block"] = _held.get("block", false) or Input.is_key_pressed(KEY_SHIFT)
 	i["fly"] = _until.get("fly", 0.0) > now or Input.is_key_pressed(KEY_F)
+	var climb := 0.0
+	if _held.get("up", false) or Input.is_key_pressed(KEY_E): climb += 1.0
+	if _held.get("down", false) or Input.is_key_pressed(KEY_Q): climb -= 1.0
+	i["climb"] = climb
+	for id in ["Up", "Down"]:
+		var b := _root.get_node_or_null(id)
+		if b != null:
+			b.visible = fighter.flying
 	i["domain"] = _until.get("domain", 0.0) > now or Input.is_key_pressed(KEY_U)
 	i["skill2"] = _until.get("skill2", 0.0) > now or Input.is_key_pressed(KEY_O)
 	_process_labels()

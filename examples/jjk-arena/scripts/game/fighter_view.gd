@@ -46,6 +46,13 @@ func _target_pose() -> Dictionary:
 				return fall.sample(_ko_t, false)
 			return PoseLib.ko(_ko_t / 0.6)
 		Fighter.State.HIT:
+			match f.knock:
+				"air":
+					return PoseLib.mix(PoseLib.hit(0.2), PoseLib.ko(0.45), 0.6)
+				"down":
+					return PoseLib.ko(1.0)
+				"getup":
+					return PoseLib.mix(PoseLib.ko(1.0), PoseLib.stance(_t), 1.0 - clampf(f._down_t / Fighter.GETUP_TIME, 0.0, 1.0))
 			return PoseLib.hit(f.hit_progress())
 		Fighter.State.BLOCK:
 			return PoseLib.block()
@@ -64,10 +71,8 @@ func _target_pose() -> Dictionary:
 					kind = f.moveset + "_" + kind
 				return PoseLib.attack(kind, info["phase"], info["k"])
 	if f.flying:
-		var clip := AnimClip.load_clip("fly_fast_side" if speed > 0.25 else "fly_hover_gojo")
-		if clip != null:
-			return clip.sample(_t)
-		return PoseLib.fly_fast(_t) if speed > 0.25 else PoseLib.fly_hover(_t)
+		var k := clampf(_fly_pitch / FLY_PITCH, 0.0, 1.0)
+		return PoseLib.mix(PoseLib.fly_hover(_t), PoseLib.fly_glide(_t, rad_to_deg(_fly_pitch) * 0.75), k)
 	if speed > 0.1:
 		var run := AnimClip.load_clip("mc_run")
 		if run != null and speed > 0.5:
@@ -78,14 +83,37 @@ func _target_pose() -> Dictionary:
 		return idle.sample(_t * 0.8)
 	return PoseLib.stance(_t)
 
+## Flight body attitude: the whole rig pitches forward with forward speed (up to FLY_PITCH, Superman style), rolls into sideways motion
+## and leans back when climbing. It turns about the hips so the body does not swing around the feet.
+const FLY_PITCH := 1.25
+const HIP := Vector3(0, 1.0, 0)
+var _fly_pitch := 0.0
+var _fly_roll := 0.0
+
+func _update_attitude(delta: float) -> void:
+	var f := fighter
+	var want_p := 0.0
+	var want_r := 0.0
+	if f.flying and f.state != Fighter.State.ATTACK and f.state != Fighter.State.KO:
+		var lv := f.global_transform.basis.inverse() * f.velocity        # local: -Z is forward
+		var top := maxf(f.fly_speed, 0.1)
+		want_p = clampf(-lv.z / top, -0.3, 1.0) * FLY_PITCH - clampf(lv.y / top, -0.6, 0.6) * 0.5
+		want_r = -clampf(lv.x / top, -1.0, 1.0) * 0.55
+	_fly_pitch = lerpf(_fly_pitch, want_p, clampf(4.0 * delta, 0.0, 1.0))
+	_fly_roll = lerpf(_fly_roll, want_r, clampf(4.0 * delta, 0.0, 1.0))
+	var b := Basis.from_euler(Vector3(-_fly_pitch, 0.0, _fly_roll))
+	var bob := Vector3(0, sin(_t * 1.6) * 0.06, 0) if f.flying else Vector3.ZERO
+	rig.transform = Transform3D(b, HIP - b * HIP + bob)
+
 func _process(delta: float) -> void:
 	if fighter == null or rig == null:
 		return
 	_t += delta
+	_update_attitude(delta)
 	if cloth != null:
 		var v := fighter.velocity
-		cloth.wind = Vector3(-v.x, 0.0, -v.z) * 0.6 + Vector3(0.6, 0, 0.3)
-		cloth.gust = 0.8 + clampf(v.length() * 0.15, 0.0, 1.5)
+		cloth.wind = -v * 0.6 + Vector3(0.6, 0, 0.3)
+		cloth.gust = 0.8 + clampf(v.length() * 0.15, 0.0, 2.5)
 	if fighter.state == Fighter.State.KO:
 		if not _was_ko:
 			_ko_t = 0.0

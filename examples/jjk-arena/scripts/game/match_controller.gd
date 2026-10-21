@@ -9,7 +9,7 @@ signal match_ended(winner: Fighter)
 
 @export var a: Fighter
 @export var b: Fighter
-@export var round_time := 60.0
+@export var round_time := 99.0
 @export var rounds_to_win := 2
 @export var spawn_a := Vector3(-3, 0, 0)
 @export var spawn_b := Vector3(3, 0, 0)

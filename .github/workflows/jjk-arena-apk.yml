@@ -75,6 +75,11 @@ jobs:
         run: |
           godot --headless --fixed-fps 60 -s tests/loading_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
           grep -q 'ALL OK' /tmp/out.txt
+      - name: "Sound: every synthesised sound builds and is audible"
+        timeout-minutes: 8
+        run: |
+          godot --headless --fixed-fps 60 -s tests/sound_test.gd 2>&1 | grep -v mesh_get_surface | grep -v 'Parameter "m" is null' | tee /tmp/out.txt
+          grep -q 'ALL OK' /tmp/out.txt
       - name: "Rig animator: poses, fists, flying"
         timeout-minutes: 8
         run: |

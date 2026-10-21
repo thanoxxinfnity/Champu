@@ -176,10 +176,21 @@ static func ko(k: float) -> Dictionary:
 
 static func fly_hover(t: float) -> Dictionary:
 	var b := sin(t * 1.6)
-	return {"lean": 4.0, "crouch": -0.05 * b, "head": 0.0,
-		"uL": Vector3(0.75, -0.65, 0.12), "fL": Vector3(0.8, -0.55, 0.2), "uR": Vector3(0.75, -0.65, 0.12), "fR": Vector3(0.8, -0.55, 0.2),
-		"tL": Vector3(0.08, -1.0, -0.12), "sL": Vector3(0.05, -1.0, -0.4), "ftL": Vector3(0.0, -1.0, 0.45),
-		"tR": Vector3(0.0, -1.0, -0.05), "sR": Vector3(0.0, -1.0, -0.35), "ftR": Vector3(0.0, -1.0, 0.4)}
+	var a := sin(t * 1.1) * 0.04
+	# calm, upright float: arms loose and a little out, one knee drawn up, toes pointing down
+	return {"lean": 3.0, "crouch": -0.03 * b, "head": 2.0, "roll": 1.5 * b,
+		"uL": Vector3(0.32, -0.94, 0.08 + a), "fL": Vector3(0.3, -0.9, 0.3), "uR": Vector3(0.32, -0.94, 0.08 - a), "fR": Vector3(0.3, -0.9, 0.3),
+		"tL": Vector3(0.06, -0.95, 0.3), "sL": Vector3(0.04, -1.0, -0.25), "ftL": Vector3(0.0, -0.8, 0.6),
+		"tR": Vector3(0.03, -1.0, 0.02), "sR": Vector3(0.02, -1.0, -0.12), "ftR": Vector3(0.0, -0.85, 0.5)}
+
+## Fast flight. The whole body is pitched forward by FighterView, so this pose is "straight": arms swept back along the body, legs
+## together and trailing, head lifted to look where he is going (`head_up` degrees, matched to the body pitch).
+static func fly_glide(t: float, head_up: float) -> Dictionary:
+	var s := sin(t * 2.6) * 0.03
+	return {"lean": 0.0, "crouch": 0.0, "head": -head_up, "roll": 0.0,
+		"uL": Vector3(0.28, -0.9, -0.3), "fL": Vector3(0.2, -0.85, -0.45), "uR": Vector3(0.28, -0.9, -0.3), "fR": Vector3(0.2, -0.85, -0.45),
+		"tL": Vector3(0.05, -0.97, -0.2 + s), "sL": Vector3(0.03, -0.92, -0.38), "ftL": Vector3(0.0, -0.55, -0.85),
+		"tR": Vector3(0.02, -0.98, -0.12 - s), "sR": Vector3(0.0, -0.95, -0.28), "ftR": Vector3(0.0, -0.55, -0.85)}
 
 static func fly_fast(t: float) -> Dictionary:
 	var s := sin(t * 2.4)

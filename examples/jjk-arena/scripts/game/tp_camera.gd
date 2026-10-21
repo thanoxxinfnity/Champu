@@ -12,13 +12,16 @@ var shake := 0.0
 var lock_on := true
 var _pos := Vector3.ZERO
 var _manual_t := 0.0
+var _air := 0.0
+var lock_range := 18.0          ## lock-on only works this close; farther away the camera follows your movement instead
+var blocked_fn: Callable        ## (point) -> bool: true inside solid world geometry (open-world buildings); keeps the camera out of walls
 var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	fov = 62.0
 	current = true
 	near = 0.1
-	far = 900.0
+	far = 3000.0       # the whole city skyline is on the horizon in the open world
 
 var _cine: Node3D
 var _cine_t := 0.0
@@ -71,24 +74,43 @@ func _process(delta: float) -> void:
 		look_at(face, Vector3.UP)
 		_pos = global_position
 		return
-	if lock_on and lock != null and is_instance_valid(lock) and _manual_t <= 0.0:
+	var flying_now: bool = target is Fighter and (target as Fighter).flying
+	var locked := lock_on and lock != null and is_instance_valid(lock) and target.global_position.distance_to(lock.global_position) < (8.0 if flying_now else lock_range)
+	if locked and _manual_t <= 0.0:
 		var to := lock.global_position - target.global_position
 		to.y = 0.0
 		if to.length() > 0.5:
 			var want := atan2(-to.x, -to.z)
 			yaw = lerp_angle(yaw, want, clampf(3.0 * delta, 0.0, 1.0))
+	elif not locked and _manual_t <= 0.0 and target is CharacterBody3D:
+		# free roam: swing round behind the direction of travel
+		var v := (target as CharacterBody3D).velocity
+		v.y = 0.0
+		if v.length() > 2.0:
+			yaw = lerp_angle(yaw, atan2(v.x, v.z), clampf(1.5 * delta, 0.0, 1.0))
 	var pivot := target.global_position + Vector3.UP * 1.5
 	var back := Vector3(sin(yaw) * cos(pitch), -sin(pitch), cos(yaw) * cos(pitch))
 	var right := Vector3(cos(yaw), 0, -sin(yaw))
 	var dist := distance
-	if lock != null and is_instance_valid(lock):
+	var air: bool = target is Fighter and (target as Fighter).flying
+	_air = lerpf(_air, 1.0 if air else 0.0, clampf(2.0 * delta, 0.0, 1.0))
+	dist += _air * 1.8                  # pull back in flight so the city and the body attitude read
+	pivot.y += _air * 0.3
+	if locked:
 		dist += clampf(target.global_position.distance_to(lock.global_position) * 0.06, 0.0, 0.7)
 	var want_pos := pivot + back * dist + right * 0.55
+	if blocked_fn.is_valid():
+		# step out from the player and stop just before the first wall
+		for k in range(1, 13):
+			var p := pivot.lerp(want_pos, k / 12.0)
+			if blocked_fn.call(p):
+				want_pos = pivot.lerp(want_pos, maxf(0.0, (k - 1.5) / 12.0))
+				break
 	_pos = want_pos if _pos == Vector3.ZERO else _pos.lerp(want_pos, clampf(10.0 * delta, 0.0, 1.0))
 	shake = maxf(0.0, shake - 2.5 * delta)
 	var off := Vector3(_rng.randf_range(-1, 1), _rng.randf_range(-1, 1), _rng.randf_range(-1, 1)) * shake * 0.18
 	global_position = _pos + off
 	var look := pivot + right * 0.4
-	if lock != null and is_instance_valid(lock) and lock_on:
-		look = look.lerp(lock.global_position + Vector3.UP * 1.2, 0.35)
+	if locked:
+		look = look.lerp(lock.global_position + Vector3.UP * 1.2, 0.1 if flying_now else 0.35)
 	look_at(look, Vector3.UP)

@@ -139,6 +139,9 @@ func _show_menu() -> void:
 	foot.offset_left = -420.0
 	foot.offset_top = -34.0
 	_menu.add_child(foot)
+	for b in _menu.find_children("*", "BaseButton", true, false):
+		(b as BaseButton).pressed.connect(func(): Sound.play("click", -8.0))
+	Sound.music(true)
 
 # ---------------------------------------------------------------- loading
 func _begin_loading() -> void:
@@ -157,6 +160,8 @@ func _begin_loading() -> void:
 
 # ---------------------------------------------------------------- fight
 func _clear_fight() -> void:
+	_was_flying = false
+	Sound.wind(0.0)
 	for n in _fight_nodes:
 		if is_instance_valid(n):
 			n.queue_free()
@@ -228,6 +233,9 @@ func _start_fight() -> void:
 		mc.spawn_b = Vector3(0, 0, -40)
 		for f in [_player, enemy]:
 			f.ground_fn = _map.ground
+			f.fly_speed = 24.0        # cross the city fast, up to skyscraper height
+			f.max_alt = 140.0
+		_cam.blocked_fn = _map.blocked
 	add_child(mc)
 	_fight_nodes.append(mc)
 	mc.setup(_player, enemy)
@@ -251,10 +259,21 @@ func _start_fight() -> void:
 	for f in [_player, enemy]:
 		f.hit_dealt.connect(func(t: Fighter, m: Dictionary, dmg: float):
 			cam.shake = minf(1.0, cam.shake + dmg * 0.03)
+			_hit_sound(t, m, dmg)
 			_on_hit(t, m))
+		f.landed_hard.connect(func():
+			Sound.play_at("land", f.global_position, 0.0, 0.8)
+			if _cam != null:
+				_cam.shake = minf(1.0, _cam.shake + 0.35))
+		f.ko.connect(func():
+			Sound.play("ko", -2.0)
+			Sound.duck(-10.0, 2.0))
 		var moves: String = Roster.find(_pick if f == _player else enemy_id)["moves"]
 		f.move_phase.connect(func(name: String, phase: int): _on_move_phase(f, moves, name, phase))
 		f.domain_used.connect(func(): _on_domain(f, moves))
+	mc.round_started.connect(func(_n): Sound.play("round", -6.0))
+	Sound.listener = cam
+	Sound.music(true)
 	mc.round_ended.connect(func(_w):
 		await get_tree().create_timer(2.8 if not _open else 4.0).timeout
 		if _open and is_instance_valid(mc):
@@ -296,6 +315,7 @@ func _process(delta: float) -> void:
 	_shot_clock += delta
 	if _auto != "" and _player != null:
 		_run_script()
+	_movement_sounds(delta)
 	if _args.has("memlog") and int(_shot_clock) != int(_shot_clock - delta):
 		print("MEM t=%d static=%.0fMB video=%.0fMB tex=%.0fMB buf=%.0fMB objects=%d nodes=%d fps=%d prims=%d draws=%d" % [int(_shot_clock),
 			Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0, Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0,
@@ -381,8 +401,17 @@ func _run_script() -> void:
 			if int(t * 3.0) % 2 == 0:
 				_controls.tap("light")
 		"fly":
-			if t > 0.5 and t < 0.7:
+			# take off, climb, cruise forward, bank round, dive, then land
+			_controls.stick = Vector2.ZERO
+			_controls._held["up"] = t > 1.2 and t < 3.5
+			_controls._held["down"] = t > 10.0 and t < 12.0
+			if (t > 0.5 and t < 0.7) or (t > 13.0 and t < 13.2):
 				_controls.tap("fly")
+			elif t > 2.5 and t < 7.0:
+				_controls.stick = Vector2(0.0, 1.0)
+			elif t >= 7.0 and t < 10.0:
+				_controls.stick = Vector2(0.8, 0.6)
+				_cam.orbit(-0.9 * get_process_delta_time(), 0.0)
 		"demo":
 			_player.energy = maxf(_player.energy, 40.0) if t > 6.0 and t < 7.0 else _player.energy
 			if t < 5.5:
@@ -452,11 +481,11 @@ func _run_script() -> void:
 					_controls.tap("light")
 			elif t > 12.0 and t < 12.2:
 				_player.energy = 100.0
-				_player.health = maxf(_player.health, 60.0)
+				_player.health = maxf(_player.health, Fighter.MAX_HEALTH * 0.6)
 				_controls.tap("ultimate")
 			elif t > 15.5 and t < 15.7:
 				_player.energy = 100.0
-				_player.health = minf(_player.health, 45.0)
+				_player.health = minf(_player.health, Fighter.MAX_HEALTH * 0.45)
 				_controls.tap("ultimate")
 		"skill2":
 			if t > 0.5 and t < 0.7:
@@ -465,7 +494,7 @@ func _run_script() -> void:
 		"lowult":
 			if t > 0.5 and t < 0.7:
 				_player.energy = 100.0
-				_player.health = 40.0
+				_player.health = Fighter.MAX_HEALTH * 0.4
 				_controls.tap("ultimate")
 		"ult":
 			if t > 0.5 and t < 0.7:
@@ -490,12 +519,15 @@ func _on_hit(target: Fighter, move: Dictionary) -> void:
 	if cost >= 100.0:
 		_impact.hitstop(0.12, 0.05)
 		_dm.blast(at, 7.0, 1.4)
+		Sound.play_at("boom", at, 0.0)
+		get_tree().create_timer(0.5).timeout.connect(func(): Sound.play_at("collapse", at, -2.0))
 		var near: Array = get_tree().get_nodes_in_group("buildings").filter(func(b): return b.is_inside_tree() and not b.has_meta("collapsed"))
 		near.sort_custom(func(a, b): return a.global_position.distance_to(at) < b.global_position.distance_to(at))
 		for i in mini(3, near.size()):
 			BuildingCollapse.run(near[i], _dm, _world, 1.0 if q["particles"] > 0.5 else 0.5, _rng)
 	elif cost >= 30.0:
 		_dm.blast(at, 3.5, 0.9)
+		Sound.play_at("boom", at, -8.0, 1.3)
 		var fire := FireFx.new()
 		fire.radius = 1.4
 		fire.burn_time = 7.0
@@ -509,10 +541,75 @@ func _on_hit(target: Fighter, move: Dictionary) -> void:
 		if heavy:
 			_dm.blast(at, 1.6, 0.35)
 
+## Hit sounds: a blocked hit clacks, light hits thump, heavy ones crack, techniques boom.
+func _hit_sound(t: Fighter, m: Dictionary, dmg: float) -> void:
+	var at := t.global_position + Vector3.UP
+	if t.state == Fighter.State.BLOCK:
+		Sound.play_at("block", at, -2.0, Sound.vary())
+	elif float(m.get("cost", 0.0)) >= 30.0:
+		Sound.play_at("heavy", at, 0.0, Sound.vary(0.05) * 0.8)
+	elif dmg >= 12.0:
+		Sound.play_at("heavy", at, 0.0, Sound.vary())
+	else:
+		Sound.play_at("punch", at, -1.0, Sound.vary(0.12))
+
+## Footsteps on the ground, a whoosh at take-off, wind that grows with flight speed.
+var _step_t := 0.0
+var _was_flying := false
+func _movement_sounds(delta: float) -> void:
+	if _player == null or not is_instance_valid(_player):
+		Sound.wind(0.0)
+		return
+	var hv := Vector2(_player.velocity.x, _player.velocity.z).length()
+	if _player.flying != _was_flying:
+		Sound.play("takeoff" if _player.flying else "land", -4.0)
+		_was_flying = _player.flying
+	if _player.flying:
+		Sound.wind(_player.velocity.length() / maxf(_player.fly_speed, 1.0))
+	else:
+		Sound.wind(0.0)
+		if _player.state == Fighter.State.MOVE and hv > 0.5:
+			_step_t -= delta
+			if _step_t <= 0.0:
+				_step_t = 0.32
+				Sound.play("step", -12.0, Sound.vary(0.15))
+
+## Wind-up and release sounds of every move.
+func _move_sound(f: Fighter, moves: String, name: String, phase: int) -> void:
+	var at := f.global_position + Vector3.UP
+	if name == "light" or name == "heavy":
+		if phase == 0:
+			Sound.play_at("swing" if name == "light" else "swing_heavy", at, -6.0, Sound.vary(0.15))
+		return
+	match [moves, name, phase]:
+		["gojo", "special", 0], ["sukuna", "ultimate", 0]:
+			Sound.play_at("charge", at, -3.0, 1.0 if moves == "gojo" else 0.7)
+		["gojo", "special", 1]:
+			Sound.play_at("red", at, 0.0)
+		["gojo", "skill2", 1]:
+			Sound.play_at("blue", at, 0.0)
+		["gojo", "ultimate", 0], ["gojo", "purple200", 0]:
+			Sound.play_at("purple_charge", at, 0.0)
+		["gojo", "ultimate", 1], ["gojo", "purple200", 1]:
+			Sound.play_at("purple", at, 2.0)
+			Sound.duck(-12.0, 2.0)
+		["sukuna", "special", 1]:
+			for k in 3:
+				get_tree().create_timer(k * 0.09).timeout.connect(func(): Sound.play_at("slash", at, -2.0, Sound.vary(0.1)))
+		["sukuna", "skill2", 1]:
+			Sound.play_at("cleave", at, 0.0)
+		["sukuna", "ultimate", 1]:
+			Sound.play_at("fuga", at, 2.0)
+			Sound.duck(-10.0, 2.0)
+		["sukuna", "world_slash", 1]:
+			Sound.play_at("world_slash", at, 3.0)
+			Sound.duck(-12.0, 2.5)
+
 ## Character-specific effects as a move winds up (phase 0) and fires (phase 1).
 func _on_move_phase(f: Fighter, moves: String, name: String, phase: int) -> void:
 	if phase > 1:
 		return
+	_move_sound(f, moves, name, phase)
 	var o := f.opponent
 	match [moves, name]:
 		["gojo", "special"]:
@@ -566,6 +663,8 @@ func _on_domain(f: Fighter, moves: String) -> void:
 	if now - float(f.get_meta("domain_at", -99.0)) < 4.0:
 		return                      # the cutscene already opened it; the move's own trigger arrives afterwards
 	f.set_meta("domain_at", now)
+	Sound.play("domain_void" if moves == "gojo" else "domain_shrine", 2.0)
+	Sound.duck(-18.0, 5.0)
 	MoveVfx.domain_burst(_world, f, Color(0.35, 0.6, 1.0) if moves == "gojo" else Color(0.9, 0.08, 0.06))
 	if moves == "gojo":
 		o.add_to_group("void_target")
@@ -604,6 +703,7 @@ func _build_open_world() -> Dictionary:
 	_map.tree_keep = [0.3, 0.5, 0.75, 1.0, 1.0][eff]
 	_map.tree_range = [170.0, 260.0, 0.0, 0.0, 0.0][eff]
 	_map.light_trees = eff <= GraphicsSettings.Mode.STANDARD
+	_map.far_min_height = [30.0, 15.0, 0.0, 0.0, 0.0][eff]
 	root.add_child(_map)
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-42, -35, 0)
