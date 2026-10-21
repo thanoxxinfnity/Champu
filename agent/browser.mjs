@@ -21,8 +21,8 @@ const SNAPSHOT_CAP = 14_000;
 // ── MCP over stdio (newline-delimited JSON-RPC) ─────────────────────────────
 
 export class McpStdio {
-  constructor({ command, args, cwd, env }) {
-    Object.assign(this, { command, args, cwd, env });
+  constructor({ command, args, cwd, env, label = 'the browser server' }) {
+    Object.assign(this, { command, args, cwd, env, label });
     this.child = null;
     this.nextId = 0;
     this.pending = new Map();
@@ -39,7 +39,7 @@ export class McpStdio {
       this.child = child;
       child.on('error', (e) => { this.fail(new Error(`could not start ${this.command}: ${e.message}`)); reject(e); });
       child.on('close', (code) => {
-        this.fail(new Error(`the browser server stopped (exit ${code}). ${this.err.trim().split('\n').slice(-3).join(' ')}`.trim()));
+        this.fail(new Error(`${this.label} stopped (exit ${code}). ${this.err.trim().split('\n').slice(-3).join(' ')}`.trim()));
         this.child = null;
         this.ready = null;
       });

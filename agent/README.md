@@ -71,6 +71,20 @@ node "$CHOMUGIRI_AGENT" browse help                        # every verb
 Route: `POST /v1/browser` `{tool, args}` → `{ok, text}` (or `{list:true}` for the tool list). The browser has the same
 power as you at that keyboard: it can reach anything your machine can, including logged-in sites. Keep the token private.
 
+## Blender (Blender MCP)
+
+`POST /v1/blender` drives a live Blender on this machine through a Blender MCP server, started on first use with `uvx`
+(pinned to a commit) and stopped after ten idle minutes. In a terminal block the model runs
+`node "$CHOMUGIRI_AGENT" blender scene | run <python> | tools | <tool> '<json>' [--pro]`.
+
+| Server | Project | Tools |
+| --- | --- | --- |
+| basic (default) | [Gorav22/Blender-mcp](https://github.com/Gorav22/Blender-mcp) (MIT) | scene info, run Python in Blender, Poly Haven assets |
+| `--pro` | [RFingAdam/mcp-blender](https://github.com/RFingAdam/mcp-blender) (AGPL-3.0, run as its own program) | 218: modelling, materials, armatures, animation, baking, rendering, export |
+
+Needs [uv](https://docs.astral.sh/uv/) and Blender open with the matching addon started (`blender addon [--pro]` prints the
+steps; only one addon at a time, both listen on port 9876). The `/blender` and `/blender-3d` commands use it.
+
 ## Webcmd ([agentrhq/webcmd](https://github.com/agentrhq/webcmd))
 
 A second way onto the web, run the same way REA is (below): no bridge code needed, just `npx` in a terminal block,

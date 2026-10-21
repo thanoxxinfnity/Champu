@@ -32,9 +32,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createZip } from './zip.mjs';
 import { browseCli, createBrowser, explainBrowserError } from './browser.mjs';
+import { blenderCli, createBlender, explainBlenderError } from './blender.mjs';
 
 // `node chomugiri-agent.mjs browse …` is the model's way to use the bridge's browser from a terminal block: a client, not a server.
 if (process.argv[2] === 'browse') process.exit(await browseCli(process.argv.slice(3)));
+// `node chomugiri-agent.mjs blender …` drives a live Blender on this machine the same way.
+if (process.argv[2] === 'blender') process.exit(await blenderCli(process.argv.slice(3)));
 
 // ── CLI arguments ───────────────────────────────────────────────────────────
 
@@ -59,6 +62,7 @@ const ALLOW_CMD = (arg('allow-cmd', process.env.CHOMUGIRI_ALLOW_CMD ?? '') || ''
 const MAX_EXEC_MS = Number(arg('max-exec-ms', 45 * 60_000));
 const VERSION = '1.1.0';
 const browser = createBrowser({ outDir: ARTIFACTS });
+const blender = createBlender({ outDir: ARTIFACTS });
 
 // ── Execution registry ──────────────────────────────────────────────────────
 
@@ -425,6 +429,24 @@ routes['POST /v1/browser'] = async (req) => {
   }
 };
 
+/** A live Blender through a Blender MCP server. `{server, tool, args}` runs one tool; `{tools:true}` lists them; `{close:true}` stops. */
+routes['POST /v1/blender'] = async (req) => {
+  const body = await readJson(req);
+  const server = body.server === 'pro' ? 'pro' : 'basic';
+  try {
+    await mkdir(ARTIFACTS, { recursive: true });
+    if (body.close) { blender.close(); return { ok: true, text: 'Blender MCP servers stopped.' }; }
+    if (body.tools) return { ok: true, text: (await blender.tools(server)).map((t) => `${t.name} — ${(t.description ?? '').split('\n')[0]}`).join('\n') };
+    const tool = String(body.tool ?? '');
+    if (!/^[a-z][a-z0-9_]+$/.test(tool)) { const e = new Error('`tool` must be a Blender MCP tool name.'); e.statusCode = 400; throw e; }
+    const out = await blender.call(server, tool, body.args ?? {});
+    return out.ok ? out : { ok: false, text: explainBlenderError(out.text, server) };
+  } catch (err) {
+    if (err.statusCode) throw err;
+    return { ok: false, text: explainBlenderError(err.message, server) };
+  }
+};
+
 /** Collect build outputs (APK/AAB/ZIP) from anywhere in the workspace. */
 routes['POST /v1/collect'] = async (req) => {
   const body = await readJson(req);
@@ -559,6 +581,7 @@ ${line('godot', tools.godot)}
 
 const shutdown = () => {
   browser.close();
+  blender.close();
   for (const run of runs.values()) if (!run.endedAt) run.child.kill('SIGTERM');
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000).unref();

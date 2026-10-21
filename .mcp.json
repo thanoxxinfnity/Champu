@@ -9,6 +9,26 @@
         "--root",
         "."
       ]
+    },
+    "blender": {
+      "command": "uvx",
+      "args": [
+        "--with",
+        "mcp[cli]==1.3.0",
+        "--with",
+        "pydantic<2.10",
+        "--from",
+        "git+https://github.com/Gorav22/Blender-mcp@1ab896923f94e9194c02944136ffc3f4e3d24d10",
+        "blender-mcp"
+      ]
+    },
+    "blender-pro": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/RFingAdam/mcp-blender@71724fc63d14bef6a08a4ac6dc6361b474b6fd27",
+        "mcp-blender"
+      ]
     }
   }
 }

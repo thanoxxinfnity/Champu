@@ -92,6 +92,55 @@ Make the 3D part the centrepiece, not decoration: a scene that renders on a phon
 Read the actual pages, not just search snippets, and say which page each fact came from. Never invent a price, a quote or a result. If a login, OTP or payment is needed, stop and ask me.`,
   },
   {
+    command: 'blender',
+    name: 'Blender (live)',
+    description: 'Drive a live Blender on your bridge machine through a Blender MCP addon: read the scene, run bpy code, model, rig, render, export GLB/FBX. "/blender add a low-poly tree and export it as tree.glb".',
+    lane: 'B',
+    icon: 'cube',
+    argHint: '<what to do in Blender>',
+    template: `Do this in the live Blender on the bridge machine, using the blender command in terminal blocks:
+
+{{input}}
+
+The blender command (node "$CHOMUGIRI_AGENT" blender …):
+  blender scene [--pro]                what is in the open scene
+  blender run <python code> [--pro]    run bpy code inside Blender
+  blender tools [--pro]                every tool the server offers
+  blender <tool_name> '<json>' [--pro] any raw tool
+  blender addon [--pro]                how to install and start the addon
+basic (default) = Gorav22/Blender-mcp: scene info, Python, Poly Haven assets. --pro = RFingAdam/mcp-blender: 218 tools for modelling, materials, armatures, animation, baking, rendering and export. Blender must be open with the matching addon started (only one at a time, both listen on port 9876).
+
+Rules:
+1. Start with "blender scene". If it says Blender is not reachable, print the addon steps ("blender addon") and stop — do not pretend a model was built.
+2. Build in small steps and check the scene after each one; prefer one "blender run" per logical step over one giant script.
+3. Name every object you create, keep real-world metres, apply scale before export.
+4. For a game asset: keep a triangle budget (hero 6-25k, prop 0.5-3k), export GLB with only what the asset needs, then render a quick preview (blender_render_screenshot with --pro, or bpy.ops.render.opengl) and show it.
+5. With no open Blender, a headless job still works: write the script to a file and run blender --background --python script.py.
+Report only what the commands printed.`,
+  },
+  {
+    command: 'blender-3d',
+    name: 'Image → 3D asset (Blender)',
+    description: 'Turn reference images into a game-ready 3D asset in Blender through gated phases (block-out, silhouette match, detail, UVs, bake, rig, export), each checked with renders against the reference. Uses the blender-image-to-3d skill (MIT, Majid Manzarpour).',
+    lane: 'B',
+    icon: 'image',
+    argHint: '<attach the reference images and say what the asset is>',
+    template: `Build a game-ready 3D asset in Blender from these references.
+
+Asset: {{input}}
+References: {{files}}
+
+Use the blender-image-to-3d skill by Majid Manzarpour (MIT) on the bridge machine:
+1. If ~/.chomugiri/skills/blender-game-skills is missing, fetch it, pinned:
+   git clone https://github.com/majidmanzarpour/blender-game-skills ~/.chomugiri/skills/blender-game-skills && git -C ~/.chomugiri/skills/blender-game-skills checkout f0ef29385a03de139957e6f700b801cdc00b7e29
+2. Read skills/blender-image-to-3d/SKILL.md there and follow its phases and gate protocol exactly; read the reference notes it names before the phases that need them.
+3. Find Blender 4.2+ ($BLENDER_BIN, then blender on PATH). Run every build step headless with its scripts (init_master.py, review_render.py, compose_review.py, validate.py, bake_maps.py, export_delivery.py, roundtrip.py). A live Blender through the blender command (/blender) is optional, for inspection.
+4. At every gate show the compare sheet (reference vs render vs overlay) and the measured numbers. Nothing gets detail before its silhouette passes.
+5. Say plainly which sides or dimensions the references did not show and were inferred.
+6. Deliver the GLB (or FBX), its asset-manifest.json and a turntable/preview render, collected as artifacts.
+If Blender is not installed on the bridge machine, say so and stop.`,
+  },
+  {
     command: 'memory',
     name: 'Memory',
     description: 'What the app remembers about you and your work: "/memory", "/memory add <text>", "/memory forget <words>", "/memory off". Or just say "yaad rakho: …".',

@@ -273,6 +273,35 @@ function ModelSwitcher() {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  // The list is placed against the viewport, not the (narrow) button: on a phone the
+  // button is a third of the screen wide, and a list that narrow cut every name down
+  // to "Google Gemini…" — the endpoint name, never the model.
+  const [box, setBox] = useState<{ left: number; width: number } | null>(null);
+  const measure = useCallback(() => {
+    if (!ref.current) return null;
+    const r = ref.current.getBoundingClientRect();
+    // the visible width: innerWidth can be the wider layout viewport on a phone
+    const vw = Math.min(window.visualViewport?.width ?? window.innerWidth, document.documentElement.clientWidth || window.innerWidth);
+    const width = Math.min(vw - 24, 384);
+    const left = Math.min(Math.max(r.right - width, 12), vw - 12 - width);
+    return { left: left - r.left, width };
+  }, []);
+  // Measured before the list exists, so it never renders once at the wrong size (its
+  // auto-focused filter box would scroll the whole page sideways to stay in view).
+  const toggle = () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setBox(measure());
+    setOpen(true);
+  };
+  useEffect(() => {
+    if (!open) return;
+    const onResize = () => setBox(measure());
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [open, measure]);
 
   useEffect(() => {
     if (!open) return;
@@ -307,7 +336,7 @@ function ModelSwitcher() {
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         className="press glow-accent mono flex min-w-0 max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px]"
         style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
         title={active ? `${active.vendor} · ${active.id}` : selection.model}
@@ -318,7 +347,7 @@ function ModelSwitcher() {
           aria-hidden
         />
         {/* Tighter on a phone: 10rem of model name leaves no room for Run. */}
-        <span className="min-w-0 max-w-28 truncate sm:max-w-40">{active?.label ?? selection.model.split('/').pop()}</span>
+        <span className="min-w-0 max-w-28 truncate sm:max-w-40">{active ? shortName(active) : selection.model.split('/').pop()}</span>
         {active?.capabilities.includes('reasoning') && (
           <span style={{ color: 'var(--color-indigo)' }} title="Emits reasoning tokens">
             ⚛
@@ -329,10 +358,12 @@ function ModelSwitcher() {
         </span>
       </button>
 
-      {open && (
+      {open && box && (
         <div
-          className="enter-pop absolute bottom-full left-2 right-2 mb-2 flex max-h-[420px] flex-col overflow-hidden rounded-2xl border sm:left-auto sm:right-0 sm:w-80"
+          className="enter-pop absolute bottom-full mb-2 flex max-h-[60vh] flex-col overflow-hidden rounded-2xl border"
           style={{
+            left: box.left,
+            width: box.width,
             borderColor: 'var(--line-strong)',
             background: 'color-mix(in oklab, var(--panel) 94%, transparent)',
             backdropFilter: 'blur(14px) saturate(1.3)',
@@ -396,7 +427,7 @@ Open Settings → API Keys to add
                         setSelection({ provider: model.provider, model: model.id, endpointId: model.endpointId });
                         setOpen(false);
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left disabled:cursor-not-allowed"
+                      className="flex w-full items-start gap-2 px-3 py-1.5 text-left disabled:cursor-not-allowed"
                       style={{
                         background: isActive ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : undefined,
                         boxShadow: isActive ? 'inset 2px 0 0 var(--accent)' : undefined,
@@ -405,11 +436,18 @@ Open Settings → API Keys to add
                       }}
                       title={model.note}
                     >
-                      <span
-                        className="mono truncate text-[11.5px]"
-                        style={{ color: isActive ? 'var(--accent)' : 'var(--ink)' }}
-                      >
-                        {model.label}
+                      <span className="flex min-w-0 flex-col">
+                        <span
+                          className="mono whitespace-normal break-words text-[11.5px] leading-snug"
+                          style={{ color: isActive ? 'var(--accent)' : 'var(--ink)' }}
+                        >
+                          {shortName(model)}
+                        </span>
+                        {model.id !== shortName(model) && (
+                          <span className="mono break-all text-[9.5px] leading-snug" style={{ color: 'var(--ink-faint)' }}>
+                            {model.id}
+                          </span>
+                        )}
                       </span>
                       <span className="ml-auto flex shrink-0 gap-1">
                         {model.capabilities.includes('reasoning') && (
@@ -443,6 +481,20 @@ Open Settings → API Keys to add
       )}
     </div>
   );
+}
+
+/**
+ * The model's own name for the switcher: the group heading already says which
+ * vendor or endpoint it is, so "Google Gemini · gemini-2.5-pro" shows as
+ * "gemini-2.5-pro" (and a Gemini "models/…" path loses its prefix).
+ */
+function shortName(m: { label: string; vendor: string; id: string }): string {
+  let name = m.label;
+  for (const prefix of [`${m.vendor} · `, `${m.vendor} - `, `${m.vendor}: `]) {
+    if (name.startsWith(prefix)) name = name.slice(prefix.length);
+  }
+  name = name.replace(/^models\//, '');
+  return name || m.id;
 }
 
 /**
