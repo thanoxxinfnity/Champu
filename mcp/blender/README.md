@@ -25,3 +25,10 @@ Chomugiri reaches the same servers through its bridge: `node "$CHOMUGIRI_AGENT" 
 
 The image-to-3D workflow skill (`.claude/skills/blender-image-to-3d`, MIT, Majid Manzarpour) does not need a live Blender:
 it runs Blender headless with its own scripts.
+
+## Cloud sessions
+
+`.claude/hooks/session-start.sh` (registered in `.claude/settings.json`) runs at the start of every Claude Code cloud
+session: it installs Blender 4.2.3 LTS into `/opt/blender-4.2.3` (checksum-verified, skipped when already there), puts
+`blender` on `PATH`, exports `BLENDER_BIN`, and pre-fetches both MCP servers. `.claude/settings.json` also approves the
+`.mcp.json` servers, so `blender` and `blender-pro` are available without a prompt. The hook does nothing on a local machine.
