@@ -1,8 +1,6 @@
 import { Marked } from 'marked';
 import hljs from 'highlight.js/lib/common';
 import { chipifyHtml } from '../lib/sites/domains.ts';
-import { activityOf } from '../lib/agent/activity.ts';
-import { describeCommand } from '../lib/agent/narrate.ts';
 import { iconSvg, SKILL_ICON_NAMES } from '../lib/skills/icons.ts';
 import { iconHtml, pick, SCENE_HTML, TAIL_HTML, VARIANTS } from '../lib/agent/activity-icons.ts';
 
@@ -83,10 +81,12 @@ marked.use({
 
       // A block that carries work (a file being written, a command being run) can light up while that is
       // happening: the same icon, scene and words the thinking bubble uses, so the two read as one thing.
-      const isCommand = path === '@terminal' || path === '@shell' || (!path && /^(bash|sh|shell|zsh|console)$/.test(language));
-      const work = isCommand || Boolean(path);
-      const phrase = isCommand ? describeCommand(text.trim()) : `Writing ${path}…`;
-      const kind = isCommand ? activityOf(phrase) : 'write';
+      // Commands the app runs no longer get a box of their own: the chat shows them as "Ran N commands" (CommandRuns),
+      // and a shell block that is only an example stays a plain, still code box. Only a file being written moves.
+      const isCommand = false;
+      const work = Boolean(path) && !path!.startsWith('@');
+      const phrase = `Writing ${path}…`;
+      const kind = 'write' as const;
       const chip = work
         ? `<span class="live-chip">${iconHtml(kind)}<span class="live-text">${escapeHtml(phrase.length > 60 ? `${phrase.slice(0, 59)}…` : phrase).replace(/\./g, '&#46;')}</span>${TAIL_HTML}</span>`
         : '';

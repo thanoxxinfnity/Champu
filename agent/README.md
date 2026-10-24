@@ -40,11 +40,22 @@ Stop the tunnel when you are done.
 | `POST` | `/v1/fs/delete` | Remove a path (never the workspace root) |
 | `POST` | `/v1/fs/zip` | Archive a subtree into `.artifacts/` |
 | `POST` | `/v1/collect` | Gather build outputs (.apk/.aab/.zip/.mcpack/.jar) |
+| `GET` | `/v1/keys` | Names (and a masked tail) of the API keys this terminal holds — never the keys |
+| `POST` | `/v1/keys` | `{env:{NAME:value}}` → replaces everything the terminal holds |
+| `POST` | `/v1/keys/delete` | `{names?}` → removes those keys, or all of them |
 | `GET` | `/v1/artifacts` | List collected artifacts |
 | `GET` | `/v1/artifact/:name` | Download |
 
 CORS is `*` so the browser talks to the tunnel directly. `ngrok-skip-browser-warning`
 is accepted so the free ngrok tier does not serve its interstitial.
+
+## API keys on the terminal
+
+Settings → API Keys has **Pull APIs on terminal** and **Delete APIs from terminal**. Pull copies every key the app holds to
+`~/.chomugiri/keys.json` on the machine running the bridge (owner-only, outside the workspace; override with
+`CHOMUGIRI_KEYS_FILE`). Every command the bridge then runs finds them as environment variables — `GROQ_API_KEY`,
+`GROQ_API_KEYS` (several, comma-separated), `GROQ_BASE_URL`, `NVIDIA_API_KEY`, `HF_TOKEN`, … — so background jobs keep going
+with the app closed. From the terminal itself: `node chomugiri-agent.mjs keys list` and `keys delete [NAME …]`.
 
 ## Browser (Playwright MCP)
 

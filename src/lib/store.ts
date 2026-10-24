@@ -12,7 +12,7 @@ import { getSetting, setSetting } from '@/lib/db/history';
 import { keyHeaders, loadKeys, loadVercel, saveVercel } from '@/lib/keys';
 import { updateRunProgress } from '@/lib/shell/run-state';
 import { endpointModels } from '@/lib/providers/endpoint-models';
-import { addUsage, emptyUsage, gatewayModels, type UsageState } from '@/lib/providers/gateway';
+import { activeEndpoints, addUsage, emptyUsage, gatewayModels, type UsageState } from '@/lib/providers/gateway';
 
 /**
  * Workspace state.
@@ -238,7 +238,7 @@ interface WorkspaceState {
   setSelection: (selection: ModelSelection) => void;
 
   // ── Gateway ───────────────────────────────────────────────────────────────
-  /** Tokens used across every provider, counted on this device; the meter in Settings → Free Providers reads it. */
+  /** Tokens used across every provider, counted on this device; the meter in Settings → Free LLM APIs reads it. */
   usage: UsageState;
   recordUsage: (who: { provider: string; model: string }, tokens: { prompt: number; completion: number }) => void;
   setUsageBudget: (budget: number | undefined) => void;
@@ -246,6 +246,10 @@ interface WorkspaceState {
   /** Which model the gateway used for the last answer, and how many it had to skip to get there. */
   gatewayLast: { label: string; switches: number; at: number } | null;
   setGatewayLast: (last: { label: string; switches: number; at: number } | null) => void;
+
+  /** Whether the AI may use the free LLM APIs (the endpoints connected under Settings → Free LLM APIs) at all. */
+  freeApis: boolean;
+  setFreeApis: (on: boolean) => void;
 
   // ── Custom endpoints ──────────────────────────────────────────────────────
   endpoints: EndpointRecord[];
@@ -462,7 +466,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
       // The catalogue is server-side and knows nothing about custom endpoints,
       // which live on the device — so they are added back on every reload.
-      const withCustom = [...models, ...endpointModels(get().endpoints), ...gatewayModels()];
+      const withCustom = [...models, ...endpointModels(activeEndpoints(get().endpoints, get().freeApis)), ...gatewayModels()];
       set({ models: withCustom, modelWarnings: data.warnings ?? [] });
 
       // If the persisted selection no longer exists, fall back to something real
@@ -510,6 +514,25 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
   gatewayLast: null,
   setGatewayLast: (gatewayLast) => set({ gatewayLast }),
+  freeApis: true,
+  setFreeApis: (on) => {
+    const prev = get();
+    // The switch changes what the picker offers, so the model list is rebuilt from the endpoints it now allows.
+    const models = [
+      ...prev.models.filter((m) => m.provider !== 'custom'),
+      ...endpointModels(activeEndpoints(prev.endpoints, on)),
+      ...gatewayModels(),
+    ];
+    set({ freeApis: on, models });
+    void setSetting('freeApis', on);
+    // A free model that was picked and is now switched off must not stay selected: fall back to the gateway, which
+    // still mixes whatever else is connected (NVIDIA, Pollinations, own endpoints).
+    const cur = prev.selection;
+    if (!models.some((m) => m.provider === cur.provider && m.id === cur.model)) {
+      const next = models.find((m) => m.provider === 'custom' && m.endpointId === 'gateway') ?? models.find((m) => m.capabilities.includes('chat'));
+      if (next) get().setSelection({ provider: next.provider, model: next.id });
+    }
+  },
 
   endpoints: [],
   capabilityTabs: [],
@@ -533,7 +556,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       capabilityTabs: [...tabs],
       // Merged in here as well as in loadModels, so adding an endpoint puts its
       // models in the switcher immediately rather than after the next refresh.
-      models: [...prev.models.filter((m) => m.provider !== 'custom'), ...endpointModels(endpoints), ...gatewayModels()],
+      models: [...prev.models.filter((m) => m.provider !== 'custom'), ...endpointModels(activeEndpoints(endpoints, prev.freeApis)), ...gatewayModels()],
     }));
   },
 
@@ -858,6 +881,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     // is not invisible in the new "Deployed" view.
     else if (priorDeploy?.project) set({ deployHistory: [priorDeploy] });
     set({ draftsEnabled: await getSetting<boolean>('draftsEnabled', false) });
+    set({ freeApis: await getSetting<boolean>('freeApis', true) });
     const savedUsage = await getSetting<UsageState | null>('gatewayUsage', null);
     if (savedUsage?.total) set({ usage: savedUsage });
     set({ mediaHidden: await getSetting<SuiteId[]>('mediaHidden', []) });

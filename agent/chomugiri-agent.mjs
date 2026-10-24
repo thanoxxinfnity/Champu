@@ -33,11 +33,14 @@ import { fileURLToPath } from 'node:url';
 import { createZip } from './zip.mjs';
 import { browseCli, createBrowser, explainBrowserError } from './browser.mjs';
 import { blenderCli, createBlender, explainBlenderError } from './blender.mjs';
+import { deleteKeystore, describeKeystore, keysCli, readKeystore, writeKeystore } from './keystore.mjs';
 
 // `node chomugiri-agent.mjs browse …` is the model's way to use the bridge's browser from a terminal block: a client, not a server.
 if (process.argv[2] === 'browse') process.exit(await browseCli(process.argv.slice(3)));
 // `node chomugiri-agent.mjs blender …` drives a live Blender on this machine the same way.
 if (process.argv[2] === 'blender') process.exit(await blenderCli(process.argv.slice(3)));
+// `node chomugiri-agent.mjs keys list|delete` looks at (or empties) the API keys this terminal holds.
+if (process.argv[2] === 'keys') process.exit(keysCli(process.argv.slice(3)));
 
 // ── CLI arguments ───────────────────────────────────────────────────────────
 
@@ -232,7 +235,7 @@ function startRun({ cmd, cwd, env, timeoutMs }) {
 
   const child = spawn(shell, args, {
     cwd: workdir,
-    env: { ...process.env, ...env, CHOMUGIRI_BRIDGE_URL: `http://127.0.0.1:${PORT}`, CHOMUGIRI_BRIDGE_TOKEN: TOKEN, CHOMUGIRI_AGENT: fileURLToPath(import.meta.url), CHOMUGIRI: '1', CI: '1', FORCE_COLOR: '0', TERM: 'dumb' },
+    env: { ...process.env, ...readKeystore().env, ...env, CHOMUGIRI_BRIDGE_URL: `http://127.0.0.1:${PORT}`, CHOMUGIRI_BRIDGE_TOKEN: TOKEN, CHOMUGIRI_AGENT: fileURLToPath(import.meta.url), CHOMUGIRI: '1', CI: '1', FORCE_COLOR: '0', TERM: 'dumb' },
     windowsHide: true,
   });
 
@@ -412,6 +415,18 @@ const routes = {
     }
     return { artifacts: out.sort((a, b) => b.modified - a.modified) };
   },
+};
+
+/** The API keys this terminal holds: what is there (names only), replace them all, or delete them. */
+routes['GET /v1/keys'] = async () => describeKeystore();
+routes['POST /v1/keys'] = async (req) => {
+  const body = await readJson(req);
+  const names = writeKeystore(body.env ?? {});
+  return { stored: names.length, names };
+};
+routes['POST /v1/keys/delete'] = async (req) => {
+  const body = await readJson(req);
+  return { deleted: deleteKeystore(body.names) };
 };
 
 /** The bridge's browser (Playwright MCP). `{tool,args}` runs one step; `{list:true}` names the tools. */

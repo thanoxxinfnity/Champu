@@ -488,7 +488,7 @@ Open Settings → API Keys to add
           <div className="mono shrink-0 border-t px-3 py-1.5 text-[9.5px] leading-snug" style={{ borderColor: 'var(--line)', color: 'var(--ink-faint)' }}>
             {gatewayLast
               ? `Gateway last used ${gatewayLast.label}${gatewayLast.switches ? ` (skipped ${gatewayLast.switches})` : ''}`
-              : 'More models: Settings → Free Providers'}
+              : 'More models: Settings → Free LLM APIs'}
           </div>
         </div>
       )}

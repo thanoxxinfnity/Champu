@@ -1,7 +1,7 @@
 /** node --experimental-strip-types --test scripts/test-session-title.mjs */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { titleFromInput } from '../src/lib/text/session-title.ts';
+import { isGenericTitle, isSmallTalk, NEW_CHAT_TITLE, titleFromInput } from '../src/lib/text/session-title.ts';
 
 test('strips leading politeness/filler before titling', () => {
   assert.equal(titleFromInput('please build me a racing game'), 'Racing game');
@@ -43,4 +43,35 @@ test('empty or pure-filler input falls back to a safe default', () => {
 test('does not destroy short inputs that look like filler but are not', () => {
   // "please" alone, once stripped, leaves nothing — falls back to the original trimmed text.
   assert.equal(titleFromInput('please'), 'Please');
+});
+
+test('a bare greeting names nothing: the chat stays "New chat"', () => {
+  for (const hi of ['hi', 'Hi', 'hello', 'Hey!', 'hiii', 'yo bro', 'namaste', 'hi bro kaise ho', 'how are you', 'good morning', 'thanks', 'ok', 'test', 'kya haal hai yar']) {
+    assert.equal(isSmallTalk(hi), true, hi);
+    assert.equal(titleFromInput(hi), NEW_CHAT_TITLE, hi);
+  }
+});
+
+test('a message with a subject is not small talk, even if it opens with a greeting', () => {
+  for (const real of ['hi, fix my login bug', 'hello can you build a todo app', 'bro goa trip plan karo', 'what is photosynthesis', 'hey write a poem about rain']) {
+    assert.equal(isSmallTalk(real), false, real);
+    assert.notEqual(titleFromInput(real), NEW_CHAT_TITLE, real);
+  }
+});
+
+test('generic model titles are recognised and rejected', () => {
+  for (const t of ['Casual Greeting', 'Friendly Greeting', 'Greeting', 'Simple Greeting Exchange', 'Hello', 'Chat', 'New Conversation', 'User Greeting', 'Introduction', 'Small Talk', 'Test Message', 'Hi']) {
+    assert.equal(isGenericTitle(t), true, t);
+  }
+  for (const t of ['Fix Login Redirect Bug', 'Goa Trip Budget', 'Python CSV Merge Script', 'Greeting Card Design']) {
+    assert.equal(isGenericTitle(t), false, t);
+  }
+});
+
+test('the retitle prompt no longer teaches the model "Casual Greeting", and small talk is wired in', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../src/lib/agent/runtime.ts', import.meta.url), 'utf8');
+  assert.equal(/becomes something like "Casual Greeting"/.test(src), false);
+  assert.match(src, /isSmallTalk\(m\.content\)/);
+  assert.match(src, /isGenericTitle\(title\)/);
 });

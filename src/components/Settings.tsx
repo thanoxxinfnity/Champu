@@ -1,7 +1,8 @@
 'use client';
 
 import { VoiceTab } from './VoiceTab';
-import { FreeProviders } from './FreeProviders';
+import { FreeApisSwitch, FreeProviders } from './FreeProviders';
+import { TerminalKeys } from './TerminalKeys';
 
 import { useCallback, useEffect, useState } from 'react';
 import { DIALECT_LABELS, dialectFromUrl, type Dialect } from '@/lib/providers/dialects';
@@ -231,7 +232,7 @@ interface TestResult {
   ms?: number;
 }
 
-function EndpointsTab() {
+function EndpointsTab({ goTo }: { goTo: (tab: Tab) => void }) {
   const endpoints = useWorkspace((s) => s.endpoints);
   const setEndpoints = useWorkspace((s) => s.setEndpoints);
 
@@ -481,8 +482,33 @@ function EndpointsTab() {
 
   const stepTitles = ['Connect', 'Test a model', 'Name and save'] as const;
 
+  const freeCount = endpoints.filter((e) => e.freeId && e.enabled).length;
+
   return (
     <div className="space-y-4">
+      {/* Free LLM APIs: same page as Settings → Free LLM APIs, one tap from here. */}
+      <div className="space-y-2 rounded-xl border p-3" style={{ borderColor: 'var(--line)' }}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="mono text-[11px]" style={{ color: 'var(--accent)' }}>Free LLM APIs</p>
+            <p className="mt-1 text-[11.5px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
+              Groq, Gemini, Mistral, OpenRouter, Cerebras and more — connect them with a free key, from one page. When one runs out of
+              quota the next one answers.{freeCount ? ` ${freeCount} connected now.` : ''}
+            </p>
+          </div>
+          <button
+            type="button"
+            data-testid="open-free-apis"
+            onClick={() => goTo('free')}
+            className="press mono shrink-0 whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-[10.5px]"
+            style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+          >
+            open
+          </button>
+        </div>
+        <FreeApisSwitch />
+      </div>
+
       {/* Where you are, and what is left. */}
       <div className="flex items-center gap-1.5">
         {stepTitles.map((title, i) => {
@@ -1759,6 +1785,8 @@ function KeysTab() {
         </p>
       )}
 
+      <TerminalKeys />
+
       <div className="rounded-lg border p-3" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
         <p className="mono text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-faint)' }}>
           no key handy?
@@ -1797,8 +1825,8 @@ function GuideTab() {
     },
     {
       done: endpoints.some((e) => e.freeId),
-      title: 'Connect free providers (optional)',
-      body: 'Free Providers lists every LLM API with a permanent free tier — Groq, Gemini, OpenRouter, Mistral, Cloudflare, Cohere and more. Paste all your keys at once (several keys per provider are used in turn); three providers need no key at all. Then pick “Gateway · Auto” in the model switcher: one provider that uses all of them and moves to the next model when one is busy or out of quota. A token meter counts what you use.',
+      title: 'Connect free LLM APIs (optional)',
+      body: 'Free LLM APIs lists every LLM API with a permanent free tier — Groq, Gemini, OpenRouter, Mistral, Cloudflare, Cohere and more. Paste all your keys at once (several keys per provider are used in turn); three providers need no key at all. Then pick “Gateway · Auto” in the model switcher: one provider that uses all of them and moves to the next model when one is busy or out of quota. A token meter counts what you use.',
       state: endpoints.some((e) => e.freeId) ? `${endpoints.filter((e) => e.freeId).length} connected` : 'none — optional',
     },
     {
@@ -2024,7 +2052,7 @@ function ImageModelField() {
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'guide', label: 'Setup Guide' },
   { id: 'keys', label: 'API Keys' },
-  { id: 'free', label: 'Free Providers' },
+  { id: 'free', label: 'Free LLM APIs' },
   { id: 'bridge', label: 'Terminal Bridge' },
   { id: 'secrets', label: 'Secrets' },
   { id: 'endpoints', label: 'Custom Endpoints' },
@@ -2093,7 +2121,7 @@ export function Settings({ open, onClose }: { open: boolean; onClose: () => void
           {tab === 'free' && <FreeProviders goTo={setTab} />}
           {tab === 'bridge' && <BridgeTab />}
           {tab === 'secrets' && <SecretsTab />}
-          {tab === 'endpoints' && <EndpointsTab />}
+          {tab === 'endpoints' && <EndpointsTab goTo={setTab} />}
           {tab === 'media' && <MediaTab goTo={setTab} />}
           {tab === 'deploy' && <DeployTab />}
           {tab === 'drive' && <DriveTab />}

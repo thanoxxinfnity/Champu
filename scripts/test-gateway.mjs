@@ -9,6 +9,7 @@ import { endpointModels } from '../src/lib/providers/endpoint-models.ts';
 import {
   addUsage, classifyError, compactTokens, parseTokenCount, createHealth, emptyUsage, estimateTokens, gatewayKind, gatewayModels, planCandidates, reportFailure,
   reportSuccess, runWithFailover, summarize, traitsOf, GATEWAY_ENDPOINT_ID,
+  activeEndpoints, parseRateLimit, noteCall, limitUntil, restingNow,
 } from '../src/lib/providers/gateway.ts';
 
 const NOW = Date.UTC(2026, 9, 24, 12, 0, 0);
@@ -255,7 +256,7 @@ test('failover: moves on past failures, stops at a cancel or once words are on t
   assert.equal(cancelled.tried.length, 1);
 
   const none = await runWithFailover([], createHealth(), async () => ({ ok: true, value: 1 }));
-  assert.match(none.lastError, /Free Providers/);
+  assert.match(none.lastError, /Free LLM APIs/);
 
   const allFail = await runWithFailover(plan.slice(0, 2), createHealth(), async () => ({ ok: false, error: { status: 503, message: 'down' } }), { now: () => NOW });
   assert.match(allFail.lastError, /2 tried/);
@@ -335,14 +336,16 @@ test('every chat call goes through the shared client, so the gateway and the met
 
 test('the store lists the gateway next to the other models, counts tokens, and keeps the meter', () => {
   const store = read('src/lib/store.ts');
-  assert.equal((store.match(/\.\.\.gatewayModels\(\)/g) ?? []).length, 2, 'both loadModels and setEndpoints add it');
+  assert.equal((store.match(/\.\.\.gatewayModels\(\)/g) ?? []).length, 3, 'loadModels, setEndpoints and the free-APIs switch all add it');
+  assert.match(store, /freeApis: true/);
+  assert.match(store, /getSetting<boolean>\('freeApis', true\)/);
   assert.match(store, /recordUsage:/);
   assert.match(store, /getSetting<UsageState \| null>\('gatewayUsage'/);
 });
 
-test('Settings has the Free Providers tab and the picker puts the Gateway group first', () => {
+test('Settings has the Free LLM APIs tab and the picker puts the Gateway group first', () => {
   const settings = read('src/components/Settings.tsx');
-  assert.match(settings, /\{ id: 'free', label: 'Free Providers' \}/);
+  assert.match(settings, /\{ id: 'free', label: 'Free LLM APIs' \}/);
   assert.match(settings, /tab === 'free' && <FreeProviders/);
   const dock = read('src/components/CommandDock.tsx');
   assert.match(dock, /a\[0\] === 'Gateway' \? -1/);
@@ -352,4 +355,83 @@ test('the generated catalogue matches the pinned commit of the source list', () 
   const data = read('src/lib/providers/free-catalog.data.ts');
   assert.match(data, /639807877a43bb85b34348ccf7146d7376fc75eb/);
   assert.match(read('scripts/sync-free-catalog.mjs'), /639807877a43bb85b34348ccf7146d7376fc75eb/);
+});
+
+// ── The free-APIs switch, published limits and the status list ──────────────
+
+test('rate-limit text from the catalogue becomes numbers', () => {
+  assert.deepEqual(parseRateLimit('15 RPM, 20K TPD'), { rpm: 15, tpd: 20000 });
+  assert.deepEqual(parseRateLimit('30 RPM, 14.4K RPD, 6K TPM'), { rpm: 30, rpd: 14400, tpm: 6000 });
+  assert.deepEqual(parseRateLimit('1,000 RPD'), { rpd: 1000 });
+  assert.deepEqual(parseRateLimit('Varies'), {});
+  assert.deepEqual(parseRateLimit(undefined), {});
+});
+
+test('with the switch off, free endpoints sit out', () => {
+  const eps = [{ id: 'free-groq', freeId: 'groq' }, { id: 'own' }];
+  assert.deepEqual(activeEndpoints(eps, true).map((e) => e.id), ['free-groq', 'own']);
+  assert.deepEqual(activeEndpoints(eps, false).map((e) => e.id), ['own']);
+});
+
+function freeSetup(keys = ['k1']) {
+  const g = freeProvider('groq');
+  const e = buildEndpoint(g, { keys, now: NOW, verified: true });
+  return { e, models: endpointModels([e]), model: usableModels(g).find((m) => parseRateLimit(m.rateLimit).rpm)?.id };
+}
+
+test('a model that used up its published per-minute allowance is skipped before the provider ever refuses it', () => {
+  const { e, models, model } = freeSetup();
+  assert.ok(model, 'groq publishes an RPM for at least one model');
+  const rpm = parseRateLimit(usableModels(freeProvider('groq')).find((m) => m.id === model).rateLimit).rpm;
+  const health = createHealth();
+  const first = planCandidates('auto', { models, endpoints: [e], health, now: NOW, maxAttempts: 100 }).find((c) => c.model === model);
+  assert.ok(first);
+  for (let i = 0; i < rpm; i++) noteCall(health, first, 100, NOW + i * 100);
+  const during = planCandidates('auto', { models, endpoints: [e], health, now: NOW + 5000, maxAttempts: 100 });
+  assert.equal(during.some((c) => c.model === model), false, 'resting while the minute is full');
+  const after = planCandidates('auto', { models, endpoints: [e], health, now: NOW + 65_000, maxAttempts: 100 });
+  assert.equal(after.some((c) => c.model === model), true, 'back once the minute has passed');
+});
+
+test('with two keys, the second takes over when the first is at its limit', () => {
+  const { e, models, model } = freeSetup(['k1', 'k2']);
+  const rpm = parseRateLimit(usableModels(freeProvider('groq')).find((m) => m.id === model).rateLimit).rpm;
+  const health = createHealth();
+  const c = planCandidates('auto', { models, endpoints: [e], health, now: NOW, maxAttempts: 100 }).find((x) => x.model === model);
+  assert.equal(c.keyIndex, 0);
+  for (let i = 0; i < rpm; i++) noteCall(health, c, 10, NOW + i);
+  const next = planCandidates('auto', { models, endpoints: [e], health, now: NOW + 1000, maxAttempts: 100 }).find((x) => x.model === model);
+  assert.equal(next.keyIndex, 1);
+});
+
+test('daily token limits are counted too, with a margin', () => {
+  const health = createHealth();
+  const c = { provider: 'custom', model: 'm', endpointId: 'e', keyIndex: 0 };
+  noteCall(health, c, 19_000, NOW);
+  assert.ok(limitUntil(health, c, { tpd: 20_000 }, NOW + 10) > NOW, '95 % of the day is used: set aside');
+  assert.equal(limitUntil(health, c, { tpd: 100_000 }, NOW + 10), 0);
+  assert.equal(limitUntil(health, c, { tpd: 20_000 }, NOW + 25 * 3600_000), 0, 'a day later it is free again');
+});
+
+test('the status list says who is resting, why and until when', () => {
+  const { e } = freeSetup();
+  const health = createHealth();
+  const cand = { provider: 'custom', model: 'llama-3.3-70b-versatile', endpointId: e.id, keyIndex: 0, label: 'x', vendor: 'Groq', score: 1 };
+  reportFailure(health, cand, 'rate', NOW);
+  reportFailure(health, { ...cand, model: 'other' }, 'quota', NOW);
+  const list = restingNow(health, [e], NOW + 1000);
+  const rate = list.find((r) => r.what.endsWith('llama-3.3-70b-versatile'));
+  assert.equal(rate.what, 'Groq · llama-3.3-70b-versatile');
+  assert.equal(rate.why, 'rate limit hit');
+  assert.ok(rate.until > NOW + 1000);
+  assert.equal(list.find((r) => r.what.endsWith('other')).why, 'free quota used up');
+  assert.equal(restingNow(health, [e], NOW + 3 * 3600_000).length, 0, 'nothing rests forever');
+});
+
+test('a pinned free model falls back to the gateway chain, and the calls are metered', () => {
+  const src = read('src/lib/providers/chat-client.ts');
+  assert.match(src, /function routeFor\(/);
+  assert.match(src, /freeApis/);
+  assert.match(src, /noteCall\(health/);
+  assert.match(src, /restingNow\(/);
 });

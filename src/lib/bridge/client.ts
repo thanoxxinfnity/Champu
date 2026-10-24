@@ -159,6 +159,21 @@ export class BridgeClient {
     });
   }
 
+  /** The API keys this terminal holds — names and a masked tail, never the keys. */
+  keys() {
+    return this.request<{ count: number; savedAt: number; keys: Array<{ name: string; hint: string }> }>('/v1/keys', { method: 'GET' });
+  }
+
+  /** Replaces everything the terminal holds with exactly these variables. */
+  pushKeys(env: Record<string, string>) {
+    return this.request<{ stored: number; names: string[] }>('/v1/keys', { method: 'POST', body: JSON.stringify({ env }) });
+  }
+
+  /** Removes the named variables from the terminal, or all of them. */
+  deleteKeys(names?: string[]) {
+    return this.request<{ deleted: number }>('/v1/keys/delete', { method: 'POST', body: JSON.stringify({ names }) });
+  }
+
   kill(execId: string) {
     return this.request<{ execId: string; killing?: boolean }>(`/v1/kill/${execId}`, { method: 'POST' });
   }

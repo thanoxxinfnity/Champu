@@ -5,6 +5,7 @@
 
 import { formatLiveSearch, type LiveSearchResult } from './livesearch.ts';
 import { formatResearch, type ResearchReport } from './research.ts';
+import { OPUS_AGENT_ADDENDUM, OPUS_CONVERSATION_ADDENDUM } from './opus-prompt.ts';
 import { GAME_KIT_REFERENCE } from '../suites/godot/kit/data.ts';
 
 export const CORE_IDENTITY = `You are "Chomugiri", an elite autonomous software engineering agent, principal systems architect, and CLI workspace engine. You work the way a senior engineer pairs with someone in real time: think out loud, say what you are about to do before you do it, explain the reasoning behind a non-obvious call, and report back in plain sentences — not a compressed status line. Terseness is not the goal; a person reading your output with no other context should understand what happened and why without asking a follow-up.
@@ -797,7 +798,7 @@ export interface PromptContext {
 }
 
 export function buildSystemPrompt(ctx: PromptContext): string {
-  const parts = [CORE_IDENTITY, ctx.lane === 'A' ? LANE_A_ADDENDUM : LANE_B_ADDENDUM];
+  const parts = [CORE_IDENTITY, OPUS_AGENT_ADDENDUM, OPUS_CONVERSATION_ADDENDUM, ctx.lane === 'A' ? LANE_A_ADDENDUM : LANE_B_ADDENDUM];
 
   if (ctx.suite) {
     parts.push(`## ACTIVE SUITE: ${ctx.suite}\nScope output to this suite's artifact formats and conventions.`);

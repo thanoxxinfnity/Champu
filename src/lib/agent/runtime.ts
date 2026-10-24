@@ -65,6 +65,7 @@ import { complete, streamCompletion, type StreamCallbacks } from '@/lib/provider
 import { draftSystemSuffix, pickAngles } from './drafts';
 import { scanForSecrets, hasBlockingSecret } from '@/lib/security/secrets';
 import { appendMessage, createSession, getSetting, listMessages, saveDraftProgress, setSetting, titleFromInput, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
+import { isGenericTitle, isSmallTalk, NEW_CHAT_TITLE } from '@/lib/text/session-title';
 import type { SuiteId } from '@/lib/db/schema';
 import { BridgeOfflineError } from '@/lib/bridge/client';
 
@@ -651,13 +652,10 @@ export async function send(opts: SendOptions): Promise<void> {
  * Sessions whose title is still the instant regex guess (titleFromInput) and
  * so are owed a smarter one once there is a reply to read the topic from.
  *
- * titleFromInput() only has the user's raw text to go on, which is why "Hi"
- * stays "Hi" and a long build request keeps whatever its first clause was.
- * One cheap, non-streaming completion after the first reply does what Claude
- * and Gemini do — read the exchange, not just echo it — without paying an
- * LLM call on every session (most never get a reply, e.g. a queued one that
- * errors before responding; those are left with the regex title, which is
- * still better than nothing).
+ * titleFromInput() only has the user's raw text to go on, so a long build request keeps whatever its first
+ * clause was. One cheap, non-streaming completion after the first reply reads the exchange instead. A chat that
+ * opens with small talk ("hi") is *not* named after it: it stays "New chat" until a message with a subject
+ * arrives, and is named from that one — whichever run it comes after, and also after a reload.
  */
 const freshSessions = new Set<string>();
 
@@ -665,7 +663,8 @@ const freshSessions = new Set<string>();
 async function launch(sessionId: string, opts: SendOptions, heavy: boolean): Promise<void> {
   try {
     await execute({ ...opts, sessionId }, heavy);
-    if (freshSessions.delete(sessionId)) void retitleSession(sessionId);
+    const fresh = freshSessions.delete(sessionId);
+    void retitleSession(sessionId, fresh);
   } finally {
     useWorkspace.getState().endRun(sessionId);
     // Even if this run threw, whatever waited behind it still gets its turn.
@@ -674,21 +673,27 @@ async function launch(sessionId: string, opts: SendOptions, heavy: boolean): Pro
 }
 
 /**
- * Replaces a session's instant regex title with one that actually read the
- * exchange — "Hi" becomes "Casual Greeting", a paragraph-long build request
- * becomes the thing it asked for, not its first clause.
+ * Gives a session a title that names its topic: the first user message that is about something, read together
+ * with the reply that followed it. A bare greeting is never a topic, and neither is a title like "Casual Greeting".
  *
- * Best-effort and silent: a session already has a reasonable title from
- * titleFromInput(), so a failed or slow call here costs nothing visible —
- * it just leaves the regex guess standing, which was always the fallback.
+ * Best-effort and silent: if the call fails, the regex title (or "New chat") stands.
  */
-async function retitleSession(sessionId: string): Promise<void> {
+async function retitleSession(sessionId: string, fresh: boolean): Promise<void> {
   try {
-    const { listMessages, touchSession } = await import('@/lib/db/history');
+    const { listMessages, touchSession, getSession } = await import('@/lib/db/history');
+    const current = (await getSession(sessionId))?.title;
+    // A chat is only retitled while it still wears the instant guess: just created, or still unnamed.
+    if (!fresh && current !== NEW_CHAT_TITLE) return;
+
     const msgs = await listMessages(sessionId);
-    const userMsg = msgs.find((m) => m.role === 'user');
-    const assistantMsg = msgs.find((m) => m.role === 'assistant' && m.content.trim().length > 0);
-    if (!userMsg || !assistantMsg) return;
+    let topic: { user: string; reply: string } | undefined;
+    for (let i = 0; i < msgs.length && !topic; i++) {
+      const m = msgs[i];
+      if (m.role !== 'user' || isSmallTalk(m.content)) continue;
+      const reply = msgs.slice(i + 1).find((x) => x.role === 'assistant' && x.content.trim().length > 0);
+      if (reply) topic = { user: m.content, reply: reply.content };
+    }
+    if (!topic) return; // only small talk so far — stays "New chat"
 
     const selection = useWorkspace.getState().selection;
     const model = selection.provider === 'nim' ? PLANNER_NIM_MODEL : selection.model;
@@ -699,25 +704,27 @@ async function retitleSession(sessionId: string): Promise<void> {
         {
           role: 'system',
           content:
-            'Name this chat session. Read the user message and the reply, then output ONLY a short title, 2-6 words, ' +
-            'Title Case, no quotes, no trailing punctuation. Describe the actual topic, not the literal wording — ' +
-            'a bare greeting becomes something like "Casual Greeting", a request to build something becomes what it asked for.',
+            'Name this chat. Output ONLY a short title of 2-6 words, Title Case, no quotes, no trailing punctuation. ' +
+            'The title names the SUBJECT the user is working on or asking about (a thing, a task, a place, a problem), ' +
+            'never the kind of message. Never use words like greeting, hello, chat, conversation, introduction or question. ' +
+            'Example subjects: "Fix Login Redirect Bug", "Goa Trip Budget", "Python CSV Merge Script".',
         },
-        { role: 'user', content: `User: ${userMsg.content.slice(0, 600)}\n\nReply: ${assistantMsg.content.slice(0, 600)}` },
+        { role: 'user', content: `User: ${topic.user.slice(0, 600)}\n\nReply: ${topic.reply.slice(0, 600)}` },
       ],
       maxTokens: 20,
     });
 
-    const title = raw
+    let title = raw
       .replace(/^["'“”]+|["'“”]+$/g, '')
       .replace(/[.!?]+$/, '')
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 72);
-    if (!title || title.split(' ').length > 10) return;
+    if (!title || title.split(' ').length > 10 || isGenericTitle(title)) title = titleFromInput(topic.user);
+    if (isGenericTitle(title) || title === current) return;
     await touchSession(sessionId, { title });
   } catch {
-    // The regex title already stands — nothing to roll back.
+    // The earlier title already stands — nothing to roll back.
   }
 }
 

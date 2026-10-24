@@ -10,6 +10,8 @@ import { TextWithSites } from './SiteChip';
 import './codeActions';
 import type { ChatMessageView } from '@/lib/store';
 import { GamePlayer } from '@/components/GamePlayer';
+import { CommandRuns } from '@/components/CommandRuns';
+import { commandCount, splitCommandBlocks } from '@/lib/text/command-blocks';
 
 function Avatar({ role, lane }: { role: string; lane?: 'A' | 'B' }) {
   const isUser = role === 'user';
@@ -109,17 +111,28 @@ function AttachmentChips({ attachments }: { attachments: NonNullable<ChatMessage
 }
 
 export function Message({ message }: { message: ChatMessageView }) {
-  const rendered = useMemo(
-    () => (message.role === 'user' ? null : renderMarkdown(message.content)),
-    [message.content, message.role],
+  // The reply as prose, with the commands it ran pulled out into one "Ran N commands" line each (CommandRuns).
+  const segments = useMemo(
+    () => (message.role === 'user' ? [] : splitCommandBlocks(message.content, { shellRuns: message.lane === 'B' })),
+    [message.content, message.role, message.lane],
   );
-  // The block still being written, and the command the terminal is running, light up in place.
-  const runningCommand = useWorkspace((s) => s.runningCommand);
+  const hasCommands = commandCount(segments) > 0;
+  const sessionId = useWorkspace((s) => s.sessionId);
+  // The block still being written lights up in place.
+  const parts = useMemo(
+    () =>
+      segments.map((seg) => {
+        if (seg.kind !== 'text') return null;
+        const open = message.streaming && (seg.text.match(/^\s*(```|~~~)/gm)?.length ?? 0) % 2 === 1;
+        return markLive(renderMarkdown(seg.text), { liveLast: open });
+      }),
+    [segments, message.streaming],
+  );
   const html = useMemo(() => {
-    if (rendered == null) return null;
+    if (message.role === 'user' || hasCommands) return null;
     const open = message.streaming && (message.content.match(/^\s*(```|~~~)/gm)?.length ?? 0) % 2 === 1;
-    return markLive(rendered, { liveLast: open, runningCmd: runningCommand });
-  }, [rendered, message.streaming, message.content, runningCommand]);
+    return markLive(renderMarkdown(message.content), { liveLast: open });
+  }, [message.role, message.content, message.streaming, hasCommands]);
 
   const isUser = message.role === 'user';
 
@@ -176,6 +189,20 @@ export function Message({ message }: { message: ChatMessageView }) {
           <p className="whitespace-pre-wrap text-[14px] leading-[1.6]" style={{ color: 'var(--ink)' }}>
             <TextWithSites text={message.content} />
           </p>
+        ) : hasCommands ? (
+          <div>
+            {segments.map((seg, i) =>
+              seg.kind === 'commands' ? (
+                <CommandRuns key={i} commands={seg.commands} sessionId={sessionId} since={message.createdAt} />
+              ) : (
+                <div
+                  key={i}
+                  className={`prose-chomu ${message.streaming && i === segments.length - 1 ? 'stream-caret' : ''}`}
+                  dangerouslySetInnerHTML={{ __html: parts[i] ?? '' }}
+                />
+              ),
+            )}
+          </div>
         ) : (
           <div
             className={`prose-chomu ${message.streaming && !message.content ? '' : message.streaming ? 'stream-caret' : ''}`}

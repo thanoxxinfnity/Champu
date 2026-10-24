@@ -26,6 +26,8 @@ export interface CommandArtifact {
   kind: 'command';
   command: string;
   cwd?: string;
+  /** What the command is for, in the model's words (`desc="…"`); shown in "Ran N commands". */
+  description?: string;
   complete: boolean;
 }
 
@@ -37,6 +39,7 @@ interface Meta {
   language: string;
   path?: string;
   cwd?: string;
+  description?: string;
 }
 
 export function parseInfoString(info: string): Meta {
@@ -53,6 +56,7 @@ export function parseInfoString(info: string): Meta {
       const value = tok.slice(eq + 1).replace(/^["']|["']$/g, '');
       if (key === 'path' || key === 'file' || key === 'filename') meta.path = value;
       else if (key === 'cwd' || key === 'dir') meta.cwd = value;
+      else if (key === 'desc' || key === 'description') meta.description = value.slice(0, 200);
       return;
     }
     if (i === 0) meta.language = tok.toLowerCase();
@@ -168,6 +172,7 @@ function finish(
       kind: 'command',
       command,
       cwd: meta.cwd,
+      description: meta.description,
       complete,
     };
   }

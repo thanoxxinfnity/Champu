@@ -3,15 +3,19 @@
 import { withKeys } from '@/lib/keys';
 import { useWorkspace } from '@/lib/store';
 import {
+  activeEndpoints,
   createHealth,
   endpointKeys,
   estimateTokens,
   gatewayKind,
+  noteCall,
   planCandidates,
+  restingNow,
   runWithFailover,
   type AttemptResult,
   type Candidate,
   type Failure,
+  type RestingItem,
 } from './gateway.ts';
 import type { ChatMessage, CustomEndpointConfig, ProviderId, StreamFrame } from './types.ts';
 
@@ -231,17 +235,50 @@ function whoIs(provider: ProviderId, custom?: CustomEndpointConfig): string {
   return found?.label ?? new URL(custom.baseUrl).hostname;
 }
 
-function count(provider: ProviderId, model: string, custom: CustomEndpointConfig | undefined, messages: ChatMessage[], reply: number, usage?: StreamResult['usage']): void {
+function count(provider: ProviderId, model: string, custom: CustomEndpointConfig | undefined, messages: ChatMessage[], reply: number, usage?: StreamResult['usage'], via?: Candidate): void {
   const prompt = usage?.promptTokens ?? estimateTokens(charsOf(messages));
   const completion = usage?.completionTokens ?? (usage?.totalTokens && usage.promptTokens != null ? usage.totalTokens - usage.promptTokens : estimateTokens(reply));
   useWorkspace.getState().recordUsage({ provider: whoIs(provider, custom), model }, { prompt, completion });
+  // Also remembered per model and key, so the plan can stay under the limits the free provider publishes.
+  if (via) noteCall(health, via, prompt + completion, Date.now());
 }
 
 // ── The two calls the app uses ──────────────────────────────────────────────
 
 function plan(kind: NonNullable<ReturnType<typeof gatewayKind>>): Candidate[] {
   const s = useWorkspace.getState();
-  return planCandidates(kind, { models: s.models, endpoints: s.endpoints, health, now: Date.now(), rotation: rotation++ });
+  return planCandidates(kind, { models: s.models, endpoints: activeEndpoints(s.endpoints, s.freeApis), health, now: Date.now(), rotation: rotation++ });
+}
+
+/** Does the message carry a picture? Then only models that can see are fallbacks. */
+function hasImage(messages: ChatMessage[]): boolean {
+  return messages.some((m) => Array.isArray(m.content) && m.content.some((p) => p.type === 'image_url'));
+}
+
+/**
+ * What to try for a call. A gateway model ("gateway/auto") gets the gateway's plan. A model pinned from a *free* provider
+ * gets itself first (on whichever of its keys still has room) and then the same chain as a fallback, so a spent free
+ * allowance never ends in an error while another connected model could have answered. Anything else — NVIDIA, Pollinations,
+ * your own endpoint — is called as picked, exactly as before.
+ */
+function routeFor(body: ChatBody): Candidate[] | null {
+  const kind = gatewayKind(body.model, body.provider);
+  if (kind) return plan(kind);
+  const s = useWorkspace.getState();
+  if (body.provider !== 'custom' || !body.custom || !s.freeApis) return null;
+  const endpoint = s.endpoints.find((e) => e.freeId && e.enabled && e.baseUrl === body.custom!.baseUrl);
+  if (!endpoint) return null;
+  const pinnedModel = s.models.filter((m) => m.provider === 'custom' && m.endpointId === endpoint.id && m.id === body.model);
+  const first = planCandidates('auto', { models: pinnedModel, endpoints: s.endpoints, health, now: Date.now(), rotation: rotation++ });
+  const rest = plan(hasImage(body.messages) ? 'vision' : 'auto').filter((c) => !(c.endpointId === endpoint.id && c.model === body.model));
+  const chain = [...first, ...rest];
+  return chain.length ? chain : null;
+}
+
+/** Who is resting right now and why — for the status list in Settings → Free LLM APIs. */
+export function gatewayResting(): RestingItem[] {
+  const s = useWorkspace.getState();
+  return restingNow(health, s.endpoints, Date.now(), (o) => (o === 'nim' ? 'NVIDIA NIM' : o === 'pollinations' ? 'Pollinations' : o));
 }
 
 function keyCountOf(c: Candidate): number {
@@ -259,8 +296,8 @@ function failureOf(r: StreamResult): Failure {
 
 /** Streams a reply. A gateway model ("gateway/auto") is resolved to a real one here, with fallbacks. */
 export async function streamCompletion(body: ChatBody, callbacks: StreamCallbacks, signal?: AbortSignal): Promise<StreamResult> {
-  const kind = gatewayKind(body.model, body.provider);
-  if (!kind) {
+  const route = routeFor(body);
+  if (!route) {
     const r = await streamOnce(body, callbacks, signal);
     count(body.provider, body.model, body.custom, body.messages, r.content.length + r.reasoning.length, r.usage);
     return r;
@@ -270,14 +307,14 @@ export async function streamCompletion(body: ChatBody, callbacks: StreamCallback
   const seen: StreamCallbacks = { onDelta: callbacks.onDelta, onReasoning: callbacks.onReasoning };
   let last: StreamResult | undefined;
   const out = await runWithFailover<StreamResult>(
-    plan(kind),
+    route,
     health,
     async (c): Promise<AttemptResult<StreamResult>> => {
       const r = await streamOnce({ ...body, provider: c.provider, model: c.model, custom: c.custom }, seen, signal);
       last = r;
       if (r.error) return { ok: false, error: failureOf(r), emitted: r.emitted };
       if (!r.content && !r.reasoning) return { ok: false, error: { code: 'empty_completion', message: `${c.label} returned an empty completion.` } };
-      count(c.provider, c.model, c.custom, body.messages, r.content.length + r.reasoning.length, r.usage);
+      count(c.provider, c.model, c.custom, body.messages, r.content.length + r.reasoning.length, r.usage, c);
       return { ok: true, value: r };
     },
     { keyCountOf },
@@ -294,20 +331,20 @@ export async function streamCompletion(body: ChatBody, callbacks: StreamCallback
 
 /** One answer, no streaming — for planning and other internal steps. A gateway model is resolved here too. */
 export async function complete(body: ChatBody, signal?: AbortSignal, timeoutMs = 45_000): Promise<string> {
-  const kind = gatewayKind(body.model, body.provider);
-  if (!kind) {
+  const route = routeFor(body);
+  if (!route) {
     const text = await completeOnce(body, signal, timeoutMs);
     count(body.provider, body.model, body.custom, body.messages, text.length);
     return text;
   }
   const out = await runWithFailover<string>(
-    plan(kind).slice(0, 5),
+    route.slice(0, 5),
     health,
     async (c): Promise<AttemptResult<string>> => {
       try {
         const text = await completeOnce({ ...body, provider: c.provider, model: c.model, custom: c.custom }, signal, Math.min(timeoutMs, 30_000));
         if (!text.trim()) return { ok: false, error: { code: 'empty_completion', message: `${c.label} returned an empty completion.` } };
-        count(c.provider, c.model, c.custom, body.messages, text.length);
+        count(c.provider, c.model, c.custom, body.messages, text.length, undefined, c);
         return { ok: true, value: text };
       } catch (err) {
         const e = err as ChatError;

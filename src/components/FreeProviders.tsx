@@ -1,16 +1,17 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { db, type EndpointRecord } from '@/lib/db/schema';
 import { saveKeys } from '@/lib/keys';
-import { complete } from '@/lib/providers/chat-client';
+import { complete, gatewayResting } from '@/lib/providers/chat-client';
 import type { CapabilityProbe } from '@/lib/providers/custom';
 import { endpointConfigFor } from '@/lib/providers/endpoint-models';
 import {
   FREE_CATALOG_SOURCE, buildEndpoint, endpointIdFor, freeProviders, parseKeyPaste, usableModels, type FreeProvider,
 } from '@/lib/providers/free-catalog';
-import { compactTokens, endpointKeys, parseTokenCount, summarize } from '@/lib/providers/gateway';
+import { compactTokens, endpointKeys, parseTokenCount, summarize, type RestingItem } from '@/lib/providers/gateway';
 import { useWorkspace } from '@/lib/store';
+import { TerminalKeys } from './TerminalKeys';
 
 const inputStyle: React.CSSProperties = { borderColor: 'var(--line)', background: 'var(--surface)', color: 'var(--ink)' };
 const inputClass = 'mono w-full rounded-lg border px-2.5 py-2 text-[11.5px] outline-none placeholder:opacity-40';
@@ -19,8 +20,39 @@ const faint: React.CSSProperties = { color: 'var(--ink-faint)' };
 
 type Note = { ok: boolean; text: string };
 
+/** The slide switch that decides whether the AI may use the free LLM APIs at all. Lives here and in Custom Endpoints. */
+export function FreeApisSwitch() {
+  const on = useWorkspace((s) => s.freeApis);
+  const setFreeApis = useWorkspace((s) => s.setFreeApis);
+  const connected = useWorkspace((s) => s.endpoints.filter((e) => e.freeId && e.enabled).length);
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border p-2.5" style={{ borderColor: 'var(--line)' }}>
+      <div className="min-w-0">
+        <p className="text-[11.5px] font-medium">Let the AI use free LLM APIs</p>
+        <p className="mt-0.5 text-[10.5px] leading-[1.45]" style={faint}>
+          {on
+            ? `On: ${connected} free provider${connected === 1 ? '' : 's'} connected; the AI can use them and the Gateway moves between them.`
+            : 'Off: free providers are left out of the model list and the Gateway. NVIDIA, Pollinations and your own endpoints work as before.'}
+        </p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label="Let the AI use free LLM APIs"
+        data-testid="free-apis-switch"
+        onClick={() => setFreeApis(!on)}
+        className="press shrink-0 rounded-full px-0.5 py-0.5 transition-colors"
+        style={{ width: 38, height: 22, background: on ? 'var(--accent)' : 'var(--line)' }}
+      >
+        <span className="block h-[18px] w-[18px] rounded-full bg-white transition-transform" style={{ transform: on ? 'translateX(16px)' : 'translateX(0)' }} />
+      </button>
+    </div>
+  );
+}
+
 /**
- * Settings → Free Providers: every LLM API with a permanent free tier (github.com/mnfst/awesome-free-llm-apis), connected
+ * Settings → Free LLM APIs: every LLM API with a permanent free tier (github.com/mnfst/awesome-free-llm-apis), connected
  * from one place, and the gateway that turns all of them into a single provider in the model switcher.
  */
 export function FreeProviders({ goTo }: { goTo: (tab: 'keys') => void }) {
@@ -43,6 +75,19 @@ export function FreeProviders({ goTo }: { goTo: (tab: 'keys') => void }) {
   const [pasteResult, setPasteResult] = useState<string[]>([]);
   const [budgetText, setBudgetText] = useState('');
   const [showBreakdown, setShowBreakdown] = useState(false);
+
+  // Who the gateway is giving a rest right now, refreshed while this page is open.
+  const [resting, setResting] = useState<RestingItem[]>([]);
+  useEffect(() => {
+    const tick = () => setResting(gatewayResting());
+    tick();
+    const id = setInterval(tick, 3000);
+    return () => clearInterval(id);
+  }, []);
+  const until = (t: number) => {
+    const s = Math.max(1, Math.round((t - Date.now()) / 1000));
+    return s < 90 ? `${s}s` : s < 5400 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`;
+  };
 
   const providers = useMemo(() => freeProviders(), []);
   const byId = useMemo(() => new Map(endpoints.map((e) => [e.id, e])), [endpoints]);
@@ -207,6 +252,7 @@ export function FreeProviders({ goTo }: { goTo: (tab: 'keys') => void }) {
 
   return (
     <div className="space-y-4">
+      <FreeApisSwitch />
       {/* The gateway */}
       <div className="rounded-xl border p-3" style={{ borderColor: 'var(--line)' }}>
         <div className="flex items-start justify-between gap-3">
@@ -234,6 +280,21 @@ export function FreeProviders({ goTo }: { goTo: (tab: 'keys') => void }) {
             {last.switches > 0 ? ` (skipped ${last.switches})` : ''}
           </p>
         )}
+        <div className="mt-2" data-testid="resting">
+          <p className="mono text-[10px] uppercase tracking-[0.12em]" style={faint}>resting right now</p>
+          {resting.length === 0 ? (
+            <p className="mt-1 text-[10.5px]" style={faint}>Nothing — every connected model is ready.</p>
+          ) : (
+            <ul className="mt-1 max-h-32 space-y-1 overflow-y-auto">
+              {resting.slice(0, 20).map((r) => (
+                <li key={`${r.what}-${r.why}`} className="flex items-baseline justify-between gap-2 text-[10.5px]">
+                  <span className="min-w-0 truncate" style={{ color: 'var(--ink-dim)' }}>{r.what}</span>
+                  <span className="mono shrink-0" style={faint}>{r.why} · back in {until(r.until)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         {/* Token meter */}
         <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--line)' }}>

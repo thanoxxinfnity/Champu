@@ -133,6 +133,9 @@ export function providerWeight(provider: string, freeId?: string): number {
   return BUILTIN_WEIGHT[provider] ?? 0.6;
 }
 
+const SECOND = 1000;
+const MINUTE = 60 * SECOND;
+
 // ── Health: who is cooling off, and why ─────────────────────────────────────
 
 export interface Health {
@@ -144,10 +147,86 @@ export interface Health {
   keyTurn: Map<string, number>;
   /** keys the provider refused, kept so the UI can say so */
   refused: Set<string>;
+  /** why something is resting, for the status panel */
+  why: Map<string, FailureClass | 'limit'>;
+  /** per model and key: when each call happened and how many tokens it used (last 24 hours), to stay under the published limits */
+  calls: Map<string, Array<{ at: number; tokens: number }>>;
 }
 
 export function createHealth(): Health {
-  return { until: new Map(), strikes: new Map(), keyTurn: new Map(), refused: new Set() };
+  return { until: new Map(), strikes: new Map(), keyTurn: new Map(), refused: new Set(), why: new Map(), calls: new Map() };
+}
+
+// ── The published limits ────────────────────────────────────────────────────
+
+export interface Limits {
+  rpm?: number;
+  rph?: number;
+  rpd?: number;
+  tpm?: number;
+  tpd?: number;
+}
+
+function amount(text: string): number {
+  const m = /^(\d+(?:\.\d+)?)\s*([kKmM])?/.exec(text.replace(/,/g, ''));
+  if (!m) return 0;
+  return Math.round(Number(m[1]) * (m[2] ? (/[kK]/.test(m[2]) ? 1e3 : 1e6) : 1));
+}
+
+/** Reads the catalogue's rate-limit text ("30 RPM, 14.4K RPD, 6K TPM") into numbers; what it does not say stays unlimited. */
+export function parseRateLimit(text: string | undefined): Limits {
+  const out: Limits = {};
+  for (const m of (text ?? '').matchAll(/(\d[\d.,]*\s*[kKmM]?)\s*(RPM|RPH|RPD|TPM|TPD)\b/gi)) {
+    const n = amount(m[1]);
+    if (n > 0) out[m[2].toLowerCase() as keyof Limits] = n;
+  }
+  return out;
+}
+
+const callKey = (c: Pick<Candidate, 'provider' | 'model' | 'endpointId' | 'keyIndex'>) => `c:${c.endpointId ?? c.provider}|${c.keyIndex}|${c.model}`;
+
+/** Remembers one call (and its tokens) so the next plan knows how much of the free allowance is gone. */
+export function noteCall(health: Health, c: Candidate, tokens: number, now: number): void {
+  const key = callKey(c);
+  const log = (health.calls.get(key) ?? []).filter((x) => now - x.at < 24 * 60 * MINUTE);
+  log.push({ at: now, tokens });
+  health.calls.set(key, log);
+}
+
+/** When this model/key may be used again if its published limits say it is used up now, else 0. */
+export function limitUntil(health: Health, c: Candidate, limits: Limits, now: number): number {
+  const log = health.calls.get(callKey(c)) ?? [];
+  if (!log.length) return 0;
+  let until = 0;
+  const within = (ms: number) => log.filter((x) => now - x.at < ms);
+  const check = (ms: number, max: number | undefined, measure: (x: { at: number; tokens: number }) => number, margin = 1) => {
+    if (!max) return;
+    const inside = within(ms);
+    let used = inside.reduce((n, x) => n + measure(x), 0);
+    if (used < max * margin) return;
+    // the window frees up when enough of the oldest calls fall out of it
+    for (const x of inside) {
+      used -= measure(x);
+      if (used < max * margin) {
+        until = Math.max(until, x.at + ms);
+        return;
+      }
+    }
+    until = Math.max(until, now + ms);
+  };
+  const one = () => 1;
+  const tok = (x: { tokens: number }) => x.tokens;
+  check(MINUTE, limits.rpm, one);
+  check(60 * MINUTE, limits.rph, one);
+  check(24 * 60 * MINUTE, limits.rpd, one);
+  check(MINUTE, limits.tpm, tok, 0.9);
+  check(24 * 60 * MINUTE, limits.tpd, tok, 0.9);
+  return until > now ? until : 0;
+}
+
+function limitsOf(freeId: string | undefined, model: string): Limits {
+  if (!freeId) return {};
+  return parseRateLimit(freeProvider(freeId)?.models.find((m) => m.id === model)?.rateLimit);
 }
 
 export interface Candidate {
@@ -178,6 +257,11 @@ export interface PlanInput {
   /** Turns the first few equally good picks so successive requests use different providers. */
   rotation?: number;
   maxAttempts?: number;
+}
+
+/** The endpoints the app may use: with the free-APIs switch off, every endpoint that came from the free catalogue sits out. */
+export function activeEndpoints<T extends { freeId?: string }>(endpoints: T[], freeApis: boolean): T[] {
+  return freeApis ? endpoints : endpoints.filter((e) => !e.freeId);
 }
 
 /**
@@ -213,18 +297,23 @@ export function planCandidates(kind: GatewayKind, input: PlanInput): Candidate[]
       if (keys.length) {
         const start = health.keyTurn.get(endpoint.id) ?? 0;
         let pick = -1;
+        const limits = limitsOf(freeId, m.id);
         for (let i = 0; i < keys.length; i++) {
           const idx = (start + i) % keys.length;
-          if (!cooling(keyKey(endpoint.id, idx))) {
-            pick = idx;
-            break;
-          }
+          if (cooling(keyKey(endpoint.id, idx))) continue;
+          // this key has already used up what the provider publishes for this model: leave it alone until the window frees up
+          const probe = { provider: m.provider, model: m.id, endpointId: endpoint.id, keyIndex: idx };
+          if (limitUntil(health, probe as Candidate, limits, now) > 0) continue;
+          pick = idx;
+          break;
         }
         if (pick < 0) continue; // every key of this provider is resting
         keyIndex = pick;
         custom = { ...base, apiKey: keys[pick] };
       } else {
         if (cooling(keyKey(endpoint.id, -1))) continue;
+        const probe = { provider: m.provider, model: m.id, endpointId: endpoint.id, keyIndex: -1 };
+        if (limitUntil(health, probe as Candidate, limitsOf(freeId, m.id), now) > 0) continue;
         custom = { ...base, apiKey: undefined };
       }
     } else if (cooling(keyKey(m.provider, -1))) {
@@ -319,9 +408,6 @@ export function classifyError(f: Failure): FailureClass {
   return 'client';
 }
 
-const SECOND = 1000;
-const MINUTE = 60 * SECOND;
-
 function strike(health: Health, key: string, now: number, forgetAfter = 10 * MINUTE): number {
   const prev = health.strikes.get(key);
   const n = prev && now - prev.at < forgetAfter ? prev.n + 1 : 1;
@@ -329,8 +415,9 @@ function strike(health: Health, key: string, now: number, forgetAfter = 10 * MIN
   return n;
 }
 
-function rest(health: Health, key: string, now: number, ms: number): void {
+function rest(health: Health, key: string, now: number, ms: number, why: FailureClass | 'limit'): void {
   health.until.set(key, Math.max(health.until.get(key) ?? 0, now + ms));
+  health.why.set(key, why);
 }
 
 /** Sets aside what failed, for as long as the kind of failure suggests. */
@@ -342,29 +429,29 @@ export function reportFailure(health: Health, c: Candidate, cls: FailureClass, n
   switch (cls) {
     case 'rate': {
       const n = strike(health, mk, now, 5 * MINUTE);
-      rest(health, mk, now, Math.max(retryAfterMs ?? 0, Math.min(MINUTE * 2 ** (n - 1), 10 * MINUTE)));
+      rest(health, mk, now, Math.max(retryAfterMs ?? 0, Math.min(MINUTE * 2 ** (n - 1), 10 * MINUTE)), 'rate');
       // three different models refused by one key within two minutes: it is the key that is spent
-      if (strike(health, `kr:${key}`, now, 2 * MINUTE) >= 3) rest(health, key, now, 5 * MINUTE);
+      if (strike(health, `kr:${key}`, now, 2 * MINUTE) >= 3) rest(health, key, now, 5 * MINUTE, 'rate');
       break;
     }
     case 'quota': {
-      rest(health, mk, now, 30 * MINUTE);
-      if (strike(health, `kq:${key}`, now, 30 * MINUTE) >= 2) rest(health, key, now, 15 * MINUTE);
+      rest(health, mk, now, 30 * MINUTE, 'quota');
+      if (strike(health, `kq:${key}`, now, 30 * MINUTE) >= 2) rest(health, key, now, 15 * MINUTE, 'quota');
       break;
     }
     case 'auth': {
-      rest(health, key, now, 60 * MINUTE);
+      rest(health, key, now, 60 * MINUTE, 'auth');
       health.refused.add(key);
       break;
     }
     case 'model': {
       const n = strike(health, mk, now, 60 * MINUTE);
-      rest(health, mk, now, n > 1 ? 60 * MINUTE : 10 * MINUTE);
+      rest(health, mk, now, n > 1 ? 60 * MINUTE : 10 * MINUTE, 'model');
       break;
     }
     case 'server': {
       const n = strike(health, mk, now, 10 * MINUTE);
-      rest(health, mk, now, Math.min(30 * SECOND * 2 ** (n - 1), 10 * MINUTE));
+      rest(health, mk, now, Math.min(30 * SECOND * 2 ** (n - 1), 10 * MINUTE), 'server');
       break;
     }
   }
@@ -426,8 +513,60 @@ export async function runWithFailover<T>(
     tried,
     lastError: last
       ? `No connected model answered (${tried.length} tried). Last: ${last.candidate.label} — ${last.message}`
-      : 'No model is available for the gateway yet. Connect a provider under Settings → Free Providers (some need no key).',
+      : 'No model is available for the gateway yet. Connect a provider under Settings → Free LLM APIs (some need no key).',
   };
+}
+
+// ── What is resting ─────────────────────────────────────────────────────────
+
+export interface RestingItem {
+  /** "Groq · llama-3.3-70b" or "Groq (key 2)" */
+  what: string;
+  why: string;
+  until: number;
+}
+
+const WHY_TEXT: Record<FailureClass | 'limit', string> = {
+  cancel: 'cancelled',
+  client: 'bad request',
+  rate: 'rate limit hit',
+  quota: 'free quota used up',
+  auth: 'key refused',
+  model: 'model not available',
+  server: 'provider is down or slow',
+  limit: 'at its published limit',
+};
+
+/** Everything the gateway is setting aside right now, soonest to return first — for the status panel. */
+export function restingNow(health: Health, endpoints: Array<Pick<EndpointRecord, 'id' | 'label' | 'models' | 'apiKey' | 'apiKeys' | 'freeId'>>, now: number, labelOf: (owner: string) => string = (o) => o): RestingItem[] {
+  const out: RestingItem[] = [];
+  const owner = (id: string) => endpoints.find((e) => e.id === id)?.label ?? labelOf(id);
+  for (const [key, until] of health.until) {
+    if (until <= now) continue;
+    const why = WHY_TEXT[health.why.get(key) ?? 'server'];
+    if (key.startsWith('m:')) {
+      const [o, model] = key.slice(2).split('|');
+      out.push({ what: `${owner(o)} · ${model}`, why, until });
+    } else if (key.startsWith('k:')) {
+      const [o, idx] = key.slice(2).split('|');
+      const e = endpoints.find((x) => x.id === o);
+      const many = e ? endpointKeys(e).length > 1 : false;
+      out.push({ what: Number(idx) >= 0 && many ? `${owner(o)} (key ${Number(idx) + 1})` : owner(o), why, until });
+    }
+  }
+  // Local view of the published limits: who is at their free allowance without having been refused yet.
+  for (const e of endpoints) {
+    if (!e.freeId) continue;
+    const keys = endpointKeys(e);
+    const idxs = keys.length ? keys.map((_, i) => i) : [-1];
+    for (const m of e.models) {
+      const limits = limitsOf(e.freeId, m.id);
+      if (!Object.keys(limits).length) continue;
+      const waits = idxs.map((i) => limitUntil(health, { provider: 'custom', model: m.id, endpointId: e.id, keyIndex: i } as Candidate, limits, now));
+      if (waits.every((w) => w > 0)) out.push({ what: `${e.label} · ${m.id}`, why: WHY_TEXT.limit, until: Math.min(...waits) });
+    }
+  }
+  return out.sort((a, b) => a.until - b.until);
 }
 
 // ── Token counter ───────────────────────────────────────────────────────────

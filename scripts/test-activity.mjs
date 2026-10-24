@@ -24,14 +24,14 @@ test('terminal commands are described so the bubble can tell a download from a r
 
 import { renderMarkdown, markLive } from '../src/components/markdown.ts';
 
-test('a command block carries its words past the website-name chips, and lights up only when running', () => {
+test('a file block lights up only while it is being written; commands no longer get an animated box', () => {
   const cmd = 'curl -L https://drive.usercontent.google.com/download?id=abc -o g.zip';
   const html = renderMarkdown('```bash path=@terminal cwd=.\n' + cmd + '\n```');
-  assert.match(html, /data-activity="download"/);
-  assert.match(html, /Downloading from drive&#46;usercontent&#46;google&#46;com/);
-  assert.ok(!html.includes('is-live'));
-  assert.match(markLive(html, { runningCmd: cmd }), /code-block is-live/);
-  assert.ok(!markLive(html, { runningCmd: 'ls' }).includes('is-live'));
+  // the chat shows commands as "Ran N commands" (CommandRuns); a command block that does reach the renderer stays still
+  assert.ok(!html.includes('data-activity'));
+  assert.ok(!markLive(html, { runningCmd: cmd, liveLast: true }).includes('is-live'));
+  const bare = renderMarkdown('```bash\nls -la\n```');
+  assert.ok(!markLive(bare, { liveLast: true }).includes('is-live'));
   const file = renderMarkdown('```gd path=main.gd\nextends Node\n```');
   assert.match(markLive(file, { liveLast: true }), /code-block is-live"[^>]*data-activity="write"/);
   assert.ok(!markLive(renderMarkdown('```js\nx\n```'), { liveLast: true }).includes('is-live'));
