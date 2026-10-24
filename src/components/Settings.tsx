@@ -17,7 +17,7 @@ import { isShellHosted, loadKeys, maskKey, nimConfigured, saveKeys, validateNimK
 import { normalizeBase } from '@/lib/providers/model-list';
 import { parseBridgeInput } from '@/lib/bridge/parse';
 
-type Tab = 'guide' | 'keys' | 'free' | 'bridge' | 'secrets' | 'endpoints' | 'media' | 'deploy' | 'drive' | 'voice' | 'guard';
+type Tab = 'guide' | 'keys' | 'free' | 'tools' | 'bridge' | 'secrets' | 'endpoints' | 'media' | 'deploy' | 'drive' | 'voice' | 'guard';
 
 function Field({
   label,
@@ -1342,6 +1342,46 @@ function DriveTab() {
   );
 }
 
+/** Settings → Tools: optional engines that change how a build is done. Off by default. */
+function ToolsTab() {
+  const on = useWorkspace((s) => s.swarmEngine);
+  const setOn = useWorkspace((s) => s.setSwarmEngine);
+  const armed = useWorkspace((s) => s.swarmArmed);
+  return (
+    <div className="space-y-4">
+      <div className="space-y-3 rounded-xl border p-3" style={{ borderColor: 'var(--line)' }}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="mono text-[11px]" style={{ color: 'var(--accent)' }}>Swarm engine</p>
+            <p className="mt-1 text-[11.5px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
+              A team for bigger builds: an Architect splits the task into files, a Coder writes them, a Reviewer checks the logic and syntax, and an
+              Orchestrator puts it together. The terminal log shows each step as it happens.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={on}
+            aria-label="Swarm engine"
+            data-testid="swarm-switch"
+            onClick={() => setOn(!on)}
+            className="press shrink-0 rounded-full px-0.5 py-0.5 transition-colors"
+            style={{ width: 38, height: 22, background: on ? 'var(--accent)' : 'var(--line)' }}
+          >
+            <span className="block h-[18px] w-[18px] rounded-full bg-white transition-transform" style={{ transform: on ? 'translateX(16px)' : 'translateX(0)' }} />
+          </button>
+        </div>
+        <ul className="space-y-1 text-[11px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
+          <li>With this on, a <span className="mono" style={{ color: 'var(--accent)' }}>⬡ swarm</span> button appears under the message box. The swarm runs only when you tap it (it lights up); otherwise one model does the build, as before.</li>
+          <li>If you picked one model yourself, that model plays every role. With <span className="mono">Gateway · Auto</span> each role gets the kind of model it needs: reasoning for the Architect and Reviewer, code for the Coder.</li>
+          <li>It makes several model calls per build, so it uses more of your free limits than a single call.</li>
+        </ul>
+        {on && <p className="mono text-[10.5px]" style={{ color: armed ? 'var(--accent)' : 'var(--ink-faint)' }}>{armed ? 'swarm button is on: the next build uses the team' : 'swarm button is off: builds use one model'}</p>}
+      </div>
+    </div>
+  );
+}
+
 function GuardTab() {
   const fingerprints = useWorkspace((s) => s.fingerprints);
   const resetGuard = useWorkspace((s) => s.resetGuard);
@@ -2053,6 +2093,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'guide', label: 'Setup Guide' },
   { id: 'keys', label: 'API Keys' },
   { id: 'free', label: 'Free LLM APIs' },
+  { id: 'tools', label: 'Tools' },
   { id: 'bridge', label: 'Terminal Bridge' },
   { id: 'secrets', label: 'Secrets' },
   { id: 'endpoints', label: 'Custom Endpoints' },
@@ -2119,6 +2160,7 @@ export function Settings({ open, onClose }: { open: boolean; onClose: () => void
           {tab === 'guide' && <GuideTab />}
           {tab === 'keys' && <KeysTab />}
           {tab === 'free' && <FreeProviders goTo={setTab} />}
+          {tab === 'tools' && <ToolsTab />}
           {tab === 'bridge' && <BridgeTab />}
           {tab === 'secrets' && <SecretsTab />}
           {tab === 'endpoints' && <EndpointsTab goTo={setTab} />}

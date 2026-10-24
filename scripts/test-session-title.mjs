@@ -75,3 +75,11 @@ test('the retitle prompt no longer teaches the model "Casual Greeting", and smal
   assert.match(src, /isSmallTalk\(m\.content\)/);
   assert.match(src, /isGenericTitle\(title\)/);
 });
+
+test('a finished run never writes the raw message over the chat title', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../src/lib/agent/runtime.ts', import.meta.url), 'utf8');
+  for (const m of src.matchAll(/touchSession\(sessionId, \{([^}]*)\}\)/g)) {
+    if (/model: selection\.model/.test(m[1])) assert.equal(/\btitle:/.test(m[1]), false, 'the end-of-run touch must not set the title');
+  }
+});

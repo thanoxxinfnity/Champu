@@ -100,7 +100,7 @@ export function sanitizePath(path: string): string | null {
  */
 export function extractArtifacts(text: string, opts: { shellRuns?: boolean } = {}): Artifact[] {
   const lines = text.split('\n');
-  const out: Artifact[] = [];
+  const out: Array<Artifact | null> = [];
 
   let open: { fence: string; indent: string; meta: Meta; body: string[] } | null = null;
 
@@ -124,7 +124,7 @@ export function extractArtifacts(text: string, opts: { shellRuns?: boolean } = {
   // A block still streaming is emitted as incomplete so the UI can show progress.
   if (open) out.push(finish(open, false, opts));
 
-  return out.filter(Boolean);
+  return out.filter((a): a is Artifact => Boolean(a));
 }
 
 /**
@@ -157,9 +157,12 @@ function finish(
   open: { meta: Meta; body: string[] },
   complete: boolean,
   opts: { shellRuns?: boolean } = {},
-): Artifact {
+): Artifact | null {
   const content = open.body.join('\n');
   const { meta } = open;
+
+  // A block of SEARCH/REPLACE edits (see diff-edit.ts), even one the model fenced with a path, is a change to a file, not the file.
+  if (/^[ \t]*<{5,9}[ \t]*SEARCH\b/m.test(content) && /^[ \t]*>{5,9}[ \t]*REPLACE[ \t]*$/m.test(content) && meta.path !== '@terminal' && meta.path !== '@shell') return null;
 
   // While executing, a shell block with no path is a command to run, not a file to keep: a model that
   // forgets `path=@terminal` still means "run this", and a snippet-xxxx.sh nobody ran helps no one.

@@ -29,6 +29,7 @@ test('the download buttons point at the files the release workflows publish', ()
   const cases = [
     ['chomugiri-apk-release.yml', 'dl-chomugiri-btn'],
     ['chomu-horizon-apk.yml', 'dl-horizon-btn'],
+    ['jjk-arena-apk.yml', 'dl-cursed-btn'],
   ];
   for (const [file, id] of cases) {
     const text = wf(file);
@@ -47,6 +48,8 @@ test('each download sits inside the section that describes the product', () => {
   assert.doesNotMatch(section('chomugiri'), /dl-horizon-btn/);
   assert.match(section('horizon'), /dl-horizon-btn/);
   assert.doesNotMatch(section('horizon'), /dl-chomugiri-btn/);
+  assert.match(section('cursed'), /dl-cursed-btn/);
+  assert.doesNotMatch(section('cursed'), /dl-horizon-btn|dl-chomugiri-btn/);
 });
 
 test('only the listed products are on the site', () => {

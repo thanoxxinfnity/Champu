@@ -524,6 +524,9 @@ export function CommandDock() {
   const activeSuite = useWorkspace((s) => s.activeSuite);
   const heartbeat = useWorkspace((s) => s.heartbeat);
   const draftsEnabled = useWorkspace((s) => s.draftsEnabled);
+  const swarmEngine = useWorkspace((s) => s.swarmEngine);
+  const swarmArmed = useWorkspace((s) => s.swarmArmed);
+  const setSwarmArmed = useWorkspace((s) => s.setSwarmArmed);
   const setDraftsEnabled = useWorkspace((s) => s.setDraftsEnabled);
 
   const [value, setValue] = useState('');
@@ -946,6 +949,27 @@ export function CommandDock() {
             >
               ⑂ drafts
             </button>
+            {swarmEngine && (
+              <button
+                type="button"
+                data-testid="swarm-chip"
+                onClick={() => setSwarmArmed(!swarmArmed)}
+                aria-pressed={swarmArmed}
+                className="press mono rounded-lg border px-2 py-1.5 text-[10.5px]"
+                style={{
+                  borderColor: swarmArmed ? 'color-mix(in oklab, var(--accent) 55%, var(--line))' : 'var(--line)',
+                  color: swarmArmed ? 'var(--accent)' : 'var(--ink-faint)',
+                  background: swarmArmed ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : undefined,
+                }}
+                title={
+                  swarmArmed
+                    ? 'Swarm is on: a build goes through Architect, Coder, Reviewer and Orchestrator. Tap to go back to one model.'
+                    : 'Tap to build with the Swarm: Architect plans, Coder writes, Reviewer checks, Orchestrator puts it together.'
+                }
+              >
+                ⬡ swarm
+              </button>
+            )}
 
             {bridgeDown && (
               <span

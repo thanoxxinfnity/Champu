@@ -70,7 +70,7 @@ export interface MessageRecord {
   lane?: 'A' | 'B';
   /** Serialised plan snapshot at the time of the message. */
   plan?: unknown;
-  attachments?: Array<{ name: string; kind: string; bytes: number; dataUrl?: string; text?: string }>;
+  attachments?: Array<{ name: string; kind: string; bytes: number; dataUrl?: string; text?: string; caption?: string }>;
   error?: string;
   usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
   durationMs?: number;

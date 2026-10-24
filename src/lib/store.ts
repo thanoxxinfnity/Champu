@@ -31,6 +31,8 @@ export interface ChatAttachment {
   dataUrl?: string;
   /** Extracted text for code/documents. */
   text?: string;
+  /** For a file the assistant sent: what it is, in its words. */
+  caption?: string;
 }
 
 /** A message sent while a run was already going. It waits its turn instead of being refused. */
@@ -360,6 +362,12 @@ interface WorkspaceState {
   setDrafts: (drafts: Draft[] | null) => void;
   patchDraft: (id: string, patch: Partial<Draft>) => void;
   draftsEnabled: boolean;
+  /** Settings → Tools: the Swarm engine (Architect, Coder, Reviewer, Orchestrator) may be used. Off: one model does the build. */
+  swarmEngine: boolean;
+  setSwarmEngine: (on: boolean) => void;
+  /** The Swarm button in the dock is pressed: builds go through the swarm. Not remembered across a reload. */
+  swarmArmed: boolean;
+  setSwarmArmed: (on: boolean) => void;
   /** Which image model paints generated textures and assets. */
   imageModel: string;
   setImageModel: (model: string) => void;
@@ -777,6 +785,14 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   patchDraft: (id, patch) =>
     set((s) => ({ drafts: s.drafts?.map((d) => (d.id === id ? { ...d, ...patch } : d)) ?? null })),
   draftsEnabled: false,
+  swarmEngine: false,
+  setSwarmEngine: (on) => {
+    // Turning the engine off also lets go of the button, so a later switch-on does not start a swarm by surprise.
+    set({ swarmEngine: on, swarmArmed: on ? get().swarmArmed : false });
+    void setSetting('swarmEngine', on);
+  },
+  swarmArmed: false,
+  setSwarmArmed: (on) => set({ swarmArmed: on && get().swarmEngine }),
 
   imageModel: 'nim:black-forest-labs/flux.1-dev',
   setImageModel: (model) => {
@@ -881,6 +897,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     // is not invisible in the new "Deployed" view.
     else if (priorDeploy?.project) set({ deployHistory: [priorDeploy] });
     set({ draftsEnabled: await getSetting<boolean>('draftsEnabled', false) });
+    set({ swarmEngine: await getSetting<boolean>('swarmEngine', false) });
     set({ freeApis: await getSetting<boolean>('freeApis', true) });
     const savedUsage = await getSetting<UsageState | null>('gatewayUsage', null);
     if (savedUsage?.total) set({ usage: savedUsage });

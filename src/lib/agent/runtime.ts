@@ -64,10 +64,15 @@ import { endpointConfigFor } from '@/lib/providers/endpoint-models';
 import { complete, streamCompletion, type StreamCallbacks } from '@/lib/providers/chat-client';
 import { draftSystemSuffix, pickAngles } from './drafts';
 import { scanForSecrets, hasBlockingSecret } from '@/lib/security/secrets';
-import { appendMessage, createSession, getSetting, listMessages, saveDraftProgress, setSetting, titleFromInput, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
+import { appendMessage, createSession, getSetting, listMessages, saveDraftProgress, setSetting, titleFromInput, touchSession, updateMessage, upsertArtifact, recordRun, uid } from '@/lib/db/history';
 import { isGenericTitle, isSmallTalk, NEW_CHAT_TITLE } from '@/lib/text/session-title';
 import type { SuiteId } from '@/lib/db/schema';
 import { BridgeOfflineError } from '@/lib/bridge/client';
+import { applyEdits, parseEdits, type EditResult } from './diff-edit';
+import { buildRepoMap, projectView } from './repo-map';
+import { runSwarm, type Role as SwarmRole } from './swarm';
+import { gatewayKind } from '@/lib/providers/gateway';
+import { baseName, dataUrlOf, isImageMime, mimeFor, parseSendBlocks, textToBase64, type SendItem } from '@/lib/text/send-blocks';
 
 /**
  * Client-side agent runtime.
@@ -363,6 +368,60 @@ export async function executeCommand(
   }
 }
 
+// ── Pictures and files the assistant sends ──────────────────────────────────
+
+const MAX_SEND_BYTES = 10 * 1024 * 1024;
+
+/** Finds one item of a ```send block: a link, a file in the workspace, or a file on the terminal bridge. */
+async function resolveSend(item: SendItem): Promise<{ name: string; kind: string; bytes: number; dataUrl: string }> {
+  const name = baseName(item.source);
+  const kind = mimeFor(name);
+  if (item.url) return { name, kind, bytes: 0, dataUrl: item.source };
+
+  const files = useWorkspace.getState().files;
+  const hit = files.get(item.source) ?? [...files.values()].find((f) => f.path.endsWith(`/${item.source}`) || f.path === name);
+  if (hit && typeof hit.content === 'string') {
+    if (hit.content.startsWith('data:')) return { name, kind, bytes: Math.round((hit.content.length * 3) / 4), dataUrl: hit.content };
+    const bytes = new TextEncoder().encode(hit.content).length;
+    if (bytes > MAX_SEND_BYTES) throw new Error('the file is larger than 10 MB');
+    return { name, kind, bytes, dataUrl: dataUrlOf(kind, textToBase64(hit.content)) };
+  }
+
+  const bridge = useWorkspace.getState().bridge;
+  const hb = useWorkspace.getState().heartbeat.status;
+  if (hb !== 'online' && hb !== 'degraded') throw new Error('it is not in the workspace and the terminal bridge is offline');
+  const file = await bridge.readFile(item.source);
+  if (file.bytes > MAX_SEND_BYTES) throw new Error('the file is larger than 10 MB');
+  const base64 = file.binary ? (file.base64 ?? '') : textToBase64(file.content ?? '');
+  return { name, kind, bytes: file.bytes, dataUrl: dataUrlOf(kind, base64) };
+}
+
+/** Attaches what a reply sent to its message (shown inline or as a file to save), and says plainly what could not be found. */
+async function deliverSends(
+  content: string,
+  messageId: string,
+  ctx: { sessionId: string; suite: SuiteId; patch: (id: string, p: { attachments?: ChatAttachment[] }) => void; note: (text: string) => void },
+): Promise<void> {
+  const items = parseSendBlocks(content);
+  if (!items.length) return;
+  const attachments: Array<{ name: string; kind: string; bytes: number; dataUrl: string }> = [];
+  const missing: string[] = [];
+  for (const item of items) {
+    try {
+      attachments.push(await resolveSend(item));
+    } catch (err) {
+      missing.push(`${item.source} (${(err as Error).message})`);
+    }
+  }
+  if (attachments.length) {
+    const withCaption = attachments.map((a, i) => ({ ...a, caption: items.find((it) => baseName(it.source) === a.name)?.caption ?? items[i]?.caption }));
+    ctx.patch(messageId, { attachments: withCaption.map((a, i) => ({ id: `${messageId}_s${i}`, ...a })) });
+    await updateMessage(messageId, { attachments: withCaption });
+    useWorkspace.getState().appendTerminal({ stream: 'system', text: `⇧ sent ${attachments.length} file${attachments.length === 1 ? '' : 's'}: ${attachments.map((a) => a.name).join(', ')}` });
+  }
+  if (missing.length) ctx.note(`Could not send ${missing.join('; ')}.`);
+}
+
 // ── Planning ────────────────────────────────────────────────────────────────
 
 let memoryFileLoaded = false;
@@ -532,21 +591,47 @@ const USED_REA = /\brea\s+(analyze|inspect|decompile|decode-android-resources|an
 const USED_WEBCMD = /\bwebcmd\s+(\S+\s+)?(browser|session|profile|site|list|doctor|auth)\b/;
 const MAX_OPS_TURNS = 6;
 const MAX_BROWSE_TURNS = 12;
-const MAX_FIX_TURNS = 3;
+const MAX_FIX_TURNS = 4;
 
-/** The workspace's text files as they are now, for a model that has to fix them: paths and contents, bounded. */
-function projectSnapshot(maxChars = 36_000): string {
-  const out: string[] = [];
-  let used = 0;
-  for (const f of useWorkspace.getState().files.values()) {
-    if (typeof f.content !== 'string' || f.content.startsWith('data:') || /\.min\.js$|package-lock\.json$/.test(f.path) || f.path.startsWith('untitled/')) continue;
-    const piece = `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``;
-    if (used + piece.length > maxChars) { out.push(`### ${f.path}\n(left out: the snapshot is full)`); continue; }
-    used += piece.length;
-    out.push(piece);
-  }
-  return `Current project files (what is on disk now):\n\n${out.join('\n\n')}`;
+/**
+ * The workspace as a model that has to fix it should see it: a small project whole, a big one as a map of what every file defines plus
+ * the files the request and the error point at in full (see repo-map.ts). Its changes then come back as edit blocks (diff-edit.ts).
+ */
+function projectSnapshot(query = '', focus: string[] = [], maxChars = 36_000): string {
+  const files = [...useWorkspace.getState().files.values()].map((f) => ({ path: f.path, content: f.content }));
+  const view = projectView(files, { query, focus, fullChars: maxChars });
+  return `Current project files (what is on disk now):\n\n${view.text}`;
 }
+
+/** Paths the text names that exist in the workspace (a build error names the files it broke on). */
+function pathsNamedIn(text: string): string[] {
+  const known = [...useWorkspace.getState().files.keys()];
+  return known.filter((p) => text.includes(p) || text.includes(p.split('/').pop()!)).slice(0, 8);
+}
+
+/**
+ * Applies the edit blocks in a reply to the files already in the workspace. What worked is saved like any file; what did not is
+ * returned so the caller can ask again with the reason.
+ */
+function applyReplyEdits(content: string, ctx: { sessionId: string; suite: SuiteId; save: (file: FileArtifact) => void }): { files: FileArtifact[]; results: EditResult[] } {
+  const edits = parseEdits(content);
+  if (!edits.length) return { files: [], results: [] };
+  const current = new Map<string, string>();
+  for (const f of useWorkspace.getState().files.values()) if (typeof f.content === 'string') current.set(f.path, f.content);
+  const { files, results } = applyEdits(current, edits);
+  const out: FileArtifact[] = [];
+  for (const r of results) {
+    if (!r.ok) continue;
+    const text = files.get(r.path)!;
+    const file: FileArtifact = { kind: 'file', path: r.path, language: languageForPath(r.path), content: text, complete: true, bytes: new TextEncoder().encode(text).length };
+    ctx.save(file);
+    void upsertArtifact({ sessionId: ctx.sessionId, suite: ctx.suite, path: file.path, language: file.language, content: file.content, bytes: file.bytes });
+    out.push(file);
+  }
+  return { files: out, results };
+}
+
+const EDIT_FORMAT_HINT = 'To change a file that already exists, write only the changed part: <<<<<<< SEARCH path=<file> / the lines exactly as they are now / ======= / the new lines / >>>>>>> REPLACE (empty SEARCH creates a new file). Write a whole file only when most of it changes.';
 
 /** Earlier page snapshots are old news once the page has moved on: keep the first lines, drop the rest, so a long session stays small. */
 function shrinkOldFeeds(convo: ChatMessage[]): ChatMessage[] {
@@ -583,7 +668,7 @@ function fixFollowUp(feed: string, last: boolean): string {
       ? 'This is the last attempt. Do not run anything more: say plainly what is wrong and what the user should do next.'
       : network
         ? 'This looks like the package server refusing or dropping requests, not a mistake in the code. Do not change any file. Wait, then run the SAME build again: ```bash path=@terminal cwd=<project>``` with `sleep 60 && <the same build command>`.'
-        : 'Read the first real error (a compile error names a file and a line). Re-emit each broken file IN FULL in a ```<lang> path=<file>``` block with the fix, then run the build again in a ```bash path=@terminal``` block. Fix the cause, not the symptom; do not delete features to make it pass.',
+        : 'Read the first real error (a compile error names a file and a line). Fix each broken file with an edit block, not by rewriting it (<<<<<<< SEARCH path=<file> / the lines exactly as they are now / ======= / the fixed lines / >>>>>>> REPLACE), copying the SEARCH lines from the project above; write a whole file in a ```<lang> path=<file>``` block only when most of it changes. Then run the build again in a ```bash path=@terminal``` block. Fix the cause, not the symptom; do not delete features to make it pass.',
   ].join('\n');
 }
 
@@ -1224,6 +1309,9 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       failedApproaches: guard.bannedApproaches(),
       attachments: attachments.map((a) => ({ name: a.name, kind: a.kind, bytes: a.bytes })),
       workspaceFiles: [...useWorkspace.getState().files.keys()],
+      repoMap: useWorkspace.getState().files.size >= 2
+        ? buildRepoMap([...useWorkspace.getState().files.values()].map((f) => ({ path: f.path, content: f.content })), { query: modelInput, maxChars: 4500 })
+        : undefined,
       buildingSite: wantsSite(modelInput),
       threejsSkills: wantsSite(modelInput) ? threejsSkillsPrompt(modelInput) : undefined,
       ...(openDesign ? { openDesign } : {}),
@@ -1319,7 +1407,63 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       onError: (message) => patch(assistantId, { error: message }),
     });
 
-    let result = await streamCompletion(
+    // Replies that may carry a ```send block (the main one and each follow-up turn), delivered once the work is done.
+    const sendQueue: Array<{ id: string; content: string }> = [];
+
+    // ── Swarm engine: Architect → Coder → Reviewer → Orchestrator instead of one model call ──
+    // Only for a build, only with the switch on (Settings → Tools) and the Swarm button armed in the dock. A pinned model does every
+    // role itself; with the Gateway selected each role gets the kind of model it needs (reasoning, code, reasoning).
+    const swarmState = useWorkspace.getState();
+    const swarming = lane === 'B' && swarmState.swarmEngine && swarmState.swarmArmed && !classification.ops && !classification.browse;
+    const runSwarmReply = async (): Promise<Awaited<ReturnType<typeof streamCompletion>>> => {
+      const gateway = gatewayKind(selection.model, selection.provider);
+      const KIND: Record<SwarmRole, string> = { architect: 'reasoning', coder: 'code', reviewer: 'reasoning', orchestrator: 'auto' };
+      const progress: string[] = [];
+      const show = (line: string) => {
+        progress.push(line);
+        patch(assistantId, { content: progress.join('\n') });
+        useWorkspace.getState().appendTerminal({ stream: 'system', text: line });
+      };
+      const PHRASE: Record<SwarmRole, string> = { architect: 'Architect is planning the files…', coder: 'Coder is writing…', reviewer: 'Reviewer is checking the code…', orchestrator: 'Putting the pieces together…' };
+      try {
+        const out = await runSwarm(
+          modelInput,
+          {
+            ask: async (role, roleSystem, user, o) => {
+              if (controller.signal.aborted) throw new Error('Run cancelled.');
+              narrate(sessionId, PHRASE[role]);
+              think(true, PHRASE[role]);
+              const system = role === 'coder' ? `${systemPrompt}\n\n## YOUR ROLE IN THIS RUN\n${roleSystem}` : roleSystem;
+              const r = await streamCompletion(
+                {
+                  provider: selection.provider,
+                  model: gateway ? `gateway/${KIND[role]}` : selection.model,
+                  messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+                  temperature: role === 'coder' ? 0.2 : 0.1,
+                  maxTokens: o?.maxTokens ?? 8192,
+                  reasoningEffort: 'low',
+                  json: o?.json,
+                  custom: gateway ? undefined : custom,
+                },
+                {},
+                controller.signal,
+              );
+              if (r.error && !r.content.trim()) throw new Error(r.error);
+              return r.content;
+            },
+            log: show,
+            step: (role, state, detail) => useWorkspace.getState().appendTerminal({ stream: 'system', text: `   ${role} ${state}${detail ? ` · ${detail}` : ''}` }),
+            files: () => [...useWorkspace.getState().files.values()].map((f) => ({ path: f.path, content: f.content })),
+            signal: controller.signal,
+          },
+        );
+        return { content: out.content, reasoning: '', finishReason: 'stop' };
+      } catch (err) {
+        return { content: progress.join('\n'), reasoning: '', error: (err as Error).message };
+      }
+    };
+
+    let result = swarming ? await runSwarmReply() : await streamCompletion(
       {
         provider: selection.provider,
         model: selection.model,
@@ -1446,6 +1590,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       durationMs: Date.now() - startedAt,
     });
 
+    sendQueue.push({ id: assistantId, content: result.content });
     void appendMessage({
       id: assistantId,
       sessionId,
@@ -1487,6 +1632,65 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
         content: file.content,
         bytes: file.bytes,
       });
+    }
+
+    // ── Edit blocks: only the changed lines of a file that already exists ──
+    {
+      const edited = applyReplyEdits(result.content, { sessionId, suite, save: upsertFile });
+      if (edited.results.length) {
+        for (const f of edited.files) {
+          const at = files.findIndex((x) => x.path === f.path);
+          if (at >= 0) files[at] = f;
+          else files.push(f);
+        }
+        const failed = edited.results.filter((r) => !r.ok);
+        const okCount = edited.results.length - failed.length;
+        useWorkspace.getState().appendTerminal({ stream: 'system', text: `✎ ${okCount} of ${edited.results.length} edit${edited.results.length === 1 ? '' : 's'} applied${failed.length ? ` · ${failed.length} did not match` : ''}` });
+        if (failed.length) {
+          // One more try, with the reasons and the files as they are: a model that mis-copied a line usually gets it right when shown.
+          const repairId = uid('msg');
+          const repairAt = Date.now();
+          emit({ id: repairId, role: 'assistant', content: '', lane, model: selection.model, provider: selection.provider, createdAt: repairAt, streaming: true });
+          think(true, 'Fixing edits that did not match…');
+          const repairPrompt = [
+            `${modelInput}`,
+            '',
+            projectSnapshot(modelInput, failed.map((r) => r.path)),
+            '',
+            'These edits did not apply:',
+            ...failed.map((r) => `- ${r.error}`),
+            '',
+            `Send them again. ${EDIT_FORMAT_HINT} Copy the SEARCH lines from the files above exactly, or write the whole file in a \`\`\`<lang> path=<file>\`\`\` block.`,
+          ].join('\n');
+          const again = await streamCompletion(
+            { provider: selection.provider, model: selection.model, messages: [messages[0]!, { role: 'user', content: repairPrompt }], temperature: 0.2, maxTokens: 8192, reasoningEffort: 'low', custom },
+            { onDelta: (_d, part) => patch(repairId, { content: part }), onReasoning: () => narrate(sessionId, 'Reasoning…'), onError: (message) => patch(repairId, { error: message }) },
+            controller.signal,
+          );
+          patch(repairId, { content: again.content, streaming: false, error: again.error, durationMs: Date.now() - repairAt });
+          void appendMessage({ id: repairId, sessionId, suite, role: 'assistant', content: again.content, createdAt: repairAt, model: selection.model, provider: selection.provider, lane, error: again.error });
+          const redo = filesOf(extractArtifacts(again.content)).filter((f) => f.complete);
+          for (const f of redo) {
+            upsertFile(f);
+            void upsertArtifact({ sessionId, suite, path: f.path, language: f.language, content: f.content, bytes: f.bytes });
+            const at = files.findIndex((x) => x.path === f.path);
+            if (at >= 0) files[at] = f;
+            else files.push(f);
+          }
+          const second = applyReplyEdits(again.content, { sessionId, suite, save: upsertFile });
+          for (const f of second.files) {
+            const at = files.findIndex((x) => x.path === f.path);
+            if (at >= 0) files[at] = f;
+            else files.push(f);
+          }
+          const still = second.results.filter((r) => !r.ok);
+          if (still.length) {
+            const note = { id: uid('msg'), role: 'system' as const, content: `${still.length} edit${still.length === 1 ? '' : 's'} still did not match and ${still.length === 1 ? 'was' : 'were'} left out: ${still.map((r) => r.error).join(' ')}`, createdAt: Date.now() };
+            emit(note);
+            void appendMessage({ ...note, sessionId, suite });
+          }
+        }
+      }
     }
 
     // ── Websites: icons are drawn, never typed ──────────────────────────────
@@ -2503,13 +2707,13 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
             } else {
               // Each fix turn stands alone: the system prompt, the request, the project as it is now, and what the last run said.
               // Carrying the whole first reply and every earlier turn is what made a long-context model start emitting noise.
-              convo = [messages[0]!, { role: 'user', content: `${modelInput}\n\n${projectSnapshot()}\n\n${followUp}` }];
+              convo = [messages[0]!, { role: 'user', content: `${modelInput}\n\n${projectSnapshot(modelInput, pathsNamedIn(feed))}\n\n${followUp}` }];
             }
             const turnId = uid('msg');
             const turnAt = Date.now();
             emit({ id: turnId, role: 'assistant', content: '', lane, model: selection.model, provider: selection.provider, createdAt: turnAt, streaming: true });
             useWorkspace.getState().patchRun(sessionId, { assistantId: turnId });
-            think(true, classification.ops ? 'Reading what came back…' : 'Reading the build error…');
+            think(true, classification.ops ? 'Reading what came back…' : `Reading the build error… (try ${turn + 1}/${maxTurns})`);
             const reply = await streamCompletion(
               { provider: selection.provider, model: selection.model, messages: convo, temperature: 0.25, maxTokens: classification.ops ? 4096 : 8192, reasoningEffort: 'low', custom },
               {
@@ -2542,6 +2746,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
             const said = answer.content.trim() ? answer.content : opsFallback(feed, Boolean(answer.error));
             patch(turnId, { content: said, streaming: false, error: answer.error, durationMs: Date.now() - turnAt });
             void appendMessage({ id: turnId, sessionId, suite, role: 'assistant', content: said, createdAt: turnAt, model: selection.model, provider: selection.provider, lane, error: answer.error });
+            sendQueue.push({ id: turnId, content: said });
             convo = [...convo, { role: 'assistant', content: said }];
             const replyArtifacts = extractArtifacts(answer.content, { shellRuns: true });
             const more = commandsOf(replyArtifacts).filter((c) => c.complete && c.command);
@@ -2559,7 +2764,25 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
                 useWorkspace.getState().appendTerminal({ stream: 'system', text: `⚠  file sync failed: ${(err as Error).message}` });
               }
             }
-            if (answer.error || !more.length) break;
+            // Edit blocks in a fix turn change the files in place, then the same sync as above.
+            const fixEdits = applyReplyEdits(answer.content, { sessionId, suite, save: upsertFile });
+            const editFailures = fixEdits.results.filter((r) => !r.ok);
+            if (fixEdits.results.length) {
+              useWorkspace.getState().appendTerminal({ stream: 'system', text: `✎ self-heal ${turn + 1}/${maxTurns}: ${fixEdits.files.length} of ${fixEdits.results.length} edit${fixEdits.results.length === 1 ? '' : 's'} applied${editFailures.length ? `, ${editFailures.length} did not match` : ''}` });
+            }
+            if (fixEdits.files.length) {
+              try {
+                await useWorkspace.getState().bridge.writeFiles(fixEdits.files.map((f) => ({ path: f.path, content: f.content })));
+                useWorkspace.getState().appendTerminal({ stream: 'system', text: `⇪ re-synced ${fixEdits.files.length} edited file${fixEdits.files.length === 1 ? '' : 's'} to the bridge` });
+              } catch (err) {
+                useWorkspace.getState().appendTerminal({ stream: 'system', text: `⚠  file sync failed: ${(err as Error).message}` });
+              }
+            }
+            if (answer.error || (!more.length && !editFailures.length)) break;
+            if (!more.length && editFailures.length) {
+              feed = `Your last edit blocks did not apply:\n${editFailures.map((r) => `- ${r.error}`).join('\n')}\n\nThe build was still failing. ${EDIT_FORMAT_HINT}`;
+              continue;
+            }
             const lines: string[] = [];
             for (const c of more) {
               if (controller.signal.aborted) break;
@@ -2641,6 +2864,21 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       }
     }
 
+    // ── Pictures and files the reply sent ───────────────────────────────────
+    // After the commands, so a file a command just made (a screenshot, a build output) is there to be found.
+    for (const reply of sendQueue) {
+      await deliverSends(reply.content, reply.id, {
+        sessionId,
+        suite,
+        patch: (id, p) => patch(id, p),
+        note: (text) => {
+          const note = { id: uid('msg'), role: 'system' as const, content: text, createdAt: Date.now() };
+          emit(note);
+          void appendMessage({ ...note, sessionId, suite });
+        },
+      });
+    }
+
     // ── Settle the checklist ────────────────────────────────────────────────
     //
     // Nothing used to complete a task, so the HUD read "0/7 complete" through a
@@ -2683,8 +2921,9 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       })();
     }
 
+    // The title is not touched here: it was set when the chat began (titleFromInput) and is renamed by retitleSession once there is
+    // a topic. Writing the raw message here made every chat wear its last message as its name — "hi" included.
     void touchSession(sessionId, {
-      title: input.slice(0, 80) || 'Untitled run',
       model: selection.model,
       provider: selection.provider,
       lane,

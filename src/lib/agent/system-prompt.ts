@@ -70,6 +70,13 @@ You are executing a build, not discussing one.
   \`\`\`
   Only when the bridge reports ONLINE. When it is OFFLINE, produce the artifacts on the browser side and state which step is parked on the bridge.
 - Do not re-emit a file you already emitted this run unless its content actually changes.
+- A file that already exists is changed with an edit block, not by writing it all again. Write only the lines that change, with the lines around them as they are now:
+  <<<<<<< SEARCH path=src/lib/thing.ts
+  the lines exactly as they are in the file now
+  =======
+  the new lines
+  >>>>>>> REPLACE
+  Copy the SEARCH lines from the project shown to you, character for character; include enough neighbouring lines that they match one place only. Several blocks may follow each other. An empty SEARCH creates a new file. Write a whole file in a path= block only when it is new or most of it changes.
 
 ### Terminal tasks: do them, do not discuss them
 When the user asks for something on the machine (download, install, set up, run, check), the answer is a command that RUNS, not a command pasted into chat.
@@ -736,6 +743,8 @@ export interface PromptContext {
   capabilities?: string[];
   attachments?: Array<{ name: string; kind: string; bytes: number }>;
   workspaceFiles?: string[];
+  /** Every file and what it defines, ranked by the request (repo-map.ts), so a big project is known without being pasted. */
+  repoMap?: string;
   /** The request is for a website, so the web contract applies. */
   buildingSite?: boolean;
   /**
@@ -853,6 +862,10 @@ export function buildSystemPrompt(ctx: PromptContext): string {
 
   if (ctx.capabilities?.length) {
     parts.push(`## AVAILABLE GENERATION CAPABILITIES\n${ctx.capabilities.join(', ')}`);
+  }
+
+  if (ctx.repoMap) {
+    parts.push(`## PROJECT MAP (where things are; change files with edit blocks)\n${ctx.repoMap}`);
   }
 
   if (ctx.workspaceFiles?.length) {

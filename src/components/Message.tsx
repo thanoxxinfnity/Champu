@@ -12,6 +12,7 @@ import type { ChatMessageView } from '@/lib/store';
 import { GamePlayer } from '@/components/GamePlayer';
 import { CommandRuns } from '@/components/CommandRuns';
 import { commandCount, splitCommandBlocks } from '@/lib/text/command-blocks';
+import { isImageMime, stripSendBlocks } from '@/lib/text/send-blocks';
 
 function Avatar({ role, lane }: { role: string; lane?: 'A' | 'B' }) {
   const isUser = role === 'user';
@@ -110,10 +111,50 @@ function AttachmentChips({ attachments }: { attachments: NonNullable<ChatMessage
   );
 }
 
+/** The reply as words: a ```send block names a file to attach, it is not text to read. */
+function shown(content: string): string {
+  return /(^|\n)[ \t]*(`{3,}|~{3,})[ \t]*send\b|path=@send/.test(content) ? stripSendBlocks(content) : content;
+}
+
+const fmtBytes = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : n ? `${n} B` : '');
+
+/** Pictures the assistant sent show in the chat; every file can be saved. */
+function SentFiles({ files }: { files: NonNullable<ChatMessageView['attachments']> }) {
+  return (
+    <div className="mt-2 space-y-2" data-testid="sent-files">
+      {files.map((a) => {
+        const image = isImageMime(a.kind) && a.dataUrl;
+        const remote = a.dataUrl?.startsWith('http');
+        return (
+          <figure key={a.id} className="max-w-full">
+            {image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={a.dataUrl} alt={a.caption ?? a.name} loading="lazy" className="max-h-[60vh] max-w-full rounded-xl border" style={{ borderColor: 'var(--line)' }} />
+            ) : null}
+            <figcaption className="mt-1 flex flex-wrap items-center gap-2">
+              <a
+                href={a.dataUrl}
+                download={remote ? undefined : a.name}
+                target={remote ? '_blank' : undefined}
+                rel="noopener noreferrer"
+                className="press mono inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[11.5px]"
+                style={{ borderColor: 'color-mix(in oklab, var(--accent) 40%, var(--line))', color: 'var(--accent)' }}
+              >
+                ↓ {a.name}{fmtBytes(a.bytes) ? ` · ${fmtBytes(a.bytes)}` : ''}
+              </a>
+              {a.caption ? <span className="text-[11.5px]" style={{ color: 'var(--ink-dim)' }}>{a.caption}</span> : null}
+            </figcaption>
+          </figure>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Message({ message }: { message: ChatMessageView }) {
   // The reply as prose, with the commands it ran pulled out into one "Ran N commands" line each (CommandRuns).
   const segments = useMemo(
-    () => (message.role === 'user' ? [] : splitCommandBlocks(message.content, { shellRuns: message.lane === 'B' })),
+    () => (message.role === 'user' ? [] : splitCommandBlocks(shown(message.content), { shellRuns: message.lane === 'B' })),
     [message.content, message.role, message.lane],
   );
   const hasCommands = commandCount(segments) > 0;
@@ -131,7 +172,7 @@ export function Message({ message }: { message: ChatMessageView }) {
   const html = useMemo(() => {
     if (message.role === 'user' || hasCommands) return null;
     const open = message.streaming && (message.content.match(/^\s*(```|~~~)/gm)?.length ?? 0) % 2 === 1;
-    return markLive(renderMarkdown(message.content), { liveLast: open });
+    return markLive(renderMarkdown(shown(message.content)), { liveLast: open });
   }, [message.role, message.content, message.streaming, hasCommands]);
 
   const isUser = message.role === 'user';
@@ -179,7 +220,7 @@ export function Message({ message }: { message: ChatMessageView }) {
           )}
         </div>
 
-        {message.attachments?.length ? <AttachmentChips attachments={message.attachments} /> : null}
+        {message.attachments?.length && isUser ? <AttachmentChips attachments={message.attachments} /> : null}
 
         {message.reasoning ? (
           <ReasoningDrawer reasoning={message.reasoning} streaming={message.streaming} />
@@ -216,6 +257,8 @@ export function Message({ message }: { message: ChatMessageView }) {
             <span className="skeleton h-3 w-[54%]" style={{ animationDelay: '140ms' }} />
           </div>
         )}
+
+        {message.attachments?.length && !isUser ? <SentFiles files={message.attachments} /> : null}
 
         {message.offer ? <OfferDownload offer={message.offer} /> : null}
 
