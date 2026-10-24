@@ -1,6 +1,7 @@
 'use client';
 
 import { VoiceTab } from './VoiceTab';
+import { FreeProviders } from './FreeProviders';
 
 import { useCallback, useEffect, useState } from 'react';
 import { DIALECT_LABELS, dialectFromUrl, type Dialect } from '@/lib/providers/dialects';
@@ -15,7 +16,7 @@ import { isShellHosted, loadKeys, maskKey, nimConfigured, saveKeys, validateNimK
 import { normalizeBase } from '@/lib/providers/model-list';
 import { parseBridgeInput } from '@/lib/bridge/parse';
 
-type Tab = 'guide' | 'keys' | 'bridge' | 'secrets' | 'endpoints' | 'media' | 'deploy' | 'drive' | 'voice' | 'guard';
+type Tab = 'guide' | 'keys' | 'free' | 'bridge' | 'secrets' | 'endpoints' | 'media' | 'deploy' | 'drive' | 'voice' | 'guard';
 
 function Field({
   label,
@@ -1795,6 +1796,12 @@ function GuideTab() {
       state: nimCount > 0 ? `${nimCount} NVIDIA models ready` : 'not set — Pollinations still works',
     },
     {
+      done: endpoints.some((e) => e.freeId),
+      title: 'Connect free providers (optional)',
+      body: 'Free Providers lists every LLM API with a permanent free tier — Groq, Gemini, OpenRouter, Mistral, Cloudflare, Cohere and more. Paste all your keys at once (several keys per provider are used in turn); three providers need no key at all. Then pick “Gateway · Auto” in the model switcher: one provider that uses all of them and moves to the next model when one is busy or out of quota. A token meter counts what you use.',
+      state: endpoints.some((e) => e.freeId) ? `${endpoints.filter((e) => e.freeId).length} connected` : 'none — optional',
+    },
+    {
       done: endpoints.length > 0,
       title: 'Add your own endpoint (optional)',
       body: 'Custom Endpoints takes any OpenAI-compatible server. Detection fills in the model list; if the server does not publish one, type the model id yourself and add it anyway.',
@@ -2017,6 +2024,7 @@ function ImageModelField() {
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'guide', label: 'Setup Guide' },
   { id: 'keys', label: 'API Keys' },
+  { id: 'free', label: 'Free Providers' },
   { id: 'bridge', label: 'Terminal Bridge' },
   { id: 'secrets', label: 'Secrets' },
   { id: 'endpoints', label: 'Custom Endpoints' },
@@ -2082,6 +2090,7 @@ export function Settings({ open, onClose }: { open: boolean; onClose: () => void
         <div className="flex-1 overflow-y-auto p-4">
           {tab === 'guide' && <GuideTab />}
           {tab === 'keys' && <KeysTab />}
+          {tab === 'free' && <FreeProviders goTo={setTab} />}
           {tab === 'bridge' && <BridgeTab />}
           {tab === 'secrets' && <SecretsTab />}
           {tab === 'endpoints' && <EndpointsTab />}

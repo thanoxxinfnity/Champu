@@ -268,6 +268,7 @@ function ModelSwitcher() {
   const selection = useWorkspace((s) => s.selection);
   const setSelection = useWorkspace((s) => s.setSelection);
   const loadModels = useWorkspace((s) => s.loadModels);
+  const gatewayLast = useWorkspace((s) => s.gatewayLast);
   const loading = useWorkspace((s) => s.modelsLoading);
 
   const [open, setOpen] = useState(false);
@@ -327,7 +328,8 @@ function ModelSwitcher() {
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(m);
     }
-    return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    // The gateway comes first: it is the one entry that stands for all the others.
+    return [...groups.entries()].sort((a, b) => (a[0] === 'Gateway' ? -1 : b[0] === 'Gateway' ? 1 : a[0].localeCompare(b[0])));
   }, [chatModels]);
 
   const active = models.find((m) => m.provider === selection.provider && m.id === selection.model);
@@ -443,10 +445,16 @@ Open Settings → API Keys to add
                         >
                           {shortName(model)}
                         </span>
-                        {model.id !== shortName(model) && (
-                          <span className="mono break-all text-[9.5px] leading-snug" style={{ color: 'var(--ink-faint)' }}>
-                            {model.id}
+                        {model.endpointId === 'gateway' ? (
+                          <span className="text-[10px] leading-snug" style={{ color: 'var(--ink-faint)' }}>
+                            {model.note}
                           </span>
+                        ) : (
+                          model.id !== shortName(model) && (
+                            <span className="mono break-all text-[9.5px] leading-snug" style={{ color: 'var(--ink-faint)' }}>
+                              {model.id}
+                            </span>
+                          )
                         )}
                       </span>
                       <span className="ml-auto flex shrink-0 gap-1">
@@ -476,6 +484,11 @@ Open Settings → API Keys to add
                 })}
               </div>
             ))}
+          </div>
+          <div className="mono shrink-0 border-t px-3 py-1.5 text-[9.5px] leading-snug" style={{ borderColor: 'var(--line)', color: 'var(--ink-faint)' }}>
+            {gatewayLast
+              ? `Gateway last used ${gatewayLast.label}${gatewayLast.switches ? ` (skipped ${gatewayLast.switches})` : ''}`
+              : 'More models: Settings → Free Providers'}
           </div>
         </div>
       )}

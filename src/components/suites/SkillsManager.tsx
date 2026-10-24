@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { withKeys } from '@/lib/keys';
+import { complete } from '@/lib/providers/chat-client';
+import { endpointConfigFor } from '@/lib/providers/endpoint-models';
 import { db, isBrowser, type SkillRecord } from '@/lib/db/schema';
 import { BUILTIN_SKILLS, parseGeneratedSkill, toRecord } from '@/lib/skills/registry';
 import { useWorkspace } from '@/lib/store';
@@ -200,32 +201,30 @@ export function SkillsManager() {
     try {
       const template = BUILTIN_SKILLS.find((s) => s.command === 'skill')!.template.replace('{{input}}', brief);
 
-      // No timeout at all meant a stalled provider hung the "generating"
-      // state forever.
-      const res = await fetch('/api/chat', withKeys({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // A stalled provider must not hang the "generating" state forever, so the call has its own timeout.
+      let content = '';
+      try {
+        content = await complete({
           provider: selection.provider,
           model: selection.model,
-          stream: false,
           json: true,
           maxTokens: 2000,
+          custom: endpointConfigFor(useWorkspace.getState().endpoints, selection),
           messages: [
             { role: 'system', content: 'You author reusable prompt skills. Reply with one JSON object and nothing else.' },
             { role: 'user', content: template },
           ],
-        }),
-        signal: AbortSignal.timeout(60_000),
-      }));
-
-      const data = (await res.json()) as { content?: string; error?: string };
-      if (!res.ok || !data.content) {
-        setError(data.error ?? 'The model returned nothing usable.');
+        }, undefined, 60_000);
+      } catch (e) {
+        setError((e as Error).message || 'The model returned nothing usable.');
+        return;
+      }
+      if (!content) {
+        setError('The model returned nothing usable.');
         return;
       }
 
-      const parsed = parseGeneratedSkill(data.content);
+      const parsed = parseGeneratedSkill(content);
       if (!parsed) {
         setError('The model did not return a valid skill object. Try rephrasing the brief.');
         return;

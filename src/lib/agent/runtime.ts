@@ -61,6 +61,7 @@ import { wantsPonytail, PONYTAIL_RULE } from '@/lib/pipeline/ponytail';
 import { loadMemoryFile, pipelineState, reviewFiles, saveMemoryFile, setPipeline } from '@/lib/pipeline/run';
 import { PLANNER_NIM_MODEL } from '@/lib/providers/registry';
 import { endpointConfigFor } from '@/lib/providers/endpoint-models';
+import { complete, streamCompletion, type StreamCallbacks } from '@/lib/providers/chat-client';
 import { draftSystemSuffix, pickAngles } from './drafts';
 import { scanForSecrets, hasBlockingSecret } from '@/lib/security/secrets';
 import { appendMessage, createSession, getSetting, listMessages, saveDraftProgress, setSetting, titleFromInput, touchSession, upsertArtifact, recordRun, uid } from '@/lib/db/history';
@@ -86,165 +87,6 @@ export interface SendOptions {
   /** The session this message belongs to; defaults to the one on screen. */
   sessionId?: string;
 }
-
-interface StreamCallbacks {
-  onDelta?: (delta: string, full: string) => void;
-  onReasoning?: (delta: string, full: string) => void;
-  onError?: (message: string) => void;
-}
-
-// ── Transport ───────────────────────────────────────────────────────────────
-
-async function streamCompletion(
-  body: {
-    provider: ProviderId;
-    model: string;
-    messages: ChatMessage[];
-    temperature?: number;
-    maxTokens?: number;
-    reasoningEffort?: 'low' | 'medium' | 'high';
-    json?: boolean;
-    custom?: CustomEndpointConfig;
-  },
-  callbacks: StreamCallbacks,
-  signal?: AbortSignal,
-): Promise<{ content: string; reasoning: string; usage?: StreamFrame & { type: 'usage' }; error?: string; finishReason?: string }> {
-  let content = '';
-  let reasoning = '';
-  let usage: (StreamFrame & { type: 'usage' }) | undefined;
-  let error: string | undefined;
-  let finishReason: string | undefined;
-
-  let res: Response;
-  try {
-    // Same failure shape as complete(): a raw caller signal with no timeout
-    // means a genuinely stuck connection (not the upstream provider erroring,
-    // which the server route already bounds internally) never resolves or
-    // rejects, and the whole chat run — the main path through this app — hangs
-    // forever with nothing to catch. 300s matches the server route's own
-    // maxDuration and openai-compat.ts's streamChat() default.
-    const timeout = AbortSignal.timeout(300_000);
-    const composed = signal ? AbortSignal.any([signal, timeout]) : timeout;
-    res = await fetch('/api/chat', withKeys({
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...body, stream: true }),
-      signal: composed,
-    }));
-  } catch (err) {
-    const message = (err as Error).name === 'AbortError' ? 'Run cancelled.' : `Gateway unreachable: ${(err as Error).message}`;
-    callbacks.onError?.(message);
-    return { content, reasoning, error: message };
-  }
-
-  if (!res.ok) {
-    const payload = (await res.json().catch(() => ({}))) as { error?: string };
-    const message = payload.error ?? `Gateway returned ${res.status}.`;
-    callbacks.onError?.(message);
-    return { content, reasoning, error: message };
-  }
-
-  const reader = res.body?.getReader();
-  if (!reader) {
-    const message = 'Gateway returned an empty stream.';
-    callbacks.onError?.(message);
-    return { content, reasoning, error: message };
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      const SEP = /\r?\n\r?\n/g;
-      for (;;) {
-        SEP.lastIndex = 0;
-        const match = SEP.exec(buffer);
-        if (!match) break;
-        const chunk = buffer.slice(0, match.index);
-        buffer = buffer.slice(match.index + match[0].length);
-
-        for (const line of chunk.split(/\r?\n/)) {
-          if (!line.startsWith('data:')) continue;
-          const raw = line.slice(5).trim();
-          if (!raw) continue;
-
-          let frame: StreamFrame;
-          try {
-            frame = JSON.parse(raw) as StreamFrame;
-          } catch {
-            continue;
-          }
-
-          switch (frame.type) {
-            case 'delta':
-              content += frame.delta;
-              callbacks.onDelta?.(frame.delta, content);
-              break;
-            case 'reasoning':
-              reasoning += frame.delta;
-              callbacks.onReasoning?.(frame.delta, reasoning);
-              break;
-            case 'usage':
-              usage = frame;
-              break;
-            case 'error':
-              error = frame.message;
-              callbacks.onError?.(frame.message);
-              break;
-            case 'done':
-              // Kept: "length" is the provider saying the reply was cut off.
-              if (frame.finishReason) finishReason = frame.finishReason;
-              break;
-            default:
-              break;
-          }
-        }
-      }
-    }
-  } catch (err) {
-    if ((err as Error).name !== 'AbortError') {
-      error = `Stream interrupted: ${(err as Error).message}`;
-      callbacks.onError?.(error);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  return { content, reasoning, usage, error, finishReason };
-}
-
-/** Single-shot completion for internal steps (planning, classification). */
-async function complete(
-  body: { provider: ProviderId; model: string; messages: ChatMessage[]; json?: boolean; custom?: CustomEndpointConfig; maxTokens?: number },
-  signal?: AbortSignal,
-): Promise<string> {
-  // Same failure shape paintTexture() was fixed for: a stalled provider on a
-  // non-streaming call had no timeout of its own, only the user's own Stop
-  // button — so a hung planner call left the run stuck on "Decomposing into
-  // atomic steps..." forever, with nothing to catch and fall back to
-  // heuristicPlan(). Composed with the caller's signal so Stop still cuts a
-  // slow-but-alive call short.
-  const timeout = AbortSignal.timeout(45_000);
-  const composed = signal ? AbortSignal.any([signal, timeout]) : timeout;
-  const res = await fetch('/api/chat', withKeys({
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...body, stream: false }),
-    signal: composed,
-  }));
-  if (!res.ok) {
-    const payload = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(payload.error ?? `Gateway returned ${res.status}`);
-  }
-  const data = (await res.json()) as { content: string };
-  return data.content;
-}
-
 
 /**
  * One texture from the image gateway.
@@ -2812,25 +2654,18 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
           const last = [...state.messages].reverse().find((m) => m.id === assistantId || (m.role === 'assistant' && m.createdAt >= startedAt && !m.error));
           const outcome = (last?.content ?? '').replace(/```[\s\S]*?```/g, ' ').trim();
           if (!worthCapturing(modelInput ?? input, outcome)) return;
-          const res = await fetch('/api/chat', withKeys({
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              provider: selection.provider,
-              model: selection.model,
-              stream: false,
-              json: true,
-              maxTokens: 600,
-              messages: [
-                { role: 'system', content: CAPTURE_SYSTEM },
-                { role: 'user', content: captureInput({ request: modelInput ?? input, outcome, files: [...state.files.keys()].slice(-12) }) },
-              ],
-            }),
-            signal: AbortSignal.timeout(30_000),
-          }));
-          if (!res.ok) return;
-          const data = (await res.json()) as { content?: string };
-          const found = parseObservations(data.content ?? '');
+          const captured = await complete({
+            provider: selection.provider,
+            model: selection.model,
+            json: true,
+            maxTokens: 600,
+            custom,
+            messages: [
+              { role: 'system', content: CAPTURE_SYSTEM },
+              { role: 'user', content: captureInput({ request: modelInput ?? input, outcome, files: [...state.files.keys()].slice(-12) }) },
+            ],
+          }, undefined, 30_000);
+          const found = parseObservations(captured ?? '');
           if (found.length) {
             await remember(found);
             if (pipe.memfile) await saveMemoryFile(useWorkspace.getState().bridge, [...useWorkspace.getState().files.keys()]);

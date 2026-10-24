@@ -12,6 +12,7 @@ import { getSetting, setSetting } from '@/lib/db/history';
 import { keyHeaders, loadKeys, loadVercel, saveVercel } from '@/lib/keys';
 import { updateRunProgress } from '@/lib/shell/run-state';
 import { endpointModels } from '@/lib/providers/endpoint-models';
+import { addUsage, emptyUsage, gatewayModels, type UsageState } from '@/lib/providers/gateway';
 
 /**
  * Workspace state.
@@ -236,6 +237,16 @@ interface WorkspaceState {
   loadModels: (force?: boolean) => Promise<void>;
   setSelection: (selection: ModelSelection) => void;
 
+  // ── Gateway ───────────────────────────────────────────────────────────────
+  /** Tokens used across every provider, counted on this device; the meter in Settings → Free Providers reads it. */
+  usage: UsageState;
+  recordUsage: (who: { provider: string; model: string }, tokens: { prompt: number; completion: number }) => void;
+  setUsageBudget: (budget: number | undefined) => void;
+  resetUsage: () => void;
+  /** Which model the gateway used for the last answer, and how many it had to skip to get there. */
+  gatewayLast: { label: string; switches: number; at: number } | null;
+  setGatewayLast: (last: { label: string; switches: number; at: number } | null) => void;
+
   // ── Custom endpoints ──────────────────────────────────────────────────────
   endpoints: EndpointRecord[];
   setEndpoints: (endpoints: EndpointRecord[]) => void;
@@ -404,6 +415,16 @@ const CAPABILITY_SUITES: Record<string, SuiteId> = {
   model3d: 'model3d',
 };
 
+/** The meter is written to storage at most every two seconds: a streaming run counts a lot of calls. */
+let usageTimer: ReturnType<typeof setTimeout> | null = null;
+function saveUsageSoon(read: () => UsageState): void {
+  if (usageTimer) return;
+  usageTimer = setTimeout(() => {
+    usageTimer = null;
+    void setSetting('gatewayUsage', read());
+  }, 2000);
+}
+
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
   activeSuite: 'chat',
   sessionId: null,
@@ -441,7 +462,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
       // The catalogue is server-side and knows nothing about custom endpoints,
       // which live on the device — so they are added back on every reload.
-      const withCustom = [...models, ...endpointModels(get().endpoints)];
+      const withCustom = [...models, ...endpointModels(get().endpoints), ...gatewayModels()];
       set({ models: withCustom, modelWarnings: data.warnings ?? [] });
 
       // If the persisted selection no longer exists, fall back to something real
@@ -474,6 +495,22 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     void setSetting('selection', selection);
   },
 
+  usage: emptyUsage(),
+  recordUsage: (who, tokens) => {
+    set((s) => ({ usage: addUsage(s.usage, who, tokens) }));
+    saveUsageSoon(() => get().usage);
+  },
+  setUsageBudget: (budget) => {
+    set((s) => ({ usage: { ...s.usage, budget: budget && budget > 0 ? Math.round(budget) : undefined } }));
+    saveUsageSoon(() => get().usage);
+  },
+  resetUsage: () => {
+    set((s) => ({ usage: { ...emptyUsage(), budget: s.usage.budget } }));
+    saveUsageSoon(() => get().usage);
+  },
+  gatewayLast: null,
+  setGatewayLast: (gatewayLast) => set({ gatewayLast }),
+
   endpoints: [],
   capabilityTabs: [],
   mediaHidden: [],
@@ -496,7 +533,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       capabilityTabs: [...tabs],
       // Merged in here as well as in loadModels, so adding an endpoint puts its
       // models in the switcher immediately rather than after the next refresh.
-      models: [...prev.models.filter((m) => m.provider !== 'custom'), ...endpointModels(endpoints)],
+      models: [...prev.models.filter((m) => m.provider !== 'custom'), ...endpointModels(endpoints), ...gatewayModels()],
     }));
   },
 
@@ -821,6 +858,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     // is not invisible in the new "Deployed" view.
     else if (priorDeploy?.project) set({ deployHistory: [priorDeploy] });
     set({ draftsEnabled: await getSetting<boolean>('draftsEnabled', false) });
+    const savedUsage = await getSetting<UsageState | null>('gatewayUsage', null);
+    if (savedUsage?.total) set({ usage: savedUsage });
     set({ mediaHidden: await getSetting<SuiteId[]>('mediaHidden', []) });
     set({ imageModel: await getSetting<string>('imageModel', 'nim:black-forest-labs/flux.1-dev') });
     set({ driveClientId: await getSetting<string>('driveClientId', '') });

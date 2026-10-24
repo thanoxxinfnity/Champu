@@ -21,19 +21,26 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const src = readFileSync(new URL('../src/lib/agent/runtime.ts', import.meta.url), 'utf8');
+// complete() lives in the shared chat client now (it also resolves the gateway and counts tokens); runtime.ts imports it.
+const chat = readFileSync(new URL('../src/lib/providers/chat-client.ts', import.meta.url), 'utf8');
 
-const completeFn = /async function complete\([\s\S]*?\n\}/.exec(src)?.[0];
+const completeFn = /export async function complete\([\s\S]*?\n\}/.exec(chat)?.[0];
+const completeOnceFn = /async function completeOnce\([\s\S]*?\n\}/.exec(chat)?.[0];
 
 test('complete exists and takes an optional caller signal', () => {
-  assert.ok(completeFn, 'complete not found in runtime.ts');
+  assert.ok(completeFn, 'complete not found in chat-client.ts');
   assert.match(completeFn, /signal\?:\s*AbortSignal/);
+  assert.match(src, /import \{[^}]*\bcomplete\b[^}]*\} from '@\/lib\/providers\/chat-client'/, 'runtime.ts uses the shared complete()');
 });
 
 test('complete bounds the call with a timeout composed with the caller signal', () => {
-  assert.match(completeFn, /AbortSignal\.timeout\(/);
-  assert.match(completeFn, /AbortSignal\.any\(\[signal, timeout\]\)/);
+  // complete() hands every attempt to completeOnce(), which owns the timeout.
+  assert.ok(completeOnceFn, 'completeOnce not found in chat-client.ts');
+  assert.match(completeFn, /completeOnce\(/);
+  assert.match(completeOnceFn, /AbortSignal\.timeout\(/);
+  assert.match(completeOnceFn, /AbortSignal\.any\(\[signal, timeout\]\)/);
   // The composed signal must actually reach the fetch call, not just exist.
-  assert.match(completeFn, /signal:\s*composed/);
+  assert.match(completeOnceFn, /signal:\s*composed/);
 });
 
 const buildPlanFn = /async function buildPlan\([\s\S]*?\n\}/.exec(src)?.[0];

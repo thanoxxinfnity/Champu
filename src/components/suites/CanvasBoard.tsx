@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useWorkspace } from '@/lib/store';
-import { withKeys } from '@/lib/keys';
+import { complete } from '@/lib/providers/chat-client';
+import { endpointConfigFor } from '@/lib/providers/endpoint-models';
 import { getSetting, setSetting } from '@/lib/db/history';
 import { downloadText, downloadZip } from '@/lib/zip';
 import { browserIo, loadOdIndex } from '@/lib/skills/opendesign/io';
@@ -102,21 +103,15 @@ export function CanvasBoard() {
 
   // ── Model ─────────────────────────────────────────────────────────────────
   const ask = async (system: string, user: string): Promise<string> => {
-    const res = await fetch('/api/chat', withKeys({
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: selection.provider,
-        model: selection.model,
-        stream: false,
-        maxTokens: 8000,
-        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-      }),
-      signal: AbortSignal.timeout(240_000),
-    }));
-    const data = (await res.json()) as { content?: string; error?: string };
-    if (!res.ok || !data.content) throw new Error(data.error ?? 'The model returned nothing usable.');
-    return data.content;
+    const text = await complete({
+      provider: selection.provider,
+      model: selection.model,
+      maxTokens: 8000,
+      custom: endpointConfigFor(useWorkspace.getState().endpoints, selection),
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+    }, undefined, 240_000).catch((e: Error) => { throw new Error(e.message || 'The model returned nothing usable.'); });
+    if (!text) throw new Error('The model returned nothing usable.');
+    return text;
   };
 
   const run = async (label: string, job: () => Promise<void>) => {

@@ -147,6 +147,13 @@ export interface EndpointRecord {
   label: string;
   baseUrl: string;
   apiKey?: string;
+  /**
+   * More keys for the same provider. The gateway rotates through `apiKey` and these, and sets a key aside for a
+   * while when the provider answers 429 or a quota error for it, so several free accounts add up to one bigger one.
+   */
+  apiKeys?: string[];
+  /** The id of the free-provider catalogue entry this endpoint was made from (src/lib/providers/free-catalog.ts). */
+  freeId?: string;
   headers?: Record<string, string>;
   chatPath?: string;
   /**
