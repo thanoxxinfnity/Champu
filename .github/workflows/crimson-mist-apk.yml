@@ -41,6 +41,14 @@ jobs:
           sed -i "s/^version\/code=.*/version\/code=$((1000 + GITHUB_RUN_NUMBER))/" export_presets.cfg
           grep -n "^version/" export_presets.cfg
 
+      - name: Import project
+        run: godot --headless --import || true
+
+      - name: Run every test gate
+        run: |
+          chmod +x tests/run_all.sh
+          tests/run_all.sh godot
+
       - name: Export Android APK
         env:
           GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/examples/sideload.keystore
