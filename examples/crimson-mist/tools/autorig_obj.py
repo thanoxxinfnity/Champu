@@ -8,12 +8,14 @@ from mathutils import Vector
 
 argv = sys.argv[sys.argv.index('--') + 1:]
 src, dst = argv[0], argv[1]
+joints_file = argv[argv.index('--joints') + 1] if '--joints' in argv else None
 preview = argv[2] if len(argv) > 2 and not argv[2].startswith('--') else None
 height = float(argv[argv.index('--height') + 1]) if '--height' in argv else 1.55
 has_tail = '--tail' in argv
+max_tris = int(argv[argv.index('--max-tris') + 1]) if '--max-tris' in argv else 0
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
-bpy.ops.wm.obj_import(filepath=src)
+(bpy.ops.wm.obj_import if src.lower().endswith('.obj') else bpy.ops.import_scene.gltf)(filepath=src)
 meshes = [o for o in bpy.context.scene.objects if o.type == 'MESH']
 bpy.ops.object.select_all(action='DESELECT')
 for o in meshes:
@@ -23,14 +25,26 @@ bpy.ops.object.join()
 body = bpy.context.view_layer.objects.active
 body.name = os.path.splitext(os.path.basename(dst))[0]
 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+ntris = sum(len(p.vertices) - 2 for p in body.data.polygons)
+if max_tris and ntris > max_tris:
+    mod = body.modifiers.new('dec', 'DECIMATE')
+    mod.ratio = max_tris / ntris
+    bpy.ops.object.modifier_apply(modifier='dec')
+for ma in body.data.materials:
+    if ma and ma.use_nodes:
+        for nd in ma.node_tree.nodes:
+            if nd.type == 'TEX_IMAGE' and nd.image and max(nd.image.size) > 1024:
+                kk = 1024 / max(nd.image.size)
+                nd.image.scale(int(nd.image.size[0] * kk), int(nd.image.size[1] * kk))
 vs = body.data.vertices
 H0 = max(v.co.z for v in vs) - min(v.co.z for v in vs)
 k = height / H0
 for v in vs:
     v.co = v.co * k
-zmin = min(v.co.z for v in vs)
+zmin_s = min(v.co.z for v in vs)
+zmin = zmin_s / k
 for v in vs:
-    v.co.z -= zmin
+    v.co.z -= zmin_s
 H = height
 
 # joints as fractions of height (x is half-width, y negative = front)
@@ -60,7 +74,7 @@ for s, sg in (('L', 1), ('R', -1)):
 
 tail_names = []
 if has_tail:  # follow the tail geometry: vertices clearly behind the body
-    tv = [v.co for v in vs if v.co.y > .06 * H and .2 * H < v.co.z < .75 * H]
+    tv = [v.co for v in vs if v.co.y > .06 * H and .2 * H < v.co.z < .66 * H and abs(v.co.x) < .16 * H]
     tv.sort(key=lambda c: c.y)
     n = 5
     pts = [Vector((0, .02 * H, .55 * H))]
@@ -72,6 +86,23 @@ if has_tail:  # follow the tail geometry: vertices clearly behind the body
         J[nm] = (pts[i], pts[i + 1])
         parent[nm] = 'Hips' if i == 0 else f'Tail{i - 1}'
         tail_names.append(nm)
+
+sway_set = set(tail_names)
+if joints_file:  # explicit joints measured on the mesh (raw model units, Blender axes: front = -Y, left = +X)
+    import json
+    spec = json.load(open(joints_file))
+    J, parent, sway_set = {}, {}, set()
+    for nm, b in spec['bones'].items():
+        h = Vector(b['head']) * k
+        t = Vector(b['tail']) * k
+        h.z -= zmin * k
+        t.z -= zmin * k
+        J[nm] = (h, t)
+        parent[nm] = b.get('parent')
+        if b.get('sway'):
+            sway_set.add(nm)
+    tail_names = [n for n in J if n in sway_set]
+    has_tail = False
 
 arm = bpy.data.armatures.new('Armature')
 rig = bpy.data.objects.new('Armature', arm)
@@ -100,10 +131,15 @@ for nm in J:
 body_names = [n for n in J if n not in tail_names]
 for v in vs:
     c = v.co
-    pool = tail_names if (has_tail and c.y > .06 * H and .2 * H < c.z < .75 * H) else body_names
-    if pool is body_names:
-        side = c.x
-        pool = [n for n in body_names if not (n.endswith('.L') and side < -.02 * H) and not (n.endswith('.R') and side > .02 * H)]
+    if joints_file:
+        pool = [n for n in body_names if not (n.endswith('.L') and c.x < -.02 * H) and not (n.endswith('.R') and c.x > .02 * H)]
+        pool += [n for n in tail_names if seg_dist(c, *J[n]) < .07 * H]
+    else:
+        pool = tail_names if (has_tail and c.y > .06 * H and .2 * H < c.z < .66 * H and abs(c.x) < .16 * H) else body_names
+        if pool is body_names:
+            pool = [n for n in body_names if not (n.endswith('.L') and c.x < -.02 * H) and not (n.endswith('.R') and c.x > .02 * H)]
+            if abs(c.x) > .09 * H and .68 * H < c.z < .87 * H:   # sleeves follow the arm only
+                pool = [n for n in pool if n.split('.')[0] in ('Shoulder', 'UpperArm', 'LowerArm', 'Hand')]
     ds = sorted(((seg_dist(c, *J[n]), n) for n in pool))[:3]
     ws = [1 / (max(d, 1e-4) ** 3) for d, _ in ds]
     s = sum(ws)

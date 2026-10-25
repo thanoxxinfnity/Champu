@@ -79,6 +79,10 @@ def target(i):
     return None
 
 
+PREF = {'Hips': 'Spine', 'Spine': 'Chest', 'Chest': 'Neck', 'Neck': 'Head', 'Shoulder': 'UpperArm', 'UpperArm': 'LowerArm', 'LowerArm': 'Hand',
+        'UpperLeg': 'LowerLeg', 'LowerLeg': 'Foot'}
+
+
 def to_b(p):
     return Vector((p[0], p[2], p[1])) * SCALE
 
@@ -143,7 +147,25 @@ for i in sorted(kept, key=lambda k: len(list(parent_chain(k)))):
     b = arm.edit_bones.new(kept[i])
     head = to_b(B[i]['pos'])
     ch = kids.get(i, [])
-    if ch:
+    nm = kept[i]
+    side = nm[-2:] if nm[-2:] in ('.L', '.R') else ''
+    base_nm = nm[:-2] if side else nm
+    want = PREF.get(base_nm)
+    pref = [c for c in ch if want and kept[c] == want + side]
+    if pref:
+        tp = to_b(B[pref[0]]['pos'])
+    elif base_nm == 'Head':
+        tp = head + Vector((0, 0, 0.2))
+    elif base_nm == 'Pelvis':
+        tp = head + Vector((0, 0, -0.12))
+    elif base_nm == 'Hand' and par[i] is not None:
+        d = head - to_b(B[par[i]]['pos'])
+        tp = head + (d.normalized() if d.length > 1e-6 else Vector((0, 0, -1))) * 0.09
+    elif base_nm == 'Foot':
+        tp = head + Vector((0, -0.12, -0.03))
+    elif base_nm == 'Toes':
+        tp = head + Vector((0, -0.08, 0))
+    elif ch:
         tp = to_b(B[ch[0]]['pos'])
     elif isinstance(B[i]['tail'], int) and B[i]['tail'] >= 0:
         tp = to_b(B[B[i]['tail']]['pos'])
