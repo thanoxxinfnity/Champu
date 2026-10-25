@@ -2,7 +2,7 @@ shader_type spatial;
 // Fog sheet: a large translucent quad of drifting noise, crimson at the edges. Stacked at a few heights over streets and the harbour.
 render_mode unshaded, blend_mix, cull_disabled, depth_draw_never, shadows_disabled;
 
-uniform vec4 tint : source_color = vec4(0.85, 0.28, 0.34, 1.0);
+uniform vec4 tint : source_color = vec4(0.72, 0.8, 0.82, 1.0);
 uniform float density = 0.18;
 uniform float speed = 0.015;
 uniform float scale = 0.035;

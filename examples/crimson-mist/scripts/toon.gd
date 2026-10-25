@@ -9,7 +9,7 @@ static var _cache := {}
 static var _outline_mats := {}
 
 
-static func outline_material(width: float, ink := Color(0.09, 0.02, 0.06)) -> ShaderMaterial:
+static func outline_material(width: float, ink := Color(0.04, 0.045, 0.06)) -> ShaderMaterial:
 	var key := "%s/%s" % [width, ink.to_html()]
 	if not _outline_mats.has(key):
 		var m := ShaderMaterial.new()

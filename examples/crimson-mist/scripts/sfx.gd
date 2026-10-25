@@ -117,6 +117,8 @@ func play_at(sound: String, pos: Vector3, db := 0.0, pitch := 1.0) -> void:
 
 func _build_all() -> void:
 	_rng.seed = 7
+	_streams["swing"] = _swish(0.24)
+	_streams["bell"] = _bell(3.4)
 	_streams["pistol"] = _shot(0.30, 0.55, 150.0, 0.6, 5200.0)
 	_streams["shotgun"] = _shot(0.60, 1.0, 85.0, 1.0, 2600.0)
 	_streams["smg"] = _shot(0.16, 0.5, 170.0, 0.5, 6500.0)
@@ -362,3 +364,27 @@ func _chop_loop(dur: float) -> AudioStreamWAV:
 		var pulse := pow(maxf(0.0, sin(TAU * 8.0 * t)), 3.0)
 		b[i] = (lp * 1.5 + sin(TAU * 48.0 * t) * 0.35) * (0.15 + pulse) * 0.9
 	return _stream(b, true)
+
+
+func _swish(dur: float) -> AudioStreamWAV:
+	var b := _buf(dur)
+	var lp := 0.0
+	for i in range(b.size()):
+		var t := float(i) / RATE
+		var k := clampf(0.05 + 0.5 * sin(PI * t / dur), 0.02, 0.6)
+		lp += ((_rng.randf() * 2.0 - 1.0) - lp) * k
+		b[i] = lp * sin(PI * t / dur) * 0.9
+	return _stream(b)
+
+
+## A struck bronze bell: inharmonic partials with long, staggered decays.
+func _bell(dur: float) -> AudioStreamWAV:
+	var b := _buf(dur)
+	var partials := [[110.0, 1.0, 1.1], [220.0, 0.8, 1.5], [262.0, 0.6, 1.9], [330.0, 0.5, 2.4], [445.0, 0.4, 3.0], [610.0, 0.25, 4.0]]
+	for i in range(b.size()):
+		var t := float(i) / RATE
+		var v := 0.0
+		for p in partials:
+			v += sin(TAU * float(p[0]) * t) * float(p[1]) * exp(-t * float(p[2]))
+		b[i] = v * 0.55 * minf(1.0, t * 400.0)
+	return _stream(b)

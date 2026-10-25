@@ -125,3 +125,37 @@ func splat(pos: Vector3, size: float) -> void:
 	add_child(mi)
 	mi.global_position = Vector3(pos.x, 0.025, pos.z)
 	mi.rotation = Vector3(0.0, randf() * TAU, 0.0)
+
+
+## Red spores from a burst bloater: a fat cloud that hangs for a moment.
+func spores(pos: Vector3, radius: float) -> void:
+	_burst(pos, Vector3.UP, 40, 1.4, radius * 0.9, 0.22, _spore_material(), 180.0, -0.05)
+	var l := OmniLight3D.new()
+	l.light_color = Color(1.0, 0.2, 0.3)
+	l.light_energy = 3.0
+	l.omni_range = radius * 2.0
+	add_child(l)
+	l.global_position = pos
+	var tw := create_tween()
+	tw.tween_property(l, "light_energy", 0.0, 0.8)
+	tw.tween_callback(l.queue_free)
+
+
+func dust(pos: Vector3) -> void:
+	_burst(pos + Vector3(0, 0.2, 0), Vector3.UP, 16, 0.7, 3.0, 0.14, _dust_material(), 70.0, 0.6)
+
+
+var _spore_mat: StandardMaterial3D
+var _dust_mat: StandardMaterial3D
+
+
+func _spore_material() -> StandardMaterial3D:
+	if _spore_mat == null:
+		_spore_mat = _emissive(Color(1.0, 0.25, 0.35), 1.6)
+	return _spore_mat
+
+
+func _dust_material() -> StandardMaterial3D:
+	if _dust_mat == null:
+		_dust_mat = _emissive(Color(0.75, 0.6, 0.62), 0.6)
+	return _dust_mat

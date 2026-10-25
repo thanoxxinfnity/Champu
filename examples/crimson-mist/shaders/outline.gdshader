@@ -3,7 +3,7 @@ shader_type spatial;
 render_mode cull_front, unshaded, shadows_disabled;
 
 uniform float width = 0.012;
-uniform vec4 ink : source_color = vec4(0.09, 0.02, 0.06, 1.0);
+uniform vec4 ink : source_color = vec4(0.04, 0.045, 0.06, 1.0);
 
 void vertex() {
 	VERTEX += NORMAL * width;

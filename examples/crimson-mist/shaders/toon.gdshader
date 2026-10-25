@@ -5,13 +5,13 @@ shader_type spatial;
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform bool use_tex = false;
 uniform vec4 albedo : source_color = vec4(1.0);
-uniform vec4 shade_tint : source_color = vec4(0.52, 0.42, 0.66, 1.0);
+uniform vec4 shade_tint : source_color = vec4(0.48, 0.52, 0.66, 1.0);
 uniform float band1 = 0.18;
 uniform float band2 = 0.62;
 uniform float softness = 0.025;
-uniform vec4 rim_color : source_color = vec4(1.0, 0.62, 0.72, 1.0);
+uniform vec4 rim_color : source_color = vec4(0.72, 0.82, 1.0, 1.0);
 uniform float rim_power = 3.2;
-uniform float rim_amount = 0.32;
+uniform float rim_amount = 0.26;
 uniform float alpha_cut = 0.0;
 uniform vec4 emission_color : source_color = vec4(0.0, 0.0, 0.0, 1.0);
 uniform float emission_energy = 1.0;
@@ -44,7 +44,7 @@ void fragment() {
 	if (grime > 0.0) {
 		float n = vnoise(wpos.xz * 1.7) * 0.6 + vnoise(wpos.xz * 6.0 + wpos.y * 2.0) * 0.4;
 		float streak = vnoise(vec2(wpos.x * 3.0 + wpos.z * 3.0, wpos.y * 0.7));
-		c *= 1.0 - grime * (0.35 * n + 0.25 * streak * (1.0 - clamp(wnorm.y, 0.0, 1.0)));
+		c *= 1.0 - grime * (0.16 * n + 0.2 * streak * (1.0 - clamp(wnorm.y, 0.0, 1.0)));
 	}
 	ALBEDO = c + vec3(flash);
 	if (alpha_cut > 0.0) {

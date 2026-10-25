@@ -5,7 +5,7 @@ shader_type canvas_item;
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear;
 uniform float hurt = 0.0;
 uniform float fear = 0.0;
-uniform float mist = 0.18;
+uniform float mist = 0.08;
 uniform float edge_strength = 0.55;
 uniform float t = 0.0;
 
@@ -21,9 +21,10 @@ void fragment() {
 	float l2 = luma(texture(screen_tex, SCREEN_UV + vec2(0.0, px.y) * 1.2).rgb);
 	float l3 = luma(texture(screen_tex, SCREEN_UV - vec2(0.0, px.y) * 1.2).rgb);
 	float edge = clamp((abs(l0 - l1) + abs(l2 - l3)) * 3.2, 0.0, 1.0);
-	c = mix(c, c * vec3(0.18, 0.08, 0.14), edge * edge_strength);
+	c = mix(c, c * vec3(0.12, 0.13, 0.16), edge * edge_strength);
 	c = mix(c, floor(c * 7.0 + 0.5) / 7.0, 0.35);
-	c = mix(c, c * vec3(1.12, 0.82, 0.9) + vec3(0.05, 0.0, 0.015), mist);
+	float g0 = luma(c);
+	c = mix(c, vec3(g0) * vec3(0.95, 1.02, 1.08) + vec3(0.0, 0.01, 0.02), 0.22 + mist);
 	vec2 uv = SCREEN_UV - 0.5;
 	float vig = smoothstep(0.35 - fear * 0.12, 0.95, length(uv * vec2(1.0, 0.9)));
 	c *= 1.0 - vig * (0.55 + fear * 0.3);

@@ -13,9 +13,9 @@ func _initialize() -> void:
 	root.add_child(world)
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.30, 0.13, 0.19)
+	env.background_color = Color(0.3, 0.34, 0.37)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.5, 0.38, 0.55)
+	env.ambient_light_color = Color(0.5, 0.58, 0.66)
 	env.ambient_light_energy = 0.55
 	var we := WorldEnvironment.new()
 	we.environment = env
@@ -29,7 +29,7 @@ func _initialize() -> void:
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(40, 40)
 	floor_mi.mesh = pm
-	floor_mi.material_override = Toon.flat(Color(0.28, 0.2, 0.26), 0.0, 0.3)
+	floor_mi.material_override = Toon.flat(Color(0.2, 0.22, 0.24), 0.0, 0.3)
 	world.add_child(floor_mi)
 	var cam := Camera3D.new()
 	cam.fov = 34
