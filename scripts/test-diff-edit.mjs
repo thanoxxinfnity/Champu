@@ -85,3 +85,34 @@ test('the runtime applies edit blocks after a reply and in the self-heal loop, a
   assert.match(sp, /<<<<<<< SEARCH path=/);
   assert.match(sp, /## PROJECT MAP/);
 });
+
+import { extractArtifacts, filesOf } from '../src/lib/agent/artifacts.ts';
+import { resolveSuite, wantsMinecraftLikeGame } from '../src/lib/agent/router.ts';
+
+test('a file whose path was put inside the block instead of on the fence is still a file', () => {
+  const t = 'Done.\n```text\npath=rp/texts/en_US.lang\nitem.myaddon.ruby.name=Ruby\n```\n```json\n// path: bp/items/ruby.json\n{"a":1}\n```\n```text\npath=@terminal\nls\n```';
+  const files = filesOf(extractArtifacts(t)).filter((f) => !f.path.startsWith('untitled/'));
+  assert.deepEqual(files.map((f) => f.path), ['rp/texts/en_US.lang', 'bp/items/ruby.json']);
+  assert.equal(files[0].content, 'item.myaddon.ruby.name=Ruby');
+  assert.equal(files[1].content, '{"a":1}');
+  // a plain block that merely starts with a word is not a file
+  assert.equal(filesOf(extractArtifacts('```text\nhello path\nworld\n```')).filter((f) => !f.path.startsWith('untitled/')).length, 0);
+});
+
+test('a game like Minecraft is a Godot game; an add-on, a mod or a pack stays the Bedrock suite', () => {
+  assert.equal(wantsMinecraftLikeGame('Bro ek na game bana na yar jasa minecraft same to same please'), true);
+  assert.equal(wantsMinecraftLikeGame('make a minecraft-like voxel game'), true);
+  assert.equal(wantsMinecraftLikeGame('build a game similar to Minecraft'), true);
+  assert.equal(wantsMinecraftLikeGame('make a minecraft addon with a ruby item'), false);
+  assert.equal(wantsMinecraftLikeGame('minecraft bedrock behavior pack like hypixel'), false);
+  assert.equal(resolveSuite('chat', 'Bro ek na game bana na yar jasa minecraft same to same please', 'B'), 'godot');
+  assert.equal(resolveSuite('chat', 'make a minecraft addon with a ruby item', 'B'), 'minecraft');
+  assert.equal(resolveSuite('chat', 'create a bedrock resource pack', 'B'), 'minecraft');
+});
+
+test('every run that made files offers them in the chat', () => {
+  const rt = readFileSync(new URL('../src/lib/agent/runtime.ts', import.meta.url), 'utf8');
+  assert.match(rt, /kind: 'files' as const/);
+  const msg = readFileSync(new URL('../src/components/Message.tsx', import.meta.url), 'utf8');
+  assert.match(msg, /offer\.kind === 'files'/);
+});

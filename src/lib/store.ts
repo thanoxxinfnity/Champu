@@ -69,9 +69,11 @@ export interface ChatMessageView {
    * should not carry a second copy of every artifact.
    */
   offer?: {
-    kind: 'minecraft-pack' | 'godot-project' | 'apk' | 'play';
+    kind: 'minecraft-pack' | 'godot-project' | 'apk' | 'play' | 'files';
     filename: string;
     label: string;
+    /** For plain files: which workspace files this run made (one is downloaded as itself, several as a zip). */
+    paths?: string[];
     /**
      * For an APK: the workspace file holding the bytes.
      *

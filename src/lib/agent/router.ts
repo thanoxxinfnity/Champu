@@ -145,6 +145,7 @@ export function isFollowUp(text: string): boolean {
 
 const SUITE_HINTS: Array<[RegExp | ((text: string) => boolean), string]> = [
   // "a 3D game for Android" is a game, not a native Android project: the word "android" must not win over "game".
+  [wantsMinecraftLikeGame, 'godot'],
   [(text) => wantsGame(text) && !MINECRAFT_EXPLICIT.test(text), 'godot'],
   [/\b(apk|aab|android|gradle|jetpack ?compose|exe|\.exe|desktop app|electron|winforms|wpf|tkinter|pyqt)\b/i, 'android'],
   [/\b(minecraft|bedrock|mcpack|mcaddon|blockbench|behaviou?r ?pack|resource ?pack|\.jar mod|forge|fabric|voxel)\b/i, 'minecraft'],
@@ -180,6 +181,16 @@ export function wantsSite(text: string): boolean {
 const ANDROID_DELIVERABLE = /\b(apk|aab|gradle)\b|\bandroid\s+(app|application|project)\b/i;
 /** Words that only mean the Bedrock suite — "forge", "fabric" and "voxel" mean other things too. */
 const MINECRAFT_EXPLICIT = /\b(minecraft|bedrock|mcpack|mcaddon|blockbench)\b/i;
+/**
+ * "A game like Minecraft" is a game to build (a voxel game, in Godot), not a Bedrock add-on: the word "minecraft" next to
+ * like / jaisa / clone / style is the genre, and only add-on words (mod, pack, bedrock, skin…) mean the Bedrock suite.
+ */
+const MINECRAFT_LIKE = /(?:\b(?:like|jaisa|jaise|jasa|jaisi|similar to|clone of|inspired by|style of|type of|same as|copy of)\s+(?:the\s+|real\s+)?minecraft|minecraft[- ]?(?:like|style|clone|jaisa|jasa|type))/i;
+const MINECRAFT_ADDON = /\b(add-?ons?|mods?|behaviou?r ?packs?|resource ?packs?|texture ?packs?|mcpack|mcaddon|bedrock|blockbench|skins?|datapacks?|forge|fabric|\.jar)\b/i;
+export function wantsMinecraftLikeGame(text: string): boolean {
+  return MINECRAFT_LIKE.test(text) && !MINECRAFT_ADDON.test(text) && /\b(games?|bana|banao|banana|build|make|create)\b/i.test(text);
+}
+
 /** "runner" alone is a test runner or a task runner; a game has to say so. */
 const GAME_EXPLICIT = /\b(games?|godot|gdscript)\b/i;
 
@@ -209,6 +220,7 @@ export function resolveSuite(base: string, input: string, lane: Lane): string {
   if (wantsTerminal(input) && !ANDROID_DELIVERABLE.test(input)) return base;
   if (base === 'game') return lane === 'B' ? 'godot' : base;
   if (base !== 'chat' || lane !== 'B') return base;
+  if (wantsMinecraftLikeGame(input) && !wantsSite(input)) return 'godot';
   if (wantsGame(input) && !wantsSite(input) && !MINECRAFT_EXPLICIT.test(input)) return 'godot';
   if (ANDROID_DELIVERABLE.test(input)) return 'android';
   if (wantsSite(input)) return base;

@@ -317,6 +317,27 @@ function OfferDownload({ offer }: { offer: NonNullable<ChatMessageView['offer']>
       return;
     }
 
+    if (offer.kind === 'files') {
+      // The files of one run, taken from the workspace as they are now (so a later fix is in them): one as itself, several zipped.
+      const picked = (offer.paths ?? []).map((p) => files.get(p)).filter((f): f is NonNullable<typeof f> => Boolean(f && typeof f.content === 'string'));
+      if (!picked.length) {
+        setError('Those files are no longer open in this workspace — ask for them again.');
+        return;
+      }
+      setError(null);
+      const asBytes = (c: string) => (c.startsWith('data:') ? dataUrlToBytes(c) : c);
+      if (picked.length === 1) {
+        const only = picked[0];
+        const bytes = asBytes(only.content);
+        const buffer = new ArrayBuffer(typeof bytes === 'string' ? new TextEncoder().encode(bytes).length : bytes.byteLength);
+        new Uint8Array(buffer).set(typeof bytes === 'string' ? new TextEncoder().encode(bytes) : bytes);
+        downloadBlob(new Blob([buffer], { type: 'application/octet-stream' }), offer.filename);
+      } else {
+        downloadZip(picked.map((f) => ({ path: f.path, content: asBytes(f.content) })), offer.filename, 'application/zip');
+      }
+      return;
+    }
+
     if (offer.kind === 'godot-project') {
       // Rebuilt from the workspace at click time, like the pack below, so an
       // edit made after the build is in the archive rather than being lost.

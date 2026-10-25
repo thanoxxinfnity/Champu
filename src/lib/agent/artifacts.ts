@@ -158,8 +158,19 @@ function finish(
   complete: boolean,
   opts: { shellRuns?: boolean } = {},
 ): Artifact | null {
-  const content = open.body.join('\n');
-  const { meta } = open;
+  let content = open.body.join('\n');
+  let { meta } = open;
+
+  // A weaker model sometimes puts the path inside the block instead of on the fence ("path=rp/texts/en_US.lang" as its first line).
+  // That is still a file with a name: take the name from the line and keep the rest as the content.
+  if (!meta.path) {
+    const first = open.body[0] ?? '';
+    const m = /^\s*(?:\/\/|#|;|<!--|\/\*)?\s*(?:path|file|filename)\s*[=:]\s*["'`]?([\w@./-]+\.[A-Za-z0-9]{1,8}|[\w@.-]+\/[\w@./-]+)["'`]?\s*(?:-->|\*\/)?\s*$/i.exec(first);
+    if (m && !m[1].split('/').includes('..')) {
+      meta = { ...meta, path: m[1] };
+      content = open.body.slice(1).join('\n');
+    }
+  }
 
   // A block of SEARCH/REPLACE edits (see diff-edit.ts), even one the model fenced with a path, is a change to a file, not the file.
   if (/^[ \t]*<{5,9}[ \t]*SEARCH\b/m.test(content) && /^[ \t]*>{5,9}[ \t]*REPLACE[ \t]*$/m.test(content) && meta.path !== '@terminal' && meta.path !== '@shell') return null;

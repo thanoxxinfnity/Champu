@@ -2539,6 +2539,27 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
         void appendMessage({ ...note, sessionId, suite });
       }
 
+      // The files of a run are always one tap away in the chat, whatever the build was: one file as itself, several as a zip.
+      // Godot and Minecraft builds have their own, more specific, offers below.
+      if (suite !== 'godot' && suite !== 'minecraft') {
+        const paths = [...new Set(files.map((f) => f.path))];
+        const slug = titleFromInput(input).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'project';
+        const offer = {
+          id: uid('msg'),
+          role: 'system' as const,
+          content: `${paths.length === 1 ? 'The file' : `The ${paths.length} files`} from this run, ready to take:`,
+          createdAt: Date.now(),
+          offer: {
+            kind: 'files' as const,
+            filename: paths.length === 1 ? baseName(paths[0]) : `${slug}.zip`,
+            label: paths.length <= 4 ? paths.join(', ') : `${paths.slice(0, 3).join(', ')} and ${paths.length - 3} more`,
+            paths,
+          },
+        };
+        emit(offer);
+        void appendMessage({ ...offer, sessionId, suite });
+      }
+
       // Five reviewers read what was just written; only what they are 80%+ sure of is shown.
       if (lane === 'B' && !classification.ops && pipe.review && !controller.signal.aborted) {
         think(true, 'Reviewing what was built...');
