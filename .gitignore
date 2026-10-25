@@ -27,3 +27,8 @@ trellis-output.glb
 
 # local code map and memory (private archive)
 .chomu-memory/
+
+# Crimson Mist: third-party model packs and converted models stay local (licences forbid redistribution); keys live in ~/.crimson-mist.env
+examples/crimson-mist/private/
+examples/crimson-mist/raw/
+*.crimson-mist.env
