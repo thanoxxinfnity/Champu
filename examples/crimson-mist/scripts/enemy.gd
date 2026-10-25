@@ -24,6 +24,13 @@ var phase2 := false
 var zone := ""
 
 var visual: Node3D
+var view: CharacterView
+var _last_state := -1
+
+const RIGS := {
+	"mist_walker": ["rig_mist_walker", "zombie", 1.75], "crawler": ["rig_crawler", "crawler", 1.5], "bloater": ["rig_bloater", "bloater", 2.0],
+	"weeper": ["rig_weeper", "weeper", 1.7], "bellkeeper": ["rig_bellkeeper", "boss", 4.2],
+}
 var _mark: MeshInstance3D
 var _target_pos := Vector3.ZERO
 var _path := PackedVector3Array()
@@ -72,7 +79,19 @@ func _ready() -> void:
 	add_child(cs)
 	visual = Node3D.new()
 	add_child(visual)
-	var model := Assets.prop(String(def.model), height, false, 0.02, 0.1)
+	var rig_info: Array = RIGS[kind]
+	view = CharacterView.new()
+	visual.add_child(view)
+	var rigged := view.setup_model("res://assets/world/%s.glb" % rig_info[0], float(rig_info[2]), def.tint, String(rig_info[1]))
+	if not rigged and kind == "crawler":      # the crawler reuses the walker's body when it has none of its own
+		view.queue_free()
+		view = CharacterView.new()
+		visual.add_child(view)
+		rigged = view.setup_model("res://assets/world/rig_mist_walker.glb", float(rig_info[2]), def.tint, "crawler")
+	if not rigged:
+		view.queue_free()
+		view = null
+	var model := Assets.prop(String(def.model), height, false, 0.02, 0.1) if view == null else Node3D.new()
 	visual.add_child(model)
 	model.rotation.y = PI if bool(model.get_meta("stand_in", false)) == false else 0.0
 	for n in model.find_children("*", "MeshInstance3D", true, false):
@@ -414,11 +433,47 @@ func _face(pos: Vector3, delta: float, rate: float) -> void:
 
 
 func _idle_anim(delta: float) -> void:
+	if view != null:
+		_animate_rig()
+		return
 	visual.rotation = Vector3(sin(_anim_t * 0.9) * 0.03, 0, sin(_anim_t * 0.7) * 0.04)
 	visual.position.y = 0.0
 
 
+func _animate_rig() -> void:
+	var spd := Vector2(velocity.x, velocity.z).length()
+	view.ground_speed = spd
+	view.clip_speed_scale = 0.0 if frozen else 1.0
+	if state != _last_state:
+		_last_state = state
+		match state:
+			S.STUNNED:
+				view.start_pose(CharacterView.Pose.HURT)
+			S.DEAD:
+				view.start_pose(CharacterView.Pose.DEAD)
+			S.WINDUP, S.STRIKE:
+				view.start_pose(CharacterView.Pose.SWING)
+	match state:
+		S.DEAD:
+			view.pose = CharacterView.Pose.DEAD
+		S.STUNNED:
+			view.pose = CharacterView.Pose.HURT
+		S.WINDUP:
+			view.pose = CharacterView.Pose.SWING
+			view.swing_phase = 0
+			view.swing_k = clampf(1.0 - _timer / (0.9 if boss else 0.5), 0.0, 1.0)
+		S.STRIKE:
+			view.pose = CharacterView.Pose.SWING
+			view.swing_phase = 1 if _timer > 0.12 else 2
+			view.swing_k = clampf(1.0 - _timer / 0.3, 0.0, 1.0) if _timer > 0.12 else clampf(1.0 - _timer / 0.12, 0.0, 1.0)
+		_:
+			view.pose = CharacterView.Pose.IDLE if spd < 0.25 else (CharacterView.Pose.WALK if spd < float(def.speed) * 0.85 or spd < 2.2 else CharacterView.Pose.RUN)
+
+
 func _animate(delta: float) -> void:
+	if view != null:
+		_animate_rig()
+		return
 	var spd := Vector2(velocity.x, velocity.z).length()
 	var k := clampf(spd / maxf(float(def.speed), 0.1), 0.0, 1.0)
 	var rot := Vector3.ZERO
@@ -455,6 +510,15 @@ func _animate(delta: float) -> void:
 
 func _update_death(delta: float) -> void:
 	_death_t += delta
+	if view != null:
+		_animate_rig()
+		velocity.x = move_toward(velocity.x, 0, 20 * delta)
+		velocity.z = move_toward(velocity.z, 0, 20 * delta)
+		velocity.y = velocity.y - GRAVITY * delta if not is_on_floor() else -0.5
+		move_and_slide()
+		if _death_t > 9.0 and not boss:
+			queue_free()
+		return
 	var k := clampf(_death_t / 0.7, 0.0, 1.0)
 	visual.rotation.x = lerpf(visual.rotation.x, -1.45 if kind != "crawler" else -0.3, minf(1.0, delta * 8.0))
 	visual.position.y = lerpf(0.0, -0.05, k)

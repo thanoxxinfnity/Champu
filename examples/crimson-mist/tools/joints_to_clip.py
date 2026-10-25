@@ -10,11 +10,11 @@ import numpy as np
 PELVIS, LHIP, RHIP, SPINE1, LKNEE, RKNEE, SPINE2, LANK, RANK, SPINE3, LFOOT, RFOOT, NECK, LCOL, RCOL, HEAD, LSH, RSH, LELB, RELB, LWR, RWR = range(22)
 SMPL_HEIGHT = 1.7
 HEAD_BIAS = 50.0
-LOOPS = {'walk', 'run', 'idle', 'scared', 'limp_walk', 'talk'}
-SWINGS = {'swing1', 'swing2', 'swing3', 'throw'}
-HOLD_END = {'death'}
+LOOPS = {'walk', 'run', 'idle', 'scared', 'limp_walk', 'talk', 'z_walk', 'z_run', 'z_idle', 'crawl', 'waddle', 'sit_cry', 'wave'}
+SWINGS = {'swing1', 'swing2', 'swing3', 'throw', 'z_attack', 'slam'}
+HOLD_END = {'death', 'z_death'}
 # MDM walks and runs nearly in place, so the root displacement says nothing about pace: use the gait's natural speeds (m/s).
-NOMINAL_SPEED = {'walk': 1.3, 'limp_walk': 0.9, 'run': 3.6}
+NOMINAL_SPEED = {'walk': 1.3, 'limp_walk': 0.9, 'run': 3.6, 'z_walk': 1.0, 'z_run': 2.6, 'crawl': 1.2, 'waddle': 0.9}
 
 
 def unit(v):
@@ -137,7 +137,7 @@ def main():
         T = len(j)
         loop = name in LOOPS
         if loop:
-            (a, b), cost = best_loop(out, T, 16, name in ('walk', 'run', 'limp_walk'))
+            (a, b), cost = best_loop(out, T, 16, name in ('walk', 'run', 'limp_walk', 'z_walk', 'z_run', 'crawl', 'waddle'))
             out = slice_clip(out, a, b)
             out = crossfade(out)
             note = 'loop %d..%d cost %.2f' % (a, b, cost)
@@ -156,6 +156,8 @@ def main():
                 out = slice_clip(out, max(0, low[0] - 4), min(T - 1, low[-1] + 4)); note = 'roll low %d..%d' % (low[0], low[-1])
             else:
                 note = 'roll full'
+        elif name == 'z_hurt':
+            out = slice_clip(out, 0, min(T - 1, 18)); note = 'z_hurt 0..18'
         elif name == 'hurt':
             out = slice_clip(out, 0, min(T - 1, 16)); note = 'hurt 0..16'
         elif name == 'death':

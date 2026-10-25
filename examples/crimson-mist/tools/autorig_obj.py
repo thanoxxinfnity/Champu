@@ -12,6 +12,9 @@ joints_file = argv[argv.index('--joints') + 1] if '--joints' in argv else None
 preview = argv[2] if len(argv) > 2 and not argv[2].startswith('--') else None
 height = float(argv[argv.index('--height') + 1]) if '--height' in argv else 1.55
 has_tail = '--tail' in argv
+adaptive = '--adaptive' in argv          # measure the joints on the mesh itself (T-pose humanoids)
+want_hair = '--hair' in argv
+want_skirt = '--skirt' in argv
 max_tris = int(argv[argv.index('--max-tris') + 1]) if '--max-tris' in argv else 0
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -25,6 +28,53 @@ bpy.ops.object.join()
 body = bpy.context.view_layer.objects.active
 body.name = os.path.splitext(os.path.basename(dst))[0]
 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+ADAPTIVE_SPEC = None
+if adaptive:
+    import statistics
+    vs0 = body.data.vertices
+    xs = [v.co.x for v in vs0]
+    cx = (min(xs) + max(xs)) / 2
+    for v in vs0:
+        v.co.x -= cx
+    zmin0, zmax0 = min(v.co.z for v in vs0), max(v.co.z for v in vs0)
+    H0 = zmax0 - zmin0
+    side = sorted(vs0, key=lambda v: -abs(v.co.x))[:max(8, len(vs0) // 60)]
+    A = statistics.median(abs(v.co.x) for v in side) * 1.15           # arm span (half)
+    arm_z = statistics.median(v.co.z for v in side)
+    legs = [v for v in vs0 if zmin0 + 0.12 * H0 < v.co.z < zmin0 + 0.32 * H0]
+    lx = statistics.median(abs(v.co.x) for v in legs if abs(v.co.x) > 0.01) if legs else 0.06 * H0
+    lx = min(max(lx, 0.04 * H0), 0.14 * H0)
+    z = lambda f: zmin0 + f * H0
+    neck_z = arm_z + 0.015 * H0
+    B = {}
+
+    def bone(name, head, tail, parent=None, sway=False):
+        B[name] = {'head': head, 'tail': tail, 'parent': parent, 'sway': sway}
+
+    bone('Hips', [0, 0, z(0.52)], [0, 0, z(0.58)])
+    bone('Spine', [0, 0, z(0.58)], [0, 0, z(0.66)], 'Hips')
+    bone('Chest', [0, 0, z(0.66)], [0, 0, neck_z], 'Spine')
+    bone('Neck', [0, 0, neck_z], [0, 0, neck_z + 0.04 * H0], 'Chest')
+    bone('Head', [0, 0, neck_z + 0.04 * H0], [0, 0, zmax0], 'Neck')
+    for sd, sg in (('L', 1), ('R', -1)):
+        bone(f'Shoulder.{sd}', [0.0, 0, arm_z], [sg * 0.2 * A, 0, arm_z], 'Chest')
+        bone(f'UpperArm.{sd}', [sg * 0.2 * A, 0, arm_z], [sg * 0.52 * A, 0, arm_z], f'Shoulder.{sd}')
+        bone(f'LowerArm.{sd}', [sg * 0.52 * A, 0, arm_z], [sg * 0.8 * A, 0, arm_z], f'UpperArm.{sd}')
+        bone(f'Hand.{sd}', [sg * 0.8 * A, 0, arm_z], [sg * A, 0, arm_z], f'LowerArm.{sd}')
+        bone(f'UpperLeg.{sd}', [sg * lx, 0, z(0.52)], [sg * lx * 1.05, 0, z(0.29)], 'Hips')
+        bone(f'LowerLeg.{sd}', [sg * lx * 1.05, 0, z(0.29)], [sg * lx * 1.05, 0, z(0.06)], f'UpperLeg.{sd}')
+        bone(f'Foot.{sd}', [sg * lx * 1.05, 0, z(0.06)], [sg * lx * 1.05, -0.09 * H0, z(0.02)], f'LowerLeg.{sd}')
+        bone(f'Toes.{sd}', [sg * lx * 1.05, -0.09 * H0, z(0.02)], [sg * lx * 1.05, -0.15 * H0, z(0.01)], f'Foot.{sd}')
+    if want_hair:
+        for i, (a, b) in enumerate(((0.93, 0.8), (0.8, 0.66), (0.66, 0.52))):
+            bone(f'sway_hair{i}', [0, 0.05 * H0, z(a)], [0, 0.06 * H0, z(b)], 'Head' if i == 0 else f'sway_hair{i - 1}', True)
+    if want_skirt:
+        for sx, sy, nm in ((0.07, -0.05, 'FL'), (-0.07, -0.05, 'FR'), (0.07, 0.05, 'BL'), (-0.07, 0.05, 'BR')):
+            bone(f'sway_skirt{nm}0', [sx * H0, sy * H0, z(0.5)], [sx * H0 * 1.2, sy * H0 * 1.2, z(0.36)], 'Hips', True)
+            bone(f'sway_skirt{nm}1', [sx * H0 * 1.2, sy * H0 * 1.2, z(0.36)], [sx * H0 * 1.3, sy * H0 * 1.3, z(0.22)], f'sway_skirt{nm}0', True)
+    ADAPTIVE_SPEC = {'bones': B}
+    print('ADAPTIVE arm_z %.2f A %.2f leg_x %.2f H %.2f' % (arm_z, A, lx, H0))
+
 ntris = sum(len(p.vertices) - 2 for p in body.data.polygons)
 if max_tris and ntris > max_tris:
     mod = body.modifiers.new('dec', 'DECIMATE')
@@ -88,9 +138,9 @@ if has_tail:  # follow the tail geometry: vertices clearly behind the body
         tail_names.append(nm)
 
 sway_set = set(tail_names)
-if joints_file:  # explicit joints measured on the mesh (raw model units, Blender axes: front = -Y, left = +X)
+if joints_file or adaptive:  # explicit joints measured on the mesh (raw model units, Blender axes: front = -Y, left = +X)
     import json
-    spec = json.load(open(joints_file))
+    spec = ADAPTIVE_SPEC if adaptive else json.load(open(joints_file))
     J, parent, sway_set = {}, {}, set()
     for nm, b in spec['bones'].items():
         h = Vector(b['head']) * k
@@ -131,7 +181,7 @@ for nm in J:
 body_names = [n for n in J if n not in tail_names]
 for v in vs:
     c = v.co
-    if joints_file:
+    if joints_file or adaptive:
         pool = [n for n in body_names if not (n.endswith('.L') and c.x < -.02 * H) and not (n.endswith('.R') and c.x > .02 * H)]
         pool += [n for n in tail_names if seg_dist(c, *J[n]) < .07 * H]
     else:
@@ -150,7 +200,7 @@ body.modifiers.new('Armature', 'ARMATURE').object = rig
 for p in body.data.polygons:
     p.use_smooth = True
 print('BONES', len(J), 'VERTS', len(vs), 'TRIS', sum(len(p.vertices) - 2 for p in body.data.polygons))
-bpy.ops.export_scene.gltf(filepath=dst, export_format='GLB', export_image_format='AUTO', export_yup=True, export_skins=True)
+bpy.ops.export_scene.gltf(filepath=dst, export_format='GLB', export_image_format='JPEG' if adaptive else 'AUTO', export_yup=True, export_skins=True)
 print('SAVED', dst, os.path.getsize(dst) // 1024, 'KB')
 
 if preview:

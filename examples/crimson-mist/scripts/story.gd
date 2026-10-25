@@ -155,7 +155,29 @@ func _spawn_zone(key: String) -> void:
 
 # ── missions ─────────────────────────────────────────────────────────────────
 
+const NPCS := [
+	["nurse", "Nurse Ito", Vector3(1.7, 0, -9.6), 215.0, CharacterView.Pose.SCARED, ["Please… don't go out there. The generator room is at the end of the hall."]],
+	["shopkeeper", "Mr. Arai", Vector3(12.8, 0, -61.0), 100.0, CharacterView.Pose.TALK, ["The workbench is all yours. Take what you can find on the street."]],
+	["granny", "Granny Sue", Vector3(-8.9, 0, -51.5), 85.0, CharacterView.Pose.WAVE, ["Stay near the lamps, dear. They hate the light."]],
+	["student", "Mika", Vector3(-24.5, 0, -100.5), 40.0, CharacterView.Pose.SCARED, ["The bell rings every night now… I can't stop hearing it."]],
+	["priest", "Father Odo", Vector3(-17.2, 0, -100.0), 250.0, CharacterView.Pose.TALK, ["The Bellkeeper was a good man once. Be merciful, if you can."]],
+	["fisher", "Captain Ren", Vector3(6.5, 0, -118.0), 120.0, CharacterView.Pose.WAVE, ["Burn the barricade. Fire is the only language they understand."]],
+]
+var npcs_made := false
+
+
+func _make_npcs() -> void:
+	if npcs_made:
+		return
+	npcs_made = true
+	for n in NPCS:
+		var npc := Npc.new()
+		npc.setup(game, n[0], n[1], n[2], n[3], n[4], n[5])
+		game.add_child(npc)
+
+
 func _start_wake(from_cp: bool) -> void:
+	_make_npcs()
 	flags["ambush"] = false
 	flags["ambush_dead"] = false
 	_make("loot", "crowbar", "Take crowbar", game.world.spots.crowbar)
