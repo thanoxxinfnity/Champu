@@ -194,6 +194,12 @@ for vi, v in enumerate(verts):
     for t, w in top:
         obj.vertex_groups[kept[t]].add([vi], w / s, 'REPLACE')
 obj.parent = rig
+MAX_TRIS = int(os.environ.get('MAX_TRIS', 25000))
+if len(keep_tri) > MAX_TRIS:
+    dec = obj.modifiers.new('dec', 'DECIMATE')
+    dec.ratio = MAX_TRIS / len(keep_tri)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.modifier_apply(modifier='dec')
 obj.modifiers.new('Armature', 'ARMATURE').object = rig
 print('BONES', len(kept), 'of', len(B), 'TRIS', len(keep_tri), 'MATS', len(obj.data.materials))
 

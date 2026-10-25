@@ -29,7 +29,7 @@ func to_world(c: Vector2i) -> Vector3:
 	return Vector3(origin.x + (c.x + 0.5) * cell, 0.0, origin.y + (c.y + 0.5) * cell)
 
 
-func block_rect(r: Rect2, margin := 0.45) -> void:
+func block_rect(r: Rect2, margin := 0.3) -> void:
 	var a := to_cell(Vector3(r.position.x - margin, 0, r.position.y - margin))
 	var b := to_cell(Vector3(r.end.x + margin, 0, r.end.y + margin))
 	for x in range(a.x, b.x + 1):

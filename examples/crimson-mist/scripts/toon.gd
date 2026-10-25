@@ -38,6 +38,8 @@ static func flat(color: Color, outline := 0.0, grime := 0.0, emission := Color.B
 
 static func apply(root: Node, outline := 0.012, tint := Color.WHITE, grime := 0.0) -> Array[ShaderMaterial]:
 	var out: Array[ShaderMaterial] = []
+	if DisplayServer.get_name() == "headless":
+		return out      # the dummy renderer has no mesh surfaces to restyle
 	for n in root.find_children("*", "MeshInstance3D", true, false):
 		var mi := n as MeshInstance3D
 		if mi.mesh == null:

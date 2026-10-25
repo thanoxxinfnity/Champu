@@ -9,6 +9,7 @@ var radius := 2.1
 var used := false
 var enabled := true
 var count := 1
+var key := ""             # world-loot slot, so a pickup is remembered across retries and saves
 var _glint: MeshInstance3D
 var _t := randf() * 6.0
 var _base_y := 0.0

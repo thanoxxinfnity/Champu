@@ -5,6 +5,8 @@ extends Node3D
 
 const WALL_H := 3.4
 const STREAM_DIST := 125.0
+const EXIT_GAP := Rect2(-1.3, -26.3, 2.6, 0.6)
+const STORE_GAP := Rect2(15.3, -66.25, 1.4, 0.5)
 
 var game: Game
 var nav := NavGrid.new()
@@ -35,7 +37,7 @@ const C_GROUND := Color(0.2, 0.24, 0.21)
 
 func build() -> void:
 	_rng.seed = 11
-	nav.setup(Rect2(-100, -260, 200, 300), 1.0)
+	nav.setup(Rect2(-100, -260, 200, 300), 0.5)
 	_environment()
 	_ground()
 	_clinic()
@@ -359,7 +361,7 @@ func _clinic() -> void:
 	_room(n, Rect2(-12, -12, 9.5, 10), WALL_H, wall, {"e": [[-6.6, -3.4]]})
 	_room(n, Rect2(2.5, -12, 9.5, 10), WALL_H, wall, {"w": [[-6.6, -3.4]]})
 	_room(n, Rect2(-7, -26, 14, 12), WALL_H, wall, {"s": [[-1.2, 1.2]], "n": [[-1.6, 1.6]]})
-	exit_door = _box(n, Vector3(0, WALL_H * 0.5, -26), Vector3(3.2, WALL_H, 0.5), Toon.flat(Color(0.35, 0.18, 0.22), 0.02, 0.4), true, true)
+	exit_door = _box(n, Vector3(0, WALL_H * 0.5, -26), Vector3(3.2, WALL_H, 0.5), Toon.flat(Color(0.35, 0.18, 0.22), 0.02, 0.4), false, true)
 	# furniture
 	_prop(n, "clinic_bed", Vector3(-3.0, 0, 9.5), 2.0, 90, true)
 	_prop(n, "clinic_bed", Vector3(3.0, 0, 9.5), 2.0, 90, true)
@@ -384,11 +386,11 @@ func _clinic() -> void:
 	spots["fuse"] = Vector3(8.5, 0.95, -8.0)
 	spots["generator"] = Vector3(0, 0, -21.2)
 	spots["cabinet"] = Vector3(-5.5, 0, -23.4)
-	spots["exit"] = Vector3(0, 0, -24.5)
+	spots["exit"] = Vector3(0, 0, -28.5)
 	spots["note0"] = Vector3(-3.0, 0.7, 9.5)
 	spots["note1"] = Vector3(8.5, 0.95, -9.4)
-	# walkable doorway through exit door is blocked until power
-	nav.block_rect(Rect2(-1.6, -26.3, 3.2, 0.6), 0.2)
+	# the doorway stays closed for pathing until the generator runs (exactly the gap between the wall ends)
+	nav.block_rect(EXIT_GAP, 0.0)
 
 
 func power_on() -> void:
@@ -399,7 +401,7 @@ func power_on() -> void:
 	if exit_door != null:
 		exit_door.queue_free()
 		exit_door = null
-		nav.unblock_rect(Rect2(-1.6, -26.3, 3.2, 0.6))
+		nav.unblock_rect(EXIT_GAP)
 
 
 func _market_street() -> void:
@@ -420,7 +422,8 @@ func _market_street() -> void:
 	_room(n, shop, WALL_H, wall, {"w": [[-66.0, -63.4]]})
 	_flat(n, Vector3(16.5, 0.03, -65), Vector3(11.4, 0.06, 13.4), Toon.flat(Color(0.4, 0.34, 0.38), 0.0, 0.4))
 	_wall(n, Vector2(10.5, -66), Vector2(22.5, -66), WALL_H, 0.4, wall, [[15.0, 17.0]])
-	storeroom_door = _box(n, Vector3(16.0, 1.3, -66), Vector3(2.0, 2.6, 0.45), Toon.flat(Color(0.3, 0.2, 0.2), 0.02), true, true)
+	storeroom_door = _box(n, Vector3(16.0, 1.3, -66), Vector3(2.0, 2.6, 0.45), Toon.flat(Color(0.3, 0.2, 0.2), 0.02), false, true)
+	nav.block_rect(STORE_GAP, 0.0)
 	_prop(n, "workbench", Vector3(14.0, 0, -60.3), 2.0, 0, true, true)
 	_box(n, Vector3(20.5, 1.0, -62.0), Vector3(1.0, 2.0, 3.0), Toon.flat(Color(0.4, 0.34, 0.3), 0.02))
 	_box(n, Vector3(20.5, 0.5, -69.2), Vector3(1.4, 1.0, 1.4), Toon.flat(Color(0.34, 0.28, 0.3), 0.02))
@@ -519,13 +522,20 @@ func _bell_road() -> void:
 	spots["note4"] = Vector3(-6.0, 1.0, -140)
 
 
+func open_storeroom() -> void:
+	if storeroom_door != null:
+		storeroom_door.queue_free()
+		storeroom_door = null
+	nav.unblock_rect(STORE_GAP)
+
+
 func burn_barricade() -> void:
 	if barricade == null:
 		return
 	game.fx.explosion(barricade.global_position + Vector3(0, 0.5, 0), 4.0)
 	barricade.queue_free()
 	barricade = null
-	nav.unblock_rect(Rect2(-6.5, -125, 13, 2.5))
+	nav.unblock_rect(Rect2(-7.0, -125.5, 14, 3.5))
 
 
 func _arena() -> void:
@@ -535,7 +545,7 @@ func _arena() -> void:
 	_wall(n, Vector2(-18, -192), Vector2(-18, -226), 7.0, 1.0, rock)
 	_wall(n, Vector2(18, -192), Vector2(18, -226), 7.0, 1.0, rock)
 	_wall(n, Vector2(-18, -226), Vector2(18, -226), 7.0, 1.0, rock)
-	arena_gate = _box(n, Vector3(0, 3.0, -191), Vector3(10, 6, 1.0), rock, true, true)
+	arena_gate = _box(n, Vector3(0, 3.0, -191), Vector3(10, 6, 1.0), rock, false, true)
 	arena_gate.visible = false
 	arena_gate.get_child(1).disabled = true
 	# the tower and its bell

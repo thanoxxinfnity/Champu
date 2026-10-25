@@ -221,6 +221,8 @@ func _restore_save() -> void:
 	var pos: Array = _save.get("pos", [])
 	if pos.size() == 3:
 		player.global_position = Vector3(pos[0], pos[1], pos[2])
+	for k in _save.get("picked", []):
+		story.picked[String(k)] = true
 	var inv: Dictionary = _save.get("inv", {})
 	for k in inv:
 		player.inventory[k] = int(inv[k])
@@ -230,8 +232,7 @@ func _restore_save() -> void:
 	if m >= 2:
 		world.power_on()
 	if m >= 3:
-		world.storeroom_door.queue_free()
-		world.nav.unblock_rect(Rect2(14.9, -66.5, 2.2, 1.0))
+		world.open_storeroom()
 		add_companion(1)
 	if m >= 5:
 		world.burn_barricade()
@@ -242,7 +243,7 @@ func save_progress() -> void:
 	if story == null or player == null:
 		return
 	var d := {"char": player.char_id, "mission": story.mission, "inv": player.inventory, "crowbar": player.has_crowbar, "pistol": player.has_pistol, "mag": player.mag,
-		"pos": [player.global_position.x, player.global_position.y, player.global_position.z], "done": story.finished}
+		"pos": [player.global_position.x, player.global_position.y, player.global_position.z], "done": story.finished, "picked": story.picked.keys()}
 	_save = d
 	Data.write_save(d)
 
@@ -259,6 +260,7 @@ func chapter_complete() -> void:
 
 
 func back_to_lobby() -> void:
+	state = State.LOBBY
 	get_tree().paused = false
 	for n in [world, player, story]:
 		if n != null:

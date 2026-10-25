@@ -33,12 +33,12 @@ func _initialize() -> void:
 	check(game.story.mission == 0, "mission 1 is active")
 	check(game.world.loaded_zones().has("clinic"), "clinic zone loaded")
 	var start := game.player.global_position
-	game.player.move_input = Vector2(0, -1)
+	game.hud.move = Vector2(0, -1)
 	game.player.yaw = 0.0
 	for i in 90:
 		await process_frame
 	check(game.player.global_position.distance_to(start) > 1.0, "player walks")
-	game.player.move_input = Vector2.ZERO
+	game.hud.move = Vector2.ZERO
 	game.player.try_attack()
 	for i in 40:
 		await process_frame

@@ -77,6 +77,8 @@ func _ready() -> void:
 	model.rotation.y = PI if bool(model.get_meta("stand_in", false)) == false else 0.0
 	for n in model.find_children("*", "MeshInstance3D", true, false):
 		var mi := n as MeshInstance3D
+		if mi.mesh == null or DisplayServer.get_name() == "headless":
+			continue
 		for s in mi.mesh.get_surface_count():
 			var m := mi.get_surface_override_material(s)
 			if m is ShaderMaterial:

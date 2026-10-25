@@ -65,7 +65,7 @@ def gen_text(name, prompt):
     if os.path.exists(dest):
         return True
     for i, key in enumerate(KEYS):
-        r = call('POST', '/tasks/text-to-model', key, {'prompt': prompt, 'polygon_limit': 60000, 'texture_size': 2048, 'turbo': False,
+        r = call('POST', '/tasks/text-to-model', key, {'prompt': prompt, 'polygon_limit': int(os.environ.get('TV_POLY', 60000)), 'texture_size': int(os.environ.get('TV_TEX', 2048)), 'turbo': False,
                                                        'client_order_id': f'cm_{name}_{int(time.time())}', 'allow_duplicate': True})
         if r.get('code') != 0:
             print(f'[{name}] key {i + 1} submit failed: {str(r)[:200]}')

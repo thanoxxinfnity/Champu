@@ -150,13 +150,13 @@ func _layout() -> void:
 	_size = get_viewport().get_visible_rect().size
 	var w := _size.x
 	var h := _size.y
-	_place(lbl_title, Rect2(16, 70, minf(420.0, w * 0.4), 22))
-	_place(lbl_goal, Rect2(16, 92, minf(420.0, w * 0.4), 44))
-	_place(lbl_toast, Rect2(w * 0.5 - 240, h * 0.2, 480, 28))
-	_place(lbl_dlg_name, Rect2(w * 0.5 - 250, h - 112, 500, 22))
-	_place(lbl_dlg, Rect2(w * 0.5 - 250, h - 90, 500, 54))
-	_place(lbl_card_t, Rect2(w * 0.5 - 400, h * 0.3, 800, 44))
-	_place(lbl_card_s, Rect2(w * 0.5 - 400, h * 0.3 + 48, 800, 50))
+	_place(lbl_title, Rect2(16, 68, minf(420.0, w * 0.4), 28))
+	_place(lbl_goal, Rect2(16, 96, minf(420.0, w * 0.4), 48))
+	_place(lbl_toast, Rect2(w * 0.5 - 240, h * 0.2, 480, 34))
+	_place(lbl_dlg_name, Rect2(w * 0.5 - 274, h - 130, 548, 28))
+	_place(lbl_dlg, Rect2(w * 0.5 - 274, h - 102, 548, 76))
+	_place(lbl_card_t, Rect2(w * 0.5 - 400, h * 0.3, 800, 54))
+	_place(lbl_card_s, Rect2(w * 0.5 - 400, h * 0.3 + 58, 800, 56))
 	_place(lbl_panel_title, Rect2(w * 0.5 - 420, h * 0.16, 840, 56))
 	_place(lbl_panel_body, Rect2(w * 0.5 - 400, h * 0.16 + 64, 800, h * 0.4))
 	_place(lbl_logo, Rect2(w * 0.5 - 520, 18, 1040, 90))
@@ -166,9 +166,9 @@ func _layout() -> void:
 	_place(lbl_perk, Rect2(w * 0.5 - 300, h - 182, 600, 56))
 	_place(lbl_stats, Rect2(40, h * 0.34, 300, 170))
 	_place(lbl_use, Rect2(w - 290, h - 262, 150, 40))
-	_place(lbl_items, Rect2(16, 46, minf(520.0, w * 0.45), 20))
-	_place(lbl_ammo, Rect2(w - 250, 48, 190, 24))
-	_place(lbl_boss, Rect2(w * 0.5 - 220, 12, 440, 22))
+	_place(lbl_items, Rect2(16, 42, minf(520.0, w * 0.45), 28))
+	_place(lbl_ammo, Rect2(w - 250, 48, 190, 32))
+	_place(lbl_boss, Rect2(w * 0.5 - 220, 8, 440, 30))
 	_place(lbl_hint, Rect2(w * 0.5 - 360, h - 60, 720, 30))
 	_buttons = {
 		"attack": {"c": Vector2(w - 92, h - 92), "r": 58.0, "label": "ATTACK", "show": true},
@@ -612,11 +612,11 @@ func _draw_playing(font: Font, w: float, h: float) -> void:
 			_canvas.draw_arc(c, 18, 0, TAU, 20, Color(1.0, 0.3 if _hit_head else 0.8, 0.3), 3.0)
 	# boss bar
 	if _boss_on:
-		_bar(Rect2(w * 0.5 - 300, 58, 600, 18), _boss_frac, Color(0.75, 0.15, 0.35))
+		_bar(Rect2(w * 0.5 - 220, 40, 440, 14), _boss_frac, Color(0.75, 0.15, 0.35))
 	# dialogue banner
 	if not _dialog.is_empty():
-		_canvas.draw_rect(Rect2(w * 0.5 - 266, h - 124, 532, 94), Color(0.04, 0.05, 0.08, 0.78))
-		_canvas.draw_rect(Rect2(w * 0.5 - 266, h - 124, 532, 94), PINK, false, 1.5)
+		_canvas.draw_rect(Rect2(w * 0.5 - 290, h - 136, 580, 118), Color(0.04, 0.05, 0.08, 0.78))
+		_canvas.draw_rect(Rect2(w * 0.5 - 290, h - 136, 580, 118), PINK, false, 1.5)
 	# virtual stick
 	if _stick_id != -99:
 		_canvas.draw_circle(_stick_origin, 66, Color(1, 1, 1, 0.08))

@@ -14,6 +14,7 @@ var kills_in_mission := 0
 var interactables: Array[Interactable] = []
 var checkpoint := {}
 var crafted := {}
+var picked := {}        # world-loot slots already taken
 var spawned_zones := {}
 var finished := false
 var _time_in_mission := 0.0
@@ -70,6 +71,8 @@ func start(index: int, from_checkpoint := false) -> void:
 	game.hud.chapter_card(objective_title, objective)
 	game.hud.set_objective(objective_title, objective)
 	_clear_interactables()
+	if index >= 2:
+		_ensure_loot()
 	match index:
 		0: _start_wake(from_checkpoint)
 		1: _start_power()
@@ -78,7 +81,7 @@ func start(index: int, from_checkpoint := false) -> void:
 		4: _start_road()
 		5: _start_boss()
 	checkpoint = {"mission": index, "pos": game.player.global_position, "inv": game.player.inventory.duplicate(), "crowbar": game.player.has_crowbar,
-		"pistol": game.player.has_pistol, "mag": game.player.mag, "flags": flags.duplicate(), "yaw": game.player.yaw}
+		"pistol": game.player.has_pistol, "mag": game.player.mag, "flags": flags.duplicate(true), "picked": picked.duplicate(), "yaw": game.player.yaw}
 	game.save_progress()
 
 
@@ -94,17 +97,37 @@ func restart_mission() -> void:
 	p.has_pistol = cp.pistol
 	p.mag = cp.mag
 	p.yaw = cp.yaw
-	flags = cp.flags.duplicate()
+	flags = cp.flags.duplicate(true)
+	picked = cp.picked.duplicate()
 	spawned_zones.clear()
 	game.hud.hide_all_screens()
 	start(int(cp.mission), true)
 
 
 func _clear_interactables() -> void:
+	## Mission-specific things (doors, prisoners, notes ...) go; world loot stays until someone takes it.
+	var keep: Array[Interactable] = []
 	for it in interactables:
-		if is_instance_valid(it):
+		if not is_instance_valid(it):
+			continue
+		if it.kind == "loot" and it.key != "":
+			keep.append(it)
+		else:
 			it.queue_free()
-	interactables.clear()
+	interactables = keep
+
+
+func _ensure_loot() -> void:
+	var have := {}
+	for it in interactables:
+		have[it.key] = true
+	for k in LOOT:
+		if picked.has(k) or have.has(k):
+			continue
+		var spec: Array = LOOT[k]
+		var it := _make("loot", spec[0], spec[2], game.world.spots[k])
+		it.count = spec[1]
+		it.key = k
 
 
 func _make(kind: String, value: String, label: String, pos: Vector3, glint := true, radius := 2.1) -> Interactable:
@@ -156,10 +179,6 @@ func _start_power() -> void:
 
 
 func _start_rescue() -> void:
-	for k in LOOT:
-		var spec: Array = LOOT[k]
-		var it := _make("loot", spec[0], spec[2], game.world.spots[k])
-		it.count = spec[1]
 	_make("note", "2", "Read sign", game.world.spots.note2, false)
 	_make("door", "", "Break storeroom door", game.world.spots.storeroom, true, 2.4)
 	_make("ally", "1", "Free survivor", game.world.spots.ally1, false, 2.4).enabled = false
@@ -220,7 +239,6 @@ func on_interact(it: Interactable) -> void:
 				if o.kind == "cabinet":
 					o.enabled = true
 			say([["{me}", "Lights! The exit door's unlocked — and the cabinet clicked open."]])
-			_advance_after(1.5)
 		"cabinet":
 			p.has_pistol = true
 			p.mag = int(Data.WEAPONS.pistol.mag)
@@ -232,8 +250,7 @@ func on_interact(it: Interactable) -> void:
 			if not p.has_crowbar:
 				game.hud.toast("YOU NEED A CROWBAR")
 				return
-			game.world.storeroom_door.queue_free()
-			game.world.nav.unblock_rect(Rect2(14.9, -66.5, 2.2, 1.0))
+			game.world.open_storeroom()
 			game.sfx.play("slam", 0.0, 1.2)
 			game.shake(0.3)
 			it.used = true
@@ -302,6 +319,8 @@ func _loot(it: Interactable) -> void:
 	else:
 		game.hud.toast("+%d %s" % [got, String(Data.ITEMS[item].name).to_upper()])
 	game.sfx.play("pickup")
+	if it.key != "":
+		picked[it.key] = true
 	it.used = true
 	it.queue_free()
 	interactables.erase(it)
@@ -369,7 +388,9 @@ func tick(delta: float) -> void:
 		1:
 			has_marker = true
 			if flags.get("power", false):
-				marker = spots.exit
+				marker = spots.cabinet if not p.has_pistol else spots.exit
+				if pz < -25.5:
+					complete_mission()
 			elif p.count("fuel") < 1:
 				marker = spots.fuel
 			elif p.count("fuse") < 1:
@@ -380,7 +401,7 @@ func tick(delta: float) -> void:
 			if pz < -28.0:
 				_spawn_zone("market")
 			if not flags.get("door_broken", false):
-				marker = spots.storeroom if pz < -52.0 else spots.market_start
+				marker = spots.storeroom
 			elif not flags.get("ally1_free", false):
 				marker = spots.ally1
 			has_marker = true
@@ -396,7 +417,7 @@ func tick(delta: float) -> void:
 				_spawn_zone("church")
 			has_marker = true
 			if not flags.get("ally2_free", false):
-				marker = spots.church_door if p.global_position.x > -10.0 else spots.ally2
+				marker = spots.church_door if p.global_position.distance_to(spots.church_door) > 6.0 and p.global_position.x > -10.0 else spots.ally2
 			elif not flags.get("barricade", false):
 				marker = spots.barricade
 			else:
@@ -404,7 +425,8 @@ func tick(delta: float) -> void:
 				if pz < -186.0:
 					complete_mission()
 		5:
-			has_marker = false
+			has_marker = not flags.get("boss_spawned", false)
+			marker = spots.arena
 			if not flags.get("boss_spawned", false) and pz < -196.0:
 				flags["boss_spawned"] = true
 				_begin_boss()
