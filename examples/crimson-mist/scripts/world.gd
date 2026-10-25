@@ -15,6 +15,7 @@ var spots := {}                  # name -> Vector3 (story anchors)
 var lamps: Array[OmniLight3D] = []
 var clinic_lights: Array[OmniLight3D] = []
 var barricade: StaticBody3D
+var barricade_bits: Array[Node] = []     # tyres and barrels piled at the barricade, cleared when it burns
 var storeroom_door: StaticBody3D
 var exit_door: StaticBody3D
 var arena_gate: StaticBody3D
@@ -26,6 +27,7 @@ var _t := 0.0
 var _zone_node: Node3D
 var _rng := RandomNumberGenerator.new()
 var _lamp_budget := 6
+var low_gfx := false
 
 # palette
 const C_WALL := Color(0.62, 0.64, 0.62)
@@ -35,20 +37,32 @@ const C_WALK := Color(0.4, 0.4, 0.4)
 const C_GROUND := Color(0.2, 0.24, 0.21)
 
 
+## The whole world in small steps, so the loading screen can redraw between them (a phone would otherwise freeze for seconds).
+func build_steps() -> Array[Callable]:
+	var steps: Array[Callable] = [
+		func() -> void:
+			_rng.seed = 11
+			nav.setup(Rect2(-100, -260, 200, 300), 0.5)
+			_environment(),
+		_ground, _clinic, _market_street, _church, _bell_road, _arena, _harbour, _mist,
+	]
+	for zname in ["ground", "clinic", "market", "church", "road", "arena", "harbour"]:
+		steps.append(func() -> void: _finish_zone(zname))
+	return steps
+
+
 func build() -> void:
-	_rng.seed = 11
-	nav.setup(Rect2(-100, -260, 200, 300), 0.5)
-	_environment()
-	_ground()
-	_clinic()
-	_market_street()
-	_church()
-	_bell_road()
-	_arena()
-	_harbour()
-	_mist()
-	for z in zones:
-		zones[z].node.visible = true
+	for step in build_steps():
+		step.call()
+
+
+func _finish_zone(zname: String) -> void:
+	if not zones.has(zname):
+		return
+	var r := Batcher.merge(zones[zname].node, 105.0)
+	zones[zname].node.visible = true
+	if r.before > 0:
+		print("world: zone %s: %d static meshes merged into %d batches" % [zname, r.before, r.after])
 
 
 # ── environment ──────────────────────────────────────────────────────────────
@@ -82,7 +96,7 @@ func _environment() -> void:
 
 func _ground() -> void:
 	var n := _new_zone("ground", Rect2(-100, -260, 200, 300))
-	_flat(n, Vector3(0, -0.05, -110), Vector3(200, 0.1, 300), Toon.flat(C_GROUND, 0.0, 0.8))
+	_flat(n, Vector3(0, -0.05, -110), Vector3(200, 0.1, 300), Surf.mat("forest_floor", 6.0, Color(0.42, 0.48, 0.5), 0.0, 0.0, 0.9))
 	var floor_body := StaticBody3D.new()
 	floor_body.collision_layer = Data.L_WORLD
 	floor_body.collision_mask = 0
@@ -93,15 +107,37 @@ func _ground() -> void:
 	floor_body.add_child(fcs)
 	floor_body.position = Vector3(0, -1.0, -110)
 	n.add_child(floor_body)
-	# street + sidewalks
-	_flat(n, Vector3(0, 0.0, -88), Vector3(14, 0.06, 126), Toon.flat(C_ROAD, 0.0, 0.7))
-	_flat(n, Vector3(-8.2, 0.02, -88), Vector3(2.4, 0.08, 126), Toon.flat(C_WALK, 0.0, 0.6))
-	_flat(n, Vector3(8.2, 0.02, -88), Vector3(2.4, 0.08, 126), Toon.flat(C_WALK, 0.0, 0.6))
-	_flat(n, Vector3(0, 0.0, -158), Vector3(10, 0.06, 70), Toon.flat(C_ROAD.lightened(0.04), 0.0, 0.8))
-	_forest(n, -95, 95, -10, 18, 70, 24, 3)
-	_forest(n, -95, 95, -250, -20, 420, 30, 5)
+	# street + sidewalks + curbs; a dirt strip between the sidewalk and the house fronts
+	var asphalt := Surf.mat("asphalt", 4.0, Color(0.5, 0.52, 0.58), 0.0, 0.0, 1.0)
+	_flat(n, Vector3(0, 0.0, -88), Vector3(14, 0.06, 126), asphalt)
+	_flat(n, Vector3(0, 0.0, -158), Vector3(10, 0.06, 70), Surf.mat("asphalt_b", 4.0, Color(0.46, 0.48, 0.52), 0.0, 0.0, 1.0))
+	var walk := Surf.mat("pavement", 2.0, Color(0.66, 0.7, 0.74), 0.0, 0.4, 0.9)
+	var curb := Surf.mat("concrete", 2.0, Color(0.62, 0.64, 0.68), 0.0, 0.5, 0.5)
+	for sx in [-1.0, 1.0]:
+		_flat(n, Vector3(sx * 8.2, 0.02, -88), Vector3(2.4, 0.08, 126), walk)
+		_flat(n, Vector3(sx * 7.05, 0.07, -88), Vector3(0.2, 0.16, 126), curb)
+		_flat(n, Vector3(sx * 10.2, 0.01, -88), Vector3(1.6, 0.04, 126), Surf.mat("mud", 3.0, Color(0.46, 0.5, 0.5), 0.0, 0.0, 0.8))
+	_forest(n, -95, 95, -10, 18, 60, 24, 3)
+	_forest(n, -95, 95, -250, -20, 360, 30, 5)
+	var paint := Toon.flat(Color(0.72, 0.7, 0.62), 0.0, 0.3)
 	for i in range(0, 20):
-		_flat(n, Vector3(0, 0.05, -28 - i * 6.0), Vector3(0.25, 0.02, 2.6), Toon.flat(Color(0.75, 0.72, 0.6), 0.0, 0.3))
+		_flat(n, Vector3(0, 0.05, -28 - i * 6.0), Vector3(0.22, 0.02, 2.6), paint)
+	# crosswalks and manholes
+	for z in [-30.0, -62.0, -94.0, -118.0]:
+		for k in range(-5, 6):
+			_flat(n, Vector3(k * 1.15, 0.05, z), Vector3(0.6, 0.02, 3.0), paint)
+	var iron := Toon.flat(Color(0.18, 0.19, 0.22), 0.0, 0.2)
+	for z in [-45.0, -77.0, -105.0]:
+		var mh := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.5
+		cm.bottom_radius = 0.5
+		cm.height = 0.03
+		cm.radial_segments = 14
+		mh.mesh = cm
+		mh.material_override = iron
+		mh.position = Vector3(2.2 if z != -77.0 else -2.4, 0.05, z)
+		n.add_child(mh)
 
 
 func _new_zone(zname: String, rect: Rect2) -> Node3D:
@@ -152,7 +188,7 @@ func _box(parent: Node3D, center: Vector3, size: Vector3, mat: Material, block_n
 
 
 ## Axis-aligned wall from a to b (x,z) with door gaps given as [from, to] coordinates along the wall.
-func _wall(parent: Node3D, a: Vector2, b: Vector2, h: float, th: float, mat: Material, gaps: Array = []) -> void:
+func _wall(parent: Node3D, a: Vector2, b: Vector2, h: float, th: float, mat: Material, gaps: Array = [], dado: Material = null) -> void:
 	var horizontal := is_equal_approx(a.y, b.y)
 	var c0 := minf(a.x, b.x) if horizontal else minf(a.y, b.y)
 	var c1 := maxf(a.x, b.x) if horizontal else maxf(a.y, b.y)
@@ -175,13 +211,38 @@ func _wall(parent: Node3D, a: Vector2, b: Vector2, h: float, th: float, mat: Mat
 			_box(parent, Vector3(mid, h * 0.5, a.y), Vector3(seg_len, h, th), mat)
 		else:
 			_box(parent, Vector3(a.x, h * 0.5, mid), Vector3(th, h, seg_len), mat)
+		if dado != null:       # two-tone wall: a tiled/panelled lower band with a rail on top, both sides
+			var rail := Toon.flat(Color(0.2, 0.24, 0.26), 0.0, 0.3)
+			for side in [-1.0, 1.0]:
+				var off: float = side * (th * 0.5 + 0.02)
+				if horizontal:
+					_flat(parent, Vector3(mid, 0.65, a.y + off), Vector3(seg_len, 1.3, 0.04), dado)
+					_flat(parent, Vector3(mid, 1.34, a.y + off * 1.3), Vector3(seg_len, 0.09, 0.08), rail)
+					_flat(parent, Vector3(mid, 0.08, a.y + off * 1.4), Vector3(seg_len, 0.16, 0.07), rail)
+				else:
+					_flat(parent, Vector3(a.x + off, 0.65, mid), Vector3(0.04, 1.3, seg_len), dado)
+					_flat(parent, Vector3(a.x + off * 1.3, 1.34, mid), Vector3(0.08, 0.09, seg_len), rail)
+					_flat(parent, Vector3(a.x + off * 1.4, 0.08, mid), Vector3(0.07, 0.16, seg_len), rail)
 
 
-func _room(parent: Node3D, r: Rect2, h: float, mat: Material, gaps := {}) -> void:
-	_wall(parent, Vector2(r.position.x, r.position.y), Vector2(r.end.x, r.position.y), h, 0.4, mat, gaps.get("n", []))
-	_wall(parent, Vector2(r.position.x, r.end.y), Vector2(r.end.x, r.end.y), h, 0.4, mat, gaps.get("s", []))
-	_wall(parent, Vector2(r.position.x, r.position.y), Vector2(r.position.x, r.end.y), h, 0.4, mat, gaps.get("w", []))
-	_wall(parent, Vector2(r.end.x, r.position.y), Vector2(r.end.x, r.end.y), h, 0.4, mat, gaps.get("e", []))
+func _room(parent: Node3D, r: Rect2, h: float, mat: Material, gaps := {}, dado: Material = null) -> void:
+	_wall(parent, Vector2(r.position.x, r.position.y), Vector2(r.end.x, r.position.y), h, 0.4, mat, gaps.get("n", []), dado)
+	_wall(parent, Vector2(r.position.x, r.end.y), Vector2(r.end.x, r.end.y), h, 0.4, mat, gaps.get("s", []), dado)
+	_wall(parent, Vector2(r.position.x, r.position.y), Vector2(r.position.x, r.end.y), h, 0.4, mat, gaps.get("w", []), dado)
+	_wall(parent, Vector2(r.end.x, r.position.y), Vector2(r.end.x, r.end.y), h, 0.4, mat, gaps.get("e", []), dado)
+
+
+## A visual-only ceiling slab with lamp panels (no collider: the camera must never be pushed by it).
+func _ceiling(parent: Node3D, r: Rect2, h: float, mat: Material, panels := true) -> void:
+	_flat(parent, Vector3(r.get_center().x, h + 0.1, r.get_center().y), Vector3(r.size.x + 0.4, 0.2, r.size.y + 0.4), mat)
+	if not panels:
+		return
+	var glow := Toon.flat(Color(0.85, 0.95, 0.9), 0.0, 0.0, Color(0.7, 0.85, 0.8), 0.7)
+	var nx := maxi(1, int(r.size.x / 5.0))
+	var nz := maxi(1, int(r.size.y / 5.0))
+	for ix in nx:
+		for iz in nz:
+			_flat(parent, Vector3(r.position.x + (ix + 0.5) * r.size.x / nx, h - 0.03, r.position.y + (iz + 0.5) * r.size.y / nz), Vector3(1.6, 0.06, 0.45), glow)
 
 
 func _prop(parent: Node3D, model: String, pos: Vector3, size: float, rot_deg := 0.0, by_length := false, solid := true, outline := 0.02) -> Node3D:
@@ -235,48 +296,6 @@ func _lamp(parent: Node3D, pos: Vector3, on := true) -> void:
 	nav.block_rect(Rect2(pos.x - 0.15, pos.z - 0.15, 0.3, 0.3), 0.15)
 
 
-## A building block with lit windows on the face toward the road (face = +1 east face, -1 west face).
-func _building(parent: Node3D, r: Rect2, h: float, color: Color, face: int) -> void:
-	_box(parent, Vector3(r.get_center().x, h * 0.5, r.get_center().y), Vector3(r.size.x, h, r.size.y), Toon.flat(color, 0.02, 0.8))
-	# gabled roof (prism, ridge along z) + a chimney
-	var roof := MeshInstance3D.new()
-	var pm := PrismMesh.new()
-	pm.size = Vector3(r.size.x + 1.2, 2.4 + r.size.x * 0.12, r.size.y + 1.0)
-	roof.mesh = pm
-	roof.material_override = Toon.flat(color.darkened(0.45).lerp(Color(0.25, 0.2, 0.2), 0.4), 0.025, 0.7)
-	roof.position = Vector3(r.get_center().x, h + pm.size.y * 0.5, r.get_center().y)
-	roof.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(roof)
-	_flat(parent, Vector3(r.get_center().x + r.size.x * 0.25, h + pm.size.y * 0.7, r.get_center().y - r.size.y * 0.2), Vector3(0.9, 2.4, 0.9), Toon.flat(Color(0.3, 0.26, 0.26), 0.02, 0.5))
-	if face == 0:
-		return
-	var x := r.end.x + 0.03 if face > 0 else r.position.x - 0.03
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var nx := float(face)
-	var z := r.position.y + 2.0
-	while z < r.end.y - 1.5:
-		var y := 2.4
-		while y < h - 1.2:
-			if _rng.randf() < 0.5:
-				var z0 := z
-				var z1 := z + 1.2
-				var y0 := y
-				var y1 := y + 1.5
-				var quad := [Vector3(x, y0, z0), Vector3(x, y1, z0), Vector3(x, y1, z1), Vector3(x, y0, z1)]
-				var order := [0, 1, 2, 0, 2, 3] if face > 0 else [0, 2, 1, 0, 3, 2]
-				for i in order:
-					st.set_normal(Vector3(nx, 0, 0))
-					st.add_vertex(quad[i])
-			y += 3.2
-		z += 3.0
-	var mi := MeshInstance3D.new()
-	mi.mesh = st.commit()
-	mi.material_override = Toon.flat(Color(1.0, 0.8, 0.5), 0.0, 0.0, Color(1.0, 0.55, 0.3), 1.5)
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(mi)
-
-
 ## One combined pine (trunk + three stacked cones) used by every forest MultiMesh.
 func _pine_mesh() -> ArrayMesh:
 	var st := SurfaceTool.new()
@@ -285,14 +304,14 @@ func _pine_mesh() -> ArrayMesh:
 	trunk.top_radius = 0.16
 	trunk.bottom_radius = 0.26
 	trunk.height = 2.0
-	trunk.radial_segments = 6
+	trunk.radial_segments = 5
 	parts.append([trunk, Transform3D(Basis(), Vector3(0, 1.0, 0))])
 	for i in 3:
 		var cone := CylinderMesh.new()
 		cone.top_radius = 0.0
 		cone.bottom_radius = 1.9 - i * 0.45
 		cone.height = 2.6
-		cone.radial_segments = 7
+		cone.radial_segments = 6
 		parts.append([cone, Transform3D(Basis(), Vector3(0, 2.6 + i * 1.5, 0))])
 	var first := true
 	for p in parts:
@@ -301,27 +320,37 @@ func _pine_mesh() -> ArrayMesh:
 	return am
 
 
-## Scatter pines inside [x0,x1] x [z0,z1], skipping the corridor |x| < keep_out around the road when keep_out > 0.
+## Scatter pines inside [x0,x1] x [z0,z1], skipping the corridor |x| < keep_out around the road when keep_out > 0. One MultiMesh per 40 m cell so
+## the renderer can cull and distance-hide whole cells (a single MultiMesh is always drawn in full).
 func _forest(parent: Node3D, x0: float, x1: float, z0: float, z1: float, count: int, keep_out := 0.0, seed_v := 1) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_v
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = _pine_mesh()
-	var xs: Array = []
+	var mesh := _pine_mesh()
+	var mat := Surf.mat("forest_floor", 3.0, Color(0.16, 0.24, 0.22), 0.0, 0.0, 0.0)
+	var cells := {}
 	for i in count:
 		var p := Vector3(rng.randf_range(x0, x1), 0, rng.randf_range(z0, z1))
 		if keep_out > 0.0 and absf(p.x) < keep_out:
 			continue
-		xs.append(Transform3D(Basis().scaled(Vector3.ONE * rng.randf_range(0.8, 1.7)).rotated(Vector3.UP, rng.randf() * TAU), p))
-	mm.instance_count = xs.size()
-	for i in xs.size():
-		mm.set_instance_transform(i, xs[i])
-	var mi := MultiMeshInstance3D.new()
-	mi.multimesh = mm
-	mi.material_override = Toon.flat(Color(0.13, 0.2, 0.17), 0.03, 0.4)
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(mi)
+		var xf := Transform3D(Basis().scaled(Vector3.ONE * rng.randf_range(0.9, 1.9)).rotated(Vector3.UP, rng.randf() * TAU), p)
+		var key := Vector2i(floori(p.x / 40.0), floori(p.z / 40.0))
+		if not cells.has(key):
+			cells[key] = []
+		cells[key].append(xf)
+	for key in cells:
+		var xs: Array = cells[key]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh
+		mm.instance_count = xs.size()
+		for i in xs.size():
+			mm.set_instance_transform(i, xs[i])
+		var mi := MultiMeshInstance3D.new()
+		mi.multimesh = mm
+		mi.material_override = mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.visibility_range_end = 120.0
+		parent.add_child(mi)
 
 
 func _tree(parent: Node3D, pos: Vector3) -> void:
@@ -332,7 +361,7 @@ func _tree(parent: Node3D, pos: Vector3) -> void:
 	cm.height = 3.0
 	cm.radial_segments = 6
 	trunk.mesh = cm
-	trunk.material_override = Toon.flat(Color(0.18, 0.12, 0.14), 0.02, 0.5)
+	trunk.material_override = Surf.mat("planks_brown", 1.2, Color(0.3, 0.27, 0.27), 0.0, 0.8, 0.0)
 	trunk.position = pos + Vector3(0, 1.5, 0)
 	parent.add_child(trunk)
 	for i in 3:
@@ -347,29 +376,183 @@ func _tree(parent: Node3D, pos: Vector3) -> void:
 	_box(parent, pos + Vector3(0, 1.2, 0), Vector3(0.5, 2.4, 0.5), Toon.flat(Color.BLACK), true, true).visible = false
 
 
+# ── dressing helpers ─────────────────────────────────────────────────────────
+
+var occupied: Array[Vector3] = []          # centres of everything placed so far, so the scatter keeps clear of it and of the story spots
+
+
+## A Poly Haven prop (assets/ph/<name>.glb), `size` metres tall (or long when by_length). Solid ones block the nav grid like any prop.
+func _ph(parent: Node3D, model: String, pos: Vector3, size: float, rot_deg := 0.0, solid := true, by_length := false) -> Node3D:
+	occupied.append(pos)
+	if model == "boulder":
+		return _boulder(parent, pos, size, rot_deg, solid)
+	return _prop(parent, "ph/" + model, pos, size, rot_deg, by_length, solid, 0.012 if size >= 1.5 else 0.0)
+
+
+## A lumpy rock: a displaced ico-sphere (a few hundred triangles) in the triplanar rock texture, with a box collider.
+func _boulder(parent: Node3D, pos: Vector3, size: float, rot_deg: float, solid: bool) -> Node3D:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(absf(pos.x * 31.0 + pos.z * 17.0)) + 5
+	var sm := SphereMesh.new()
+	sm.radial_segments = 10
+	sm.rings = 6
+	var arrays := sm.get_mesh_arrays()
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var off := {}
+	for i in verts.size():
+		var key := Vector3i(roundi(verts[i].x * 40), roundi(verts[i].y * 40), roundi(verts[i].z * 40))
+		if not off.has(key):
+			off[key] = rng.randf_range(0.78, 1.18)
+		verts[i] = verts[i] * float(off[key])
+		verts[i].y *= 0.75
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var holder := Node3D.new()
+	holder.position = pos
+	holder.rotation_degrees.y = rot_deg
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.scale = Vector3(size, size, size) * Vector3(1.2, 1.0, 1.0)
+	mi.position.y = size * 0.3
+	mi.material_override = Surf.mat("rock", 2.5, Color(0.55, 0.6, 0.64), 0.0, 0.8, 1.0)
+	holder.add_child(mi)
+	if solid:
+		var body := StaticBody3D.new()
+		body.collision_layer = Data.L_WORLD
+		body.collision_mask = 0
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = Vector3(size * 1.5, size * 0.9, size * 1.1)
+		cs.shape = bs
+		cs.position.y = size * 0.45
+		body.add_child(cs)
+		holder.add_child(body)
+		if size > 0.8:
+			nav.block_rect(Rect2(pos.x - size * 0.8, pos.z - size * 0.6, size * 1.6, size * 1.2), 0.2)
+	parent.add_child(holder)
+	return holder
+
+
+func _free_spot(pos: Vector3, gap: float) -> bool:
+	for o in occupied:
+		if Vector2(o.x - pos.x, o.z - pos.z).length() < gap:
+			return false
+	for k in spots:
+		var sp: Vector3 = spots[k]
+		if Vector2(sp.x - pos.x, sp.z - pos.z).length() < 2.4:
+			return false
+	return true
+
+
+## Scatter props inside `area` (x, z rectangle). kinds: [model, size, by_length, solid, weight]. Keeps the road centre free unless `road` is true.
+func _scatter(parent: Node3D, area: Rect2, kinds: Array, count: int, seed_v: int, gap := 2.0, road := false) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_v
+	var total := 0.0
+	for k in kinds:
+		total += float(k[4])
+	var placed := 0
+	var tries := 0
+	while placed < count and tries < count * 12:
+		tries += 1
+		var pos := Vector3(rng.randf_range(area.position.x, area.end.x), 0, rng.randf_range(area.position.y, area.end.y))
+		if not road and absf(pos.x) < 5.0 and area.size.x > 8.0:
+			continue
+		if not _free_spot(pos, gap):
+			continue
+		var roll := rng.randf() * total
+		var pick: Array = kinds[0]
+		for k in kinds:
+			roll -= float(k[4])
+			if roll <= 0.0:
+				pick = k
+				break
+		if road and bool(pick[3]) and absf(pos.x) < 3.4 and area.size.x > 8.0:
+			continue       # solid things never narrow the middle of the road: the nav corridor must stay open
+		_ph(parent, pick[0], pos, float(pick[1]) * rng.randf_range(0.9, 1.1), rng.randf() * 360.0, bool(pick[3]), bool(pick[2]))
+		placed += 1
+
+
+func _blood(parent: Node3D, pos: Vector3, size: float, rng: RandomNumberGenerator) -> void:
+	var m := Toon.flat(Color(0.3, 0.03, 0.05), 0.0, 0.0)
+	for i in rng.randi_range(2, 4):
+		var q := _flat(parent, pos + Vector3(rng.randf_range(-size, size) * 0.5, 0.075 + i * 0.002, rng.randf_range(-size, size) * 0.5), Vector3(size * rng.randf_range(0.3, 0.7), 0.01, size * rng.randf_range(0.3, 0.7)), m)
+		q.rotation.y = rng.randf() * TAU
+
+
 # ── Chapter 1 places ─────────────────────────────────────────────────────────
 
 func _clinic() -> void:
 	var n := _new_zone("clinic", Rect2(-14, -28, 28, 44))
-	var wall := Toon.flat(C_WALL, 0.02, 0.5)
-	var floor_m := Toon.flat(C_FLOOR, 0.0, 0.5)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	var wall := Surf.mat("plaster_beige", 3.0, Color(0.72, 0.78, 0.8), 0.55, 0.9)
+	var wall2 := Surf.mat("plaster_blue", 3.0, Color(0.62, 0.72, 0.76), 0.55, 0.9)
+	var floor_m := Surf.mat("tiles_check", 1.4, Color(0.6, 0.66, 0.68), 0.0, 0.6, 0.8)
 	_flat(n, Vector3(0, 0.02, -6), Vector3(26, 0.06, 40), floor_m)
 	# ward (start): x[-5,5] z[2,12]; corridor x[-2.5,2.5] z[-14,2]; storage west; office east; generator room z[-24,-14]
-	_room(n, Rect2(-5, 2, 10, 10), WALL_H, wall, {"n": [[-1.2, 1.2]]})
-	_wall(n, Vector2(-2.5, 2), Vector2(-2.5, -14), WALL_H, 0.4, wall, [[-6.6, -3.4]])
-	_wall(n, Vector2(2.5, 2), Vector2(2.5, -14), WALL_H, 0.4, wall, [[-6.6, -3.4]])
-	_room(n, Rect2(-12, -12, 9.5, 10), WALL_H, wall, {"e": [[-6.6, -3.4]]})
-	_room(n, Rect2(2.5, -12, 9.5, 10), WALL_H, wall, {"w": [[-6.6, -3.4]]})
-	_room(n, Rect2(-7, -26, 14, 12), WALL_H, wall, {"s": [[-1.2, 1.2]], "n": [[-1.6, 1.6]]})
-	exit_door = _box(n, Vector3(0, WALL_H * 0.5, -26), Vector3(3.2, WALL_H, 0.5), Toon.flat(Color(0.35, 0.18, 0.22), 0.02, 0.4), false, true)
-	# furniture
+	var tile_blue := Surf.mat("tiles_blue", 1.1, Color(0.62, 0.72, 0.76), 0.0, 0.5, 0.8)
+	var tile_brown := Surf.mat("tiles_brown", 1.1, Color(0.58, 0.58, 0.6), 0.0, 0.5, 0.8)
+	var ceil_m := Surf.mat("concrete", 2.4, Color(0.34, 0.37, 0.4), 0.0, 0.9, 0.5)
+	_room(n, Rect2(-5, 2, 10, 10), WALL_H, wall2, {"n": [[-1.2, 1.2]]}, tile_blue)
+	_wall(n, Vector2(-2.5, 2), Vector2(-2.5, -14), WALL_H, 0.4, wall, [[-6.6, -3.4]], tile_brown)
+	_wall(n, Vector2(2.5, 2), Vector2(2.5, -14), WALL_H, 0.4, wall, [[-6.6, -3.4]], tile_brown)
+	_room(n, Rect2(-12, -12, 9.5, 10), WALL_H, wall, {"e": [[-6.6, -3.4]]}, tile_brown)
+	_room(n, Rect2(2.5, -12, 9.5, 10), WALL_H, wall, {"w": [[-6.6, -3.4]]}, tile_brown)
+	_room(n, Rect2(-7, -26, 14, 12), WALL_H, Surf.mat("concrete_block", 3.0, Color(0.6, 0.64, 0.66), 0.6, 1.0), {"s": [[-1.2, 1.2]], "n": [[-1.6, 1.6]]}, Surf.mat("metal", 1.4, Color(0.4, 0.46, 0.48), 0.0, 0.6, 0.0))
+	for cr in [Rect2(-5, 2, 10, 10), Rect2(-2.5, -14, 5, 16), Rect2(-12, -12, 9.5, 10), Rect2(2.5, -12, 9.5, 10), Rect2(-7, -26, 14, 12)]:
+		_ceiling(n, cr, WALL_H, ceil_m)
+	_flat(n, Vector3(0, 3.05, -25.62), Vector3(1.0, 0.32, 0.08), Toon.flat(Color(0.2, 0.9, 0.45), 0.0, 0.0, Color(0.1, 1.0, 0.4), 1.4))
+	var cs := Label3D.new()
+	cs.text = "HARROW COVE CLINIC"
+	cs.font_size = 64
+	cs.pixel_size = 0.008
+	cs.modulate = Color(0.9, 0.95, 1.0)
+	cs.position = Vector3(0, 3.5, -26.32)
+	cs.rotation.y = PI
+	n.add_child(cs)
+	exit_door = _box(n, Vector3(0, WALL_H * 0.5, -26), Vector3(3.2, WALL_H, 0.5), Surf.mat("shutter", 2.0, Color(0.55, 0.42, 0.42), 0.0, 0.6), false, true)
+	Batcher.keep(exit_door)
+	var wood := Surf.mat("planks_brown", 1.6, Color(0.7, 0.66, 0.62), 0.0, 0.5)
+	var metal := Surf.mat("metal", 1.6, Color(0.55, 0.6, 0.62), 0.0, 0.6, 0.0)
+	# ward: two beds, bedside tables, the cabinet with the crowbar, chairs, a wheelchair
 	_prop(n, "clinic_bed", Vector3(-3.0, 0, 9.5), 2.0, 90, true)
 	_prop(n, "clinic_bed", Vector3(3.0, 0, 9.5), 2.0, 90, true)
-	_box(n, Vector3(3.6, 0.45, 6.0), Vector3(1.2, 0.9, 0.7), Toon.flat(Color(0.5, 0.36, 0.28), 0.02))
-	_box(n, Vector3(-9.0, 0.9, -11.2), Vector3(5.0, 1.8, 0.8), Toon.flat(Color(0.4, 0.42, 0.48), 0.02))
-	_box(n, Vector3(8.5, 0.45, -8.0), Vector3(2.4, 0.9, 1.0), Toon.flat(Color(0.5, 0.36, 0.28), 0.02))
-	_box(n, Vector3(-5.5, 0.6, -24.6), Vector3(1.6, 1.2, 0.8), Toon.flat(Color(0.4, 0.45, 0.4), 0.02))
+	_ph(n, "drawers", Vector3(3.6, 0, 6.0), 0.9, 180)
+	_ph(n, "drawers", Vector3(-4.2, 0, 8.0), 0.8, 90)
+	_ph(n, "chair", Vector3(-1.2, 0, 10.8), 0.95, 200)
+	_ph(n, "wheelchair", Vector3(1.6, 0, 3.4), 1.0, 160, false)
+	_ph(n, "desk_lamp", Vector3(-4.25, 0.8, 8.0), 0.35, 0, false)
+	_ph(n, "wet_sign", Vector3(0.6, 0, 1.4), 0.6, 20, false)
+	for b in [Vector3(0.5, 0, 6.5), Vector3(-3.5, 0, 6.5), Vector3(2.0, 0, 11.0)]:
+		_blood(n, b, 1.1, rng)
+	# corridor: blood trail, scattered stretcher parts
+	for z in [-0.5, -3.5, -9.0, -12.0]:
+		_blood(n, Vector3(rng.randf_range(-1.0, 1.0), 0, z), 0.9, rng)
+	_ph(n, "hand_truck", Vector3(-1.9, 0, -10.2), 1.1, 90, false)
+	_ph(n, "trashbag", Vector3(1.9, 0, -1.0), 0.6, 30, false)
+	# storage (west): shelves, fuel, boxes
+	_box(n, Vector3(-9.0, 0.9, -11.2), Vector3(5.0, 1.8, 0.8), metal)
+	_ph(n, "carton", Vector3(-11.0, 0, -4.0), 0.7, 20)
+	_ph(n, "carton", Vector3(-10.4, 0, -3.1), 0.55, 70)
+	_ph(n, "crate_plastic", Vector3(-6.5, 0, -10.2), 0.6, 10)
+	_ph(n, "bucket", Vector3(-4.0, 0, -4.4), 0.4, 0, false)
+	_ph(n, "toolbox", Vector3(-11.2, 0, -9.0), 0.4, 40, false)
+	# office (east): desk with the fuse, chairs, cabinet
+	_ph(n, "table", Vector3(8.5, 0, -8.0), 0.95, 0)
+	_ph(n, "chair", Vector3(8.5, 0, -6.6), 0.95, 180)
+	_ph(n, "cabinet", Vector3(11.0, 0, -4.0), 1.9, 270)
+	_ph(n, "medical_box", Vector3(4.2, 0, -4.2), 0.5, 20, false)
+	_ph(n, "register", Vector3(8.4, 0.9, -3.8), 0.35, 0, false)
+	_blood(n, Vector3(7.0, 0, -6.0), 1.4, rng)
+	# generator room
+	_box(n, Vector3(-5.5, 0.6, -24.6), Vector3(1.6, 1.2, 0.8), metal)
 	_prop(n, "generator", Vector3(0, 0, -23.0), 1.1, 0, false, true)
+	_ph(n, "barrel", Vector3(5.2, 0, -24.4), 0.95, 0)
+	_ph(n, "barrel", Vector3(5.9, 0, -23.4), 0.95, 40)
+	_ph(n, "crate_a", Vector3(-5.8, 0, -16.2), 0.9, 10)
+	_ph(n, "hang_lamp", Vector3(0, 2.7, -20.0), 0.7, 0, false)
 	# lights: dim red emergency until the generator runs
 	for p in [Vector3(0, 3.0, 7), Vector3(0, 3.0, -4), Vector3(-7, 3.0, -7), Vector3(7, 3.0, -7), Vector3(0, 3.0, -20)]:
 		var l := OmniLight3D.new()
@@ -406,27 +589,43 @@ func power_on() -> void:
 
 func _market_street() -> void:
 	var n := _new_zone("market", Rect2(-30, -92, 60, 70))
-	var cols := [Color(0.5, 0.46, 0.42), Color(0.42, 0.47, 0.52), Color(0.52, 0.42, 0.38), Color(0.43, 0.5, 0.46), Color(0.48, 0.45, 0.4)]
-	# west side blocks with alleys at z = -44 and -80
-	var west: Array = [[-28, -40, 9], [-48, -78, 11], [-84, -92, 8]]
+	# west side blocks with alleys at z = -44 and -80 (street face = east)
+	var west: Array = [[-28, -40, 9, 0, "COVE PHARMACY"], [-48, -78, 11, 1, "TIDE & TEA"], [-84, -92, 8, 4, "HARROW INN"]]
 	for i in west.size():
-		var s: Array = west[i]
-		_building(n, Rect2(-27, minf(s[0], s[1]), 16, absf(s[1] - s[0])), float(s[2]), cols[i % cols.size()], 1)
-	# east side: blocks, then the radio shop (enterable)
-	_building(n, Rect2(11, -44, 14, 16), 9.0, cols[2], -1)
-	_building(n, Rect2(11, -58, 14, 12), 8.0, cols[4], -1)
-	_building(n, Rect2(11, -82, 14, 10), 10.0, cols[1], -1)
-	_building(n, Rect2(11, -92, 14, 8), 8.0, cols[3], -1)
-	var wall := Toon.flat(Color(0.6, 0.55, 0.5), 0.02, 0.7)
+		var b: Array = west[i]
+		Kit.building(self, n, Rect2(-27, minf(b[0], b[1]), 16, absf(b[1] - b[0])), float(b[2]), int(b[3]), ["e", "n", "s"], ["e"], String(b[4]), 10 + i)
+	# east side: blocks, then the radio shop (enterable) (street face = west)
+	Kit.building(self, n, Rect2(11, -44, 14, 16), 9.0, 2, ["w", "n", "s"], ["w"], "FISHMONGER", 20)
+	Kit.building(self, n, Rect2(11, -58, 14, 12), 8.0, 5, ["w", "n", "s"], ["w"], "BARBER", 21)
+	Kit.building(self, n, Rect2(11, -82, 14, 10), 10.0, 3, ["w", "n", "s"], ["w"], "BOOKS", 22)
+	Kit.building(self, n, Rect2(11, -92, 14, 8), 8.0, 6, ["w", "n"], ["w"], "GROCER", 23)
+	var wall := Surf.mat("plaster_clay", 3.0, Color(0.74, 0.7, 0.66), 0.5, 0.9)
 	var shop := Rect2(10.5, -72, 12, 14)
-	_room(n, shop, WALL_H, wall, {"w": [[-66.0, -63.4]]})
-	_flat(n, Vector3(16.5, 0.03, -65), Vector3(11.4, 0.06, 13.4), Toon.flat(Color(0.4, 0.34, 0.38), 0.0, 0.4))
-	_wall(n, Vector2(10.5, -66), Vector2(22.5, -66), WALL_H, 0.4, wall, [[15.0, 17.0]])
-	storeroom_door = _box(n, Vector3(16.0, 1.3, -66), Vector3(2.0, 2.6, 0.45), Toon.flat(Color(0.3, 0.2, 0.2), 0.02), false, true)
+	_room(n, shop, WALL_H, wall, {"w": [[-66.0, -63.4]]}, Surf.mat("planks_brown", 1.5, Color(0.5, 0.46, 0.44), 0.0, 0.5))
+	_ceiling(n, shop, WALL_H, Surf.mat("planks_brown", 1.6, Color(0.36, 0.33, 0.32), 0.0, 0.8, 0.0), false)
+	_ph(n, "hang_lamp", Vector3(16.5, 2.75, -64.0), 0.7, 0, false)
+	_flat(n, Vector3(16.5, 0.03, -65), Vector3(11.4, 0.06, 13.4), Surf.mat("wood_floor", 2.0, Color(0.6, 0.56, 0.54), 0.0, 0.7, 0.8))
+	_wall(n, Vector2(10.5, -66), Vector2(22.5, -66), WALL_H, 0.4, wall, [[15.0, 17.0]], Surf.mat("planks_brown", 1.5, Color(0.5, 0.46, 0.44), 0.0, 0.5))
+	storeroom_door = _box(n, Vector3(16.0, 1.3, -66), Vector3(2.0, 2.6, 0.45), Surf.mat("door_wood", 1.6, Color(0.6, 0.55, 0.52), 0.0, 0.6), false, true)
+	Batcher.keep(storeroom_door)
 	nav.block_rect(STORE_GAP, 0.0)
-	_prop(n, "workbench", Vector3(14.0, 0, -60.3), 2.0, 0, true, true)
-	_box(n, Vector3(20.5, 1.0, -62.0), Vector3(1.0, 2.0, 3.0), Toon.flat(Color(0.4, 0.34, 0.3), 0.02))
-	_box(n, Vector3(20.5, 0.5, -69.2), Vector3(1.4, 1.0, 1.4), Toon.flat(Color(0.34, 0.28, 0.3), 0.02))
+	# shop front sign
+	_flat(n, Vector3(10.2, 3.75, -64.7), Vector3(0.14, 0.8, 3.6), Toon.flat(Color(0.12, 0.13, 0.16), 0.0, 0.2))
+	var sl := Label3D.new()
+	sl.text = "ARAI RADIO"
+	sl.font_size = 64
+	sl.pixel_size = 0.0075
+	sl.modulate = Color(0.95, 0.85, 0.6)
+	sl.position = Vector3(10.1, 3.75, -64.7)
+	sl.rotation.y = -PI * 0.5
+	n.add_child(sl)
+	_ph(n, "dining", Vector3(14.0, 0, -60.3), 2.0, 0, true, true)
+	_ph(n, "bucket", Vector3(13.2, 0.95, -60.3), 0.3, 0, false)
+	_box(n, Vector3(20.5, 1.0, -62.0), Vector3(1.0, 2.0, 3.0), Surf.mat("planks_brown", 1.6, Color(0.62, 0.58, 0.55), 0.0, 0.6))
+	_box(n, Vector3(20.5, 0.5, -69.2), Vector3(1.4, 1.0, 1.4), Surf.mat("planks_brown", 1.6, Color(0.55, 0.52, 0.5), 0.0, 0.6))
+	_ph(n, "cart", Vector3(13.0, 0, -69.5), 0.9, 30)
+	_ph(n, "carton", Vector3(12.0, 0, -61.5), 0.5, 10, false)
+	_ph(n, "toolbox", Vector3(15.2, 0.95, -60.3), 0.3, 0, false)
 	var shop_light := OmniLight3D.new()
 	shop_light.light_color = Color(1.0, 0.82, 0.6)
 	shop_light.light_energy = 1.3
@@ -446,6 +645,7 @@ func _market_street() -> void:
 	_prop(n, "crate", Vector3(-6.6, 0, -62), 0.95, 20)
 	_prop(n, "crate", Vector3(-6.2, 0, -63.2), 0.95, 50)
 	_prop(n, "crate", Vector3(6.8, 0, -36), 0.95, 0)
+	occupied.append_array([Vector3(-3.2, 0, -38), Vector3(3.5, 0, -57), Vector3(-4, 0, -74), Vector3(-7.8, 0, -47), Vector3(-7.8, 0, -55), Vector3(7.8, 0, -49), Vector3(-6.4, 0, -62.6), Vector3(6.8, 0, -36)])
 	spots["market_start"] = Vector3(0, 0, -30)
 	spots["shop_door"] = Vector3(10.5, 0, -64.7)
 	spots["workbench"] = Vector3(14.0, 0, -61.4)
@@ -460,26 +660,46 @@ func _market_street() -> void:
 	spots["loot7"] = Vector3(20.5, 1.0, -62.0)
 	spots["loot8"] = Vector3(-6.4, 0.9, -62.6)
 	spots["note2"] = Vector3(9.4, 1.1, -64.5)
+	# the rest of the street: bins, barrels, benches, hydrants, fences, tyres, rubbish along both sidewalks, barriers at the kerb
+	var street := [["bin", 0.95, false, true, 3.0], ["barrel", 0.95, false, true, 2.5], ["bench", 0.9, false, true, 1.5], ["hydrant", 0.85, false, true, 1.0], ["planter", 0.7, false, true, 1.5],
+		["trashbag", 0.55, false, false, 3.0], ["tyre", 0.7, false, false, 2.0], ["crate_b", 0.8, false, true, 2.0], ["utility_box", 1.3, false, true, 1.0], ["barrier", 2.2, true, true, 1.2], ["bucket", 0.4, false, false, 1.5]]
+	_scatter(n, Rect2(7.3, -92, 2.0, 62), street, 22, 31, 3.0)
+	_scatter(n, Rect2(-9.4, -92, 2.0, 62), street, 22, 32, 3.0)
+	_scatter(n, Rect2(9.6, -92, 1.4, 62), [["fence", 2.2, true, false, 3.0], ["trashbag", 0.55, false, false, 2.0], ["bin", 0.95, false, true, 1.0]], 8, 33, 3.0)
+	_scatter(n, Rect2(-11.0, -92, 1.6, 62), [["fence", 2.2, true, false, 3.0], ["trashbag", 0.55, false, false, 2.0], ["bin", 0.95, false, true, 1.0]], 8, 34, 3.0)
+	_scatter(n, Rect2(-6.0, -92, 12.0, 62), [["tyre", 0.7, false, false, 2.0], ["trashbag", 0.55, false, false, 3.0], ["barrier", 2.2, true, true, 1.0], ["crate_plastic", 0.5, false, false, 1.5], ["covered_car", 4.2, true, true, 0.2]], 9, 35, 4.0, true)
 
 
 func _church() -> void:
 	var n := _new_zone("church", Rect2(-34, -126, 60, 38))
-	var wall := Toon.flat(Color(0.6, 0.58, 0.55), 0.02, 0.7)
-	_building(n, Rect2(11, -108, 14, 16), 9.0, Color(0.46, 0.4, 0.5), -1)
-	_building(n, Rect2(11, -124, 14, 14), 10.0, Color(0.5, 0.42, 0.44), -1)
+	var stone := Surf.mat("church_brick", 3.0, Color(0.72, 0.72, 0.78), 0.5, 1.0)
+	Kit.building(self, n, Rect2(11, -108, 14, 16), 9.0, 1, ["w", "n", "s"], ["w"], "HARBOUR CAFE", 40)
+	Kit.building(self, n, Rect2(11, -124, 14, 14), 10.0, 4, ["w", "n", "s"], ["w"], "CHANDLER", 41)
 	var ch := Rect2(-28, -118, 17, 22)
-	_room(n, ch, 8.0, wall, {"e": [[-109.0, -105.5]]})
-	_flat(n, Vector3(ch.get_center().x, 0.03, ch.get_center().y), Vector3(16.4, 0.06, 21.4), Toon.flat(Color(0.36, 0.34, 0.32), 0.0, 0.4))
+	_room(n, ch, 8.0, stone, {"e": [[-109.0, -105.5]]})
+	_flat(n, Vector3(ch.get_center().x, 0.03, ch.get_center().y), Vector3(16.4, 0.06, 21.4), Surf.mat("tiles_brown", 1.6, Color(0.5, 0.5, 0.55), 0.0, 0.8, 0.8))
+	# a steep slate roof over the nave and a belfry gable on the front
+	var roof := MeshInstance3D.new()
+	var pm := PrismMesh.new()
+	pm.size = Vector3(ch.size.x + 1.6, 5.2, ch.size.y + 1.0)
+	roof.mesh = pm
+	roof.material_override = Surf.mat("roof_grey", 2.2, Color(0.42, 0.44, 0.5), 0.0, 1.0)
+	roof.position = Vector3(ch.get_center().x, 8.0 + pm.size.y * 0.5 - 0.1, ch.get_center().y)
+	n.add_child(roof)
+	var pew := Surf.mat("planks_brown", 1.6, Color(0.56, 0.5, 0.46), 0.0, 0.6)
 	for i in range(4):
-		_box(n, Vector3(-23.5, 0.45, -113 + i * 3.6), Vector3(3.0, 0.9, 0.7), Toon.flat(Color(0.42, 0.28, 0.24), 0.02))
-		_box(n, Vector3(-16.5, 0.45, -113 + i * 3.6), Vector3(3.0, 0.9, 0.7), Toon.flat(Color(0.42, 0.28, 0.24), 0.02))
-	_box(n, Vector3(-26.5, 0.55, -107), Vector3(1.4, 1.1, 3.4), Toon.flat(Color(0.6, 0.55, 0.62), 0.02))
+		_box(n, Vector3(-23.5, 0.45, -113 + i * 3.6), Vector3(3.0, 0.9, 0.7), pew)
+		_box(n, Vector3(-16.5, 0.45, -113 + i * 3.6), Vector3(3.0, 0.9, 0.7), pew)
+	_box(n, Vector3(-26.5, 0.55, -107), Vector3(1.4, 1.1, 3.4), Surf.mat("stone", 1.6, Color(0.7, 0.7, 0.76), 0.0, 0.5))
 	var cl := OmniLight3D.new()
 	cl.light_color = Color(1.0, 0.8, 0.55)
 	cl.light_energy = 1.4
 	cl.omni_range = 11.0
 	cl.position = Vector3(-19, 3.4, -107)
 	n.add_child(cl)
+	_ph(n, "lantern", Vector3(-24.8, 0.0, -104.0), 0.9, 0, false)
+	_ph(n, "lantern", Vector3(-24.8, 0.0, -110.5), 0.9, 0, false)
+	_ph(n, "bust", Vector3(-26.0, 1.1, -103.0), 0.7, 90, false)
 	_prop(n, "church_bell", Vector3(-18, 0, -96.8), 3.2, 0, false, false)
 	for z in [-96.0, -112.0, -120.0]:
 		_lamp(n, Vector3(-9.2, 0, z))
@@ -487,17 +707,23 @@ func _church() -> void:
 	_prop(n, "car_wreck", Vector3(3.0, 0, -100), 4.4, 80, true)
 	_prop(n, "crate", Vector3(-7.0, 0, -98), 0.95, 10)
 	_prop(n, "crate", Vector3(-7.4, 0, -99.3), 0.95, 40)
+	occupied.append_array([Vector3(3, 0, -100), Vector3(-7.2, 0, -98.6), Vector3(-18, 0, -96.8)])
 	spots["church_door"] = Vector3(-10.8, 0, -107.3)
 	spots["ally2"] = Vector3(-19.5, 0, -112.5)
 	spots["plaza"] = Vector3(0, 0, -100)
 	spots["loot9"] = Vector3(-7.2, 0.9, -98.6)
 	spots["loot10"] = Vector3(-16.5, 1.0, -106.0)
 	spots["note3"] = Vector3(-26.0, 1.1, -108.0)
+	var street := [["bin", 0.95, false, true, 2.0], ["barrel", 0.95, false, true, 2.0], ["bench", 0.9, false, true, 2.0], ["planter", 0.7, false, true, 2.0], ["trashbag", 0.55, false, false, 3.0], ["crate_b", 0.8, false, true, 1.0], ["tyre", 0.7, false, false, 1.0]]
+	_scatter(n, Rect2(7.3, -126, 2.0, 38), street, 12, 41, 3.0)
+	_scatter(n, Rect2(-9.4, -126, 2.0, 38), street, 12, 42, 3.0)
+	_scatter(n, Rect2(-6.0, -126, 12.0, 38), [["tyre", 0.7, false, false, 2.0], ["trashbag", 0.55, false, false, 3.0], ["barrier", 2.2, true, true, 1.0]], 6, 43, 4.0, true)
+	_scatter(n, Rect2(-34, -126, 6.0, 38), [["dead_tree", 4.0, true, false, 2.0], ["boulder", 1.6, false, true, 1.0], ["fir", 8.0, false, true, 2.0]], 5, 44, 4.5, true)
 
 
 func _bell_road() -> void:
 	var n := _new_zone("road", Rect2(-30, -200, 60, 78))
-	var rock := Toon.flat(Color(0.3, 0.31, 0.3), 0.02, 0.8)
+	var rock := Surf.mat("rock", 4.0, Color(0.5, 0.55, 0.58), 0.0, 0.8, 1.0)
 	for i in range(0, 12):
 		var z := -128.0 - i * 6.0
 		_box(n, Vector3(-6.2 - (i % 3) * 0.4, 0.8, z), Vector3(2.6, 1.6 + (i % 4) * 0.5, 3.2), rock)
@@ -511,15 +737,30 @@ func _bell_road() -> void:
 	_lamp(n, Vector3(-5.2, 0, -186))
 	_prop(n, "car_wreck", Vector3(-1.5, 0, -150), 4.4, 20, true)
 	_prop(n, "crate", Vector3(3.0, 0, -172), 0.95, 0)
-	# the barricade
-	var bm := Toon.flat(Color(0.35, 0.24, 0.2), 0.03, 0.6, Color(0, 0, 0))
+	occupied.append_array([Vector3(-1.5, 0, -150), Vector3(3, 0, -172)])
+	# the barricade: planks, tyres, barrels, jersey barriers
+	var bm := Surf.mat("planks_brown", 1.4, Color(0.55, 0.42, 0.36), 0.0, 0.8, 1.0)
 	barricade = _box(n, Vector3(0, 1.3, -124), Vector3(12, 2.6, 1.2), bm, true, true)
-	_box(n, Vector3(-3.0, 2.4, -124), Vector3(0.3, 2.0, 0.4), bm, false, false).rotation_degrees.z = 20
+	Batcher.keep(barricade)
+	var strut := _box(n, Vector3(-3.0, 2.4, -124), Vector3(0.3, 2.0, 0.4), bm, false, false)
+	strut.rotation_degrees.z = 20
+	Batcher.keep(strut)
+	for dx in [-5.0, -2.5, 2.2, 5.0]:
+		var t := _ph(n, "tyre", Vector3(dx, 0, -125.4), 0.7, 0, false)
+		Batcher.keep(t)
+		barricade_bits.append(t)
+	for dx in [-4.0, 3.8]:
+		var bb := _ph(n, "barrel", Vector3(dx, 0, -122.8), 0.95, 20, false)
+		Batcher.keep(bb)
+		barricade_bits.append(bb)
 	spots["barricade"] = Vector3(0, 0, -122.4)
 	spots["road_mid"] = Vector3(0, 0, -150)
 	spots["loot11"] = Vector3(3.0, 0.9, -172)
 	spots["loot12"] = Vector3(-1.5, 0.9, -148.5)
 	spots["note4"] = Vector3(-6.0, 1.0, -140)
+	_scatter(n, Rect2(-5.0, -196, 10.0, 66), [["tyre", 0.7, false, false, 2.0], ["trashbag", 0.55, false, false, 1.0], ["boulder", 0.9, false, true, 1.5], ["barrier", 2.2, true, true, 0.8]], 10, 51, 4.0, true)
+	_scatter(n, Rect2(-24, -198, 15, 70), [["fir", 9.0, false, true, 3.0], ["boulder", 2.0, false, true, 2.0], ["dead_tree_b", 4.0, true, false, 1.0]], 8, 52, 5.0, true)
+	_scatter(n, Rect2(9, -198, 15, 70), [["fir", 9.0, false, true, 3.0], ["boulder", 2.0, false, true, 2.0], ["dead_tree", 4.0, true, false, 1.0]], 8, 53, 5.0, true)
 
 
 func open_storeroom() -> void:
@@ -535,23 +776,37 @@ func burn_barricade() -> void:
 	game.fx.explosion(barricade.global_position + Vector3(0, 0.5, 0), 4.0)
 	barricade.queue_free()
 	barricade = null
+	for b in barricade_bits:
+		if is_instance_valid(b):
+			b.queue_free()
+	barricade_bits.clear()
 	nav.unblock_rect(Rect2(-7.0, -125.5, 14, 3.5))
 
 
 func _arena() -> void:
 	var n := _new_zone("arena", Rect2(-30, -240, 60, 52))
-	var rock := Toon.flat(Color(0.28, 0.29, 0.29), 0.02, 0.8)
-	_flat(n, Vector3(0, 0.04, -208), Vector3(36, 0.08, 34), Toon.flat(Color(0.3, 0.3, 0.3), 0.0, 0.7))
+	var rock := Surf.mat("stone", 3.0, Color(0.55, 0.58, 0.62), 0.3, 0.9, 1.0)
+	_flat(n, Vector3(0, 0.04, -208), Vector3(36, 0.08, 34), Surf.mat("cobble", 2.4, Color(0.5, 0.52, 0.56), 0.0, 0.5, 1.0))
 	_wall(n, Vector2(-18, -192), Vector2(-18, -226), 7.0, 1.0, rock)
 	_wall(n, Vector2(18, -192), Vector2(18, -226), 7.0, 1.0, rock)
 	_wall(n, Vector2(-18, -226), Vector2(18, -226), 7.0, 1.0, rock)
-	arena_gate = _box(n, Vector3(0, 3.0, -191), Vector3(10, 6, 1.0), rock, false, true)
+	arena_gate = _box(n, Vector3(0, 3.0, -191), Vector3(10, 6, 1.0), Surf.mat("shutter", 3.0, Color(0.5, 0.4, 0.4), 0.0, 0.6), false, true)
+	Batcher.keep(arena_gate)
 	arena_gate.visible = false
 	arena_gate.get_child(1).disabled = true
 	# the tower and its bell
-	_box(n, Vector3(0, 9.0, -224), Vector3(9, 18, 6), Toon.flat(Color(0.48, 0.46, 0.46), 0.03, 0.8))
-	_box(n, Vector3(0, 20.0, -224), Vector3(11, 4, 8), Toon.flat(Color(0.4, 0.38, 0.38), 0.03, 0.8), false, false)
+	var tower := Surf.mat("church_brick", 3.0, Color(0.62, 0.62, 0.7), 0.4, 1.0, 1.0)
+	_box(n, Vector3(0, 9.0, -224), Vector3(9, 18, 6), tower)
+	_box(n, Vector3(0, 20.0, -224), Vector3(11, 4, 8), Surf.mat("stone", 3.0, Color(0.5, 0.52, 0.58), 0.2, 0.9), false, false)
+	var spire := MeshInstance3D.new()
+	var pm := PrismMesh.new()
+	pm.size = Vector3(11.6, 6.0, 8.6)
+	spire.mesh = pm
+	spire.material_override = Surf.mat("roof_grey", 2.0, Color(0.38, 0.4, 0.46), 0.0, 1.0)
+	spire.position = Vector3(0, 25.0, -224)
+	n.add_child(spire)
 	_prop(n, "church_bell", Vector3(0, 14.0, -221.5), 5.0, 0, false, false)
+	var lamp_m := Surf.mat("metal", 2.0, Color(0.4, 0.42, 0.46), 0.0, 0.6, 0.0)
 	for p in [Vector3(-15, 0, -198), Vector3(15, 0, -198), Vector3(-15, 0, -216), Vector3(15, 0, -216)]:
 		var l := OmniLight3D.new()
 		l.light_color = Color(1.0, 0.25, 0.3)
@@ -560,7 +815,11 @@ func _arena() -> void:
 		l.position = p + Vector3(0, 3, 0)
 		l.shadow_enabled = false
 		n.add_child(l)
-		_box(n, p + Vector3(0, 1.0, 0), Vector3(1.0, 2.0, 1.0), rock)
+		_box(n, p + Vector3(0, 1.0, 0), Vector3(1.0, 2.0, 1.0), lamp_m)
+		_flat(n, p + Vector3(0, 2.1, 0), Vector3(0.7, 0.4, 0.7), Toon.flat(Color(1.0, 0.35, 0.4), 0.0, 0.0, Color(1.0, 0.15, 0.2), 1.6))
+	for dx in [-9.0, 9.0]:
+		_ph(n, "boulder", Vector3(dx, 0, -194.5), 1.8, dx * 11.0)
+		_ph(n, "dead_tree", Vector3(dx * 1.7, 0, -222.0), 4.0, dx * 7.0, false, true)
 	spots["arena"] = Vector3(0, 0, -200)
 	spots["boss_spawn"] = Vector3(0, 0, -212)
 	spots["arena_gate"] = Vector3(0, 0, -191)
@@ -577,11 +836,20 @@ func _harbour() -> void:
 	var n := _new_zone("harbour", Rect2(-100, -150, 70, 190))
 	var water := Toon.flat(Color(0.1, 0.15, 0.18), 0.0, 0.0, Color(0.02, 0.05, 0.06), 0.5)
 	_flat(n, Vector3(-65, -0.9, -60), Vector3(70, 0.1, 200), water)
-	_flat(n, Vector3(-36, 0.0, -30), Vector3(8, 0.2, 80), Toon.flat(Color(0.32, 0.22, 0.2), 0.02, 0.6))
+	_flat(n, Vector3(-36, 0.0, -30), Vector3(8, 0.2, 80), Surf.mat("planks_brown", 1.8, Color(0.55, 0.52, 0.5), 0.0, 0.8, 1.0))
+	var post := Surf.mat("planks_brown", 1.0, Color(0.42, 0.38, 0.36), 0.0, 0.8, 0.0)
 	for i in 5:
-		_box(n, Vector3(-39.5, 0.6, -6 - i * 14.0), Vector3(0.4, 1.2, 0.4), Toon.flat(Color(0.2, 0.14, 0.14)), false, false)
+		_box(n, Vector3(-39.5, 0.6, -6 - i * 14.0), Vector3(0.4, 1.2, 0.4), post, false, false)
 	_prop(n, "boat", Vector3(-48, -0.2, -22), 6.0, 90, true, false)
 	_prop(n, "boat", Vector3(-50, -0.2, -64), 5.5, 80, true, false)
+	_ph(n, "ship", Vector3(-58, -0.6, -42), 14.0, 90, false, true)
+	_ph(n, "pinnace", Vector3(-52, -0.5, 4), 10.0, 80, false, true)
+	_ph(n, "lifebuoy", Vector3(-39.2, 0.4, -20.0), 0.7, 90, false)
+	_ph(n, "buoy", Vector3(-40.5, 0, -52.0), 1.4, 0, false)
+	_ph(n, "lantern", Vector3(-33.6, 0.0, -34.0), 0.9, 0, false)
+	for z in [-12.0, -26.0, -40.0, -54.0]:
+		_ph(n, "barrel", Vector3(-33.2, 0, z), 0.95, z * 5.0, false)
+		_ph(n, "crate_a", Vector3(-34.6, 0, z - 3.5), 0.85, z * 3.0, false)
 	_prop(n, "lighthouse", Vector3(-86, 0, -120), 30.0, 0, false, false)
 	var beam := OmniLight3D.new()
 	beam.light_color = Color(1.0, 0.85, 0.7)
@@ -633,6 +901,21 @@ func update_streaming(p: Vector3) -> void:
 	order.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
 	for i in order.size():
 		(order[i][1] as OmniLight3D).visible = i < _lamp_budget and order[i][0] < 40.0
+
+
+## LOW graphics for weak phones: no mist sheet, fewer lamps, closer view distance, denser fog (hides the shorter draw distance).
+func set_low(on: bool) -> void:
+	low_gfx = on
+	_lamp_budget = 3 if on else 6
+	env.fog_density = 0.05 if on else 0.034
+	for m in mist_sheets:
+		m.visible = not on
+	for z in zones:
+		for c in zones[z].node.get_children():
+			if c is MeshInstance3D and c.name.begins_with("batch"):
+				(c as MeshInstance3D).visibility_range_end = 62.0 if on else 105.0
+			elif c is MultiMeshInstance3D:
+				(c as MultiMeshInstance3D).visibility_range_end = 70.0 if on else 120.0
 
 
 func loaded_zones() -> Array:

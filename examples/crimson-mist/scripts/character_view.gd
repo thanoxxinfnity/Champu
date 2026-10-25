@@ -101,6 +101,8 @@ func setup_model(path: String, h: float, tint: Color, body_style: String) -> boo
 	rig.position.y = -box.position.y * k
 	rig.rotation.y = PI
 	materials = Toon.apply(rig.model, 0.014, tint)
+	for mi in rig.model.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).visibility_range_end = 85.0      # nothing past the fog needs drawing
 	return true
 
 

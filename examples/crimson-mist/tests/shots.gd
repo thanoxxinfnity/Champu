@@ -26,7 +26,7 @@ func _initialize() -> void:
 	await snap("00_lobby")
 	game.lobby_step(1)
 	await snap("01_lobby_next")
-	game.start_game(false)
+	await game.start_game(false)
 	await process_frame
 	game.hud.chapter_card("1 · Red Dawn", "Search the ward for something to defend yourself with.")
 	await snap("02_ward")

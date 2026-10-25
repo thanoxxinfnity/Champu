@@ -18,6 +18,7 @@ uniform float emission_energy = 1.0;
 uniform float grime = 0.0;
 uniform float flash = 0.0;
 uniform float uv_scale = 1.0;
+uniform bool use_vcolor = false;   // batched flat-colour geometry carries its colour in COLOR (see Batcher)
 
 varying vec3 wpos;
 varying vec3 wnorm;
@@ -41,6 +42,9 @@ void vertex() {
 void fragment() {
 	vec4 t = use_tex ? texture(albedo_tex, UV * uv_scale) : vec4(1.0);
 	vec3 c = albedo.rgb * t.rgb;
+	if (use_vcolor) {
+		c *= COLOR.rgb;
+	}
 	if (grime > 0.0) {
 		float n = vnoise(wpos.xz * 1.7) * 0.6 + vnoise(wpos.xz * 6.0 + wpos.y * 2.0) * 0.4;
 		float streak = vnoise(vec2(wpos.x * 3.0 + wpos.z * 3.0, wpos.y * 0.7));

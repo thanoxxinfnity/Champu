@@ -17,7 +17,7 @@ func _initialize() -> void:
 	await T.frames(self, 5)
 	T.check(game.state == Game.State.LOBBY, "back in the lobby")
 	T.check(game.hud.lobby.get("can_continue", false), "lobby offers Continue")
-	game.start_game(true)
+	await game.start_game(true)
 	await T.frames(self, 10)
 	T.check(game.story.mission == 3, "continue resumes mission 4")
 	T.check(game.player.count("scrap") == 3 and game.player.has_crowbar, "bag and crowbar restored")

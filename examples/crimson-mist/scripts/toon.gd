@@ -20,6 +20,28 @@ static func outline_material(width: float, ink := Color(0.04, 0.045, 0.06)) -> S
 	return _outline_mats[key]
 
 
+## One shared material for batched flat-colour geometry: the colour comes from the vertex colours Batcher bakes in.
+static func vcolor() -> ShaderMaterial:
+	if not _cache.has("vcolor"):
+		var m := ShaderMaterial.new()
+		m.shader = SHADER
+		m.set_shader_parameter("use_vcolor", true)
+		m.set_shader_parameter("grime", 0.3)
+		_cache["vcolor"] = m
+	return _cache["vcolor"]
+
+
+## True for a plain flat toon material (no texture, outline or glow) whose colour can live in vertex colours instead.
+static func is_plain(m: Material) -> bool:
+	var sm := m as ShaderMaterial
+	if sm == null or sm.shader != SHADER or sm.next_pass != null:
+		return false
+	if sm.get_shader_parameter("use_tex") == true or sm.get_shader_parameter("use_vcolor") == true:
+		return false
+	var e = sm.get_shader_parameter("emission_color")
+	return e == null or (e as Color).r + (e as Color).g + (e as Color).b < 0.001
+
+
 ## A plain toon material from a colour (buildings, ground, props that have no texture).
 static func flat(color: Color, outline := 0.0, grime := 0.0, emission := Color.BLACK, energy := 1.0) -> ShaderMaterial:
 	var key := "flat/%s/%s/%s/%s/%s" % [color.to_html(), outline, grime, emission.to_html(), energy]

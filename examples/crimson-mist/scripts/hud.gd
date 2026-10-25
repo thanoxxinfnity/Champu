@@ -37,6 +37,10 @@ var _screen_buttons: Array = []    # {"id", "rect", "label", "enabled"}
 var _hurt := 0.0
 var _fear := 0.0
 var _t := 0.0
+var gfx_low := false
+var _load_frac := 0.0
+var _load_text := ""
+var _play_t := 0.0                 # seconds since this run started (drives the first-seconds control hints)
 var _toast_t := 0.0
 var _hit_t := 0.0
 var _hit_head := false
@@ -164,7 +168,7 @@ func _layout() -> void:
 	_place(lbl_name, Rect2(w * 0.5 - 300, h - 270, 600, 54))
 	_place(lbl_role, Rect2(w * 0.5 - 300, h - 218, 600, 34))
 	_place(lbl_perk, Rect2(w * 0.5 - 300, h - 182, 600, 56))
-	_place(lbl_stats, Rect2(40, h * 0.34, 300, 170))
+	_place(lbl_stats, Rect2(24, h * 0.34, 250, 170))
 	_place(lbl_use, Rect2(w - 290, h - 262, 150, 40))
 	_place(lbl_items, Rect2(16, 42, minf(520.0, w * 0.45), 28))
 	_place(lbl_ammo, Rect2(w - 250, 48, 190, 32))
@@ -193,15 +197,16 @@ func _rebuild_screen_buttons() -> void:
 	_screen_buttons.clear()
 	match screen:
 		Screen.LOBBY:
-			_screen_buttons.append({"id": "prev", "rect": Rect2(w * 0.5 - 420, h * 0.42, 90, 90), "label": "<", "enabled": true})
-			_screen_buttons.append({"id": "next", "rect": Rect2(w * 0.5 + 330, h * 0.42, 90, 90), "label": ">", "enabled": true})
+			_screen_buttons.append({"id": "prev", "rect": Rect2(w * 0.5 - 300, h * 0.42, 90, 90), "label": "<", "enabled": true})
+			_screen_buttons.append({"id": "next", "rect": Rect2(w * 0.5 + 210, h * 0.42, 90, 90), "label": ">", "enabled": true})
 			_screen_buttons.append({"id": "start", "rect": Rect2(w * 0.5 - 220, h - 112, 440, 74), "label": "START CHAPTER 1", "enabled": true})
 			if lobby.get("can_continue", false):
 				_screen_buttons.append({"id": "continue", "rect": Rect2(w - 290, h - 112, 250, 74), "label": "CONTINUE", "enabled": true})
 		Screen.PAUSE:
 			_screen_buttons.append({"id": "resume", "rect": Rect2(w * 0.5 - 200, h * 0.38, 400, 70), "label": "RESUME", "enabled": true})
 			_screen_buttons.append({"id": "bag", "rect": Rect2(w * 0.5 - 200, h * 0.38 + 84, 400, 70), "label": "CRAFT / BAG", "enabled": true})
-			_screen_buttons.append({"id": "lobby", "rect": Rect2(w * 0.5 - 200, h * 0.38 + 168, 400, 70), "label": "BACK TO LOBBY", "enabled": true})
+			_screen_buttons.append({"id": "gfx", "rect": Rect2(w * 0.5 - 200, h * 0.38 + 168, 400, 70), "label": "GRAPHICS: LOW (FAST)" if gfx_low else "GRAPHICS: HIGH", "enabled": true})
+			_screen_buttons.append({"id": "lobby", "rect": Rect2(w * 0.5 - 200, h * 0.38 + 252, 400, 70), "label": "BACK TO LOBBY", "enabled": true})
 		Screen.DEATH:
 			_screen_buttons.append({"id": "retry", "rect": Rect2(w * 0.5 - 200, h * 0.5, 400, 74), "label": "TRY AGAIN", "enabled": true})
 			_screen_buttons.append({"id": "lobby", "rect": Rect2(w * 0.5 - 200, h * 0.5 + 90, 400, 70), "label": "BACK TO LOBBY", "enabled": true})
@@ -252,8 +257,16 @@ func set_camera(c: Camera3D) -> void:
 	cam = c
 
 
+func set_gfx_low(on: bool) -> void:
+	gfx_low = on
+	_post.visible = not on
+	_rebuild_screen_buttons()
+
+
 func set_playing(on: bool) -> void:
 	playing = on
+	if on:
+		_play_t = 0.0
 	move = Vector2.ZERO
 	look = Vector2.ZERO
 	held.clear()
@@ -335,6 +348,20 @@ func show_loading_free() -> void:
 	pass
 
 
+func show_loading(title: String, frac: float) -> void:
+	playing = false
+	_load_frac = frac
+	_load_text = ""
+	_open(Screen.LOADING, title.to_upper(), "")
+	_canvas.queue_redraw()
+
+
+func set_loading(text: String, frac: float) -> void:
+	_load_frac = frac
+	lbl_panel_body.text = text
+	_canvas.queue_redraw()
+
+
 func hide_all_screens() -> void:
 	screen = Screen.NONE
 	_refresh()
@@ -409,6 +436,7 @@ func is_modal() -> bool:
 
 func update_frame(p: Player, delta: float) -> void:
 	_t += delta
+	_play_t += delta if playing else 0.0
 	_post_mat.set_shader_parameter("t", _t)
 	_hurt = maxf(0.0, _hurt - delta * 1.4)
 	_post_mat.set_shader_parameter("hurt", _hurt)
@@ -561,6 +589,10 @@ func _draw_ui() -> void:
 	if screen == Screen.LOBBY:
 		_draw_lobby(font, w, h)
 		return
+	if screen == Screen.LOADING:
+		_canvas.draw_rect(Rect2(0, 0, w, h), Color(0.02, 0.03, 0.05, 1.0))
+		_bar(Rect2(w * 0.5 - 220, h * 0.62, 440, 18), _load_frac, Color(0.78, 0.84, 0.9))
+		return
 	if screen == Screen.PAUSE or screen == Screen.DEATH or screen == Screen.WIN or screen == Screen.NOTE or screen == Screen.CRAFT:
 		_canvas.draw_rect(Rect2(0, 0, w, h), Color(0.03, 0.04, 0.06, 0.78))
 		if screen == Screen.CRAFT:
@@ -617,13 +649,31 @@ func _draw_playing(font: Font, w: float, h: float) -> void:
 	if not _dialog.is_empty():
 		_canvas.draw_rect(Rect2(w * 0.5 - 290, h - 136, 580, 118), Color(0.04, 0.05, 0.08, 0.78))
 		_canvas.draw_rect(Rect2(w * 0.5 - 290, h - 136, 580, 118), PINK, false, 1.5)
+	# frame rate, small, so a slow phone is easy to report
+	_canvas.draw_string(font, Vector2(w - 96, 70), "%d fps" % int(Engine.get_frames_per_second()), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.8, 0.9, 1.0, 0.55))
 	# virtual stick
 	if _stick_id != -99:
 		_canvas.draw_circle(_stick_origin, 66, Color(1, 1, 1, 0.08))
 		_canvas.draw_arc(_stick_origin, 66, 0, TAU, 40, Color(1, 1, 1, 0.4), 2.0)
 		_canvas.draw_circle(_stick_origin + move * 66.0, 26, Color(0.85, 0.9, 1.0, 0.5))
 	else:
-		_canvas.draw_arc(Vector2(120, h - 130), 50, 0, TAU, 32, Color(1, 1, 1, 0.12), 2.0)
+		# an always-visible resting stick so a new player sees where the left thumb goes
+		var rc := Vector2(132, h - 132)
+		var pulse := 0.5 + 0.5 * sin(_t * 2.4)
+		_canvas.draw_circle(rc, 72, Color(0.05, 0.07, 0.1, 0.34))
+		_canvas.draw_arc(rc, 72, 0, TAU, 44, Color(0.8, 0.88, 1.0, 0.45 + 0.2 * pulse), 3.0)
+		_canvas.draw_circle(rc, 28, Color(0.85, 0.9, 1.0, 0.32))
+		for a in 4:
+			var dir := Vector2.from_angle(a * TAU / 4.0 - PI * 0.5)
+			var tip := rc + dir * 56.0
+			_canvas.draw_colored_polygon(PackedVector2Array([tip + dir * 8.0, tip + dir.rotated(2.5) * 7.0, tip + dir.rotated(-2.5) * 7.0]), Color(0.85, 0.92, 1.0, 0.5))
+		_canvas.draw_string(font, rc + Vector2(-22, 98), "MOVE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.85, 0.92, 1.0, 0.7))
+	if _play_t < 14.0 and _stick_id == -99 and _look_id == -99:
+		var lc := Vector2(w * 0.62, h * 0.5)
+		var f := clampf(1.0 - (_play_t - 10.0) / 4.0, 0.0, 1.0)
+		_canvas.draw_arc(lc, 54, 0, TAU, 32, Color(1, 1, 1, 0.3 * f), 2.0)
+		_canvas.draw_string(font, lc + Vector2(-36, 6), "LOOK", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.85, 0.92, 1.0, 0.85 * f))
+		_canvas.draw_string(font, lc + Vector2(-60, 32), "drag here", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.85, 0.92, 1.0, 0.6 * f))
 	# buttons
 	for id in _buttons:
 		var b: Dictionary = _buttons[id]
@@ -709,13 +759,13 @@ func _draw_craft(font: Font, w: float, h: float) -> void:
 func _draw_lobby(font: Font, w: float, h: float) -> void:
 	_canvas.draw_rect(Rect2(0, 0, w, h * 0.0 + 150), Color(0.03, 0.04, 0.06, 0.6))
 	_canvas.draw_rect(Rect2(0, h - 280, w, 280), Color(0.03, 0.04, 0.06, 0.6))
-	_canvas.draw_rect(Rect2(24, h * 0.32, 330, 200), Color(0.04, 0.05, 0.08, 0.78))
-	_canvas.draw_rect(Rect2(24, h * 0.32, 330, 200), PINK, false, 2.0)
+	_canvas.draw_rect(Rect2(24, h * 0.32, 300, 200), Color(0.04, 0.05, 0.08, 0.78))
+	_canvas.draw_rect(Rect2(24, h * 0.32, 300, 200), PINK, false, 2.0)
 	var vals := [float(lobby.get("hp", 0.0)) / 120.0, float(lobby.get("speed", 0.0)) / 5.5, float(lobby.get("stamina", 0.0)) / 140.0, float(lobby.get("carry", 0.0)) / 14.0]
 	var by := h * 0.32 + 38.0
 	var names := ["HEALTH", "SPEED", "STAMINA", "CARRY"]
 	for i in 4:
-		_bar(Rect2(170, by + i * 40.0, 170, 14), vals[i], PINK)
+		_bar(Rect2(150, by + i * 40.0, 160, 14), vals[i], PINK)
 		_canvas.draw_string(font, Vector2(40, by + i * 40.0 + 13.0), names[i], HORIZONTAL_ALIGNMENT_LEFT, 120, 20, CREAM)
 	var idx := int(lobby.get("index", 0))
 	var cnt := int(lobby.get("count", 1))

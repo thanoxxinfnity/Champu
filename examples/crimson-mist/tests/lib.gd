@@ -22,7 +22,7 @@ static func boot(tree: SceneTree, character := "rachel") -> Game:
 
 
 static func start(tree: SceneTree, game: Game, continue_save := false) -> void:
-	game.start_game(continue_save)
+	await game.start_game(continue_save)
 	for i in 6:
 		await tree.process_frame
 

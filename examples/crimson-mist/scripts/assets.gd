@@ -8,8 +8,13 @@ const DIR := "res://assets/world/"
 static var _scenes := {}
 
 
+## "ph/barrel" -> assets/ph/barrel.glb (Poly Haven, CC0); anything else lives in assets/world.
+static func path_of(model: String) -> String:
+	return "res://assets/%s.glb" % model if model.begins_with("ph/") else "%s%s.glb" % [DIR, model]
+
+
 static func exists(model: String) -> bool:
-	return ResourceLoader.exists("%s%s.glb" % [DIR, model])
+	return ResourceLoader.exists(path_of(model))
 
 
 static func bounds(root: Node3D) -> AABB:
@@ -34,9 +39,9 @@ static func bounds(root: Node3D) -> AABB:
 ## centred on its footprint, with a toon material + outline. Returns a holder; `stand_in` is set in its meta when the model is missing.
 static func prop(model: String, size: float, by_length := false, outline := 0.02, grime := 0.25) -> Node3D:
 	var holder := Node3D.new()
-	holder.name = model
+	holder.name = model.get_file()
 	if not _scenes.has(model):
-		_scenes[model] = load("%s%s.glb" % [DIR, model]) if exists(model) else null
+		_scenes[model] = load(path_of(model)) if exists(model) else null
 	var pack: PackedScene = _scenes[model]
 	if pack == null:
 		holder.add_child(_stand_in(model, size, by_length))

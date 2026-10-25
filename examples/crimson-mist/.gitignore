@@ -2,3 +2,4 @@
 # Godot import cache (never commit: it contains converted copies of every model)
 .godot/
 *.import.tmp
+__pycache__/

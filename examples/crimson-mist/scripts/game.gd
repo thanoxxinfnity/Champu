@@ -3,7 +3,7 @@ extends Node
 ## Crimson Mist — the conductor. Owns the lobby (pick a survivor), builds Harrow Cove when the chapter starts, and is the one place the other scripts
 ## talk through (`game.sfx`, `game.fx`, `game.noise()`, `game.shake()` ...). The plot lives in Story.
 
-enum State { LOBBY, PLAYING, PAUSED, DEAD, WON }
+enum State { LOBBY, PLAYING, PAUSED, DEAD, WON, LOADING }
 
 var state := State.LOBBY
 var world: World
@@ -27,6 +27,10 @@ var _kafu_t := 0.0
 var _save := {}
 var _prev_hold := {}
 var _shoot_latch := false
+var low_gfx := false
+var _fps_t := 0.0
+var _fps_n := 0
+var _fps_sum := 0.0
 
 
 func is_touch() -> bool:
@@ -185,12 +189,21 @@ func _leave_lobby() -> void:
 # ── starting and ending the chapter ──────────────────────────────────────────
 
 func start_game(continue_save := false) -> void:
+	if state == State.LOADING:
+		return
+	state = State.LOADING
 	_leave_lobby()
 	var id: String = Data.CAST_ORDER[selected]
+	hud.show_loading("Harrow Cove", 0.0)
+	await get_tree().process_frame
 	world = World.new()
 	world.game = self
 	add_child(world)
-	world.build()
+	var steps := world.build_steps()
+	for i in steps.size():
+		steps[i].call()
+		hud.set_loading("Building the town", float(i + 1) / float(steps.size() + 3))
+		await get_tree().process_frame
 	player = Player.new()
 	player.setup(self, id)
 	add_child(player)
@@ -199,11 +212,18 @@ func start_game(continue_save := false) -> void:
 	player.died.connect(_on_player_died)
 	player.hurt.connect(func(a: float) -> void: hud.hurt_flash(a))
 	hud.set_camera(player.cam)
+	hud.set_loading("Waking up", float(steps.size() + 1) / float(steps.size() + 3))
+	await get_tree().process_frame
 	story = Story.new()
 	story.game = self
 	add_child(story)
 	play_time = 0.0
 	hud.hide_all_screens()
+	_fps_t = 0.0
+	_fps_n = 0
+	_fps_sum = 0.0
+	if low_gfx:
+		set_low_gfx(true)
 	hud.set_playing(true)
 	state = State.PLAYING
 	var m := 0
@@ -319,6 +339,9 @@ func _on_screen(id: String) -> void:
 		"continue": start_game(true)
 		"resume": set_paused(false)
 		"bag": hud.show_craft(true)
+		"gfx":
+			set_low_gfx(not low_gfx)
+			hud.show_pause(true)
 		"lobby": back_to_lobby()
 		"retry": retry()
 		"close":
@@ -330,6 +353,30 @@ func _on_screen(id: String) -> void:
 			if id.begins_with("craft_"):
 				story.craft(id.substr(6))
 				hud.show_craft(true)
+
+
+func set_low_gfx(on: bool) -> void:
+	low_gfx = on
+	hud.set_gfx_low(on)
+	if world != null:
+		world.set_low(on)
+	if player != null and player.cam != null:
+		player.cam.far = 110.0 if on else 220.0
+
+
+## First seconds of play: if the phone averages under 26 fps, drop to LOW graphics once and say so.
+func _watch_fps(delta: float) -> void:
+	if low_gfx or play_time < 4.0 or _fps_t > 8.0:
+		return
+	_fps_t += delta
+	_fps_n += 1
+	_fps_sum += delta
+	if _fps_t >= 6.0:
+		var avg := float(_fps_n) / maxf(_fps_sum, 0.001)
+		_fps_t = 99.0
+		if avg < 26.0:
+			set_low_gfx(true)
+			hud.toast("Graphics set to LOW for speed (Pause > Graphics)")
 
 
 func _notification(what: int) -> void:
@@ -466,6 +513,7 @@ func _process(delta: float) -> void:
 	if state != State.PLAYING:
 		return
 	play_time += delta
+	_watch_fps(delta)
 	world.update(delta, player.global_position)
 	_stream_t -= delta
 	if _stream_t <= 0.0:

@@ -10,11 +10,11 @@ rig() {  # raw_name out_path height max_tris extra...
   $BL -b -P tools/autorig_obj.py -- "$src" "$out" --adaptive --height "$h" --max-tris "$t" "$@" 2>&1 | grep -E "BONES|SAVED|Error|Traceback"
 }
 mkdir -p assets/world assets/cast
-rig z_walker assets/world/rig_mist_walker.glb 1.9 12000
-rig z_bloater assets/world/rig_bloater.glb 1.9 12000
-rig z_weeper assets/world/rig_weeper.glb 1.9 12000 --hair --skirt
-rig z_bellkeeper assets/world/rig_bellkeeper.glb 1.9 16000
-for n in nurse shopkeeper priest student fisher granny; do rig npc_$n assets/world/npc_$n.glb 1.62 9000; done
+rig z_walker assets/world/rig_mist_walker.glb 1.9 6500
+rig z_bloater assets/world/rig_bloater.glb 1.9 7000
+rig z_weeper assets/world/rig_weeper.glb 1.9 7000 --hair --skirt
+rig z_bellkeeper assets/world/rig_bellkeeper.glb 1.9 10000
+for n in nurse shopkeeper priest student fisher granny; do rig npc_$n assets/world/npc_$n.glb 1.62 6000; done
 rig hero_a assets/cast/rachel.glb 1.6 14000 --hair
 rig hero_b assets/cast/kafu.glb 1.6 14000 --hair
 rig hero_c assets/cast/mococo.glb 1.6 14000 --hair

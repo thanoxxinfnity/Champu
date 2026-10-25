@@ -25,7 +25,7 @@ func _initialize() -> void:
 		game.lobby_step(1)
 		await process_frame
 	game.selected = 0
-	game.start_game(false)
+	await game.start_game(false)
 	for i in 20:
 		await process_frame
 	check(game.state == Game.State.PLAYING, "chapter 1 starts")

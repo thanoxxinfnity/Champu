@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://1fvtwuluortk"
+path="res://.godot/imported/bed_GothicBed_01_diff_1k.jpg-a91b73ca7914e7f17d64ea4450fb74ee.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "47cdc1fddbf06886784545c1ac24f287"
+}
+
+[deps]
+
+source_file="res://assets/ph/bed_GothicBed_01_diff_1k.jpg"
+dest_files=["res://.godot/imported/bed_GothicBed_01_diff_1k.jpg-a91b73ca7914e7f17d64ea4450fb74ee.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1
