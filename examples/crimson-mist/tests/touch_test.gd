@@ -62,6 +62,10 @@ func _initialize() -> void:
 			break
 		await process_frame
 	T.check(not game.hud.is_modal(), "no screen blocks the controls after Start")
+	var rest := Vector2(132, game.hud._size.y - 132)
+	for id in game.hud._buttons:
+		var bt: Dictionary = game.hud._buttons[id]
+		T.check(bt.c.distance_to(rest) > float(bt.r) + 90.0, "the %s button does not sit on the move stick" % id)
 	var p := game.player
 	var p0 := p.global_position
 	# left thumb: push the stick up

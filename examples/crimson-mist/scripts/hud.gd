@@ -6,8 +6,8 @@ extends CanvasLayer
 signal screen_pressed(id: String)
 
 const INK := Color(0.03, 0.04, 0.06)
-const PINK := Color(0.78, 0.84, 0.9)
-const CREAM := Color(1.0, 0.93, 0.88)
+const PINK := Color(0.92, 0.95, 1.0)
+const CREAM := Color(1.0, 1.0, 1.0)
 const GOLD := Color(0.93, 0.8, 0.5)
 const UI := 0.72
 
@@ -182,7 +182,7 @@ func _layout() -> void:
 		"reload": {"c": Vector2(w - 208, h - 208), "r": 28.0, "label": "RELOAD", "show": false},
 		"bandage": {"c": Vector2(w - 44, h - 272), "r": 28.0, "label": "HEAL", "show": true},
 		"flare": {"c": Vector2(w - 44, h - 332), "r": 28.0, "label": "FLARE", "show": true},
-		"sprint": {"c": Vector2(96, h - 56), "r": 32.0, "label": "RUN", "show": true},
+		"sprint": {"c": Vector2(w - 306, h - 56), "r": 32.0, "label": "RUN", "show": true},
 		"pause": {"c": Vector2(w - 34, 34), "r": 22.0, "label": "II", "show": true},
 		"light": {"c": Vector2(w - 82, 34), "r": 22.0, "label": "LAMP", "show": true},
 		"bag": {"c": Vector2(w - 130, 34), "r": 22.0, "label": "BAG", "show": true},
@@ -607,6 +607,15 @@ func _draw_ui() -> void:
 
 
 func _bar(r: Rect2, frac: float, col: Color) -> void:
+	var bg := UiArt.box("bar_bg", 11)
+	if bg != null:
+		_canvas.draw_style_box(bg, r.grow_individual(2, 3, 2, 3))
+		var fb := UiArt.box("bar_fill", 11)
+		var fw := (r.size.x - 4) * clampf(frac, 0.0, 1.0)
+		if fw > 2.0:
+			fb.modulate_color = Color(col.r, col.g, col.b, 0.95)
+			_canvas.draw_style_box(fb, Rect2(r.position + Vector2(2, 1), Vector2(maxf(fw, 10.0), r.size.y - 2)))
+		return
 	_canvas.draw_rect(r, Color(0, 0, 0, 0.55))
 	_canvas.draw_rect(Rect2(r.position + Vector2(2, 2), Vector2((r.size.x - 4) * clampf(frac, 0.0, 1.0), r.size.y - 4)), col)
 	_canvas.draw_rect(r, INK, false, 2.0)
@@ -617,11 +626,15 @@ func _draw_playing(font: Font, w: float, h: float) -> void:
 	if p == null:
 		return
 	# portrait ring + bars
-	_canvas.draw_circle(Vector2(30, 28), 20, Color(0, 0, 0, 0.55))
-	_canvas.draw_arc(Vector2(30, 28), 20, 0, TAU, 28, PINK, 2.0)
-	_canvas.draw_string(font, Vector2(22, 36), String(p.info.name).substr(0, 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 22, CREAM)
-	_bar(Rect2(60, 12, 190, 14), p.hp / p.max_hp, Color(0.75, 0.18, 0.2) if p.hp / p.max_hp > 0.3 else Color(0.95, 0.1, 0.1))
-	_bar(Rect2(60, 30, 140, 8), p.stamina / p.max_stamina, Color(0.78, 0.74, 0.5))
+	if UiArt.tex("btn_round") != null:
+		_canvas.draw_texture_rect(UiArt.tex("btn_round"), Rect2(8, 6, 44, 44), false)
+		_canvas.draw_texture_rect(UiArt.tex("ic_heart"), Rect2(17, 14, 26, 26), false, Color(1, 1, 1, 0.95))
+	else:
+		_canvas.draw_circle(Vector2(30, 28), 20, Color(0, 0, 0, 0.55))
+		_canvas.draw_arc(Vector2(30, 28), 20, 0, TAU, 28, PINK, 2.0)
+		_canvas.draw_string(font, Vector2(22, 36), String(p.info.name).substr(0, 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 22, CREAM)
+	_bar(Rect2(60, 12, 190, 14), p.hp / p.max_hp, Color(1.0, 0.42, 0.45) if p.hp / p.max_hp > 0.3 else Color(1.0, 0.16, 0.18))
+	_bar(Rect2(60, 30, 140, 8), p.stamina / p.max_stamina, Color(0.96, 0.93, 0.76))
 	# goal flash
 	if _goal_flash > 0.0:
 		_canvas.draw_rect(Rect2(10, 66, minf(420.0, w * 0.4) + 12, 76), Color(1, 0.85, 0.5, 0.25 * _goal_flash), false, 2.0)
@@ -647,16 +660,37 @@ func _draw_playing(font: Font, w: float, h: float) -> void:
 		_bar(Rect2(w * 0.5 - 220, 40, 440, 14), _boss_frac, Color(0.75, 0.15, 0.35))
 	# dialogue banner
 	if not _dialog.is_empty():
-		_canvas.draw_rect(Rect2(w * 0.5 - 290, h - 136, 580, 118), Color(0.04, 0.05, 0.08, 0.78))
-		_canvas.draw_rect(Rect2(w * 0.5 - 290, h - 136, 580, 118), PINK, false, 1.5)
+		var dbox := UiArt.box("panel_dark", 30)
+		if dbox != null:
+			_canvas.draw_style_box(dbox, Rect2(w * 0.5 - 290, h - 136, 580, 118))
+		else:
+			_canvas.draw_rect(Rect2(w * 0.5 - 290, h - 136, 580, 118), Color(0.04, 0.05, 0.08, 0.78))
+			_canvas.draw_rect(Rect2(w * 0.5 - 290, h - 136, 580, 118), PINK, false, 1.5)
 	# frame rate, small, so a slow phone is easy to report
 	_canvas.draw_string(font, Vector2(w - 96, 70), "%d fps" % int(Engine.get_frames_per_second()), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.8, 0.9, 1.0, 0.55))
 	# virtual stick
-	if _stick_id != -99:
+	var sb := UiArt.tex("stick_base")
+	var sk := UiArt.tex("stick_knob")
+	if _stick_id != -99 and sb != null:
+		_canvas.draw_texture_rect(sb, Rect2(_stick_origin - Vector2(84, 84), Vector2(168, 168)), false)
+		_canvas.draw_texture_rect(sk, Rect2(_stick_origin + move * 66.0 - Vector2(34, 34), Vector2(68, 68)), false)
+	elif _stick_id != -99:
 		_canvas.draw_circle(_stick_origin, 66, Color(1, 1, 1, 0.08))
 		_canvas.draw_arc(_stick_origin, 66, 0, TAU, 40, Color(1, 1, 1, 0.4), 2.0)
 		_canvas.draw_circle(_stick_origin + move * 66.0, 26, Color(0.85, 0.9, 1.0, 0.5))
-	else:
+	elif sb != null:
+		var rc0 := Vector2(132, h - 132)
+		var pulse0 := 0.75 + 0.25 * sin(_t * 2.4)
+		_canvas.draw_texture_rect(sb, Rect2(rc0 - Vector2(84, 84), Vector2(168, 168)), false, Color(1, 1, 1, pulse0))
+		_canvas.draw_texture_rect(sk, Rect2(rc0 - Vector2(30, 30), Vector2(60, 60)), false, Color(1, 1, 1, 0.8))
+		for ang in 4:
+			var dir0 := Vector2.from_angle(ang * TAU / 4.0 - PI * 0.5)
+			var ar := UiArt.tex("ic_arrow")
+			var xf := Transform2D(dir0.angle() + PI * 0.5, rc0 + dir0 * 64.0)
+			_canvas.draw_set_transform_matrix(xf)
+			_canvas.draw_texture_rect(ar, Rect2(Vector2(-7, -7), Vector2(14, 14)), false, Color(1, 1, 1, 0.65))
+			_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+	if _stick_id == -99 and UiArt.tex("stick_base") == null:
 		# an always-visible resting stick so a new player sees where the left thumb goes
 		var rc := Vector2(132, h - 132)
 		var pulse := 0.5 + 0.5 * sin(_t * 2.4)
@@ -687,22 +721,41 @@ func _draw_playing(font: Font, w: float, h: float) -> void:
 			enabled = p.count("bandage") > 0 and p.hp < p.max_hp - 1.0
 		elif id == "shoot":
 			enabled = p.has_pistol
-		var base := Color(0.05, 0.07, 0.1, 0.55) if enabled else Color(0.05, 0.07, 0.1, 0.3)
-		if id == "use":
-			base = Color(0.55, 0.3, 0.05, 0.7 + 0.2 * sin(_t * 6.0))
-		_canvas.draw_circle(b.c, b.r, base if not on else Color(0.85, 0.9, 1.0, 0.8))
-		_canvas.draw_arc(b.c, b.r, 0, TAU, 36, PINK if enabled else Color(0.6, 0.5, 0.55, 0.5), 3.0)
-		var fs := int(clampf(float(b.r) * 0.3, 10.0, 18.0))
-		var ts: Vector2 = font.get_string_size(String(b.label), HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
-		_canvas.draw_string(font, b.c + Vector2(-ts.x * 0.5, fs * 0.35), String(b.label), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, CREAM if enabled else Color(0.7, 0.65, 0.7))
+		var disc := UiArt.tex("btn_round_down" if on else "btn_round")
+		var glyph := UiArt.tex("ic_" + String(UiArt.GLYPH.get(id, "")))
+		var dim := 1.0 if enabled else 0.4
+		if disc != null:
+			var pulse := 1.0
+			var tint := Color(1, 1, 1, dim)
+			if id == "use":
+				pulse = 1.0 + 0.06 * sin(_t * 6.0)
+				tint = Color(1.0, 0.92, 0.7, 1.0)
+			var rr: float = float(b.r) * pulse
+			_canvas.draw_texture_rect(disc, Rect2(b.c - Vector2(rr, rr), Vector2(rr, rr) * 2.0), false, tint)
+			if glyph != null:
+				var gs: float = float(b.r) * (1.25 if id == "attack" else 1.1)
+				_canvas.draw_texture_rect(glyph, Rect2(b.c - Vector2(gs, gs) * 0.5, Vector2(gs, gs)), false, Color(1, 1, 1, dim))
+		else:
+			var base := Color(0.05, 0.07, 0.1, 0.55) if enabled else Color(0.05, 0.07, 0.1, 0.3)
+			if id == "use":
+				base = Color(0.55, 0.3, 0.05, 0.7 + 0.2 * sin(_t * 6.0))
+			_canvas.draw_circle(b.c, b.r, base if not on else Color(0.85, 0.9, 1.0, 0.8))
+			_canvas.draw_arc(b.c, b.r, 0, TAU, 36, PINK if enabled else Color(0.6, 0.5, 0.55, 0.5), 3.0)
+			var fs := int(clampf(float(b.r) * 0.3, 10.0, 18.0))
+			var ts: Vector2 = font.get_string_size(String(b.label), HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+			_canvas.draw_string(font, b.c + Vector2(-ts.x * 0.5, fs * 0.35), String(b.label), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, CREAM if enabled else Color(0.7, 0.65, 0.7))
 		if id == "flare" or id == "bandage":
 			var n := p.count(String(id).replace("bandage", "bandage"))
-			_canvas.draw_string(font, b.c + Vector2(b.r * 0.45, -b.r * 0.5), str(n), HORIZONTAL_ALIGNMENT_LEFT, -1, 16, GOLD)
+			_canvas.draw_string(font, b.c + Vector2(b.r * 0.5, -b.r * 0.55), str(n), HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color(1, 1, 1, 0.95))
 	if _dialog.is_empty() and _toast_t <= 0.0 and false:
 		pass
 
 
 func _diamond(c: Vector2, r: float, col: Color) -> void:
+	var mk := UiArt.tex("ic_marker")
+	if mk != null:
+		_canvas.draw_texture_rect(mk, Rect2(c - Vector2(r, r) * 1.2, Vector2(r, r) * 2.4), false, col)
+		return
 	_canvas.draw_colored_polygon(PackedVector2Array([c + Vector2(0, -r), c + Vector2(r, 0), c + Vector2(0, r), c + Vector2(-r, 0)]), col)
 	_canvas.draw_polyline(PackedVector2Array([c + Vector2(0, -r), c + Vector2(r, 0), c + Vector2(0, r), c + Vector2(-r, 0), c + Vector2(0, -r)]), INK, 2.0)
 
@@ -733,11 +786,24 @@ func _draw_screen_buttons(font: Font) -> void:
 	for b in _screen_buttons:
 		var r: Rect2 = b.rect
 		var en: bool = b.enabled
-		_canvas.draw_rect(r, Color(0.08, 0.1, 0.14, 0.92) if en else Color(0.07, 0.08, 0.1, 0.7))
-		_canvas.draw_rect(r, PINK if en else Color(0.5, 0.4, 0.45), false, 3.0)
+		var label := String(b.label)
+		var wide := UiArt.box("btn_wide", 40)
+		var glyph_name := "left" if label == "<" else ("right" if label == ">" else "")
+		if wide != null and glyph_name == "":
+			_canvas.draw_style_box(wide, r)
+			if not en:
+				_canvas.draw_rect(r, Color(0, 0, 0, 0.35))
+		elif UiArt.tex("btn_round") != null and glyph_name != "":
+			_canvas.draw_texture_rect(UiArt.tex("btn_round"), r, false)
+			var gt := UiArt.tex("ic_" + glyph_name)
+			_canvas.draw_texture_rect(gt, Rect2(r.position + r.size * 0.2, r.size * 0.6), false)
+			continue
+		else:
+			_canvas.draw_rect(r, Color(0.08, 0.1, 0.14, 0.92) if en else Color(0.07, 0.08, 0.1, 0.7))
+			_canvas.draw_rect(r, PINK if en else Color(0.5, 0.4, 0.45), false, 3.0)
 		var fs := 30 if r.size.y > 60 else 24
-		var ts: Vector2 = font.get_string_size(String(b.label), HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
-		_canvas.draw_string(font, r.position + Vector2((r.size.x - ts.x) * 0.5, r.size.y * 0.5 + fs * 0.35), String(b.label), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, CREAM if en else Color(0.65, 0.6, 0.65))
+		var ts: Vector2 = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+		_canvas.draw_string(font, r.position + Vector2((r.size.x - ts.x) * 0.5, r.size.y * 0.5 + fs * 0.35), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1, 0.98) if en else Color(0.75, 0.75, 0.78))
 
 
 func _draw_craft(font: Font, w: float, h: float) -> void:
@@ -759,8 +825,12 @@ func _draw_craft(font: Font, w: float, h: float) -> void:
 func _draw_lobby(font: Font, w: float, h: float) -> void:
 	_canvas.draw_rect(Rect2(0, 0, w, h * 0.0 + 150), Color(0.03, 0.04, 0.06, 0.6))
 	_canvas.draw_rect(Rect2(0, h - 280, w, 280), Color(0.03, 0.04, 0.06, 0.6))
-	_canvas.draw_rect(Rect2(24, h * 0.32, 300, 200), Color(0.04, 0.05, 0.08, 0.78))
-	_canvas.draw_rect(Rect2(24, h * 0.32, 300, 200), PINK, false, 2.0)
+	var lp := UiArt.box("panel", 30)
+	if lp != null:
+		_canvas.draw_style_box(lp, Rect2(24, h * 0.32, 300, 200))
+	else:
+		_canvas.draw_rect(Rect2(24, h * 0.32, 300, 200), Color(0.04, 0.05, 0.08, 0.78))
+		_canvas.draw_rect(Rect2(24, h * 0.32, 300, 200), PINK, false, 2.0)
 	var vals := [float(lobby.get("hp", 0.0)) / 120.0, float(lobby.get("speed", 0.0)) / 5.5, float(lobby.get("stamina", 0.0)) / 140.0, float(lobby.get("carry", 0.0)) / 14.0]
 	var by := h * 0.32 + 38.0
 	var names := ["HEALTH", "SPEED", "STAMINA", "CARRY"]
