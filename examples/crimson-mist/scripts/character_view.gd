@@ -51,7 +51,7 @@ func setup(id: String) -> void:
 			rig.scale = Vector3.ONE * k
 			rig.position.y = -box.position.y * k
 			rig.rotation.y = PI          # the glb faces +Z, the game faces -Z
-			materials = Toon.apply(rig.model, 0.011, Color.WHITE)
+			materials = Toon.apply(rig.model, 0.011, Color(0.8, 0.82, 0.88))
 			_last_pos = global_position if is_inside_tree() else Vector3.ZERO
 			return
 		rig.queue_free()
