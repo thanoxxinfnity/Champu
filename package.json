@@ -4,7 +4,9 @@
   "private": true,
   "description": "Chomugiri \u2014 autonomous developer workspace. NVIDIA NIM + Pollinations + universal OpenAI-compatible gateway + terminal tunnel bridge.",
   "scripts": {
+    "predev": "node scripts/sync-agent-assets.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/sync-agent-assets.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

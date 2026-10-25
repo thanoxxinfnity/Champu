@@ -26,6 +26,8 @@ const OUT = process.argv[2] ?? path.join(ROOT, 'android/app/src/main/assets/web'
 const SKIP = new Set(['node_modules', '.next', '.git', 'android', 'dist', 'out', 'agent']);
 
 async function stage() {
+  // The bridge files the app can hand to an old bridge (see sync-agent-assets.mjs) go into public/ before it is copied.
+  execFileSync('node', [path.join(ROOT, 'scripts/sync-agent-assets.mjs')], { cwd: ROOT, stdio: 'inherit' });
   await rm(STAGE, { recursive: true, force: true });
   await mkdir(STAGE, { recursive: true });
 

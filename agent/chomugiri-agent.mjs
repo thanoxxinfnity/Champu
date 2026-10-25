@@ -63,7 +63,7 @@ const TOKEN = arg('token', process.env.CHOMUGIRI_TOKEN ?? randomBytes(24).toStri
 const ALLOW_CMD = (arg('allow-cmd', process.env.CHOMUGIRI_ALLOW_CMD ?? '') || '')
   .split(',').map((s) => s.trim()).filter(Boolean);
 const MAX_EXEC_MS = Number(arg('max-exec-ms', 45 * 60_000));
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const browser = createBrowser({ outDir: ARTIFACTS });
 const blender = createBlender({ outDir: ARTIFACTS });
 
@@ -315,6 +315,8 @@ const routes = {
     ok: true,
     agent: 'chomugiri-bridge',
     version: VERSION,
+    /** What this bridge can do beyond the basics, so the app knows without trying. */
+    features: ['keys'],
     platform: process.platform,
     arch: process.arch,
     node: process.version,

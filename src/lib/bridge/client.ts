@@ -30,6 +30,7 @@ export interface BridgeHealth {
   ok: boolean;
   agent: string;
   version: string;
+  features?: string[];
   platform: string;
   arch: string;
   node: string;
@@ -81,6 +82,11 @@ export class BridgeClient {
 
   update(config: Partial<BridgeConfig>): void {
     this.config = { ...this.config, ...config, url: normalizeUrl(config.url ?? this.config.url) };
+  }
+
+  /** Where this client points and the token it uses (for the restart command the app prints when it updates a bridge). */
+  describe(): { url: string; token: string } {
+    return { url: this.config.url, token: this.config.token };
   }
 
   get configured(): boolean {
