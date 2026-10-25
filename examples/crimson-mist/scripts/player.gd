@@ -77,7 +77,7 @@ func _ready() -> void:
 	add_child(view)
 	view.setup(char_id)
 	for n in view.find_children("*", "MeshInstance3D", true, false):
-		(n as MeshInstance3D).layers = 3
+		(n as MeshInstance3D).layers = 2   # visible to the camera, but the torch (cull mask 1) does not light the player
 	pivot = Node3D.new()
 	pivot.position.y = 1.45
 	add_child(pivot)
@@ -530,6 +530,7 @@ func _physics_process(delta: float) -> void:
 	# pose
 	var sp := planar.length() / maxf(base, 0.1)
 	view.move_speed = clampf(sp * (1.0 if not running else 0.95), 0.0, 1.4)
+	view.ground_speed = planar.length()
 	if _atk != 0:
 		view.pose = CharacterView.Pose.SWING
 	elif _roll_t > 0.0:

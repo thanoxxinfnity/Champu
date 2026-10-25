@@ -47,6 +47,8 @@ func _initialize() -> void:
 			v.rotation.y = PI + 0.45
 			v.pose = poses[j][0]
 			v.move_speed = 1.0
+			v.ground_speed = 1.3 if j == 1 else 0.0
+			v.use_clips = not OS.get_cmdline_user_args().has("--procedural")
 			v.swing_phase = 1
 			v.swing_k = 0.55
 			views.append(v)

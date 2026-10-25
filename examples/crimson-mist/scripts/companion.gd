@@ -94,6 +94,7 @@ func _physics_process(delta: float) -> void:
 	view.rotation.y = lerp_angle(view.rotation.y, face_yaw, minf(1.0, delta * 8.0))
 	var sp := planar.length() / maxf(float(Data.CAST[char_id].speed), 0.1)
 	view.move_speed = clampf(sp, 0.0, 1.4)
+	view.ground_speed = planar.length()
 	if _swing_t > 0.0:
 		view.pose = CharacterView.Pose.SWING
 		view.swing_phase = 1

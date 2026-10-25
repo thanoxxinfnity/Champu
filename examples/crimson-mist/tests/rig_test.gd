@@ -30,7 +30,7 @@ func _initialize() -> void:
 		T.check(tris == 0 or tris <= 26000, "%s triangle budget (%d)" % [id, tris])
 		# a pose must actually move the arm: raise it, compare the hand position
 		var sk := v.rig.skeleton
-		var hand := v.rig.idx["handR"]
+		var hand: int = v.rig.idx["handR"]
 		v.rig.apply(PoseLib.build(CMPoses.idle(0.0)))
 		var down := sk.get_bone_global_pose(hand).origin
 		v.rig.apply(PoseLib.build(CMPoses.swing(1, 1.0, 0)))
