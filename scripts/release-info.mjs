@@ -26,7 +26,7 @@ const day = (file) => {
 };
 
 const info = {
-  chomugiri: { version, date: day('releases/Chomugiri.apk'), mb: mb(join(root, 'releases/Chomugiri.apk')) },
+  chomugiri: { version, date: process.env.CHOMUGIRI_RELEASE_DATE || day('releases/Chomugiri.apk'), mb: mb(join(root, 'releases/Chomugiri.apk')) },
   horizon: { version: null, date: null, mb: mb(join(root, 'examples/chomu-horizon/build/ChomuHorizon.apk')) ?? 110 },
 };
 writeFileSync(join(root, 'site/data/release.json'), `${JSON.stringify(info, null, 2)}\n`);
