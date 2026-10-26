@@ -49,6 +49,7 @@ func _physics_process(delta: float) -> void:
 	var p := game.player
 	if p != null and not p.dead and global_position.distance_to(p.global_position + Vector3(0, 1.0, 0)) < 0.75:
 		p.take_damage(damage, global_position)
+		Bestiary.note("(spit)", damage)
 		p.slow(2.0)
 		_land()
 		return

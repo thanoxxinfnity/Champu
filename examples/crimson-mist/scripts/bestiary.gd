@@ -10,6 +10,14 @@ extends RefCounted
 ##   leaper    telegraphs, then lunges   burst    bursts into spores       crawl     low and fast                stalker   quiet, patient, sees far
 ##   weeper    freezes while looked at
 
+## Damage dealt to the player per kind (a balance tally the playthrough bot prints).
+static var dealt := {}
+
+
+static func note(kind: String, amount: float) -> void:
+	dealt[kind] = float(dealt.get(kind, 0.0)) + amount
+
+
 const TRAITS := {
 	"shambler": {"hp": 60.0, "speed": 1.8, "patrol": 0.8, "dmg": 13.0, "sight": 15.0, "hear": 20.0, "reach": 1.5, "cd": 1.2},
 	"runner": {"hp": 36.0, "speed": 4.5, "patrol": 1.4, "dmg": 9.0, "sight": 17.0, "hear": 24.0, "reach": 1.4, "cd": 0.8},

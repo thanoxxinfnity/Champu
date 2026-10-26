@@ -39,6 +39,7 @@ func _initialize() -> void:
 			game.hud.hide_all_screens()
 			continue
 		_think(p, frames)
+	print("damage taken by kind: ", Bestiary.dealt)
 	T.check(game.story.finished, "the bot finished Chapter 1 (mission %d, %d frames, %d deaths)" % [game.story.mission, frames, deaths])
 	T.check(deaths <= 4, "the bot did not need more than 4 retries (%d)" % deaths)
 	T.check(game.player.has_crowbar and game.player.has_pistol, "weapons were found on the way")

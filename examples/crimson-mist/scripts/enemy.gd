@@ -297,6 +297,7 @@ func _physics_process(delta: float) -> void:
 		if _aura_t <= 0.0:
 			_aura_t = 0.7
 			p.take_damage(float(def.aura) * 0.7, global_position)
+			Bestiary.note(kind, float(def.aura) * 0.7)
 	_scream_cd = maxf(0.0, _scream_cd - delta)
 	match state:
 		S.DORMANT:
@@ -330,6 +331,7 @@ func _physics_process(delta: float) -> void:
 				if not _lunge_hit and dist < 1.5 and not p.dead:
 					_lunge_hit = true
 					p.take_damage(float(def.dmg), global_position)
+					Bestiary.note(kind, float(def.dmg))
 					game.sfx.play_at("hit", p.global_position, 2.0)
 				if _lunge_t <= 0.0:
 					velocity.x = 0.0
@@ -483,6 +485,7 @@ func _strike(p: Player) -> void:
 	var reach := float(def.reach) * 1.35
 	if to.length() <= reach and not p.dead:
 		p.take_damage(float(def.dmg), global_position)
+		Bestiary.note(kind, float(def.dmg))
 		game.sfx.play_at("hit", p.global_position, 2.0)
 
 
