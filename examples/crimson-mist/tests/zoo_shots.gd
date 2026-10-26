@@ -35,6 +35,7 @@ func _initialize() -> void:
 		var ok := v.setup_model("res://assets/world/%s.glb" % info[0], minf(float(info[2]), 2.3 if id != "bellkeeper" else 3.4), d.tint, String(info[1]))
 		if not ok:
 			missing += 1
+			print("zoo: stand-in for ", id)
 		var col := i % cols
 		var row := i / cols
 		v.position = Vector3((col - (cols - 1) * 0.5) * spacing, 0, -row * 3.2)
@@ -54,10 +55,11 @@ func _initialize() -> void:
 	var cam := Camera3D.new()
 	cam.fov = 40
 	world.add_child(cam)
-	cam.look_at_from_position(Vector3(0, 2.6, 11.5), Vector3(0, 1.0, -4.8))
 	cam.make_current()
-	for i in 40:
-		await process_frame
-	root.get_texture().get_image().save_png("%s/zoo_all.png" % out)
-	print("saved zoo_all.png")
+	for r in (ids.size() + cols - 1) / cols:
+		cam.look_at_from_position(Vector3(0, 1.9, -r * 3.2 + 6.2), Vector3(0, 0.95, -r * 3.2))
+		for i in 12:
+			await process_frame
+		root.get_texture().get_image().save_png("%s/zoo_row%d.png" % [out, r])
+	print("saved zoo rows")
 	quit()

@@ -33,11 +33,11 @@ const SPAWNS := {
 	"church": [
 		["weeper", Vector3(-2, 0, -112), "dormant"], ["fallen_priest", Vector3(5, 0, -100), "patrol"], ["pale_bride", Vector3(-4, 0, -96), "patrol"],
 		["lost_student", Vector3(3, 0, -110), "dormant"], ["pale_stalker", Vector3(-6, 0, -118), "dormant"], ["spore_mother", Vector3(6, 0, -120), "patrol"],
-		["granny_creeper", Vector3(0, 0, -104), "dormant"], ["tide_weeper", Vector3(-3, 0, -123), "dormant"]],
+		["granny_creeper", Vector3(0, 0, -104), "dormant"], ["tide_weeper", Vector3(-3, 0, -123), "dormant"],
+		["captains_crew", Vector3(8, 0, -108), "dormant"], ["bell_hand", Vector3(-8, 0, -108), "dormant"], ["wet_widow", Vector3(-1, 0, -128), "dormant"]],
 	"road": [
 		["patrolman", Vector3(-2, 0, -135), "dormant"], ["ashen_trooper", Vector3(2, 0, -140), "dormant"], ["cinder_fighter", Vector3(0, 0, -148), "patrol"],
-		["hard_hat", Vector3(-3, 0, -156), "patrol"], ["cinder_nurse", Vector3(1, 0, -164), "patrol"], ["captains_crew", Vector3(-3, 0, -174), "dormant"],
-		["bell_hand", Vector3(-2, 0, -170), "dormant"], ["bloated_baker", Vector3(2, 0, -178), "patrol"], ["wet_widow", Vector3(0, 0, -184), "dormant"],
+		["hard_hat", Vector3(-3, 0, -156), "patrol"], ["cinder_nurse", Vector3(1, 0, -164), "patrol"], ["bloated_baker", Vector3(2, 0, -178), "patrol"],
 		["drowned_girl", Vector3(3, 0, -186), "dormant"]],
 }
 
