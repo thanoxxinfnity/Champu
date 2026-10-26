@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bjqewoxmbleni"
-path="res://.godot/imported/police_car_albedo.jpg-4bb46ddce24bd1caad0bbeeb7ad25156.ctex"
+path.s3tc="res://.godot/imported/police_car_albedo.jpg-4bb46ddce24bd1caad0bbeeb7ad25156.s3tc.ctex"
+path.etc2="res://.godot/imported/police_car_albedo.jpg-4bb46ddce24bd1caad0bbeeb7ad25156.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "c9858297fa38f61ce9e7159e42ed3861"
@@ -14,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/police_car_albedo.jpg"
-dest_files=["res://.godot/imported/police_car_albedo.jpg-4bb46ddce24bd1caad0bbeeb7ad25156.ctex"]
+dest_files=["res://.godot/imported/police_car_albedo.jpg-4bb46ddce24bd1caad0bbeeb7ad25156.s3tc.ctex", "res://.godot/imported/police_car_albedo.jpg-4bb46ddce24bd1caad0bbeeb7ad25156.etc2.ctex"]
 
 [params]
 

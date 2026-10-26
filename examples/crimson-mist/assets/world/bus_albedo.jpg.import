@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dlhkk65a71pin"
-path="res://.godot/imported/bus_albedo.jpg-dd0bac73efcf1b44cf46cd06b0d2433a.ctex"
+path.s3tc="res://.godot/imported/bus_albedo.jpg-dd0bac73efcf1b44cf46cd06b0d2433a.s3tc.ctex"
+path.etc2="res://.godot/imported/bus_albedo.jpg-dd0bac73efcf1b44cf46cd06b0d2433a.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "b744f598b47d49bd6fecd3700eacf36b"
@@ -14,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/bus_albedo.jpg"
-dest_files=["res://.godot/imported/bus_albedo.jpg-dd0bac73efcf1b44cf46cd06b0d2433a.ctex"]
+dest_files=["res://.godot/imported/bus_albedo.jpg-dd0bac73efcf1b44cf46cd06b0d2433a.s3tc.ctex", "res://.godot/imported/bus_albedo.jpg-dd0bac73efcf1b44cf46cd06b0d2433a.etc2.ctex"]
 
 [params]
 

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bc8yutlgu8b62"
-path="res://.godot/imported/van_wreck_albedo.jpg-7738ed2a7d5b7155ff805ac87fd8f22c.ctex"
+path.s3tc="res://.godot/imported/van_wreck_albedo.jpg-7738ed2a7d5b7155ff805ac87fd8f22c.s3tc.ctex"
+path.etc2="res://.godot/imported/van_wreck_albedo.jpg-7738ed2a7d5b7155ff805ac87fd8f22c.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "dd5f434a3db2821419532a57bc607001"
@@ -14,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/van_wreck_albedo.jpg"
-dest_files=["res://.godot/imported/van_wreck_albedo.jpg-7738ed2a7d5b7155ff805ac87fd8f22c.ctex"]
+dest_files=["res://.godot/imported/van_wreck_albedo.jpg-7738ed2a7d5b7155ff805ac87fd8f22c.s3tc.ctex", "res://.godot/imported/van_wreck_albedo.jpg-7738ed2a7d5b7155ff805ac87fd8f22c.etc2.ctex"]
 
 [params]
 
