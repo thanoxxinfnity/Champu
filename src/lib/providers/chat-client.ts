@@ -275,6 +275,16 @@ function routeFor(body: ChatBody): Candidate[] | null {
   return chain.length ? chain : null;
 }
 
+/**
+ * The models a call would try, in order: the gateway's plan, a pinned free model with its fallbacks, or just the one picked.
+ * Background jobs use this to know what to write down for the bridge.
+ */
+export function candidatesFor(body: ChatBody): Array<{ provider: ProviderId; model: string; label?: string; custom?: CustomEndpointConfig }> {
+  const route = routeFor(body);
+  if (route) return route.map((c) => ({ provider: c.provider, model: c.model, label: c.label, custom: c.custom }));
+  return [{ provider: body.provider, model: body.model, custom: body.custom }];
+}
+
 /** Who is resting right now and why — for the status list in Settings → Free LLM APIs. */
 export function gatewayResting(): RestingItem[] {
   const s = useWorkspace.getState();

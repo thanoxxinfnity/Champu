@@ -1,11 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { getKeys } from '@/lib/keys';
-import { keyEnvFrom } from '@/lib/bridge/key-env';
 import { useWorkspace } from '@/lib/store';
 import { lacksKeyStore, pushAgentFiles, restartCommand } from '@/lib/bridge/update';
 import { copyText } from './codeActions';
+import { currentKeyEnv, useAutoPush } from '@/lib/bridge/auto-push';
 
 const btn = 'press mono rounded-lg border px-2.5 py-1.5 text-[10.5px] disabled:opacity-40';
 
@@ -68,7 +67,11 @@ export function TerminalKeys() {
     }
   };
 
-  const env = keyEnvFrom(getKeys(), endpoints);
+  void endpoints; // re-render when a custom endpoint changes, so the count and the push below stay current
+  const env = currentKeyEnv();
+  const autoOn = useAutoPush((s) => s.on);
+  const autoSet = useAutoPush((s) => s.set);
+  const autoLast = useAutoPush((s) => s.last);
   const count = Object.keys(env).length;
 
   const pull = async () => {
@@ -116,6 +119,14 @@ export function TerminalKeys() {
           {busy === 'delete' ? 'deleting…' : 'Delete APIs from terminal'}
         </button>
       </div>
+      <label className="flex cursor-pointer items-start gap-2 rounded-lg border p-2.5" style={{ borderColor: autoOn ? 'var(--accent)' : 'var(--line)' }}>
+        <input type="checkbox" className="mt-0.5" checked={autoOn} disabled={!online || old} onChange={(e) => autoSet(e.target.checked)} data-testid="auto-push" />
+        <span className="text-[11.5px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
+          <span style={{ color: 'var(--ink)' }}>Auto-push keys</span> — every key and every custom endpoint (with its base URL) goes to the terminal by itself when you add or
+          change it, and again if the terminal loses them. No need to press the button.
+        </span>
+      </label>
+      {autoOn && autoLast && <p className="text-[10.5px]" style={{ color: autoLast.ok ? 'var(--color-success)' : 'var(--color-danger)' }} role="status">{autoLast.text}</p>}
       {old && (
         <div className="space-y-2 rounded-lg border p-2.5" style={{ borderColor: 'var(--color-amber, #d99a2b)' }} data-testid="bridge-old">
           <p className="text-[11px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>

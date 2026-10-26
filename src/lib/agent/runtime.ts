@@ -204,7 +204,7 @@ function narrate(sessionId: string, phrase: string): void {
 
 // ── Message assembly ────────────────────────────────────────────────────────
 
-function buildUserContent(input: string, attachments: ChatAttachment[]): ChatMessage['content'] {
+export function buildUserContent(input: string, attachments: ChatAttachment[]): ChatMessage['content'] {
   const images = attachments.filter((a) => a.dataUrl && a.kind.startsWith('image/'));
   const texts = attachments.filter((a) => a.text);
 

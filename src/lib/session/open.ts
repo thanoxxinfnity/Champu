@@ -1,6 +1,6 @@
 'use client';
 
-import { listMessages } from '@/lib/db/history';
+import { listArtifacts, listMessages } from '@/lib/db/history';
 import { useWorkspace } from '@/lib/store';
 import type { SessionRecord } from '@/lib/db/schema';
 
@@ -25,6 +25,13 @@ export async function openSession(session: SessionRecord): Promise<void> {
     s.setPlan(null);
     s.setFiles(new Map());
     s.setSlotOwner(session.id);
+    // Bring back what this session made: the files live in the browser's database, not only in memory.
+    const saved = await listArtifacts(session.id);
+    if (saved.length && useWorkspace.getState().sessionId === session.id) {
+      useWorkspace.getState().setFiles(
+        new Map(saved.map((a) => [a.path, { kind: 'file' as const, path: a.path, language: a.language, content: a.content, complete: true, bytes: a.bytes }])),
+      );
+    }
   }
 
   const messages = await listMessages(session.id);
@@ -43,6 +50,8 @@ export async function openSession(session: SessionRecord): Promise<void> {
       usage: m.usage,
       durationMs: m.durationMs,
       error: m.error,
+      background: m.background,
+      streaming: m.background ? true : undefined,
     });
   }
 

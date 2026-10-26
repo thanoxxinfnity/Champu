@@ -9,6 +9,9 @@
 /** The first bridge version that holds API keys. */
 export const KEYS_MIN_VERSION = '1.2.0';
 
+/** The first bridge version that runs background jobs (model calls that go on with the app closed). */
+export const JOBS_MIN_VERSION = '1.3.0';
+
 export function compareVersions(a: string, b: string): number {
   const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
   const pb = b.split('.').map((n) => parseInt(n, 10) || 0);
@@ -24,6 +27,13 @@ export function lacksKeyStore(health: { version?: string; features?: string[] } 
   if (!health) return false;
   if (health.features?.includes('keys')) return false;
   return !health.version || compareVersions(health.version, KEYS_MIN_VERSION) < 0;
+}
+
+/** True when the bridge can run background jobs. */
+export function hasJobs(health: { version?: string; features?: string[] } | null | undefined): boolean {
+  if (!health) return false;
+  if (health.features?.includes('jobs')) return true;
+  return !!health.version && compareVersions(health.version, JOBS_MIN_VERSION) >= 0;
 }
 
 export interface AgentManifest {

@@ -72,6 +72,8 @@ export interface MessageRecord {
   plan?: unknown;
   attachments?: Array<{ name: string; kind: string; bytes: number; dataUrl?: string; text?: string; caption?: string }>;
   error?: string;
+  /** The id of the terminal's background job still writing this reply; cleared when the answer arrives. */
+  background?: string;
   usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
   durationMs?: number;
 }

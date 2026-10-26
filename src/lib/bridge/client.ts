@@ -61,6 +61,44 @@ export interface ExecFrame {
   replay?: boolean;
 }
 
+export interface JobMeta {
+  sessionId: string;
+  assistantId: string;
+  userId?: string;
+  suite?: string;
+  lane?: 'A' | 'B';
+  title?: string;
+  model?: string;
+  provider?: string;
+  startedAt?: number;
+}
+
+export interface JobSummary {
+  id: string;
+  status: 'running' | 'done' | 'failed' | 'cancelled' | 'interrupted';
+  meta: JobMeta | null;
+  startedAt: number;
+  endedAt: number | null;
+  chars: number;
+  label: string | null;
+  error: string | null;
+}
+
+export interface JobDetail extends JobSummary {
+  content: string;
+  reasoning: string;
+  usage: { promptTokens?: number; completionTokens?: number; totalTokens?: number } | null;
+  finishReason: string | null;
+}
+
+export interface JobSpec {
+  id: string;
+  meta: JobMeta;
+  recipes: Array<{ label: string; url: string; headers: Record<string, string>; body: Record<string, unknown>; stream: boolean; timeoutMs?: number }>;
+  /** A ntfy.sh topic the bridge should ping when the job ends. */
+  ntfy?: string;
+}
+
 export class BridgeOfflineError extends Error {
   readonly code = 'bridge_offline';
   constructor(message = 'Terminal bridge is offline.') {
@@ -178,6 +216,28 @@ export class BridgeClient {
   /** Removes the named variables from the terminal, or all of them. */
   deleteKeys(names?: string[]) {
     return this.request<{ deleted: number }>('/v1/keys/delete', { method: 'POST', body: JSON.stringify({ names }) });
+  }
+
+  /** Background jobs: model calls the bridge keeps running while the app is closed (bridge 1.3.0+). */
+  createJob(spec: JobSpec) {
+    return this.request<JobSummary>('/v1/jobs', { method: 'POST', body: JSON.stringify(spec) }, 60_000);
+  }
+
+  jobs() {
+    return this.request<{ jobs: JobSummary[]; running: number }>('/v1/jobs', { method: 'GET' });
+  }
+
+  job(id: string) {
+    return this.request<JobDetail>(`/v1/job?id=${encodeURIComponent(id)}`, { method: 'GET' });
+  }
+
+  cancelJob(id: string) {
+    return this.request<{ cancelled: boolean }>('/v1/job/cancel', { method: 'POST', body: JSON.stringify({ id }) });
+  }
+
+  /** The app has taken these jobs into its conversations; the bridge can delete them. */
+  ackJobs(ids: string[]) {
+    return this.request<{ removed: number }>('/v1/job/ack', { method: 'POST', body: JSON.stringify({ ids }) });
   }
 
   kill(execId: string) {

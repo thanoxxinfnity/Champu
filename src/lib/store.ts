@@ -60,6 +60,8 @@ export interface ChatMessageView {
   createdAt: number;
   streaming?: boolean;
   error?: string;
+  /** Set while the terminal bridge is still writing this reply in the background (the job id). */
+  background?: string;
   attachments?: ChatAttachment[];
   usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
   durationMs?: number;
@@ -439,6 +441,46 @@ function saveUsageSoon(read: () => UsageState): void {
   }, 2000);
 }
 
+// ── Files survive leaving the app ─────────────────────────────────────────────
+// The live file slot is only memory, so a reload (or the phone killing the tab) used to take every generated file with it. Each finished file is
+// also written to the artifacts table under the session that owns the slot, and opening a session reads them back (see session/open.ts).
+
+const pendingWrites = new Map<string, ReturnType<typeof setTimeout>>();
+
+function slotOwner(): { id: string; suite: SuiteId } | null {
+  const s = useWorkspace.getState();
+  const id = s.slotSessionId ?? s.sessionId;
+  return id ? { id, suite: s.activeSuite } : null;
+}
+
+function persistFile(file: FileArtifact): void {
+  // A run saves its own files (with its own session id); this is for everything else that fills the slot.
+  if (typeof window === 'undefined' || !file.complete || useWorkspace.getState().runSessionId) return;
+  const owner = slotOwner();
+  if (!owner) return;
+  const key = `${owner.id}\u0000${file.path}`;
+  clearTimeout(pendingWrites.get(key));
+  pendingWrites.set(
+    key,
+    setTimeout(() => {
+      pendingWrites.delete(key);
+      void import('@/lib/db/history').then(({ upsertArtifact }) =>
+        upsertArtifact({ sessionId: owner.id, suite: owner.suite, path: file.path, language: file.language, content: file.content, bytes: file.bytes }),
+      );
+    }, 400),
+  );
+}
+
+function forgetFile(path: string): void {
+  if (typeof window === 'undefined') return;
+  const owner = slotOwner();
+  if (!owner) return;
+  void Promise.all([import('@/lib/db/history'), import('@/lib/db/schema')]).then(async ([, schema]) => {
+    const rows = await schema.db().artifacts.where('[sessionId+path]').equals([owner.id, path]).toArray().catch(() => []);
+    for (const r of rows) await schema.db().artifacts.delete(r.id).catch(() => undefined);
+  });
+}
+
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
   activeSuite: 'chat',
   sessionId: null,
@@ -634,18 +676,22 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   files: new Map(),
   activeFile: null,
   setFiles: (files) => set({ files }),
-  upsertFile: (file) =>
+  upsertFile: (file) => {
     set((s) => {
       const next = new Map(s.files);
       next.set(file.path, file);
       return { files: next, activeFile: s.activeFile ?? file.path };
-    }),
-  removeFile: (path) =>
+    });
+    persistFile(file);
+  },
+  removeFile: (path) => {
     set((s) => {
       const next = new Map(s.files);
       next.delete(path);
       return { files: next, activeFile: s.activeFile === path ? null : s.activeFile };
-    }),
+    });
+    forgetFile(path);
+  },
   setActiveFile: (path) => set({ activeFile: path }),
 
   terminal: [],

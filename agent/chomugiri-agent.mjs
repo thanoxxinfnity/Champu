@@ -34,6 +34,7 @@ import { createZip } from './zip.mjs';
 import { browseCli, createBrowser, explainBrowserError } from './browser.mjs';
 import { blenderCli, createBlender, explainBlenderError } from './blender.mjs';
 import { deleteKeystore, describeKeystore, keysCli, readKeystore, writeKeystore } from './keystore.mjs';
+import { createJobs } from './jobs.mjs';
 
 // `node chomugiri-agent.mjs browse …` is the model's way to use the bridge's browser from a terminal block: a client, not a server.
 if (process.argv[2] === 'browse') process.exit(await browseCli(process.argv.slice(3)));
@@ -63,7 +64,7 @@ const TOKEN = arg('token', process.env.CHOMUGIRI_TOKEN ?? randomBytes(24).toStri
 const ALLOW_CMD = (arg('allow-cmd', process.env.CHOMUGIRI_ALLOW_CMD ?? '') || '')
   .split(',').map((s) => s.trim()).filter(Boolean);
 const MAX_EXEC_MS = Number(arg('max-exec-ms', 45 * 60_000));
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const browser = createBrowser({ outDir: ARTIFACTS });
 const blender = createBlender({ outDir: ARTIFACTS });
 
@@ -316,7 +317,7 @@ const routes = {
     agent: 'chomugiri-bridge',
     version: VERSION,
     /** What this bridge can do beyond the basics, so the app knows without trying. */
-    features: ['keys'],
+    features: ['keys', 'jobs'],
     platform: process.platform,
     arch: process.arch,
     node: process.version,
@@ -430,6 +431,17 @@ routes['POST /v1/keys/delete'] = async (req) => {
   const body = await readJson(req);
   return { deleted: deleteKeystore(body.names) };
 };
+
+/**
+ * Background jobs: model calls that go on with the app closed (see jobs.mjs). The app lists them when it comes back, takes the finished
+ * ones into their conversations and acknowledges them. Ids travel in the query string so every route stays an exact match.
+ */
+const jobs = createJobs();
+routes['POST /v1/jobs'] = async (req) => jobs.start(await readJson(req));
+routes['GET /v1/jobs'] = async () => ({ jobs: jobs.list(), running: jobs.running() });
+routes['GET /v1/job'] = async (_req, url) => jobs.get(url.searchParams.get('id') ?? '');
+routes['POST /v1/job/cancel'] = async (req) => jobs.cancel(String((await readJson(req)).id ?? ''));
+routes['POST /v1/job/ack'] = async (req) => jobs.ack((await readJson(req)).ids);
 
 /** The bridge's browser (Playwright MCP). `{tool,args}` runs one step; `{list:true}` names the tools. */
 routes['POST /v1/browser'] = async (req) => {

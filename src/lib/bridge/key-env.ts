@@ -24,6 +24,7 @@ export interface KeyEnvKeys {
   sketchfab?: string;
   kaggle?: string;
   huggingface?: string;
+  vercel?: string;
 }
 
 const APP_NAMES: Record<keyof KeyEnvKeys, string> = {
@@ -34,6 +35,7 @@ const APP_NAMES: Record<keyof KeyEnvKeys, string> = {
   sketchfab: 'SKETCHFAB_TOKEN',
   kaggle: 'KAGGLE_API_TOKEN',
   huggingface: 'HF_TOKEN',
+  vercel: 'VERCEL_TOKEN',
 };
 
 const slug = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'ENDPOINT';

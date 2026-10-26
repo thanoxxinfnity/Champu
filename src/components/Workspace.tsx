@@ -13,6 +13,7 @@ import { FileManager } from './FileManager';
 import { CommandDock } from './CommandDock';
 import { Settings } from './Settings';
 import { DeployButton } from './DeployButton';
+import { hasEntryPoint } from '@/lib/deploy/state';
 import { DraftPicker } from './DraftPicker';
 import { AssetStudio } from './suites/AssetStudio';
 import { LogoMark, LogoWordmark } from './Logo';
@@ -33,6 +34,10 @@ import { Workdrive } from './suites/Workdrive';
 import { SkillsManager } from './suites/SkillsManager';
 import { Studio } from './suites/Studio';
 import { db, isBrowser } from '@/lib/db/schema';
+import { getSetting, setSetting } from '@/lib/db/history';
+import { openSessionById } from '@/lib/session/open';
+import { useAutoPushKeys } from '@/lib/bridge/auto-push';
+import { useBackgroundInbox } from '@/lib/agent/background-inbox';
 
 /** Suite-specific tool pane shown on the right when the suite has one. */
 function SuiteTool() {
@@ -142,6 +147,8 @@ export function Workspace() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
   const bootedRef = useRef(false);
+  useAutoPushKeys();
+  useBackgroundInbox();
 
   // ── Boot ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -152,10 +159,22 @@ export function Workspace() {
 
     if (isBrowser()) {
       void db().endpoints.toArray().then(setEndpoints).catch(() => undefined);
+      // Coming back after the phone closed the app: land in the conversation that was open, with its messages and its files,
+      // instead of an empty chat that looks like everything was lost.
+      void getSetting<string | null>('lastSessionId', null).then(async (id) => {
+        const st = useWorkspace.getState();
+        if (id && !st.sessionId && st.messages.length === 0) await openSessionById(id);
+      });
     }
 
     return () => useWorkspace.getState().stopHeartbeat();
   }, [hydrate, setEndpoints]);
+
+  // Remember which conversation is open, for the next launch.
+  const openSessionId = useWorkspace((s) => s.sessionId);
+  useEffect(() => {
+    if (openSessionId) void setSetting('lastSessionId', openSessionId);
+  }, [openSessionId]);
 
   // Bridge recovery un-parks blocked steps.
   useEffect(() => {
@@ -187,6 +206,7 @@ export function Workspace() {
   // A website is worth watching run, so the tab appears the moment one exists —
   // in any suite, since "build me a landing page" is not a suite of its own.
   const hasSite = Array.from(files.keys()).some((path) => /\.html?$/i.test(path));
+  const canDeploy = hasEntryPoint(Array.from(files.keys()));
   const tabs: Array<{ id: typeof rightPaneTab; label: string; badge?: number }> = [
     ...(suiteHasTool ? [{ id: 'preview' as const, label: 'tool' }] : []),
     ...(hasSite ? [{ id: 'site' as const, label: 'site' }] : []),
@@ -284,7 +304,8 @@ export function Workspace() {
 
           <div className="ml-auto flex items-center gap-2">
             <ThemeToggle />
-            <DeployButton onOpenSettings={() => setSettingsOpen(true)} />
+            {/* Only while there is something to ship: a button that is always there, with nothing behind it, is just noise. */}
+            {canDeploy && <DeployButton onOpenSettings={() => setSettingsOpen(true)} />}
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}

@@ -1,10 +1,11 @@
 'use client';
 
 import { useWorkspace, visibleFiles } from '@/lib/store';
-import { dataUrlToBytes, downloadBlob, downloadZip } from '@/lib/zip';
+import { dataUrlToBytes, downloadBlob, zipBlob } from '@/lib/zip';
+import { canShareFiles, downloadSource, shareBlob, shareSource } from '@/lib/save-file';
 import { buildPackExport, detectPacks } from '@/lib/suites/minecraft/pack';
 import { buildGodotExport } from '@/lib/suites/godot/export';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { markLive, renderMarkdown } from './markdown';
 import { TextWithSites } from './SiteChip';
 import './codeActions';
@@ -120,11 +121,16 @@ const fmtBytes = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB`
 
 /** Pictures the assistant sent show in the chat; every file can be saved. */
 function SentFiles({ files }: { files: NonNullable<ChatMessageView['attachments']> }) {
+  const [note, setNote] = useState<Record<string, string>>({});
+  const [share, setShare] = useState(false);
+  useEffect(() => setShare(canShareFiles()), []);
+  const say = (id: string, text: string) => setNote((n) => ({ ...n, [id]: text }));
   return (
     <div className="mt-2 space-y-2" data-testid="sent-files">
       {files.map((a) => {
         const image = isImageMime(a.kind) && a.dataUrl;
-        const remote = a.dataUrl?.startsWith('http');
+        const chipStyle = { borderColor: 'color-mix(in oklab, var(--accent) 40%, var(--line))', color: 'var(--accent)' } as const;
+        const chip = 'press mono inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[11.5px]';
         return (
           <figure key={a.id} className="max-w-full">
             {image ? (
@@ -132,21 +138,47 @@ function SentFiles({ files }: { files: NonNullable<ChatMessageView['attachments'
               <img src={a.dataUrl} alt={a.caption ?? a.name} loading="lazy" className="max-h-[60vh] max-w-full rounded-xl border" style={{ borderColor: 'var(--line)' }} />
             ) : null}
             <figcaption className="mt-1 flex flex-wrap items-center gap-2">
-              <a
-                href={a.dataUrl}
-                download={remote ? undefined : a.name}
-                target={remote ? '_blank' : undefined}
-                rel="noopener noreferrer"
-                className="press mono inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[11.5px]"
-                style={{ borderColor: 'color-mix(in oklab, var(--accent) 40%, var(--line))', color: 'var(--accent)' }}
+              <button
+                type="button"
+                className={chip}
+                style={chipStyle}
+                onClick={() => void downloadSource(a).then((ok) => say(a.id, ok ? 'Saving… check your Downloads. If nothing appears, use Share.' : 'This file is no longer available — ask for it again.'))}
               >
                 ↓ {a.name}{fmtBytes(a.bytes) ? ` · ${fmtBytes(a.bytes)}` : ''}
-              </a>
+              </button>
+              {share ? (
+                <button
+                  type="button"
+                  className={chip}
+                  style={chipStyle}
+                  onClick={() => void shareSource(a).then((r) => { if (r === 'unsupported') say(a.id, 'Sharing is not available here — use the download button.'); else if (r === 'missing') say(a.id, 'This file is no longer available — ask for it again.'); })}
+                >
+                  Share / save
+                </button>
+              ) : null}
               {a.caption ? <span className="text-[11.5px]" style={{ color: 'var(--ink-dim)' }}>{a.caption}</span> : null}
             </figcaption>
+            {note[a.id] ? <p className="mt-1 text-[10.5px]" style={{ color: 'var(--ink-faint)' }} role="status">{note[a.id]}</p> : null}
           </figure>
         );
       })}
+    </div>
+  );
+}
+
+/** A reply the terminal is still writing: it says so, and it can be stopped. */
+function BackgroundStrip({ jobId }: { jobId: string }) {
+  const bridge = useWorkspace((s) => s.bridge);
+  const [stopped, setStopped] = useState(false);
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-[11.5px]" style={{ borderColor: 'color-mix(in oklab, var(--accent) 40%, var(--line))', color: 'var(--ink-dim)' }} role="status" data-testid="background-strip">
+      <span aria-hidden>⏳</span>
+      <span>{stopped ? 'Stopping…' : 'Working on the terminal — you can close the app. The reply will be here when you come back.'}</span>
+      {!stopped && (
+        <button type="button" className="press mono rounded-lg border px-2 py-1 text-[10.5px]" style={{ borderColor: 'var(--line)' }} onClick={() => { setStopped(true); void bridge.cancelJob(jobId).catch(() => setStopped(false)); }}>
+          stop
+        </button>
+      )}
     </div>
   );
 }
@@ -258,6 +290,8 @@ export function Message({ message }: { message: ChatMessageView }) {
           </div>
         )}
 
+        {message.background ? <BackgroundStrip jobId={message.background} /> : null}
+
         {message.attachments?.length && !isUser ? <SentFiles files={message.attachments} /> : null}
 
         {message.offer ? <OfferDownload offer={message.offer} /> : null}
@@ -292,20 +326,23 @@ export function Message({ message }: { message: ChatMessageView }) {
 function OfferDownload({ offer }: { offer: NonNullable<ChatMessageView['offer']> }) {
   const files = useWorkspace(visibleFiles);
   const [error, setError] = useState<string | null>(null);
+  const [canShare, setCanShare] = useState(false);
+  useEffect(() => setCanShare(canShareFiles()), []);
 
   // Not a download at all: the game itself, in the message that built it.
   if (offer.kind === 'play') {
     return offer.playId ? <GamePlayer id={offer.playId} label={offer.label} /> : null;
   }
 
-  const take = () => {
+  /** The file as bytes, or null (with the reason shown) when what made it is no longer in the workspace. */
+  const make = (): { blob: Blob; name: string } | null => {
     if (offer.kind === 'apk') {
       // Not rebuildable in the browser: making an APK needs Godot's native
       // exporter on the bridge. The bytes were stored when it was built.
       const stored = offer.source ? files.get(offer.source) : undefined;
       if (!stored?.content?.startsWith('data:')) {
         setError('That APK is no longer in this workspace — re-run the build to compile it again.');
-        return;
+        return null;
       }
       setError(null);
       // Copied into a plain ArrayBuffer: a Uint8Array can be backed by a
@@ -313,8 +350,7 @@ function OfferDownload({ offer }: { offer: NonNullable<ChatMessageView['offer']>
       const bytes = dataUrlToBytes(stored.content);
       const buffer = new ArrayBuffer(bytes.byteLength);
       new Uint8Array(buffer).set(bytes);
-      downloadBlob(new Blob([buffer], { type: 'application/vnd.android.package-archive' }), offer.filename);
-      return;
+      return { blob: new Blob([buffer], { type: 'application/vnd.android.package-archive' }), name: offer.filename };
     }
 
     if (offer.kind === 'files') {
@@ -322,7 +358,7 @@ function OfferDownload({ offer }: { offer: NonNullable<ChatMessageView['offer']>
       const picked = (offer.paths ?? []).map((p) => files.get(p)).filter((f): f is NonNullable<typeof f> => Boolean(f && typeof f.content === 'string'));
       if (!picked.length) {
         setError('Those files are no longer open in this workspace — ask for them again.');
-        return;
+        return null;
       }
       setError(null);
       const asBytes = (c: string) => (c.startsWith('data:') ? dataUrlToBytes(c) : c);
@@ -331,11 +367,9 @@ function OfferDownload({ offer }: { offer: NonNullable<ChatMessageView['offer']>
         const bytes = asBytes(only.content);
         const buffer = new ArrayBuffer(typeof bytes === 'string' ? new TextEncoder().encode(bytes).length : bytes.byteLength);
         new Uint8Array(buffer).set(typeof bytes === 'string' ? new TextEncoder().encode(bytes) : bytes);
-        downloadBlob(new Blob([buffer], { type: 'application/octet-stream' }), offer.filename);
-      } else {
-        downloadZip(picked.map((f) => ({ path: f.path, content: asBytes(f.content) })), offer.filename, 'application/zip');
+        return { blob: new Blob([buffer], { type: 'application/octet-stream' }), name: offer.filename };
       }
-      return;
+      return { blob: zipBlob(picked.map((f) => ({ path: f.path, content: asBytes(f.content) })), 'application/zip'), name: offer.filename };
     }
 
     if (offer.kind === 'godot-project') {
@@ -344,11 +378,10 @@ function OfferDownload({ offer }: { offer: NonNullable<ChatMessageView['offer']>
       const built = buildGodotExport([...files.values()], null, offer.filename.replace(/\.zip$/i, ''));
       if (!built) {
         setError('That project is no longer open — re-run the build to get the game again.');
-        return;
+        return null;
       }
       setError(null);
-      downloadZip(built.entries, built.filename, 'application/zip');
-      return;
+      return { blob: zipBlob(built.entries, 'application/zip'), name: built.filename };
     }
 
     const packs = detectPacks([...files.values()]);
@@ -356,10 +389,19 @@ function OfferDownload({ offer }: { offer: NonNullable<ChatMessageView['offer']>
     if (!built) {
       // The files that produced this offer are no longer in the workspace.
       setError('Those pack files are no longer open — re-run the build to get the add-on again.');
-      return;
+      return null;
     }
     setError(null);
-    downloadZip(built.entries, built.filename, 'application/octet-stream');
+    return { blob: zipBlob(built.entries, 'application/octet-stream'), name: built.filename };
+  };
+
+  const take = () => {
+    const out = make();
+    if (out) downloadBlob(out.blob, out.name);
+  };
+  const shareIt = () => {
+    const out = make();
+    if (out) void shareBlob(out.blob, out.name).then((r) => { if (r === 'unsupported') setError('Sharing is not available here — use the download button.'); });
   };
 
   return (
@@ -376,6 +418,16 @@ function OfferDownload({ offer }: { offer: NonNullable<ChatMessageView['offer']>
       >
         ↓ {offer.filename}
       </button>
+      {canShare && (
+        <button
+          type="button"
+          onClick={shareIt}
+          className="press mono ml-2 inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[11.5px]"
+          style={{ borderColor: 'color-mix(in oklab, var(--accent) 45%, var(--line))', color: 'var(--accent)' }}
+        >
+          Share / save
+        </button>
+      )}
       <p className="mono mt-1 text-[10px]" style={{ color: 'var(--ink-faint)' }}>
         {offer.label}
       </p>

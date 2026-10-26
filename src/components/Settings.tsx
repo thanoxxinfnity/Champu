@@ -3,6 +3,7 @@
 import { VoiceTab } from './VoiceTab';
 import { FreeApisSwitch, FreeProviders } from './FreeProviders';
 import { TerminalKeys } from './TerminalKeys';
+import { BackgroundWork } from './BackgroundWork';
 
 import { useCallback, useEffect, useState } from 'react';
 import { DIALECT_LABELS, dialectFromUrl, type Dialect } from '@/lib/providers/dialects';
@@ -1826,6 +1827,7 @@ function KeysTab() {
       )}
 
       <TerminalKeys />
+      <BackgroundWork />
 
       <div className="rounded-lg border p-3" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
         <p className="mono text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-faint)' }}>

@@ -4,6 +4,9 @@ import { SiteChipRow } from './SiteChip';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isRunningHere, useWorkspace, type ChatAttachment } from '@/lib/store';
 import { send } from '@/lib/agent/runtime';
+import { BG_SETTING, sendInBackground } from '@/lib/agent/background';
+import { hasJobs } from '@/lib/bridge/update';
+import { getSetting, setSetting } from '@/lib/db/history';
 import { BUILTIN_SKILLS, expandSkill, parseSlash, searchSkills, type SkillDefinition } from '@/lib/skills/registry';
 import { classifyLocal, resolveSuite } from '@/lib/agent/router';
 import { SkillIcon } from './SkillIcon';
@@ -543,6 +546,12 @@ export function CommandDock() {
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [laneOverride, setLaneOverride] = useState<'A' | 'B' | null>(null);
+  // Background mode: the reply is written by the terminal, so it keeps coming with the app closed.
+  const [bgMode, setBgMode] = useState(false);
+  const [bgNote, setBgNote] = useState<string | null>(null);
+  useEffect(() => {
+    void getSetting<boolean>(BG_SETTING, false).then(setBgMode);
+  }, []);
   const [guardDismissed, setGuardDismissed] = useState(false);
   const [activatingValues, setActivatingValues] = useState<Set<string>>(new Set());
   const [failedActivations, setFailedActivations] = useState<Set<string>>(new Set());
@@ -729,8 +738,18 @@ export function CommandDock() {
     setAttachments([]);
     setLaneOverride(null);
 
+    const hb = useWorkspace.getState().heartbeat;
+    if (bgMode && (hb.status === 'online' || hb.status === 'degraded') && hasJobs(hb.health)) {
+      const r = await sendInBackground({ input, attachments, suite, forceLane: lane });
+      if (r.ok) {
+        setBgNote(null);
+        return;
+      }
+      // It could not go to the terminal: say why, and send it the usual way so nothing the user wrote is lost.
+      setBgNote(`Sent normally — ${r.reason}`);
+    }
     await send({ input, attachments, suite, forceLane: lane });
-  }, [value, attachments, laneOverride, activeSuite, allSkills]);
+  }, [value, attachments, laneOverride, activeSuite, allSkills, bgMode]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showPalette && matches.length) {
@@ -872,6 +891,7 @@ export function CommandDock() {
           )}
 
           <SiteChipRow text={value} />
+          {bgNote && <p className="px-3 pt-1 text-[10.5px]" style={{ color: 'var(--color-amber)' }} role="status">{bgNote}</p>}
 
           <textarea
             ref={textareaRef}
@@ -968,6 +988,24 @@ export function CommandDock() {
                 }
               >
                 ⬡ swarm
+              </button>
+            )}
+
+            {!bridgeDown && hasJobs(heartbeat.health) && (
+              <button
+                type="button"
+                data-testid="background-chip"
+                onClick={() => { const next = !bgMode; setBgMode(next); void setSetting(BG_SETTING, next); }}
+                aria-pressed={bgMode}
+                className="press mono rounded-lg border px-2 py-1.5 text-[10.5px]"
+                style={{
+                  borderColor: bgMode ? 'color-mix(in oklab, var(--accent) 55%, var(--line))' : 'var(--line)',
+                  color: bgMode ? 'var(--accent)' : 'var(--ink-faint)',
+                  background: bgMode ? 'color-mix(in oklab, var(--accent) 12%, transparent)' : undefined,
+                }}
+                title={bgMode ? 'Background is on: the terminal writes the reply, so it keeps working with the app closed. Tap to turn off.' : 'Tap so the terminal writes the next replies in the background, even with the app closed.'}
+              >
+                ☾ background
               </button>
             )}
 

@@ -43,7 +43,7 @@ test('the copies the app carries match the agent, and the agent says it can hold
   assert.equal(m.version, /const VERSION = '([^']+)'/.exec(agent)[1]);
   assert.ok(m.files.includes('keystore.mjs') && m.files.includes('chomugiri-agent.mjs'));
   assert.equal(readFileSync('public/agent/keystore.mjs', 'utf8'), readFileSync('agent/keystore.mjs', 'utf8'));
-  assert.match(agent, /features: \['keys'\]/);
+  assert.match(agent, /features: \['keys'/);
   assert.equal(lacksKeyStore({ version: m.version, features: ['keys'] }), false);
 });
 
