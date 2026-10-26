@@ -21,10 +21,10 @@ static func note(kind: String, amount: float) -> void:
 const TRAITS := {
 	"shambler": {"hp": 60.0, "speed": 1.8, "patrol": 0.8, "dmg": 13.0, "sight": 15.0, "hear": 20.0, "reach": 1.5, "cd": 1.2},
 	"runner": {"hp": 36.0, "speed": 4.5, "patrol": 1.4, "dmg": 9.0, "sight": 17.0, "hear": 24.0, "reach": 1.4, "cd": 0.8},
-	"brute": {"hp": 190.0, "speed": 1.5, "patrol": 0.6, "dmg": 27.0, "sight": 13.0, "hear": 17.0, "reach": 1.9, "cd": 1.7},
-	"armored": {"hp": 110.0, "speed": 1.7, "patrol": 0.7, "dmg": 17.0, "sight": 15.0, "hear": 18.0, "reach": 1.6, "cd": 1.3, "armor": 0.45},
+	"brute": {"hp": 160.0, "speed": 1.5, "patrol": 0.6, "dmg": 20.0, "sight": 13.0, "hear": 17.0, "reach": 1.9, "cd": 1.7},
+	"armored": {"hp": 100.0, "speed": 1.7, "patrol": 0.7, "dmg": 13.0, "sight": 15.0, "hear": 18.0, "reach": 1.6, "cd": 1.3, "armor": 0.45},
 	"burning": {"hp": 75.0, "speed": 2.1, "patrol": 0.8, "dmg": 8.0, "sight": 15.0, "hear": 20.0, "reach": 1.5, "cd": 1.2, "aura": 5.0},
-	"spitter": {"hp": 46.0, "speed": 1.7, "patrol": 0.7, "dmg": 12.0, "sight": 20.0, "hear": 22.0, "reach": 1.4, "cd": 1.2, "spit": 2.8},
+	"spitter": {"hp": 46.0, "speed": 1.7, "patrol": 0.7, "dmg": 9.0, "sight": 20.0, "hear": 22.0, "reach": 1.4, "cd": 1.2, "spit": 3.4},
 	"screamer": {"hp": 52.0, "speed": 2.2, "patrol": 0.9, "dmg": 11.0, "sight": 19.0, "hear": 24.0, "reach": 1.4, "cd": 1.2, "scream": 9.0},
 	"leaper": {"hp": 50.0, "speed": 2.5, "patrol": 1.1, "dmg": 16.0, "sight": 16.0, "hear": 22.0, "reach": 1.4, "cd": 1.0, "lunge": 3.2},
 	"burst": {"hp": 100.0, "speed": 1.2, "patrol": 0.6, "dmg": 6.0, "sight": 13.0, "hear": 18.0, "reach": 1.8, "cd": 1.6, "burst": true},
