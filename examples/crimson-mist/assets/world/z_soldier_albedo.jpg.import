@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bt2r7ka0qifef"
-path="res://.godot/imported/z_soldier_albedo.jpg-6238874d25aa29a710d4087449cd73f0.ctex"
+path.s3tc="res://.godot/imported/z_soldier_albedo.jpg-6238874d25aa29a710d4087449cd73f0.s3tc.ctex"
+path.etc2="res://.godot/imported/z_soldier_albedo.jpg-6238874d25aa29a710d4087449cd73f0.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "c5e45fc632e653b78fee709a4d0d4950"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_soldier_albedo.jpg"
-dest_files=["res://.godot/imported/z_soldier_albedo.jpg-6238874d25aa29a710d4087449cd73f0.ctex"]
+dest_files=["res://.godot/imported/z_soldier_albedo.jpg-6238874d25aa29a710d4087449cd73f0.s3tc.ctex", "res://.godot/imported/z_soldier_albedo.jpg-6238874d25aa29a710d4087449cd73f0.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

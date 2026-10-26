@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://beigo2i7xtjcx"
-path="res://.godot/imported/lighthouse_albedo.jpg-0f0f5eda0ed2108144e817ccb351d8ff.ctex"
+path.s3tc="res://.godot/imported/lighthouse_albedo.jpg-0f0f5eda0ed2108144e817ccb351d8ff.s3tc.ctex"
+path.etc2="res://.godot/imported/lighthouse_albedo.jpg-0f0f5eda0ed2108144e817ccb351d8ff.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "c07668098bcae5ef1449d438aa3b5b98"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/lighthouse_albedo.jpg"
-dest_files=["res://.godot/imported/lighthouse_albedo.jpg-0f0f5eda0ed2108144e817ccb351d8ff.ctex"]
+dest_files=["res://.godot/imported/lighthouse_albedo.jpg-0f0f5eda0ed2108144e817ccb351d8ff.s3tc.ctex", "res://.godot/imported/lighthouse_albedo.jpg-0f0f5eda0ed2108144e817ccb351d8ff.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

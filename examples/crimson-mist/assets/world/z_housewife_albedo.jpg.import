@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cxfmr6r1t0ws2"
-path="res://.godot/imported/z_housewife_albedo.jpg-3bd2dfec60c4f2b7c70d0d9fbbde44bf.ctex"
+path.s3tc="res://.godot/imported/z_housewife_albedo.jpg-3bd2dfec60c4f2b7c70d0d9fbbde44bf.s3tc.ctex"
+path.etc2="res://.godot/imported/z_housewife_albedo.jpg-3bd2dfec60c4f2b7c70d0d9fbbde44bf.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "69a91873790b1444e497f7c3c5326b28"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_housewife_albedo.jpg"
-dest_files=["res://.godot/imported/z_housewife_albedo.jpg-3bd2dfec60c4f2b7c70d0d9fbbde44bf.ctex"]
+dest_files=["res://.godot/imported/z_housewife_albedo.jpg-3bd2dfec60c4f2b7c70d0d9fbbde44bf.s3tc.ctex", "res://.godot/imported/z_housewife_albedo.jpg-3bd2dfec60c4f2b7c70d0d9fbbde44bf.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

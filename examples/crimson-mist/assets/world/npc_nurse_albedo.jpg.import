@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://t7o8eq5ej182"
-path="res://.godot/imported/npc_nurse_albedo.jpg-e03755cba29d81f79632bd9386eae8e6.ctex"
+path.s3tc="res://.godot/imported/npc_nurse_albedo.jpg-e03755cba29d81f79632bd9386eae8e6.s3tc.ctex"
+path.etc2="res://.godot/imported/npc_nurse_albedo.jpg-e03755cba29d81f79632bd9386eae8e6.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "fe65173536fc47662438480b22ed4f43"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/npc_nurse_albedo.jpg"
-dest_files=["res://.godot/imported/npc_nurse_albedo.jpg-e03755cba29d81f79632bd9386eae8e6.ctex"]
+dest_files=["res://.godot/imported/npc_nurse_albedo.jpg-e03755cba29d81f79632bd9386eae8e6.s3tc.ctex", "res://.godot/imported/npc_nurse_albedo.jpg-e03755cba29d81f79632bd9386eae8e6.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

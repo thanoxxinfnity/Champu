@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://8eyclmehm3r2"
-path="res://.godot/imported/streetlamp_albedo.jpg-0f6b883e139f194d5961a482a12731fd.ctex"
+path.s3tc="res://.godot/imported/streetlamp_albedo.jpg-0f6b883e139f194d5961a482a12731fd.s3tc.ctex"
+path.etc2="res://.godot/imported/streetlamp_albedo.jpg-0f6b883e139f194d5961a482a12731fd.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "ad951fd55a01d8dd08790670e3b50504"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/streetlamp_albedo.jpg"
-dest_files=["res://.godot/imported/streetlamp_albedo.jpg-0f6b883e139f194d5961a482a12731fd.ctex"]
+dest_files=["res://.godot/imported/streetlamp_albedo.jpg-0f6b883e139f194d5961a482a12731fd.s3tc.ctex", "res://.godot/imported/streetlamp_albedo.jpg-0f6b883e139f194d5961a482a12731fd.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

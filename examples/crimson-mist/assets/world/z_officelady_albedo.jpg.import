@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cmavsd5o3j8iv"
-path="res://.godot/imported/z_officelady_albedo.jpg-798f3320f370aa9f2641b275842502a0.ctex"
+path.s3tc="res://.godot/imported/z_officelady_albedo.jpg-798f3320f370aa9f2641b275842502a0.s3tc.ctex"
+path.etc2="res://.godot/imported/z_officelady_albedo.jpg-798f3320f370aa9f2641b275842502a0.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "7481d0556b1781c80eff450ba396ecde"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_officelady_albedo.jpg"
-dest_files=["res://.godot/imported/z_officelady_albedo.jpg-798f3320f370aa9f2641b275842502a0.ctex"]
+dest_files=["res://.godot/imported/z_officelady_albedo.jpg-798f3320f370aa9f2641b275842502a0.s3tc.ctex", "res://.godot/imported/z_officelady_albedo.jpg-798f3320f370aa9f2641b275842502a0.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

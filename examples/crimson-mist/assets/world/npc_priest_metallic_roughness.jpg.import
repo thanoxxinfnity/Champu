@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cacjj687m2jr4"
-path="res://.godot/imported/npc_priest_metallic_roughness.jpg-8e1b34f491ffcbffcc9e8958d6ab5e4d.ctex"
+path.s3tc="res://.godot/imported/npc_priest_metallic_roughness.jpg-8e1b34f491ffcbffcc9e8958d6ab5e4d.s3tc.ctex"
+path.etc2="res://.godot/imported/npc_priest_metallic_roughness.jpg-8e1b34f491ffcbffcc9e8958d6ab5e4d.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "d1824c90224b380d98d3faa307173932"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/npc_priest_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/npc_priest_metallic_roughness.jpg-8e1b34f491ffcbffcc9e8958d6ab5e4d.ctex"]
+dest_files=["res://.godot/imported/npc_priest_metallic_roughness.jpg-8e1b34f491ffcbffcc9e8958d6ab5e4d.s3tc.ctex", "res://.godot/imported/npc_priest_metallic_roughness.jpg-8e1b34f491ffcbffcc9e8958d6ab5e4d.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

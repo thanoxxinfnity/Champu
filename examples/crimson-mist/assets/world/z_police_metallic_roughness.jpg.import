@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bv0nafx1w51kp"
-path="res://.godot/imported/z_police_metallic_roughness.jpg-fc489b51083589a5a4708bf564c50d94.ctex"
+path.s3tc="res://.godot/imported/z_police_metallic_roughness.jpg-fc489b51083589a5a4708bf564c50d94.s3tc.ctex"
+path.etc2="res://.godot/imported/z_police_metallic_roughness.jpg-fc489b51083589a5a4708bf564c50d94.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "1addd5a847e0e91c89af5742c1e077fa"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_police_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/z_police_metallic_roughness.jpg-fc489b51083589a5a4708bf564c50d94.ctex"]
+dest_files=["res://.godot/imported/z_police_metallic_roughness.jpg-fc489b51083589a5a4708bf564c50d94.s3tc.ctex", "res://.godot/imported/z_police_metallic_roughness.jpg-fc489b51083589a5a4708bf564c50d94.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bjaxgsuvh4pbg"
-path="res://.godot/imported/npc_granny_metallic_roughness.jpg-b86a2a3310629242a6e3202a699fda65.ctex"
+path.s3tc="res://.godot/imported/npc_granny_metallic_roughness.jpg-b86a2a3310629242a6e3202a699fda65.s3tc.ctex"
+path.etc2="res://.godot/imported/npc_granny_metallic_roughness.jpg-b86a2a3310629242a6e3202a699fda65.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "d96d0a9aa90e0c8bbac6ab7b880caf4a"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/npc_granny_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/npc_granny_metallic_roughness.jpg-b86a2a3310629242a6e3202a699fda65.ctex"]
+dest_files=["res://.godot/imported/npc_granny_metallic_roughness.jpg-b86a2a3310629242a6e3202a699fda65.s3tc.ctex", "res://.godot/imported/npc_granny_metallic_roughness.jpg-b86a2a3310629242a6e3202a699fda65.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

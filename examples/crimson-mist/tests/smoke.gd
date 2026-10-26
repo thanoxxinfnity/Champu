@@ -19,7 +19,11 @@ func _initialize() -> void:
 	await process_frame
 	await process_frame
 	check(game.state == Game.State.LOBBY, "boots into the lobby")
-	check(game.hud.lobby.get("count", 0) == 4, "lobby lists four survivors")
+	check(game.hud.lobby.get("count", 0) == 8, "lobby lists eight survivors")
+	var men := 0
+	for id in Data.CAST_ORDER:
+		men += 1 if ["ren", "daichi", "haru", "oda"].has(id) else 0
+	check(men * 2 == Data.CAST_ORDER.size(), "as many men as women in the cast")
 	for i in 4:
 		check(game._lobby_view != null and game._lobby_view.char_id == Data.CAST_ORDER[game.selected], "lobby shows %s" % Data.CAST_ORDER[game.selected])
 		game.lobby_step(1)

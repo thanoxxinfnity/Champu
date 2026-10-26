@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bdiw8xkq4pkd5"
-path="res://.godot/imported/market_stall_albedo.jpg-ba23f451e3d69887bd953eec9489f8d8.ctex"
+path.s3tc="res://.godot/imported/market_stall_albedo.jpg-ba23f451e3d69887bd953eec9489f8d8.s3tc.ctex"
+path.etc2="res://.godot/imported/market_stall_albedo.jpg-ba23f451e3d69887bd953eec9489f8d8.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "ac00cada8f9a252f2e575d2635730ea9"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/market_stall_albedo.jpg"
-dest_files=["res://.godot/imported/market_stall_albedo.jpg-ba23f451e3d69887bd953eec9489f8d8.ctex"]
+dest_files=["res://.godot/imported/market_stall_albedo.jpg-ba23f451e3d69887bd953eec9489f8d8.s3tc.ctex", "res://.godot/imported/market_stall_albedo.jpg-ba23f451e3d69887bd953eec9489f8d8.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

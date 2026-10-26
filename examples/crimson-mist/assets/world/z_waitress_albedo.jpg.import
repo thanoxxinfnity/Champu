@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://flpxdkrqlsy5"
-path="res://.godot/imported/z_waitress_albedo.jpg-bd2b111f78729e9612e964a3bfb0924b.ctex"
+path.s3tc="res://.godot/imported/z_waitress_albedo.jpg-bd2b111f78729e9612e964a3bfb0924b.s3tc.ctex"
+path.etc2="res://.godot/imported/z_waitress_albedo.jpg-bd2b111f78729e9612e964a3bfb0924b.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "f2af1065d0485f7ff5ed7eeaa787f7ab"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_waitress_albedo.jpg"
-dest_files=["res://.godot/imported/z_waitress_albedo.jpg-bd2b111f78729e9612e964a3bfb0924b.ctex"]
+dest_files=["res://.godot/imported/z_waitress_albedo.jpg-bd2b111f78729e9612e964a3bfb0924b.s3tc.ctex", "res://.godot/imported/z_waitress_albedo.jpg-bd2b111f78729e9612e964a3bfb0924b.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

@@ -191,7 +191,7 @@ func _start_wake(from_cp: bool) -> void:
 	marker = game.world.spots.crowbar
 	has_marker = true
 	if not from_cp:
-		say([["{me}", "Ngh… my head. The harbour clinic… why is it so dark?"], ["{me}", "The bell rang, then the mist came up. I need something to defend myself."]])
+		say([["{me}", "Ngh… my head. The bus… that car, flying over the road…"], ["{me}", "The harbour clinic. The mist is in here too. I need something to defend myself."]])
 
 
 func _start_power() -> void:

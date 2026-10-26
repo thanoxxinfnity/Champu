@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dno7kqvvu6kfc"
-path="res://.godot/imported/z_swimmer_metallic_roughness.jpg-847cf6c2628889671c6922acd0462dac.ctex"
+path.s3tc="res://.godot/imported/z_swimmer_metallic_roughness.jpg-847cf6c2628889671c6922acd0462dac.s3tc.ctex"
+path.etc2="res://.godot/imported/z_swimmer_metallic_roughness.jpg-847cf6c2628889671c6922acd0462dac.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "b5943aa5994915fb601f60d013b81402"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_swimmer_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/z_swimmer_metallic_roughness.jpg-847cf6c2628889671c6922acd0462dac.ctex"]
+dest_files=["res://.godot/imported/z_swimmer_metallic_roughness.jpg-847cf6c2628889671c6922acd0462dac.s3tc.ctex", "res://.godot/imported/z_swimmer_metallic_roughness.jpg-847cf6c2628889671c6922acd0462dac.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

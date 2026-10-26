@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://clu753o3wsi43"
-path="res://.godot/imported/kafu_metallic_roughness.jpg-442f3de98a0cab91e80b333b675e292b.ctex"
+path.s3tc="res://.godot/imported/kafu_metallic_roughness.jpg-442f3de98a0cab91e80b333b675e292b.s3tc.ctex"
+path.etc2="res://.godot/imported/kafu_metallic_roughness.jpg-442f3de98a0cab91e80b333b675e292b.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "a6760886a4a984bb9a507ab9e2cb115c"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/cast/kafu_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/kafu_metallic_roughness.jpg-442f3de98a0cab91e80b333b675e292b.ctex"]
+dest_files=["res://.godot/imported/kafu_metallic_roughness.jpg-442f3de98a0cab91e80b333b675e292b.s3tc.ctex", "res://.godot/imported/kafu_metallic_roughness.jpg-442f3de98a0cab91e80b333b675e292b.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bca1vpgjgf5o0"
-path="res://.godot/imported/rig_bellkeeper_albedo.jpg-97615b132bfe40f6f245291530b6c4d3.ctex"
+path.s3tc="res://.godot/imported/rig_bellkeeper_albedo.jpg-97615b132bfe40f6f245291530b6c4d3.s3tc.ctex"
+path.etc2="res://.godot/imported/rig_bellkeeper_albedo.jpg-97615b132bfe40f6f245291530b6c4d3.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "b60a825f2e6bfe4e965c55cd94369ca6"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/rig_bellkeeper_albedo.jpg"
-dest_files=["res://.godot/imported/rig_bellkeeper_albedo.jpg-97615b132bfe40f6f245291530b6c4d3.ctex"]
+dest_files=["res://.godot/imported/rig_bellkeeper_albedo.jpg-97615b132bfe40f6f245291530b6c4d3.s3tc.ctex", "res://.godot/imported/rig_bellkeeper_albedo.jpg-97615b132bfe40f6f245291530b6c4d3.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

@@ -30,6 +30,8 @@ var kills := 0
 var view: CharacterView
 var pivot: Node3D
 var arm: SpringArm3D
+const CAM_NEAR := 2.15
+const CAM_FAR := 2.7
 var cam: Camera3D
 var torch: SpotLight3D
 var iframes := 0.0
@@ -79,20 +81,20 @@ func _ready() -> void:
 	for n in view.find_children("*", "MeshInstance3D", true, false):
 		(n as MeshInstance3D).layers = 2   # visible to the camera, but the torch (cull mask 1) does not light the player
 	pivot = Node3D.new()
-	pivot.position.y = 1.45
+	pivot.position.y = 1.5
 	add_child(pivot)
 	arm = SpringArm3D.new()
-	arm.spring_length = 3.3
+	arm.spring_length = CAM_NEAR
 	arm.margin = 0.3
 	arm.collision_mask = Data.L_WORLD
 	arm.shape = null
 	pivot.add_child(arm)
 	cam = Camera3D.new()
-	cam.fov = 66.0
+	cam.fov = 60.0
 	cam.near = 0.08
 	cam.far = 220.0
-	cam.h_offset = 0.55
-	cam.v_offset = 0.12
+	cam.h_offset = 0.42
+	cam.v_offset = 0.1
 	arm.add_child(cam)
 	cam.make_current()
 	torch = SpotLight3D.new()
@@ -191,7 +193,7 @@ func use_bandage() -> bool:
 	if dead or hp >= max_hp - 1.0 or count("bandage") <= 0:
 		return false
 	spend("bandage")
-	heal(35.0 * (1.5 if char_id == "rachel" else 1.0))
+	heal(35.0 * (1.5 if char_id == "rachel" else float(info.get("heal_mult", 1.0))))
 	game.sfx.play("pickup", -2.0, 0.8)
 	game.hud.toast("BANDAGE USED")
 	return true
@@ -270,7 +272,7 @@ func try_attack() -> void:
 func _apply_hit() -> void:
 	var w := weapon_name()
 	var wd: Dictionary = Data.WEAPONS[w] if w != "" else {"dmg": 7.0, "reach": 1.5, "arc": 100.0, "rate": 0.5, "stam": 4.0, "knock": 1.5}
-	var dmg := float(wd.dmg) * (1.35 if _combo == 2 else 1.0)
+	var dmg := float(wd.dmg) * (1.35 if _combo == 2 else 1.0) * (float(info.get("melee_mult", 1.0)) if w.begins_with("crowbar") else 1.0)
 	var hit_any := false
 	for e in get_tree().get_nodes_in_group("enemies"):
 		var en := e as Enemy
@@ -296,7 +298,7 @@ func _apply_hit() -> void:
 func try_roll() -> void:
 	if dead or _roll_t > 0.0 or _atk != 0:
 		return
-	var cost := 12.0 if char_id == "mococo" else 22.0
+	var cost := 12.0 if char_id == "mococo" else float(info.get("roll_cost", 22.0))
 	if stamina < cost:
 		return
 	stamina -= cost
@@ -400,6 +402,7 @@ func slow(t: float) -> void:
 func take_damage(amount: float, from: Vector3) -> void:
 	if dead or iframes > 0.0:
 		return
+	amount *= float(info.get("dmg_taken", 1.0))
 	hp -= amount
 	iframes = 0.6
 	_hurt_t = 0.45
@@ -489,7 +492,7 @@ func _physics_process(delta: float) -> void:
 	if _stam_wait > 0.0:
 		_stam_wait -= delta
 	elif stamina < max_stamina:
-		stamina = minf(max_stamina, stamina + (26.0 if char_id != "mococo" else 38.0) * delta)
+		stamina = minf(max_stamina, stamina + (38.0 if char_id == "mococo" else float(info.get("regen", 26.0))) * delta)
 	# attack phases
 	if _atk != 0:
 		_atk_t -= delta
@@ -561,5 +564,7 @@ func _update_camera(delta: float) -> void:
 	pivot.rotation = Vector3(pitch, yaw, 0)
 	_shake = maxf(0.0, _shake - delta * 2.5)
 	cam.rotation = Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * _shake * 0.03
-	var run_fov := 72.0 if sprint and Vector2(velocity.x, velocity.z).length() > float(info.speed) * 1.2 else 66.0
-	cam.fov = lerpf(cam.fov, run_fov, minf(1.0, delta * 5.0))
+	var running_fast := sprint and Vector2(velocity.x, velocity.z).length() > float(info.speed) * 1.2
+	cam.fov = lerpf(cam.fov, 68.0 if running_fast else 60.0, minf(1.0, delta * 5.0))
+	# close behind the shoulder, easing back a little while sprinting so the road ahead stays readable
+	arm.spring_length = lerpf(arm.spring_length, CAM_FAR if running_fast else CAM_NEAR, minf(1.0, delta * 3.0))

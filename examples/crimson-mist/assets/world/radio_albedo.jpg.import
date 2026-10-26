@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://w65h0jdmie2k"
-path="res://.godot/imported/radio_albedo.jpg-11a352394c12ab40cc3cc9c7c646aaa5.ctex"
+path.s3tc="res://.godot/imported/radio_albedo.jpg-11a352394c12ab40cc3cc9c7c646aaa5.s3tc.ctex"
+path.etc2="res://.godot/imported/radio_albedo.jpg-11a352394c12ab40cc3cc9c7c646aaa5.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "56be89f0154e9a112ec7588bca428230"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/radio_albedo.jpg"
-dest_files=["res://.godot/imported/radio_albedo.jpg-11a352394c12ab40cc3cc9c7c646aaa5.ctex"]
+dest_files=["res://.godot/imported/radio_albedo.jpg-11a352394c12ab40cc3cc9c7c646aaa5.s3tc.ctex", "res://.godot/imported/radio_albedo.jpg-11a352394c12ab40cc3cc9c7c646aaa5.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

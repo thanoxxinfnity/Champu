@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://so6ebmpvxq0l"
-path="res://.godot/imported/mococo_albedo.jpg-8fb03fc61d1513d21ac584d82bb8e41d.ctex"
+path.s3tc="res://.godot/imported/mococo_albedo.jpg-8fb03fc61d1513d21ac584d82bb8e41d.s3tc.ctex"
+path.etc2="res://.godot/imported/mococo_albedo.jpg-8fb03fc61d1513d21ac584d82bb8e41d.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "5465902c404b283b1c15edc0ecd06108"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/cast/mococo_albedo.jpg"
-dest_files=["res://.godot/imported/mococo_albedo.jpg-8fb03fc61d1513d21ac584d82bb8e41d.ctex"]
+dest_files=["res://.godot/imported/mococo_albedo.jpg-8fb03fc61d1513d21ac584d82bb8e41d.s3tc.ctex", "res://.godot/imported/mococo_albedo.jpg-8fb03fc61d1513d21ac584d82bb8e41d.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

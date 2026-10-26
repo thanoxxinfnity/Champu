@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://2a1hjre8xcbd"
-path="res://.godot/imported/rig_bloater_metallic_roughness.jpg-8b4e755ec6cbdd95d95bb1d081353e86.ctex"
+path.s3tc="res://.godot/imported/rig_bloater_metallic_roughness.jpg-8b4e755ec6cbdd95d95bb1d081353e86.s3tc.ctex"
+path.etc2="res://.godot/imported/rig_bloater_metallic_roughness.jpg-8b4e755ec6cbdd95d95bb1d081353e86.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "bbe23548ac25278a483e7040c0c9443f"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/rig_bloater_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/rig_bloater_metallic_roughness.jpg-8b4e755ec6cbdd95d95bb1d081353e86.ctex"]
+dest_files=["res://.godot/imported/rig_bloater_metallic_roughness.jpg-8b4e755ec6cbdd95d95bb1d081353e86.s3tc.ctex", "res://.godot/imported/rig_bloater_metallic_roughness.jpg-8b4e755ec6cbdd95d95bb1d081353e86.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

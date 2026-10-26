@@ -45,6 +45,11 @@ var _last_pos := Vector3.ZERO
 var _have_last := false
 var _vel_model := Vector3.ZERO
 var _holder: Node3D
+## Test hook (tests/playthrough.gd): when on, every body is checked each frame and the longest run of frames in a T-like pose is kept.
+static var watch := false
+static var worst_t_run := 0
+static var worst_t_who := ""
+var _t_run := 0
 
 
 static func model_path(model: String) -> String:
@@ -225,8 +230,23 @@ func _process(delta: float) -> void:
 		d = d.duplicate()
 		d["crouch"] = float(d["crouch"]) * height
 	rig.apply(PoseLib.build(d))
+	if watch and is_visible_in_tree():
+		_watch_t_pose()
 	if not rig.sway_bones.is_empty():
 		_update_sway(delta)
+
+
+func _watch_t_pose() -> void:
+	rig.skeleton.force_update_all_bone_transforms()
+	var bend := 0.0
+	for side in ["upperarmL", "upperarmR"]:
+		if rig.idx.has(side):
+			var i: int = rig.idx[side]
+			bend = maxf(bend, rad_to_deg(rig._rest_dir[i].angle_to(rig.skeleton.get_bone_global_pose(i).basis.y.normalized())))
+	_t_run = _t_run + 1 if bend < 6.0 else 0
+	if _t_run > worst_t_run:
+		worst_t_run = _t_run
+		worst_t_who = "%s %s pose %d" % [char_id if char_id != "" else String(name), style, pose]
 
 
 func _update_sway(delta: float) -> void:

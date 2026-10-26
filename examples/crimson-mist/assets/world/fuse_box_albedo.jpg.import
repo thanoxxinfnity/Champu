@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://mct430grhfct"
-path="res://.godot/imported/fuse_box_albedo.jpg-844fe024b48fec664d491844491baf73.ctex"
+path.s3tc="res://.godot/imported/fuse_box_albedo.jpg-844fe024b48fec664d491844491baf73.s3tc.ctex"
+path.etc2="res://.godot/imported/fuse_box_albedo.jpg-844fe024b48fec664d491844491baf73.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "8e5d1be28756f4797afead823024b6f7"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/fuse_box_albedo.jpg"
-dest_files=["res://.godot/imported/fuse_box_albedo.jpg-844fe024b48fec664d491844491baf73.ctex"]
+dest_files=["res://.godot/imported/fuse_box_albedo.jpg-844fe024b48fec664d491844491baf73.s3tc.ctex", "res://.godot/imported/fuse_box_albedo.jpg-844fe024b48fec664d491844491baf73.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

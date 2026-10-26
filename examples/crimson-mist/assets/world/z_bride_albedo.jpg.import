@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://6tec3n5aece0"
-path="res://.godot/imported/z_bride_albedo.jpg-6f1799c797c7f52fd19d9f0d931c060a.ctex"
+path.s3tc="res://.godot/imported/z_bride_albedo.jpg-6f1799c797c7f52fd19d9f0d931c060a.s3tc.ctex"
+path.etc2="res://.godot/imported/z_bride_albedo.jpg-6f1799c797c7f52fd19d9f0d931c060a.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "7f78506210d9a21bd0f18edd4bd81bfb"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_bride_albedo.jpg"
-dest_files=["res://.godot/imported/z_bride_albedo.jpg-6f1799c797c7f52fd19d9f0d931c060a.ctex"]
+dest_files=["res://.godot/imported/z_bride_albedo.jpg-6f1799c797c7f52fd19d9f0d931c060a.s3tc.ctex", "res://.godot/imported/z_bride_albedo.jpg-6f1799c797c7f52fd19d9f0d931c060a.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

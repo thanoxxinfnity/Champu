@@ -19,10 +19,19 @@ const CAST := {
 		"perk": "Quick Paws — dodge is cheaper and recovers fast.", "tint": Color(1.0, 0.7, 0.8), "voice": 1.35},
 	"rina": {"name": "Rina Nakajima", "role": "Quiet scavenger", "model": "rina", "height": 1.58, "hp": 95.0, "speed": 4.2, "stamina": 100.0, "carry": 12,
 		"perk": "Scavenger — finds one extra piece of every loot.", "tint": Color(1.0, 0.6, 0.6), "voice": 0.9},
+	# the men of the last bus (equal numbers with the women)
+	"ren": {"name": "Ren Takagi", "role": "Paramedic", "model": "ren", "height": 1.76, "hp": 105.0, "speed": 4.2, "stamina": 105.0, "carry": 10,
+		"perk": "Triage — bandages heal 30% more and a first-aid kit is worth two.", "tint": Color(0.6, 0.9, 0.7), "voice": 0.78, "heal_mult": 1.3},
+	"daichi": {"name": "Daichi Mori", "role": "Firefighter", "model": "daichi", "height": 1.86, "hp": 140.0, "speed": 3.7, "stamina": 95.0, "carry": 11,
+		"perk": "Heavy Coat — takes 25% less damage from every hit.", "tint": Color(0.85, 0.85, 0.9), "voice": 0.68, "dmg_taken": 0.75},
+	"haru": {"name": "Haru Sato", "role": "Student photographer", "model": "haru", "height": 1.66, "hp": 85.0, "speed": 4.8, "stamina": 120.0, "carry": 8,
+		"perk": "Quick Feet — stamina comes back faster and the dodge is cheaper.", "tint": Color(0.65, 0.8, 1.0), "voice": 0.95, "regen": 36.0, "roll_cost": 14.0},
+	"oda": {"name": "Captain Oda", "role": "Fisherman", "model": "oda", "height": 1.74, "hp": 120.0, "speed": 3.9, "stamina": 110.0, "carry": 12,
+		"perk": "Sea Legs — hits harder with the crowbar and carries more.", "tint": Color(0.9, 0.8, 0.6), "voice": 0.72, "melee_mult": 1.2},
 }
-const CAST_ORDER := ["rachel", "kafu", "mococo", "rina"]
-## Who becomes the first and second companion when the player is not that character.
-const ALLY_ORDER := ["kafu", "mococo", "rina", "rachel"]
+const CAST_ORDER := ["rachel", "ren", "kafu", "daichi", "mococo", "haru", "rina", "oda"]
+## Who becomes the first and second companion when the player is not that character (a woman first, then a man, and so on).
+const ALLY_ORDER := ["kafu", "ren", "mococo", "daichi", "rina", "haru", "rachel", "oda"]
 
 const ENEMIES := {
 	"mist_walker": {"name": "Mist Walker", "hp": 60.0, "speed": 1.7, "patrol": 0.8, "dmg": 12.0, "height": 1.75, "sight": 15.0, "hear": 20.0, "reach": 1.5,

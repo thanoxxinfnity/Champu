@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dnt16875h1ddj"
-path="res://.godot/imported/crawler_albedo.jpg-09795de0047df3f72eae66244c00e550.ctex"
+path.s3tc="res://.godot/imported/crawler_albedo.jpg-09795de0047df3f72eae66244c00e550.s3tc.ctex"
+path.etc2="res://.godot/imported/crawler_albedo.jpg-09795de0047df3f72eae66244c00e550.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "06baa8aa499a60ea2ef7fcc5f7df70be"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/crawler_albedo.jpg"
-dest_files=["res://.godot/imported/crawler_albedo.jpg-09795de0047df3f72eae66244c00e550.ctex"]
+dest_files=["res://.godot/imported/crawler_albedo.jpg-09795de0047df3f72eae66244c00e550.s3tc.ctex", "res://.godot/imported/crawler_albedo.jpg-09795de0047df3f72eae66244c00e550.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

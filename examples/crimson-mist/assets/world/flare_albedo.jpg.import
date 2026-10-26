@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://duhyu3vy4mksg"
-path="res://.godot/imported/flare_albedo.jpg-7f9b32461033b0db78ceb9ff8c06a932.ctex"
+path.s3tc="res://.godot/imported/flare_albedo.jpg-7f9b32461033b0db78ceb9ff8c06a932.s3tc.ctex"
+path.etc2="res://.godot/imported/flare_albedo.jpg-7f9b32461033b0db78ceb9ff8c06a932.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "d7166c260694cd9de2c60035b4185261"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/flare_albedo.jpg"
-dest_files=["res://.godot/imported/flare_albedo.jpg-7f9b32461033b0db78ceb9ff8c06a932.ctex"]
+dest_files=["res://.godot/imported/flare_albedo.jpg-7f9b32461033b0db78ceb9ff8c06a932.s3tc.ctex", "res://.godot/imported/flare_albedo.jpg-7f9b32461033b0db78ceb9ff8c06a932.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://db5t83no43eew"
-path="res://.godot/imported/rachel_metallic_roughness.jpg-0c2e7232d75fb62779cc3bd507501ca4.ctex"
+path.s3tc="res://.godot/imported/rachel_metallic_roughness.jpg-0c2e7232d75fb62779cc3bd507501ca4.s3tc.ctex"
+path.etc2="res://.godot/imported/rachel_metallic_roughness.jpg-0c2e7232d75fb62779cc3bd507501ca4.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "ff88690b35ea82441170da36bbe36e12"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/cast/rachel_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/rachel_metallic_roughness.jpg-0c2e7232d75fb62779cc3bd507501ca4.ctex"]
+dest_files=["res://.godot/imported/rachel_metallic_roughness.jpg-0c2e7232d75fb62779cc3bd507501ca4.s3tc.ctex", "res://.godot/imported/rachel_metallic_roughness.jpg-0c2e7232d75fb62779cc3bd507501ca4.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

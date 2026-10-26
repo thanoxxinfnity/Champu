@@ -18,6 +18,7 @@ var _wind: AudioStreamPlayer
 var _drone: AudioStreamPlayer
 var _heart: AudioStreamPlayer
 var _chop: AudioStreamPlayer
+var _rain: AudioStreamPlayer
 var _heart_t := 0.0
 var heart_rate := 0.0   # beats per second; 0 = silent
 var _rng := RandomNumberGenerator.new()
@@ -40,7 +41,8 @@ func _ready() -> void:
 	_drone = AudioStreamPlayer.new()
 	_heart = AudioStreamPlayer.new()
 	_chop = AudioStreamPlayer.new()
-	for p in [_wind, _drone, _heart, _chop]:
+	_rain = AudioStreamPlayer.new()
+	for p in [_wind, _drone, _heart, _chop, _rain]:
 		add_child(p)
 	_thread = Thread.new()
 	_thread.start(_build_all)
@@ -63,6 +65,8 @@ func _process(delta: float) -> void:
 		_drone.volume_db = -18.0
 		_chop.stream = _streams["chop"]
 		_chop.volume_db = -80.0
+		_rain.stream = _streams["rain"]
+		_rain.volume_db = -80.0
 	if heart_rate > 0.0 and ready_ok:
 		_heart_t += delta * heart_rate
 		if _heart_t >= 1.0:
@@ -78,6 +82,13 @@ func start_ambience() -> void:
 	if not _wind.playing:
 		_wind.play()
 		_drone.play()
+		_rain.play()
+
+
+## Rain on the street: 0 = dry, 1 = full downpour (the volume follows).
+func set_rain(level: float) -> void:
+	if ready_ok:
+		_rain.volume_db = -80.0 if level <= 0.01 else lerpf(-30.0, -15.0, clampf(level, 0.0, 1.0))
 
 
 func chopper(on: bool) -> void:
@@ -143,6 +154,8 @@ func _build_all() -> void:
 	_streams["slam"] = _boom(0.9)
 	_streams["heart"] = _heart_beat()
 	_streams["wind"] = _wind_loop(6.0)
+	_streams["rain"] = _rain_loop(4.0)
+	_streams["thunder"] = _boom(3.4)
 	_streams["drone"] = _drone_loop(6.0)
 	_streams["chop"] = _chop_loop(1.0)
 
@@ -343,6 +356,18 @@ func _wind_loop(dur: float) -> AudioStreamWAV:
 		# Cosine window so the loop point is silent and the seam cannot click.
 		var win := 0.5 - 0.5 * cos(TAU * t / dur)
 		b[i] = (lp2 * 2.4) * gust * (0.25 + 0.75 * win)
+	return _stream(b, true)
+
+
+func _rain_loop(dur: float) -> AudioStreamWAV:
+	var b := _buf(dur)
+	var lp := 0.0
+	for i in range(b.size()):
+		var t := float(i) / RATE
+		var n := _rng.randf() * 2.0 - 1.0
+		lp += (n - lp) * 0.35
+		var win := 0.5 - 0.5 * cos(TAU * t / dur)
+		b[i] = (n - lp) * 0.55 * (0.3 + 0.7 * win)      # the hiss: noise with the low end taken out
 	return _stream(b, true)
 
 

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dg1srjiwmcqs"
-path="res://.godot/imported/z_punk_albedo.jpg-36181282380f892a2a548ff05f2c028c.ctex"
+path.s3tc="res://.godot/imported/z_punk_albedo.jpg-36181282380f892a2a548ff05f2c028c.s3tc.ctex"
+path.etc2="res://.godot/imported/z_punk_albedo.jpg-36181282380f892a2a548ff05f2c028c.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "29fd6c9fd65b898ad531bb5bcb84c990"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_punk_albedo.jpg"
-dest_files=["res://.godot/imported/z_punk_albedo.jpg-36181282380f892a2a548ff05f2c028c.ctex"]
+dest_files=["res://.godot/imported/z_punk_albedo.jpg-36181282380f892a2a548ff05f2c028c.s3tc.ctex", "res://.godot/imported/z_punk_albedo.jpg-36181282380f892a2a548ff05f2c028c.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

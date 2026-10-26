@@ -28,6 +28,9 @@ PROPS = {
     'house_small': 'small seaside town house with wooden walls and tiled roof',
     'market_stall': 'wooden market stall with striped awning',
     'crate': 'wooden shipping crate',
+    'bus': 'old white and teal city coach bus, rusty, dented, side view, full vehicle',
+    'police_car': 'old black and white police car, dented, flat tires',
+    'van_wreck': 'burnt out delivery van, rusty, blackened',
     'clinic_bed': 'hospital bed with white sheets',
     'lighthouse': 'white and red striped lighthouse tower',
     'church_bell': 'large bronze church bell hanging in a wooden frame',
@@ -74,6 +77,11 @@ TP_HEROES = {
     'hero_b': 'anime girl with silver hair and blue eyes, white coat with blue lines, black skirt, ' + TPOSE,
     'hero_c': 'anime fox girl with cat ears, pink hair, black crop jacket, white shorts, a fluffy tail, ' + TPOSE,
     'hero_d': 'anime girl with wavy blonde hair and a red headband, red high-neck leotard, white thigh-high stockings, ' + TPOSE,
+    # the male half of the cast (original designs)
+    'hero_e': 'anime young man, short messy black hair, green paramedic jacket with reflective stripes, dark trousers, boots, ' + TPOSE,
+    'hero_f': 'anime tall broad man, short brown hair and stubble, grey firefighter coat and helmet strap, heavy boots, ' + TPOSE,
+    'hero_g': 'anime teenage boy with spiky silver hair, blue hoodie and jeans, sneakers, a camera strap, ' + TPOSE,
+    'hero_h': 'anime middle aged man with a beard and a flat cap, brown fisherman sweater, waders, ' + TPOSE,
 }
 which = {'enemies': ENEMIES, 'props': PROPS, 'tp_enemies': TP_ENEMIES, 'tp_npcs': TP_NPCS, 'tp_heroes': TP_HEROES, 'tp_zombies': TP_ZOMBIES}[sys.argv[1]]
 idx, cnt = (int(sys.argv[2]), int(sys.argv[3])) if len(sys.argv) > 3 else (0, 1)

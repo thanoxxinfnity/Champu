@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://vdov1qvyb4ni"
-path="res://.godot/imported/church_bell_albedo.jpg-d5c43c2c0cb7ed16a4fe803daa8148d5.ctex"
+path.s3tc="res://.godot/imported/church_bell_albedo.jpg-d5c43c2c0cb7ed16a4fe803daa8148d5.s3tc.ctex"
+path.etc2="res://.godot/imported/church_bell_albedo.jpg-d5c43c2c0cb7ed16a4fe803daa8148d5.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "3af220ade44e9b0899aa147b9ce012bc"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/church_bell_albedo.jpg"
-dest_files=["res://.godot/imported/church_bell_albedo.jpg-d5c43c2c0cb7ed16a4fe803daa8148d5.ctex"]
+dest_files=["res://.godot/imported/church_bell_albedo.jpg-d5c43c2c0cb7ed16a4fe803daa8148d5.s3tc.ctex", "res://.godot/imported/church_bell_albedo.jpg-d5c43c2c0cb7ed16a4fe803daa8148d5.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

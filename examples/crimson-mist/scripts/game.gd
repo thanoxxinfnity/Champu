@@ -28,6 +28,12 @@ var _save := {}
 var _prev_hold := {}
 var _shoot_latch := false
 var low_gfx := false
+var gfx := 1                   # graphics tier: 0 LOW (fast), 1 MEDIUM, 2 HIGH (sharper, anti-aliased)
+var gfx_manual := false        # the player picked a tier in the pause menu: the automatic raising stops
+var _fps_up := 0
+const GFX_PIXELS := [0.5e6, 1.1e6, 3.7e6]   # how many pixels the 3D view may have per tier; the screen is what it is, the 3D scale follows
+const GFX_FAR := [110.0, 160.0, 220.0]
+const GFX_NAMES := ["LOW (FAST)", "MEDIUM", "HIGH (SHARP)"]
 var met := {}                # kinds of creature the player has met (shown in the bestiary, kept in the save)
 var _fps_t := 0.0
 var _fps_n := 0
@@ -58,6 +64,8 @@ func _ready() -> void:
 	add_child(hud)
 	hud.screen_pressed.connect(_on_screen)
 	_save = Data.load_save()
+	gfx = int(_save.get("gfx", 1))
+	gfx_manual = bool(_save.get("gfx_manual", false))
 	if _save.has("char") and Data.CAST_ORDER.has(_save.char) and not args.has("--fresh"):
 		selected = Data.CAST_ORDER.find(_save.char)
 	_enter_lobby()
@@ -189,7 +197,7 @@ func _leave_lobby() -> void:
 
 # ── starting and ending the chapter ──────────────────────────────────────────
 
-func start_game(continue_save := false) -> void:
+func start_game(continue_save := false, with_intro := false) -> void:
 	if state == State.LOADING:
 		return
 	met = {}
@@ -224,8 +232,10 @@ func start_game(continue_save := false) -> void:
 	_fps_t = 0.0
 	_fps_n = 0
 	_fps_sum = 0.0
-	if low_gfx:
-		set_low_gfx(true)
+	set_gfx(gfx)
+	if with_intro and not continue_save:
+		await Intro.play(self, id)
+		player.cam.make_current()
 	hud.set_playing(true)
 	state = State.PLAYING
 	var m := 0
@@ -267,7 +277,7 @@ func save_progress() -> void:
 	if story == null or player == null:
 		return
 	var d := {"char": player.char_id, "mission": story.mission, "inv": player.inventory, "crowbar": player.has_crowbar, "pistol": player.has_pistol, "mag": player.mag,
-		"pos": [player.global_position.x, player.global_position.y, player.global_position.z], "done": story.finished, "picked": story.picked.keys(), "met": met.keys()}
+		"pos": [player.global_position.x, player.global_position.y, player.global_position.z], "done": story.finished, "picked": story.picked.keys(), "met": met.keys(), "gfx": gfx, "gfx_manual": gfx_manual}
 	_save = d
 	Data.write_save(d)
 
@@ -278,7 +288,7 @@ func chapter_complete() -> void:
 	state = State.WON
 	hud.set_playing(false)
 	var secs := int(play_time)
-	_save = {"char": player.char_id, "done": true, "best": secs}
+	_save = {"char": player.char_id, "done": true, "best": secs, "gfx": gfx, "gfx_manual": gfx_manual}
 	Data.write_save(_save)
 	hud.show_win("Harrow Cove is still under the mist.\nNext: Chapter 2 — The Lighthouse.\n\nTIME  %d:%02d      DEFEATED  %d" % [secs / 60, secs % 60, player.kills])
 
@@ -339,13 +349,13 @@ func _on_screen(id: String) -> void:
 	match id:
 		"prev": lobby_step(-1)
 		"next": lobby_step(1)
-		"start": start_game(false)
+		"start": start_game(false, true)
 		"continue": start_game(true)
 		"resume": set_paused(false)
 		"bag": hud.show_craft(true)
 		"bestiary": hud.show_bestiary()
 		"gfx":
-			set_low_gfx(not low_gfx)
+			set_gfx((gfx + 1) % 3, true)
 			hud.show_pause(true)
 		"lobby": back_to_lobby()
 		"retry": retry()
@@ -360,28 +370,51 @@ func _on_screen(id: String) -> void:
 				hud.show_craft(true)
 
 
-func set_low_gfx(on: bool) -> void:
-	low_gfx = on
-	hud.set_gfx_low(on)
+func set_gfx(tier: int, manual := false) -> void:
+	gfx = clampi(tier, 0, 2)
+	if manual:
+		gfx_manual = true
+	low_gfx = gfx == 0
+	var vp := get_viewport()
+	var win := Vector2(DisplayServer.window_get_size())
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+	vp.scaling_3d_scale = clampf(sqrt(float(GFX_PIXELS[gfx]) / maxf(win.x * win.y, 1.0)), 0.35, 1.0)
+	vp.msaa_3d = Viewport.MSAA_2X if gfx == 2 else Viewport.MSAA_DISABLED
+	hud.set_gfx_low(low_gfx)
+	hud.gfx_name = GFX_NAMES[gfx]
+	hud.set_gfx_low(low_gfx)
 	if world != null:
-		world.set_low(on)
+		world.set_low(low_gfx)
+		world.set_weather(gfx)
 	if player != null and player.cam != null:
-		player.cam.far = 110.0 if on else 220.0
+		player.cam.far = float(GFX_FAR[gfx])
 
 
-## First seconds of play: if the phone averages under 26 fps, drop to LOW graphics once and say so.
+## Keeps the frame rate playable by itself: every 5 s of play the average is looked at; under 24 fps one tier down (and the player is told),
+## a steady 57+ fps twice in a row one tier up, unless the player chose a tier by hand.
 func _watch_fps(delta: float) -> void:
-	if low_gfx or play_time < 4.0 or _fps_t > 8.0:
+	if play_time < 4.0:
 		return
 	_fps_t += delta
 	_fps_n += 1
 	_fps_sum += delta
-	if _fps_t >= 6.0:
-		var avg := float(_fps_n) / maxf(_fps_sum, 0.001)
-		_fps_t = 99.0
-		if avg < 26.0:
-			set_low_gfx(true)
-			hud.toast("Graphics set to LOW for speed (Pause > Graphics)")
+	if _fps_t < 5.0:
+		return
+	var avg := float(_fps_n) / maxf(_fps_sum, 0.001)
+	_fps_t = 0.0
+	_fps_n = 0
+	_fps_sum = 0.0
+	if avg < 24.0 and gfx > 0:
+		_fps_up = 0
+		set_gfx(gfx - 1)
+		hud.toast("Graphics set to %s for speed (Pause > Graphics)" % GFX_NAMES[gfx])
+	elif avg > 57.0 and gfx < 2 and not gfx_manual:
+		_fps_up += 1
+		if _fps_up >= 2:
+			_fps_up = 0
+			set_gfx(gfx + 1)
+	else:
+		_fps_up = 0
 
 
 func _notification(what: int) -> void:

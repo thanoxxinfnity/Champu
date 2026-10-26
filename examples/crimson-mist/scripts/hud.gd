@@ -38,6 +38,7 @@ var _hurt := 0.0
 var _fear := 0.0
 var _t := 0.0
 var gfx_low := false
+var gfx_name := "MEDIUM"
 var _load_frac := 0.0
 var _load_text := ""
 var _play_t := 0.0                 # seconds since this run started (drives the first-seconds control hints)
@@ -206,7 +207,7 @@ func _rebuild_screen_buttons() -> void:
 			_screen_buttons.append({"id": "resume", "rect": Rect2(w * 0.5 - 200, h * 0.38, 400, 70), "label": "RESUME", "enabled": true})
 			_screen_buttons.append({"id": "bag", "rect": Rect2(w * 0.5 - 200, h * 0.38 + 84, 400, 70), "label": "CRAFT / BAG", "enabled": true})
 			_screen_buttons.append({"id": "bestiary", "rect": Rect2(w * 0.5 - 200, h * 0.38 + 168, 400, 70), "label": "BESTIARY", "enabled": true})
-			_screen_buttons.append({"id": "gfx", "rect": Rect2(w * 0.5 - 200, h * 0.38 + 252, 400, 70), "label": "GRAPHICS: LOW (FAST)" if gfx_low else "GRAPHICS: HIGH", "enabled": true})
+			_screen_buttons.append({"id": "gfx", "rect": Rect2(w * 0.5 - 200, h * 0.38 + 252, 400, 70), "label": "GRAPHICS: " + gfx_name, "enabled": true})
 			_screen_buttons.append({"id": "lobby", "rect": Rect2(w * 0.5 - 200, h * 0.38 + 336, 400, 70), "label": "BACK TO LOBBY", "enabled": true})
 		Screen.DEATH:
 			_screen_buttons.append({"id": "retry", "rect": Rect2(w * 0.5 - 200, h * 0.5, 400, 74), "label": "TRY AGAIN", "enabled": true})
@@ -263,7 +264,14 @@ func set_camera(c: Camera3D) -> void:
 func set_gfx_low(on: bool) -> void:
 	gfx_low = on
 	_post.visible = not on
+	_post_mat.set_shader_parameter("lite", 1.0 if gfx_name.begins_with("MEDIUM") else 0.0)
 	_rebuild_screen_buttons()
+
+
+## Cut-scene look: a soft focus away from the middle of the frame (the post shader's `dof`); 0 returns to normal play.
+func set_cinema(dof: float) -> void:
+	_post_mat.set_shader_parameter("dof", dof)
+	_post.visible = dof > 0.0 or not gfx_low
 
 
 func set_playing(on: bool) -> void:

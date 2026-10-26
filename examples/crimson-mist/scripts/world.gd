@@ -21,6 +21,12 @@ var exit_door: StaticBody3D
 var arena_gate: StaticBody3D
 var env: Environment
 var sun: DirectionalLight3D
+var rain: GPUParticles3D
+var fire_lights: Array[OmniLight3D] = []
+var weather_tier := 1
+var _bolt_in := 18.0
+var _bolt := 0.0
+var _amb_base := 0.62
 var mist_sheets: Array[MeshInstance3D] = []
 var powered := false
 var _t := 0.0
@@ -44,7 +50,7 @@ func build_steps() -> Array[Callable]:
 			_rng.seed = 11
 			nav.setup(Rect2(-100, -260, 200, 300), 0.5)
 			_environment(),
-		_ground, _clinic, _market_street, _church, _bell_road, _arena, _harbour, _mist,
+		_ground, _clinic, _market_street, _church, _bell_road, _arena, _harbour, _mist, _weather,
 	]
 	for zname in ["ground", "clinic", "market", "church", "road", "arena", "harbour"]:
 		steps.append(func() -> void: _finish_zone(zname))
@@ -73,10 +79,10 @@ func _environment() -> void:
 	env.background_color = Color(0.34, 0.39, 0.42)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.5, 0.58, 0.66)
-	env.ambient_light_energy = 0.5
+	env.ambient_light_energy = _amb_base
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.36, 0.41, 0.44)
-	env.fog_density = 0.034
+	env.fog_density = 0.026
 	env.fog_sky_affect = 1.0
 	env.glow_enabled = false
 	env.glow_intensity = 0.3
@@ -645,6 +651,11 @@ func _market_street() -> void:
 	_prop(n, "car_wreck", Vector3(-3.2, 0, -38), 4.4, 12, true)
 	_prop(n, "car_wreck", Vector3(3.5, 0, -57), 4.4, -8, true)
 	_prop(n, "car_wreck", Vector3(-4.0, 0, -74), 4.4, 170, true)
+	# the night the bus came in: the wreck of it on the verge and cars thrown over the road
+	_prop(n, "bus", Vector3(-8.4, 0, -29.5), 10.5, 92, true)
+	_flipped(n, "car_wreck", Vector3(2.2, 0, -46.0), 4.4, 35.0, 180.0)
+	_flipped(n, "car_wreck", Vector3(-1.6, 0, -67.0), 4.4, -28.0, 180.0)
+	_flipped(n, "police_car", Vector3(5.6, 0, -80.0), 4.4, 70.0, 90.0)
 	_prop(n, "market_stall", Vector3(-7.8, 0, -47), 2.8, 90, true)
 	_prop(n, "market_stall", Vector3(-7.8, 0, -55), 2.8, 90, true)
 	_prop(n, "market_stall", Vector3(7.8, 0, -49), 2.8, -90, true)
@@ -801,6 +812,9 @@ func _bell_road() -> void:
 	_lamp(n, Vector3(5.2, 0, -166), false)
 	_lamp(n, Vector3(-5.2, 0, -186))
 	_prop(n, "car_wreck", Vector3(-1.5, 0, -150), 4.4, 20, true)
+	_prop(n, "van_wreck", Vector3(3.6, 0, -158), 4.8, 35, true)
+	_fire(n, Vector3(3.6, 0, -158))
+	_flipped(n, "police_car", Vector3(-2.6, 0, -168), 4.4, -50.0, 180.0)
 	_prop(n, "crate", Vector3(3.0, 0, -172), 0.95, 0)
 	occupied.append_array([Vector3(-1.5, 0, -150), Vector3(3, 0, -172)])
 	# the barricade: planks, tyres, barrels, jersey barriers
@@ -968,11 +982,119 @@ func update_streaming(p: Vector3) -> void:
 		(order[i][1] as OmniLight3D).visible = i < _lamp_budget and order[i][0] < 40.0
 
 
+## A car that has been thrown: upside down (or on its side), resting on its roof. `roll` 180 = flipped, 90 = on its flank.
+func _flipped(parent: Node3D, model: String, pos: Vector3, length: float, yaw_deg: float, roll_deg := 180.0) -> void:
+	var p := Assets.prop(model, length, true, 0.02, 0.5)
+	var h := Assets.size_of(p).y
+	var holder := Node3D.new()
+	holder.position = Vector3(pos.x, 0, pos.z)
+	holder.rotation_degrees.y = yaw_deg
+	p.rotation_degrees.z = roll_deg
+	p.position.y = h * (1.0 if roll_deg > 135.0 else 0.55)
+	holder.add_child(p)
+	parent.add_child(holder)
+	var sz := Assets.size_of(p)
+	var body := StaticBody3D.new()
+	body.collision_layer = Data.L_WORLD
+	body.collision_mask = 0
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3(sz.x * 0.85, maxf(sz.y, 1.0), sz.z * 0.85)
+	cs.shape = bs
+	cs.position = Vector3(0, bs.size.y * 0.5, 0)
+	body.add_child(cs)
+	holder.add_child(body)
+	var rr := deg_to_rad(yaw_deg)
+	var w: float = absf(sz.x * cos(rr)) + absf(sz.z * sin(rr))
+	var d: float = absf(sz.x * sin(rr)) + absf(sz.z * cos(rr))
+	nav.block_rect(Rect2(pos.x - w * 0.5, pos.z - d * 0.5, w, d), 0.2)
+	occupied.append(pos)
+
+
+## A burning wreck: an orange light that flickers (updated in `update`).
+func _fire(parent: Node3D, pos: Vector3) -> void:
+	var l := OmniLight3D.new()
+	l.light_color = Color(1.0, 0.5, 0.2)
+	l.omni_range = 11.0
+	l.light_energy = 1.8
+	l.shadow_enabled = false
+	l.position = pos + Vector3(0, 1.4, 0)
+	parent.add_child(l)
+	fire_lights.append(l)
+	var glow := Toon.flat(Color(1.0, 0.5, 0.1), 0.0, 0.0, Color(1.0, 0.45, 0.1), 2.2)
+	_flat(parent, pos + Vector3(0, 1.1, 0), Vector3(0.7, 0.9, 0.7), glow)
+
+
+## Rain over the street that follows the player: streaks falling in a box around them, thicker on higher graphics; none on LOW.
+func _weather() -> void:
+	rain = GPUParticles3D.new()
+	rain.amount = 600
+	rain.lifetime = 0.8
+	rain.preprocess = 0.8
+	rain.visibility_aabb = AABB(Vector3(-16, -14, -16), Vector3(32, 28, 32))
+	rain.local_coords = false
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = Vector3(13, 0.5, 13)
+	pm.direction = Vector3(0.12, -1, 0.05)
+	pm.spread = 3.0
+	pm.initial_velocity_min = 22.0
+	pm.initial_velocity_max = 26.0
+	pm.gravity = Vector3(0, -6, 0)
+	rain.process_material = pm
+	var q := QuadMesh.new()
+	q.size = Vector2(0.018, 0.55)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color = Color(0.75, 0.85, 0.95, 0.38)
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+	m.no_depth_test = false
+	q.material = m
+	rain.draw_pass_1 = q
+	rain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(rain)
+	set_weather(weather_tier)
+
+
+## 0 = clear streets (LOW), 1 = steady rain, 2 = heavy rain with lightning.
+func set_weather(tier: int) -> void:
+	weather_tier = tier
+	if rain == null:
+		return
+	rain.emitting = tier > 0
+	rain.amount_ratio = 0.0 if tier == 0 else (0.45 if tier == 1 else 1.0)
+	rain.visible = tier > 0
+	var g := get_parent()
+	if g != null and g.get("sfx") != null:
+		(g.sfx as Sfx).set_rain(0.0 if tier == 0 else (0.5 if tier == 1 else 1.0))
+
+
+func _lightning(delta: float, p: Vector3) -> void:
+	if weather_tier == 0:
+		return
+	_bolt_in -= delta
+	if _bolt_in <= 0.0:
+		_bolt_in = randf_range(16.0, 34.0)
+		_bolt = 0.5
+		var g := get_parent()
+		if g != null and g.get("sfx") != null:
+			(g.sfx as Sfx).play("thunder", -4.0, randf_range(0.55, 0.8))
+	if _bolt > 0.0:
+		_bolt = maxf(0.0, _bolt - delta)
+		var flick := 1.0 if (int(_bolt * 24.0) % 3 != 1 and _bolt > 0.12) else 0.0
+		env.ambient_light_energy = _amb_base + 1.1 * flick
+		sun.light_energy = 0.62 + 0.9 * flick
+	else:
+		env.ambient_light_energy = _amb_base
+		sun.light_energy = 0.62
+
+
 ## LOW graphics for weak phones: no mist sheet, fewer lamps, closer view distance, denser fog (hides the shorter draw distance).
 func set_low(on: bool) -> void:
 	low_gfx = on
 	_lamp_budget = 3 if on else 6
-	env.fog_density = 0.05 if on else 0.034
+	env.fog_density = 0.045 if on else 0.026
 	for m in mist_sheets:
 		m.visible = not on
 	for z in zones:
@@ -993,6 +1115,11 @@ func loaded_zones() -> Array:
 
 func update(delta: float, p: Vector3) -> void:
 	_t += delta
+	if rain != null:
+		rain.global_position = p + Vector3(0, 10.0, 0)
+	_lightning(delta, p)
+	for i in fire_lights.size():
+		fire_lights[i].light_energy = 1.7 + 0.6 * sin(_t * 9.0 + i * 2.0) + 0.3 * sin(_t * 23.0 + i)
 	for i in mist_sheets.size():
 		mist_sheets[i].position.x = snappedf(p.x, 6.0)
 		mist_sheets[i].position.z = snappedf(p.z, 6.0)

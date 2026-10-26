@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ws3o20lqpo1j"
-path="res://.godot/imported/medkit_albedo.jpg-068f1ea23f9d2d793b00938d4f9fa34e.ctex"
+path.s3tc="res://.godot/imported/medkit_albedo.jpg-068f1ea23f9d2d793b00938d4f9fa34e.s3tc.ctex"
+path.etc2="res://.godot/imported/medkit_albedo.jpg-068f1ea23f9d2d793b00938d4f9fa34e.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "7cf162a7ba061832f3396b237dba5180"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/medkit_albedo.jpg"
-dest_files=["res://.godot/imported/medkit_albedo.jpg-068f1ea23f9d2d793b00938d4f9fa34e.ctex"]
+dest_files=["res://.godot/imported/medkit_albedo.jpg-068f1ea23f9d2d793b00938d4f9fa34e.s3tc.ctex", "res://.godot/imported/medkit_albedo.jpg-068f1ea23f9d2d793b00938d4f9fa34e.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

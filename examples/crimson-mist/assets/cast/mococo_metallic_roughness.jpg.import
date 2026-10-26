@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cs5adu153okvf"
-path="res://.godot/imported/mococo_metallic_roughness.jpg-87eebd7d8338e01f28ddeea91656959a.ctex"
+path.s3tc="res://.godot/imported/mococo_metallic_roughness.jpg-87eebd7d8338e01f28ddeea91656959a.s3tc.ctex"
+path.etc2="res://.godot/imported/mococo_metallic_roughness.jpg-87eebd7d8338e01f28ddeea91656959a.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "5de4f2172abc9f9da8df4485a0a8672e"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/cast/mococo_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/mococo_metallic_roughness.jpg-87eebd7d8338e01f28ddeea91656959a.ctex"]
+dest_files=["res://.godot/imported/mococo_metallic_roughness.jpg-87eebd7d8338e01f28ddeea91656959a.s3tc.ctex", "res://.godot/imported/mococo_metallic_roughness.jpg-87eebd7d8338e01f28ddeea91656959a.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

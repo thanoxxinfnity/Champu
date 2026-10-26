@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://d06hcw87wgp4g"
-path="res://.godot/imported/z_punk_metallic_roughness.jpg-3fcaf55f0e96ebe67978c96fb3fd12fe.ctex"
+path.s3tc="res://.godot/imported/z_punk_metallic_roughness.jpg-3fcaf55f0e96ebe67978c96fb3fd12fe.s3tc.ctex"
+path.etc2="res://.godot/imported/z_punk_metallic_roughness.jpg-3fcaf55f0e96ebe67978c96fb3fd12fe.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "c3b07302d4cc97638d7824287e42941f"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_punk_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/z_punk_metallic_roughness.jpg-3fcaf55f0e96ebe67978c96fb3fd12fe.ctex"]
+dest_files=["res://.godot/imported/z_punk_metallic_roughness.jpg-3fcaf55f0e96ebe67978c96fb3fd12fe.s3tc.ctex", "res://.godot/imported/z_punk_metallic_roughness.jpg-3fcaf55f0e96ebe67978c96fb3fd12fe.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

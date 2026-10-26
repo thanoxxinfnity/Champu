@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://m0uks0qmfxbf"
-path="res://.godot/imported/z_police_albedo.jpg-db4c837f70c948f6c8d8e73efefbc3ff.ctex"
+path.s3tc="res://.godot/imported/z_police_albedo.jpg-db4c837f70c948f6c8d8e73efefbc3ff.s3tc.ctex"
+path.etc2="res://.godot/imported/z_police_albedo.jpg-db4c837f70c948f6c8d8e73efefbc3ff.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "b27f6e545bbcc72cffd3a8b416418de3"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_police_albedo.jpg"
-dest_files=["res://.godot/imported/z_police_albedo.jpg-db4c837f70c948f6c8d8e73efefbc3ff.ctex"]
+dest_files=["res://.godot/imported/z_police_albedo.jpg-db4c837f70c948f6c8d8e73efefbc3ff.s3tc.ctex", "res://.godot/imported/z_police_albedo.jpg-db4c837f70c948f6c8d8e73efefbc3ff.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://csqkpu2m2dlmg"
-path="res://.godot/imported/npc_granny_albedo.jpg-0103e95868ed7f9ba328326c722ebd99.ctex"
+path.s3tc="res://.godot/imported/npc_granny_albedo.jpg-0103e95868ed7f9ba328326c722ebd99.s3tc.ctex"
+path.etc2="res://.godot/imported/npc_granny_albedo.jpg-0103e95868ed7f9ba328326c722ebd99.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "03828aaf8c34f239b0437b969a89fa80"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/npc_granny_albedo.jpg"
-dest_files=["res://.godot/imported/npc_granny_albedo.jpg-0103e95868ed7f9ba328326c722ebd99.ctex"]
+dest_files=["res://.godot/imported/npc_granny_albedo.jpg-0103e95868ed7f9ba328326c722ebd99.s3tc.ctex", "res://.godot/imported/npc_granny_albedo.jpg-0103e95868ed7f9ba328326c722ebd99.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

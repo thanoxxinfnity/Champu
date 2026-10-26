@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b7770syegrjry"
-path="res://.godot/imported/z_salaryman_albedo.jpg-46dff6fd31d0eb266778f3091ee12b04.ctex"
+path.s3tc="res://.godot/imported/z_salaryman_albedo.jpg-46dff6fd31d0eb266778f3091ee12b04.s3tc.ctex"
+path.etc2="res://.godot/imported/z_salaryman_albedo.jpg-46dff6fd31d0eb266778f3091ee12b04.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "8af98296a3a5e75e0c0135b910dc485c"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_salaryman_albedo.jpg"
-dest_files=["res://.godot/imported/z_salaryman_albedo.jpg-46dff6fd31d0eb266778f3091ee12b04.ctex"]
+dest_files=["res://.godot/imported/z_salaryman_albedo.jpg-46dff6fd31d0eb266778f3091ee12b04.s3tc.ctex", "res://.godot/imported/z_salaryman_albedo.jpg-46dff6fd31d0eb266778f3091ee12b04.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

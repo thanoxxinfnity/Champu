@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c5xan6ehmqtan"
-path="res://.godot/imported/kafu_albedo.jpg-bc1d6b6c7b638ad1438799b95622462e.ctex"
+path.s3tc="res://.godot/imported/kafu_albedo.jpg-bc1d6b6c7b638ad1438799b95622462e.s3tc.ctex"
+path.etc2="res://.godot/imported/kafu_albedo.jpg-bc1d6b6c7b638ad1438799b95622462e.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "bdc0ac7162d6a31c7fd533fa28ab8704"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/cast/kafu_albedo.jpg"
-dest_files=["res://.godot/imported/kafu_albedo.jpg-bc1d6b6c7b638ad1438799b95622462e.ctex"]
+dest_files=["res://.godot/imported/kafu_albedo.jpg-bc1d6b6c7b638ad1438799b95622462e.s3tc.ctex", "res://.godot/imported/kafu_albedo.jpg-bc1d6b6c7b638ad1438799b95622462e.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

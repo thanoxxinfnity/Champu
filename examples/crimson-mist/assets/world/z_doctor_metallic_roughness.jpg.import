@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://if3q2fp1yged"
-path="res://.godot/imported/z_doctor_metallic_roughness.jpg-0b75444d188bded76f6b44fa333e109a.ctex"
+path.s3tc="res://.godot/imported/z_doctor_metallic_roughness.jpg-0b75444d188bded76f6b44fa333e109a.s3tc.ctex"
+path.etc2="res://.godot/imported/z_doctor_metallic_roughness.jpg-0b75444d188bded76f6b44fa333e109a.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "0f532b5baceec2255428def74619b53f"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_doctor_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/z_doctor_metallic_roughness.jpg-0b75444d188bded76f6b44fa333e109a.ctex"]
+dest_files=["res://.godot/imported/z_doctor_metallic_roughness.jpg-0b75444d188bded76f6b44fa333e109a.s3tc.ctex", "res://.godot/imported/z_doctor_metallic_roughness.jpg-0b75444d188bded76f6b44fa333e109a.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

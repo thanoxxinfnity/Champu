@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cguaprec4g1aj"
-path="res://.godot/imported/rachel_albedo.jpg-053fca1562092237eb476666b9d07c0d.ctex"
+path.s3tc="res://.godot/imported/rachel_albedo.jpg-053fca1562092237eb476666b9d07c0d.s3tc.ctex"
+path.etc2="res://.godot/imported/rachel_albedo.jpg-053fca1562092237eb476666b9d07c0d.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "c44c4627ea0bbfd288f2bea5f0ecd7f2"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/cast/rachel_albedo.jpg"
-dest_files=["res://.godot/imported/rachel_albedo.jpg-053fca1562092237eb476666b9d07c0d.ctex"]
+dest_files=["res://.godot/imported/rachel_albedo.jpg-053fca1562092237eb476666b9d07c0d.s3tc.ctex", "res://.godot/imported/rachel_albedo.jpg-053fca1562092237eb476666b9d07c0d.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

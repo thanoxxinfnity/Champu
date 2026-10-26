@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bvfua201cqjfn"
-path="res://.godot/imported/rina_albedo.jpg-932231ee8827da21b91a9c5ca5f2b711.ctex"
+path.s3tc="res://.godot/imported/rina_albedo.jpg-932231ee8827da21b91a9c5ca5f2b711.s3tc.ctex"
+path.etc2="res://.godot/imported/rina_albedo.jpg-932231ee8827da21b91a9c5ca5f2b711.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "93784cb4504757595c4ce2f6be81416a"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/cast/rina_albedo.jpg"
-dest_files=["res://.godot/imported/rina_albedo.jpg-932231ee8827da21b91a9c5ca5f2b711.ctex"]
+dest_files=["res://.godot/imported/rina_albedo.jpg-932231ee8827da21b91a9c5ca5f2b711.s3tc.ctex", "res://.godot/imported/rina_albedo.jpg-932231ee8827da21b91a9c5ca5f2b711.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

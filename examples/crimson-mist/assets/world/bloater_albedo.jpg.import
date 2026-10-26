@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bnr3sxdtalrst"
-path="res://.godot/imported/bloater_albedo.jpg-494e9ce02ff3657c542d495bfbf66e56.ctex"
+path.s3tc="res://.godot/imported/bloater_albedo.jpg-494e9ce02ff3657c542d495bfbf66e56.s3tc.ctex"
+path.etc2="res://.godot/imported/bloater_albedo.jpg-494e9ce02ff3657c542d495bfbf66e56.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "33e24f8d2fa5b60244ddee300e7c21db"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/bloater_albedo.jpg"
-dest_files=["res://.godot/imported/bloater_albedo.jpg-494e9ce02ff3657c542d495bfbf66e56.ctex"]
+dest_files=["res://.godot/imported/bloater_albedo.jpg-494e9ce02ff3657c542d495bfbf66e56.s3tc.ctex", "res://.godot/imported/bloater_albedo.jpg-494e9ce02ff3657c542d495bfbf66e56.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://y5i4u3u641ox"
-path="res://.godot/imported/npc_student_metallic_roughness.jpg-37d78aeb4f6513fa3077e3f5ee98fc80.ctex"
+path.s3tc="res://.godot/imported/npc_student_metallic_roughness.jpg-37d78aeb4f6513fa3077e3f5ee98fc80.s3tc.ctex"
+path.etc2="res://.godot/imported/npc_student_metallic_roughness.jpg-37d78aeb4f6513fa3077e3f5ee98fc80.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "5ae91f7ebc2c7319d42cf05b961d1473"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/npc_student_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/npc_student_metallic_roughness.jpg-37d78aeb4f6513fa3077e3f5ee98fc80.ctex"]
+dest_files=["res://.godot/imported/npc_student_metallic_roughness.jpg-37d78aeb4f6513fa3077e3f5ee98fc80.s3tc.ctex", "res://.godot/imported/npc_student_metallic_roughness.jpg-37d78aeb4f6513fa3077e3f5ee98fc80.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

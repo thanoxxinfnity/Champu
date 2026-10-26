@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ceex0rd5rhty0"
-path="res://.godot/imported/rig_weeper_metallic_roughness.jpg-0e8434c4acc90620cf60de37851069bc.ctex"
+path.s3tc="res://.godot/imported/rig_weeper_metallic_roughness.jpg-0e8434c4acc90620cf60de37851069bc.s3tc.ctex"
+path.etc2="res://.godot/imported/rig_weeper_metallic_roughness.jpg-0e8434c4acc90620cf60de37851069bc.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "bfa486bf249c063fc776764e5531470f"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/rig_weeper_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/rig_weeper_metallic_roughness.jpg-0e8434c4acc90620cf60de37851069bc.ctex"]
+dest_files=["res://.godot/imported/rig_weeper_metallic_roughness.jpg-0e8434c4acc90620cf60de37851069bc.s3tc.ctex", "res://.godot/imported/rig_weeper_metallic_roughness.jpg-0e8434c4acc90620cf60de37851069bc.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

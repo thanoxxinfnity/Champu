@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bchvgqv8vc3cv"
-path="res://.godot/imported/z_swimmer_albedo.jpg-457b2c49406b204b1672845a4b114e3f.ctex"
+path.s3tc="res://.godot/imported/z_swimmer_albedo.jpg-457b2c49406b204b1672845a4b114e3f.s3tc.ctex"
+path.etc2="res://.godot/imported/z_swimmer_albedo.jpg-457b2c49406b204b1672845a4b114e3f.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "aebfb38e3b74dfc32305e7869b3a09b1"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_swimmer_albedo.jpg"
-dest_files=["res://.godot/imported/z_swimmer_albedo.jpg-457b2c49406b204b1672845a4b114e3f.ctex"]
+dest_files=["res://.godot/imported/z_swimmer_albedo.jpg-457b2c49406b204b1672845a4b114e3f.s3tc.ctex", "res://.godot/imported/z_swimmer_albedo.jpg-457b2c49406b204b1672845a4b114e3f.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

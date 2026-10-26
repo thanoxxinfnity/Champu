@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://nenarueyehk8"
-path="res://.godot/imported/npc_student_albedo.jpg-bbcea5e31025f3e887469a073ce6ff27.ctex"
+path.s3tc="res://.godot/imported/npc_student_albedo.jpg-bbcea5e31025f3e887469a073ce6ff27.s3tc.ctex"
+path.etc2="res://.godot/imported/npc_student_albedo.jpg-bbcea5e31025f3e887469a073ce6ff27.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "12e6bc76593273039c25a186b61da05f"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/npc_student_albedo.jpg"
-dest_files=["res://.godot/imported/npc_student_albedo.jpg-bbcea5e31025f3e887469a073ce6ff27.ctex"]
+dest_files=["res://.godot/imported/npc_student_albedo.jpg-bbcea5e31025f3e887469a073ce6ff27.s3tc.ctex", "res://.godot/imported/npc_student_albedo.jpg-bbcea5e31025f3e887469a073ce6ff27.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

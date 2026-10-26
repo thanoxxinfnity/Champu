@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c4rddldgwo2v8"
-path="res://.godot/imported/crate_albedo.jpg-866910ceb0286d8b04ebff8d381d0ad4.ctex"
+path.s3tc="res://.godot/imported/crate_albedo.jpg-866910ceb0286d8b04ebff8d381d0ad4.s3tc.ctex"
+path.etc2="res://.godot/imported/crate_albedo.jpg-866910ceb0286d8b04ebff8d381d0ad4.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "851c70c949b77921dafef96472b5ab36"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/crate_albedo.jpg"
-dest_files=["res://.godot/imported/crate_albedo.jpg-866910ceb0286d8b04ebff8d381d0ad4.ctex"]
+dest_files=["res://.godot/imported/crate_albedo.jpg-866910ceb0286d8b04ebff8d381d0ad4.s3tc.ctex", "res://.godot/imported/crate_albedo.jpg-866910ceb0286d8b04ebff8d381d0ad4.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

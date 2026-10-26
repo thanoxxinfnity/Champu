@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cyxw5r5tk8emm"
-path="res://.godot/imported/rig_mist_walker_albedo.jpg-088d093662e704329f76fad17b5e1f52.ctex"
+path.s3tc="res://.godot/imported/rig_mist_walker_albedo.jpg-088d093662e704329f76fad17b5e1f52.s3tc.ctex"
+path.etc2="res://.godot/imported/rig_mist_walker_albedo.jpg-088d093662e704329f76fad17b5e1f52.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "45fc6b66da9437c0bc56db0eb6c9997b"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/rig_mist_walker_albedo.jpg"
-dest_files=["res://.godot/imported/rig_mist_walker_albedo.jpg-088d093662e704329f76fad17b5e1f52.ctex"]
+dest_files=["res://.godot/imported/rig_mist_walker_albedo.jpg-088d093662e704329f76fad17b5e1f52.s3tc.ctex", "res://.godot/imported/rig_mist_walker_albedo.jpg-088d093662e704329f76fad17b5e1f52.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://crlngvnyusebd"
-path="res://.godot/imported/z_waitress_metallic_roughness.jpg-b4868dc573ec40ef82f41872adc2990f.ctex"
+path.s3tc="res://.godot/imported/z_waitress_metallic_roughness.jpg-b4868dc573ec40ef82f41872adc2990f.s3tc.ctex"
+path.etc2="res://.godot/imported/z_waitress_metallic_roughness.jpg-b4868dc573ec40ef82f41872adc2990f.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "c2f5e3757b9529f2107d843c5a6e5a71"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_waitress_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/z_waitress_metallic_roughness.jpg-b4868dc573ec40ef82f41872adc2990f.ctex"]
+dest_files=["res://.godot/imported/z_waitress_metallic_roughness.jpg-b4868dc573ec40ef82f41872adc2990f.s3tc.ctex", "res://.godot/imported/z_waitress_metallic_roughness.jpg-b4868dc573ec40ef82f41872adc2990f.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

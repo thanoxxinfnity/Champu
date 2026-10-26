@@ -15,6 +15,7 @@ func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	game = await T.boot(self, args[0] if args.size() > 0 else "rachel")
 	await T.start(self, game)
+	CharacterView.watch = true
 	var p := game.player
 	p.max_hp = 600.0      # the bot is not a good fighter: three times the health, same enemies
 	p.hp = 600.0
@@ -40,6 +41,7 @@ func _initialize() -> void:
 			continue
 		_think(p, frames)
 	print("damage taken by kind: ", Bestiary.dealt)
+	T.check(CharacterView.worst_t_run < 45, "nobody stood in the T-pose for 45 frames or more (worst: %d frames, %s)" % [CharacterView.worst_t_run, CharacterView.worst_t_who])
 	T.check(game.story.finished, "the bot finished Chapter 1 (mission %d, %d frames, %d deaths)" % [game.story.mission, frames, deaths])
 	T.check(deaths <= 4, "the bot did not need more than 4 retries (%d)" % deaths)
 	T.check(game.player.has_crowbar and game.player.has_pistol, "weapons were found on the way")

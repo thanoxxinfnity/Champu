@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dynshpy20c187"
-path="res://.godot/imported/z_butcher_metallic_roughness.jpg-c099e68d1ae3c2c319d4bd374b35e2da.ctex"
+path.s3tc="res://.godot/imported/z_butcher_metallic_roughness.jpg-c099e68d1ae3c2c319d4bd374b35e2da.s3tc.ctex"
+path.etc2="res://.godot/imported/z_butcher_metallic_roughness.jpg-c099e68d1ae3c2c319d4bd374b35e2da.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "3f7d18b4771c65fef16791129bb9a685"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_butcher_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/z_butcher_metallic_roughness.jpg-c099e68d1ae3c2c319d4bd374b35e2da.ctex"]
+dest_files=["res://.godot/imported/z_butcher_metallic_roughness.jpg-c099e68d1ae3c2c319d4bd374b35e2da.s3tc.ctex", "res://.godot/imported/z_butcher_metallic_roughness.jpg-c099e68d1ae3c2c319d4bd374b35e2da.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

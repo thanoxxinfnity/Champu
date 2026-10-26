@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cpgi3wv88tntc"
-path="res://.godot/imported/rig_mist_walker_metallic_roughness.jpg-3164ace9dce086d925a17f656127e373.ctex"
+path.s3tc="res://.godot/imported/rig_mist_walker_metallic_roughness.jpg-3164ace9dce086d925a17f656127e373.s3tc.ctex"
+path.etc2="res://.godot/imported/rig_mist_walker_metallic_roughness.jpg-3164ace9dce086d925a17f656127e373.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "a3bb5924915ea9e3f01859da65a963e9"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/rig_mist_walker_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/rig_mist_walker_metallic_roughness.jpg-3164ace9dce086d925a17f656127e373.ctex"]
+dest_files=["res://.godot/imported/rig_mist_walker_metallic_roughness.jpg-3164ace9dce086d925a17f656127e373.s3tc.ctex", "res://.godot/imported/rig_mist_walker_metallic_roughness.jpg-3164ace9dce086d925a17f656127e373.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

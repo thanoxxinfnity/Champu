@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bsuamnefikte6"
-path="res://.godot/imported/clinic_bed_albedo.jpg-e6355348184faadebb63450bea6169c8.ctex"
+path.s3tc="res://.godot/imported/clinic_bed_albedo.jpg-e6355348184faadebb63450bea6169c8.s3tc.ctex"
+path.etc2="res://.godot/imported/clinic_bed_albedo.jpg-e6355348184faadebb63450bea6169c8.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "c410c67a1ed104ed1df89e07d259de00"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/clinic_bed_albedo.jpg"
-dest_files=["res://.godot/imported/clinic_bed_albedo.jpg-e6355348184faadebb63450bea6169c8.ctex"]
+dest_files=["res://.godot/imported/clinic_bed_albedo.jpg-e6355348184faadebb63450bea6169c8.s3tc.ctex", "res://.godot/imported/clinic_bed_albedo.jpg-e6355348184faadebb63450bea6169c8.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

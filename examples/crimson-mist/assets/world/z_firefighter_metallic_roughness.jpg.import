@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://o41iwstj6kd3"
-path="res://.godot/imported/z_firefighter_metallic_roughness.jpg-d1c0a662cb32087dd5648b8063c0b901.ctex"
+path.s3tc="res://.godot/imported/z_firefighter_metallic_roughness.jpg-d1c0a662cb32087dd5648b8063c0b901.s3tc.ctex"
+path.etc2="res://.godot/imported/z_firefighter_metallic_roughness.jpg-d1c0a662cb32087dd5648b8063c0b901.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "606a9a43ce3788cfe80de7e255230a1a"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_firefighter_metallic_roughness.jpg"
-dest_files=["res://.godot/imported/z_firefighter_metallic_roughness.jpg-d1c0a662cb32087dd5648b8063c0b901.ctex"]
+dest_files=["res://.godot/imported/z_firefighter_metallic_roughness.jpg-d1c0a662cb32087dd5648b8063c0b901.s3tc.ctex", "res://.godot/imported/z_firefighter_metallic_roughness.jpg-d1c0a662cb32087dd5648b8063c0b901.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

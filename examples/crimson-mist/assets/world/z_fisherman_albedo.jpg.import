@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://6smi7trqpgx6"
-path="res://.godot/imported/z_fisherman_albedo.jpg-e22e68a3e51445cfdcfc3b37ca52ff25.ctex"
+path.s3tc="res://.godot/imported/z_fisherman_albedo.jpg-e22e68a3e51445cfdcfc3b37ca52ff25.s3tc.ctex"
+path.etc2="res://.godot/imported/z_fisherman_albedo.jpg-e22e68a3e51445cfdcfc3b37ca52ff25.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "bb9be686af537abfd0446457ff91260f"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/world/z_fisherman_albedo.jpg"
-dest_files=["res://.godot/imported/z_fisherman_albedo.jpg-e22e68a3e51445cfdcfc3b37ca52ff25.ctex"]
+dest_files=["res://.godot/imported/z_fisherman_albedo.jpg-e22e68a3e51445cfdcfc3b37ca52ff25.s3tc.ctex", "res://.godot/imported/z_fisherman_albedo.jpg-e22e68a3e51445cfdcfc3b37ca52ff25.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
