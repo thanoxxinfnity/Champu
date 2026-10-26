@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import triverse_gen as tv
 
 STYLE = 'anime cel-shaded style, game asset, clean colors'
-os.environ.setdefault('TV_POLY', '20000')
+os.environ.setdefault('TV_POLY', '12000' if len(sys.argv) > 1 and sys.argv[1] == 'tp_zombies' else '20000')
 os.environ.setdefault('TV_TEX', '1024')
 ENEMIES = {
     'mist_walker': 'gaunt infected townsperson with glowing red eyes, red veins, tattered clothes, arms hanging, standing, full body',
@@ -40,6 +40,27 @@ TP_ENEMIES = {
     'z_weeper': 'pale ghost girl in a long white dress, long black hair over her face, ' + TPOSE,
     'z_bellkeeper': 'giant hulking monster with a bronze bell fused to its back, red veins, glowing eyes, ' + TPOSE,
 }
+INF = 'infected, pale grey skin, red veins, glowing red eyes, torn dirty clothes, '
+TP_ZOMBIES = {
+    # men
+    'zb_fisherman': 'male fisherman in a torn yellow oilskin coat and rubber boots, ' + INF + TPOSE,
+    'zb_police': 'male police officer in a ripped dark blue uniform with a badge and cap, ' + INF + TPOSE,
+    'zb_soldier': 'male soldier in a dirty olive combat vest and helmet with a gas mask, ' + INF + TPOSE,
+    'zb_butcher': 'big male butcher in a blood-stained white apron holding nothing, ' + INF + TPOSE,
+    'zb_firefighter': 'male firefighter in a burnt black and yellow turnout coat and helmet, ' + INF + TPOSE,
+    'zb_builder': 'stocky male construction worker with a hard hat and an orange safety vest, ' + INF + TPOSE,
+    'zb_salaryman': 'male office worker in a torn grey suit with a loose tie, ' + INF + TPOSE,
+    'zb_doctor': 'male doctor in a stained white coat with a surgical mask and round glasses, ' + INF + TPOSE,
+    # women
+    'zb_bride': 'female bride in a torn white wedding dress and tattered veil, ' + INF + TPOSE,
+    'zb_officelady': 'female office worker in a ripped blazer, pencil skirt and one high heel, ' + INF + TPOSE,
+    'zb_jogger': 'slim female jogger in a torn tracksuit and running shoes with a ponytail, ' + INF + TPOSE,
+    'zb_waitress': 'female waitress in a torn black dress with a white apron and name tag, ' + INF + TPOSE,
+    'zb_tourist': 'female tourist in a torn sundress and a straw hat with a camera strap, ' + INF + TPOSE,
+    'zb_punk': 'female punk girl in a ripped leather jacket, studded belt and spiky hair, ' + INF + TPOSE,
+    'zb_swimmer': 'female swimmer in a wet one-piece swimsuit covered in seaweed with long wet hair, ' + INF + TPOSE,
+    'zb_housewife': 'female housewife in a torn floral apron and slippers with messy hair, ' + INF + TPOSE,
+}
 TP_NPCS = {
     'npc_nurse': 'young anime nurse woman with a white uniform and pink cap, ' + TPOSE,
     'npc_shopkeeper': 'middle aged anime man shopkeeper with a green apron and glasses, ' + TPOSE,
@@ -54,7 +75,7 @@ TP_HEROES = {
     'hero_c': 'anime fox girl with cat ears, pink hair, black crop jacket, white shorts, a fluffy tail, ' + TPOSE,
     'hero_d': 'anime girl with wavy blonde hair and a red headband, red high-neck leotard, white thigh-high stockings, ' + TPOSE,
 }
-which = {'enemies': ENEMIES, 'props': PROPS, 'tp_enemies': TP_ENEMIES, 'tp_npcs': TP_NPCS, 'tp_heroes': TP_HEROES}[sys.argv[1]]
+which = {'enemies': ENEMIES, 'props': PROPS, 'tp_enemies': TP_ENEMIES, 'tp_npcs': TP_NPCS, 'tp_heroes': TP_HEROES, 'tp_zombies': TP_ZOMBIES}[sys.argv[1]]
 idx, cnt = (int(sys.argv[2]), int(sys.argv[3])) if len(sys.argv) > 3 else (0, 1)
 ok = True
 for i, (name, desc) in enumerate(which.items()):

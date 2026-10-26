@@ -3,7 +3,7 @@
 GODOT=${1:-godot}
 cd "$(dirname "$0")/.."
 status=0
-for t in smoke rig nav enemy mission stream save ui; do
+for t in smoke rig nav enemy bestiary roof mission stream save ui; do
   [ -f tests/${t}_test.gd ] || [ -f tests/${t}.gd ] || continue
   f=tests/${t}_test.gd; [ -f $f ] || f=tests/${t}.gd
   out=$(timeout 900 $GODOT --headless --fixed-fps 60 --path . -s $f 2>&1)

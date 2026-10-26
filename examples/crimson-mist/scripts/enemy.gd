@@ -22,6 +22,8 @@ var marked := 0.0
 var frozen := false
 var phase2 := false
 var zone := ""
+var trait_id := "shambler"
+var female := false
 
 var visual: Node3D
 var view: CharacterView
@@ -51,13 +53,20 @@ var _death_t := 0.0
 var _investigate_t := 0.0
 var _last_pos := Vector3.ZERO
 var _stuck_t := 0.0
+var _aura_t := 0.0
+var _scream_cd := 3.0
+var _lunge_t := 0.0
+var _lunge_hit := false
+var _intent := ""          # what the wind-up in progress is for: "" (a swing), "spit", "scream", "lunge"
 
 
 func setup(g: Game, k: String, pos: Vector3, home_zone := "") -> void:
 	game = g
 	kind = k
 	zone = home_zone
-	def = Data.ENEMIES[k]
+	def = Bestiary.def(k)
+	trait_id = Bestiary.trait_of(k)
+	female = Bestiary.sex_of(k) == "F"
 	max_hp = float(def.hp)
 	hp = max_hp
 	height = float(def.height)
@@ -72,17 +81,22 @@ func _ready() -> void:
 	collision_mask = Data.L_WORLD | Data.L_PLAYER
 	var cs := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
-	cap.radius = 1.4 if boss else (0.6 if kind == "bloater" else (0.42 if kind == "crawler" else 0.36))
-	cap.height = maxf(height * (0.9 if kind != "crawler" else 1.0), cap.radius * 2.0 + 0.1)
+	cap.radius = 1.4 if boss else (0.6 if trait_id == "burst" and kind == "bloater" else (0.42 if trait_id == "crawl" else 0.36))
+	cap.height = maxf(height * (0.9 if trait_id != "crawl" else 1.0), cap.radius * 2.0 + 0.1)
 	cs.shape = cap
 	cs.position.y = cap.height * 0.5
 	add_child(cs)
 	visual = Node3D.new()
 	add_child(visual)
-	var rig_info: Array = RIGS[kind]
+	var rig_info: Array = RIGS[kind] if RIGS.has(kind) else [String(def.body), String(def.style), float(def.height)]
 	view = CharacterView.new()
 	visual.add_child(view)
 	var rigged := view.setup_model("res://assets/world/%s.glb" % rig_info[0], float(rig_info[2]), def.tint, String(rig_info[1]))
+	if not rigged and kind != "bellkeeper" and String(rig_info[0]) != "rig_mist_walker":      # a body that is not built yet: the walker stands in, same behaviour, same tint
+		view.queue_free()
+		view = CharacterView.new()
+		visual.add_child(view)
+		rigged = view.setup_model("res://assets/world/rig_mist_walker.glb", float(rig_info[2]), def.tint, String(rig_info[1]))
 	if not rigged and kind == "crawler":      # the crawler reuses the walker's body when it has none of its own
 		view.queue_free()
 		view = CharacterView.new()
@@ -105,6 +119,10 @@ func _ready() -> void:
 				sm.next_pass = (m as ShaderMaterial).next_pass
 				mi.set_surface_override_material(s, sm)
 				_mats.append(sm)
+	if def.has("aura"):
+		for m in _mats:
+			m.set_shader_parameter("emission_color", Color(1.0, 0.38, 0.08))
+			m.set_shader_parameter("emission_energy", 0.55)
 	_mark = MeshInstance3D.new()
 	var dm := SphereMesh.new()
 	dm.radius = 0.16
@@ -126,7 +144,7 @@ func _ready() -> void:
 	add_child(_mark)
 	var shadow := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
-	pm.size = Vector2(1.0, 1.0) * (3.5 if boss else (1.3 if kind == "bloater" else 0.9))
+	pm.size = Vector2(1.0, 1.0) * (3.5 if boss else (1.3 if trait_id == "burst" else 0.9))
 	shadow.mesh = pm
 	var sm2 := StandardMaterial3D.new()
 	sm2.albedo_color = Color(0, 0, 0, 0.45)
@@ -141,10 +159,11 @@ func _ready() -> void:
 func wake(alert := true) -> void:
 	if state == S.DEAD:
 		return
+	game.meet(kind)
 	if state == S.DORMANT or state == S.PATROL or state == S.INVESTIGATE:
 		state = S.CHASE
 		alerted = alert
-		game.sfx.play_at("groan%d" % (1 + randi() % 3), global_position, -3.0, randf_range(0.85, 1.1) * (0.7 if boss else 1.0))
+		game.sfx.play_at("groan%d" % (1 + randi() % 3), global_position, -3.0, randf_range(0.85, 1.1) * (0.7 if boss else (1.25 if female else 1.0)))
 
 
 func hear(pos: Vector3, radius: float) -> void:
@@ -183,7 +202,9 @@ func chest() -> Vector3:
 func take_damage(dmg: float, from: Vector3, knock := 3.0, head := false) -> void:
 	if state == S.DEAD:
 		return
-	hp -= dmg * (1.6 if head else 1.0)
+	var armor := float(def.get("armor", 1.0))
+	game.meet(kind)
+	hp -= dmg * (1.6 if head else 1.0) * (lerpf(armor, 1.0, 0.6) if head else armor)
 	_flash = 1.0
 	game.sfx.play_at("hit", global_position, 0.0, randf_range(0.9, 1.1))
 	game.fx.blood(chest(), (from - global_position).normalized(), false)
@@ -196,9 +217,9 @@ func take_damage(dmg: float, from: Vector3, knock := 3.0, head := false) -> void
 	if not boss and state != S.WINDUP:
 		var away := (global_position - from)
 		away.y = 0
-		_knock = away.normalized() * knock * (0.5 if kind == "bloater" else 1.0)
+		_knock = away.normalized() * knock * (0.5 if trait_id == "burst" else (0.55 if armor < 1.0 else 1.0))
 		state = S.STUNNED
-		_timer = 0.28 if kind != "bloater" else 0.12
+		_timer = 0.28 if trait_id != "burst" else 0.12
 	if boss:
 		game.hud.boss_hp(hp / max_hp)
 		if not phase2 and hp < max_hp * 0.5:
@@ -213,9 +234,9 @@ func _die() -> void:
 	collision_layer = 0
 	collision_mask = Data.L_WORLD
 	remove_from_group("enemies")
-	game.sfx.play_at("scream" if kind == "weeper" else "groan3", global_position, -1.0, 1.1 if not boss else 0.6)
+	game.sfx.play_at("scream" if (kind == "weeper" or (female and randf() < 0.5)) else "groan3", global_position, -1.0, 1.1 if not boss else 0.6)
 	game.fx.splat(global_position, 1.4 if not boss else 4.0)
-	if kind == "bloater":
+	if bool(def.get("burst", false)):
 		_burst(0.6)
 	_mark.visible = false
 	died.emit(self)
@@ -261,11 +282,22 @@ func _physics_process(delta: float) -> void:
 	var to_p := p.global_position - global_position
 	to_p.y = 0
 	var dist := to_p.length()
+	# far from the player and asleep: nothing to see or animate (saves a skeleton per sleeper on a phone)
+	if state == S.DORMANT and dist > 42.0 and not alerted:
+		visual.visible = false
+		return
+	visual.visible = true
 	_sight_t -= delta
 	if _sight_t <= 0.0:
 		_sight_t = 0.2
 		_look_for_player(dist)
 	frozen = false
+	if def.has("aura") and dist < 2.5 and not p.dead and state != S.DORMANT:
+		_aura_t -= delta
+		if _aura_t <= 0.0:
+			_aura_t = 0.7
+			p.take_damage(float(def.aura) * 0.7, global_position)
+	_scream_cd = maxf(0.0, _scream_cd - delta)
 	match state:
 		S.DORMANT:
 			velocity.x = move_toward(velocity.x, 0, 20 * delta)
@@ -290,6 +322,18 @@ func _physics_process(delta: float) -> void:
 				_strike(p)
 		S.STRIKE:
 			_timer -= delta
+			if _lunge_t > 0.0:
+				_lunge_t -= delta
+				var fwd := -global_transform.basis.z
+				velocity.x = fwd.x * 13.0
+				velocity.z = fwd.z * 13.0
+				if not _lunge_hit and dist < 1.5 and not p.dead:
+					_lunge_hit = true
+					p.take_damage(float(def.dmg), global_position)
+					game.sfx.play_at("hit", p.global_position, 2.0)
+				if _lunge_t <= 0.0:
+					velocity.x = 0.0
+					velocity.z = 0.0
 			if _timer <= 0.0:
 				state = S.CHASE
 		S.STUNNED:
@@ -347,29 +391,89 @@ func _patrol(delta: float) -> void:
 
 
 func _chase(p: Player, dist: float, delta: float) -> void:
-	if kind == "weeper":
+	if trait_id == "weeper":
 		if game.player_looking_at(chest()) and dist > 1.8:
 			frozen = true
 			velocity.x = 0
 			velocity.z = 0
 			return
-	if kind == "bloater" and dist < 2.2:
+	if bool(def.get("burst", false)) and dist < 2.2:
 		_burst(1.0)
 		return
 	var reach := float(def.reach)
+	var sees := _clear_to(p)
+	# the specials: each one is a wind-up the player can read, then the thing itself
+	if _cd <= 0.0 and sees:
+		if def.has("spit") and dist >= 5.0 and dist <= 15.0:
+			_begin("spit", 0.65, 0.9)
+			return
+		if def.has("lunge") and dist >= reach + 1.2 and dist <= float(def.lunge) * 2.4:
+			_begin("lunge", 0.5, 1.4)
+			return
+	if def.has("scream") and _scream_cd <= 0.0 and sees and dist < 20.0:
+		_begin("scream", 0.8, 1.0)
+		return
 	if dist <= reach and _cd <= 0.0:
 		state = S.WINDUP
-		_timer = 0.9 if boss else (0.35 if kind == "crawler" else 0.5)
-		game.sfx.play_at("groan%d" % (1 + randi() % 3), global_position, -2.0, 1.3 if kind != "bloater" else 0.8)
+		_intent = ""
+		_timer = 0.9 if boss else (0.35 if trait_id == "crawl" else 0.5)
+		game.sfx.play_at("groan%d" % (1 + randi() % 3), global_position, -2.0, (1.3 if not burst_like() else 0.8) * (1.2 if female else 1.0))
 		return
 	var spd := float(def.speed) * _speed_mul
+	# a spitter holds its ground at range instead of walking into the fight
+	if def.has("spit") and dist < 13.0 and dist > 6.0 and sees:
+		_face(p.global_position, delta, 8.0)
+		velocity.x = move_toward(velocity.x, 0, 16 * delta)
+		velocity.z = move_toward(velocity.z, 0, 16 * delta)
+		return
 	_move_toward(p.global_position, spd, delta, true)
+
+
+func burst_like() -> bool:
+	return bool(def.get("burst", false))
+
+
+func _clear_to(p: Player) -> bool:
+	var q := PhysicsRayQueryParameters3D.create(global_position + Vector3(0, height * 0.8, 0), p.global_position + Vector3(0, 1.2, 0), Data.L_WORLD)
+	return get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+
+
+func _begin(intent: String, windup: float, cooldown: float) -> void:
+	state = S.WINDUP
+	_intent = intent
+	_timer = windup
+	_cd = cooldown
+	match intent:
+		"scream":
+			game.sfx.play_at("scream", global_position, -4.0, 1.0 if female else 0.8)
+		"spit", "lunge":
+			game.sfx.play_at("groan%d" % (1 + randi() % 3), global_position, -2.0, 1.5 if female else 1.2)
 
 
 func _strike(p: Player) -> void:
 	state = S.STRIKE
 	_timer = 0.3
 	_cd = float(def.cd)
+	match _intent:
+		"spit":
+			_cd = float(def.spit)
+			var from := global_position + Vector3(0, height * 0.75, 0)
+			var glob := Glob.new()
+			glob.setup(game, from, p.global_position + Vector3(0, 0.2, 0) + p.velocity * 0.35, float(def.dmg))
+			game.add_child(glob)
+			_intent = ""
+			return
+		"scream":
+			_scream()
+			_intent = ""
+			return
+		"lunge":
+			_lunge_t = 0.34
+			_lunge_hit = false
+			_timer = 0.55
+			_cd = float(def.cd) + 1.2
+			_intent = ""
+			return
 	if boss:
 		game.sfx.play_at("slam", global_position, 2.0, 0.7)
 		game.shake(0.6)
@@ -380,6 +484,17 @@ func _strike(p: Player) -> void:
 	if to.length() <= reach and not p.dead:
 		p.take_damage(float(def.dmg), global_position)
 		game.sfx.play_at("hit", p.global_position, 2.0)
+
+
+## The scream: everything within earshot wakes and comes, and the player is shaken.
+func _scream() -> void:
+	_scream_cd = float(def.scream)
+	game.sfx.play_at("scream", global_position, 3.0, 1.1 if female else 0.85)
+	game.shake(0.45)
+	for e in get_tree().get_nodes_in_group("enemies"):
+		var o := e as Enemy
+		if o != self and o.state != S.DEAD and o.global_position.distance_to(global_position) < 32.0:
+			o.wake()
 
 
 func _move_toward(target: Vector3, speed: float, delta: float, repath := false) -> void:
@@ -461,7 +576,7 @@ func _animate_rig() -> void:
 		S.WINDUP:
 			view.pose = CharacterView.Pose.SWING
 			view.swing_phase = 0
-			view.swing_k = clampf(1.0 - _timer / (0.9 if boss else 0.5), 0.0, 1.0)
+			view.swing_k = clampf(1.0 - _timer / (0.9 if boss else (0.8 if _intent == "scream" else (0.65 if _intent == "spit" else 0.5))), 0.0, 1.0)
 		S.STRIKE:
 			view.pose = CharacterView.Pose.SWING
 			view.swing_phase = 1 if _timer > 0.12 else 2

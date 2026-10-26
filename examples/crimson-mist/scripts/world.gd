@@ -378,6 +378,7 @@ func _tree(parent: Node3D, pos: Vector3) -> void:
 
 # ── dressing helpers ─────────────────────────────────────────────────────────
 
+var reserved: Array[Rect2] = []             # footprints that scattered props must keep out of (the veranda roof and its ramp)
 var occupied: Array[Vector3] = []          # centres of everything placed so far, so the scatter keeps clear of it and of the story spots
 
 
@@ -435,6 +436,9 @@ func _boulder(parent: Node3D, pos: Vector3, size: float, rot_deg: float, solid: 
 
 
 func _free_spot(pos: Vector3, gap: float) -> bool:
+	for r in reserved:
+		if r.grow(1.0).has_point(Vector2(pos.x, pos.z)):
+			return false
 	for o in occupied:
 		if Vector2(o.x - pos.x, o.z - pos.z).length() < gap:
 			return false
@@ -633,9 +637,11 @@ func _market_street() -> void:
 	shop_light.position = Vector3(16, 2.8, -64)
 	n.add_child(shop_light)
 	# street dressing
-	for z in [-34.0, -52.0, -70.0, -88.0]:
+	for z in [-34.0, -52.0, -70.0]:        # (the lamp that stood at -88 is now the light under the veranda roof)
 		_lamp(n, Vector3(-9.2, 0, z))
+	for z in [-34.0, -52.0, -70.0, -88.0]:
 		_lamp(n, Vector3(9.2, 0, z - 9.0))
+	_veranda(n, Rect2(-11.0, -86.0, 3.8, 8.0), 3.4)
 	_prop(n, "car_wreck", Vector3(-3.2, 0, -38), 4.4, 12, true)
 	_prop(n, "car_wreck", Vector3(3.5, 0, -57), 4.4, -8, true)
 	_prop(n, "car_wreck", Vector3(-4.0, 0, -74), 4.4, 170, true)
@@ -668,6 +674,65 @@ func _market_street() -> void:
 	_scatter(n, Rect2(9.6, -92, 1.4, 62), [["fence", 2.2, true, false, 3.0], ["trashbag", 0.55, false, false, 2.0], ["bin", 0.95, false, true, 1.0]], 8, 33, 3.0)
 	_scatter(n, Rect2(-11.0, -92, 1.6, 62), [["fence", 2.2, true, false, 3.0], ["trashbag", 0.55, false, false, 2.0], ["bin", 0.95, false, true, 1.0]], 8, 34, 3.0)
 	_scatter(n, Rect2(-6.0, -92, 12.0, 62), [["tyre", 0.7, false, false, 2.0], ["trashbag", 0.55, false, false, 3.0], ["barrier", 2.2, true, true, 1.0], ["crate_plastic", 0.5, false, false, 1.5], ["covered_car", 4.2, true, true, 0.2]], 9, 35, 4.0, true)
+
+
+## A roof you can climb onto: a veranda slab along the front of a building, posts at the street edge, a railing, and a ramp up from the ground at its
+## far end. The ground under the slab stays walkable; the ramp is solid. A spitter waits up there and there is loot, so the roof is worth the climb.
+func _veranda(parent: Node3D, r: Rect2, h: float) -> void:
+	var wood := Surf.mat("planks_brown", 1.6, Color(0.6, 0.55, 0.5), 0.0, 0.7, 1.0)
+	var iron := Surf.mat("metal", 1.6, Color(0.45, 0.48, 0.52), 0.0, 0.7, 0.0)
+	var tiles := Surf.mat("roof_iron", 2.0, Color(0.55, 0.5, 0.5), 0.0, 0.8, 1.0)
+	_box(parent, Vector3(r.get_center().x, h - 0.15, r.get_center().y), Vector3(r.size.x, 0.3, r.size.y), tiles, false, true)
+	for z in [r.position.y + 0.3, r.get_center().y, r.end.y - 0.3]:
+		_box(parent, Vector3(r.end.x - 0.15, (h - 0.3) * 0.5, z), Vector3(0.3, h - 0.3, 0.3), iron)
+	# railing along the street side and the open end (the ramp comes in at the far end, z = r.position.y)
+	var rail_h := 0.95
+	_flat(parent, Vector3(r.end.x - 0.05, h + rail_h * 0.5, r.get_center().y), Vector3(0.1, rail_h, r.size.y), wood)
+	_box(parent, Vector3(r.end.x - 0.05, h + rail_h * 0.5, r.get_center().y), Vector3(0.2, rail_h, r.size.y), wood, false, true).visible = false
+	_flat(parent, Vector3(r.get_center().x, h + rail_h * 0.5, r.end.y - 0.05), Vector3(r.size.x, rail_h, 0.1), wood)
+	_box(parent, Vector3(r.get_center().x, h + rail_h * 0.5, r.end.y - 0.05), Vector3(r.size.x, rail_h, 0.2), wood, false, true).visible = false
+	# the ramp: rises from the ground at z = r.position.y - len up to the slab edge
+	var len := 9.0
+	var ramp_w := 2.4
+	var rx := r.position.x + 1.6
+	var rise := h
+	var run := sqrt(len * len - rise * rise)
+	var ang := atan2(rise, run)
+	var body := StaticBody3D.new()
+	body.collision_layer = Data.L_WORLD
+	body.collision_mask = 0
+	body.position = Vector3(rx, rise * 0.5 - 0.15, r.position.y - run * 0.5)
+	body.rotation.x = -ang
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3(ramp_w, 0.3, len + 0.2)
+	cs.shape = bs
+	body.add_child(cs)
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(ramp_w, 0.3, len + 0.2)
+	mi.mesh = bm
+	mi.material_override = wood
+	body.add_child(mi)
+	parent.add_child(body)
+	nav.block_rect(Rect2(rx - ramp_w * 0.5, r.position.y - run, ramp_w, run), 0.3)
+	for side in [-1.0, 1.0]:
+		var rail := _flat(parent, Vector3(rx + side * (ramp_w * 0.5 + 0.05), rise * 0.5 + 0.5, r.position.y - run * 0.5), Vector3(0.1, 0.9, len), wood)
+		rail.rotation.x = -ang
+	var lamp := OmniLight3D.new()
+	lamp.light_color = Color(1.0, 0.78, 0.5)
+	lamp.light_energy = 1.6
+	lamp.omni_range = 9.0
+	lamp.position = Vector3(r.get_center().x, h - 0.5, r.get_center().y)
+	parent.add_child(lamp)
+	lamps.append(lamp)
+	reserved.append(Rect2(r.position.x, r.position.y - run - 0.5, r.size.x, r.size.y + run + 0.5))
+	spots["roof_loot"] = Vector3(r.get_center().x - 0.4, h + 0.2, r.get_center().y + 1.0)
+	spots["loot13"] = spots["roof_loot"]
+	spots["roof_ramp"] = Vector3(rx, 0, r.position.y - run - 0.5)
+	spots["roof_top"] = Vector3(r.get_center().x, h, r.get_center().y)
+	_prop(parent, "crate", Vector3(r.get_center().x - 1.2, h, r.get_center().y + 2.6), 0.95, 25, false)
+	_ph(parent, "barrel", Vector3(r.position.x + 0.7, h, r.end.y - 0.9), 0.95, 0, false)
 
 
 func _church() -> void:

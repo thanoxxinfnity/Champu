@@ -28,6 +28,7 @@ var _save := {}
 var _prev_hold := {}
 var _shoot_latch := false
 var low_gfx := false
+var met := {}                # kinds of creature the player has met (shown in the bestiary, kept in the save)
 var _fps_t := 0.0
 var _fps_n := 0
 var _fps_sum := 0.0
@@ -191,6 +192,7 @@ func _leave_lobby() -> void:
 func start_game(continue_save := false) -> void:
 	if state == State.LOADING:
 		return
+	met = {}
 	state = State.LOADING
 	_leave_lobby()
 	var id: String = Data.CAST_ORDER[selected]
@@ -243,6 +245,8 @@ func _restore_save() -> void:
 		player.global_position = Vector3(pos[0], pos[1], pos[2])
 	for k in _save.get("picked", []):
 		story.picked[String(k)] = true
+	for k in _save.get("met", []):
+		met[String(k)] = true
 	var inv: Dictionary = _save.get("inv", {})
 	for k in inv:
 		player.inventory[k] = int(inv[k])
@@ -263,7 +267,7 @@ func save_progress() -> void:
 	if story == null or player == null:
 		return
 	var d := {"char": player.char_id, "mission": story.mission, "inv": player.inventory, "crowbar": player.has_crowbar, "pistol": player.has_pistol, "mag": player.mag,
-		"pos": [player.global_position.x, player.global_position.y, player.global_position.z], "done": story.finished, "picked": story.picked.keys()}
+		"pos": [player.global_position.x, player.global_position.y, player.global_position.z], "done": story.finished, "picked": story.picked.keys(), "met": met.keys()}
 	_save = d
 	Data.write_save(d)
 
@@ -339,6 +343,7 @@ func _on_screen(id: String) -> void:
 		"continue": start_game(true)
 		"resume": set_paused(false)
 		"bag": hud.show_craft(true)
+		"bestiary": hud.show_bestiary()
 		"gfx":
 			set_low_gfx(not low_gfx)
 			hud.show_pause(true)
@@ -387,6 +392,13 @@ func _notification(what: int) -> void:
 
 # ── services ─────────────────────────────────────────────────────────────────
 
+func meet(kind: String) -> void:
+	if not met.has(kind):
+		met[kind] = true
+		if state == State.PLAYING:
+			hud.toast("New: %s" % String(Bestiary.def(kind).name))
+
+
 func spawn_enemy(kind: String, pos: Vector3, zone := "") -> Enemy:
 	var e := Enemy.new()
 	e.setup(self, kind, pos, zone)
@@ -398,7 +410,7 @@ func spawn_enemy(kind: String, pos: Vector3, zone := "") -> Enemy:
 func _on_enemy_died(e: Enemy) -> void:
 	if story != null:
 		story.on_kill(e)
-	if not e.boss and randf() < 0.18 and e.kind != "bloater":
+	if not e.boss and randf() < 0.18 and not bool(e.def.get("burst", false)):
 		var it := story._make("loot", "bandage" if randf() < 0.35 else "ammo", "Search body", e.global_position + Vector3(0, 0.3, 0), true, 1.8)
 		it.count = 1 if it.value == "bandage" else 3
 

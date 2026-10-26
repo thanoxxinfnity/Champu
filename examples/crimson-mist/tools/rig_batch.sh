@@ -19,3 +19,13 @@ rig hero_a assets/cast/rachel.glb 1.6 14000 --hair
 rig hero_b assets/cast/kafu.glb 1.6 14000 --hair
 rig hero_c assets/cast/mococo.glb 1.6 14000 --hair
 rig hero_d assets/cast/rina.glb 1.6 14000 --hair
+# the infected townsfolk (gen_assets.py tp_zombies): men 1.75 m, women 1.66 m, 6k triangles each
+for n in fisherman police soldier butcher firefighter builder salaryman doctor; do rig zb_$n assets/world/z_$n.glb 1.75 6000; done
+rig zb_bride assets/world/z_bride.glb 1.66 6000 --hair --skirt
+rig zb_officelady assets/world/z_officelady.glb 1.66 6000 --hair --skirt
+rig zb_jogger assets/world/z_jogger.glb 1.66 6000 --hair
+rig zb_waitress assets/world/z_waitress.glb 1.66 6000 --hair --skirt
+rig zb_tourist assets/world/z_tourist.glb 1.66 6000 --hair --skirt
+rig zb_punk assets/world/z_punk.glb 1.66 6000 --hair
+rig zb_swimmer assets/world/z_swimmer.glb 1.66 6000 --hair
+rig zb_housewife assets/world/z_housewife.glb 1.66 6000 --hair --skirt

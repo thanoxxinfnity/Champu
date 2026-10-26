@@ -278,7 +278,7 @@ func _apply_hit() -> void:
 			continue
 		var to := en.global_position - global_position
 		to.y = 0
-		var reach := float(wd.reach) + (1.2 if en.boss else 0.0) + (0.5 if en.kind == "bloater" else 0.0)
+		var reach := float(wd.reach) + (1.2 if en.boss else 0.0) + (0.5 if bool(en.def.get("burst", false)) else 0.0)
 		if to.length() > reach:
 			continue
 		if _atk_dir.angle_to(to) > deg_to_rad(float(wd.arc) * 0.5) and to.length() > 0.8:

@@ -122,7 +122,7 @@ func _abilities(delta: float, target: Enemy) -> void:
 			_call_t = 12.0
 			var d := target.global_position - game.player.global_position
 			var side := "ahead" if d.dot(game.player.facing()) > 3.0 else ("behind us" if d.dot(game.player.facing()) < -3.0 else "to the side")
-			game.hud.say([[Data.CAST[char_id].name.split(" ")[0], "%s %s!" % [Data.ENEMIES[target.kind].name, side]]], 2.2)
+			game.hud.say([[Data.CAST[char_id].name.split(" ")[0], "%s %s!" % [Bestiary.def(target.kind).name, side]]], 2.2)
 	else:
 		if target != null and _cd <= 0.0 and target.global_position.distance_to(global_position) < 2.2:
 			_cd = 1.3

@@ -11,7 +11,7 @@ const CREAM := Color(1.0, 1.0, 1.0)
 const GOLD := Color(0.93, 0.8, 0.5)
 const UI := 0.72
 
-enum Screen { NONE, LOBBY, PAUSE, DEATH, WIN, CRAFT, NOTE, LOADING }
+enum Screen { NONE, LOBBY, PAUSE, DEATH, WIN, CRAFT, NOTE, LOADING, BESTIARY }
 
 var game: Game
 var cam: Camera3D
@@ -205,8 +205,9 @@ func _rebuild_screen_buttons() -> void:
 		Screen.PAUSE:
 			_screen_buttons.append({"id": "resume", "rect": Rect2(w * 0.5 - 200, h * 0.38, 400, 70), "label": "RESUME", "enabled": true})
 			_screen_buttons.append({"id": "bag", "rect": Rect2(w * 0.5 - 200, h * 0.38 + 84, 400, 70), "label": "CRAFT / BAG", "enabled": true})
-			_screen_buttons.append({"id": "gfx", "rect": Rect2(w * 0.5 - 200, h * 0.38 + 168, 400, 70), "label": "GRAPHICS: LOW (FAST)" if gfx_low else "GRAPHICS: HIGH", "enabled": true})
-			_screen_buttons.append({"id": "lobby", "rect": Rect2(w * 0.5 - 200, h * 0.38 + 252, 400, 70), "label": "BACK TO LOBBY", "enabled": true})
+			_screen_buttons.append({"id": "bestiary", "rect": Rect2(w * 0.5 - 200, h * 0.38 + 168, 400, 70), "label": "BESTIARY", "enabled": true})
+			_screen_buttons.append({"id": "gfx", "rect": Rect2(w * 0.5 - 200, h * 0.38 + 252, 400, 70), "label": "GRAPHICS: LOW (FAST)" if gfx_low else "GRAPHICS: HIGH", "enabled": true})
+			_screen_buttons.append({"id": "lobby", "rect": Rect2(w * 0.5 - 200, h * 0.38 + 336, 400, 70), "label": "BACK TO LOBBY", "enabled": true})
 		Screen.DEATH:
 			_screen_buttons.append({"id": "retry", "rect": Rect2(w * 0.5 - 200, h * 0.5, 400, 74), "label": "TRY AGAIN", "enabled": true})
 			_screen_buttons.append({"id": "lobby", "rect": Rect2(w * 0.5 - 200, h * 0.5 + 90, 400, 70), "label": "BACK TO LOBBY", "enabled": true})
@@ -214,6 +215,8 @@ func _rebuild_screen_buttons() -> void:
 			_screen_buttons.append({"id": "lobby", "rect": Rect2(w * 0.5 - 220, h * 0.62, 440, 74), "label": "BACK TO LOBBY", "enabled": true})
 		Screen.NOTE:
 			_screen_buttons.append({"id": "close", "rect": Rect2(w * 0.5 - 130, h * 0.62, 260, 66), "label": "CLOSE", "enabled": true})
+		Screen.BESTIARY:
+			_screen_buttons.append({"id": "close", "rect": Rect2(w * 0.5 - 130, h - 82, 260, 62), "label": "CLOSE", "enabled": true})
 		Screen.CRAFT:
 			var y := h * 0.3
 			for id in Data.RECIPES:
@@ -235,9 +238,9 @@ func _refresh() -> void:
 		Screen.LOBBY:
 			for l in [lbl_logo, lbl_sub, lbl_name, lbl_role, lbl_perk]:
 				l.visible = true
-		Screen.PAUSE, Screen.DEATH, Screen.WIN, Screen.NOTE, Screen.CRAFT, Screen.LOADING:
+		Screen.PAUSE, Screen.DEATH, Screen.WIN, Screen.NOTE, Screen.CRAFT, Screen.LOADING, Screen.BESTIARY:
 			lbl_panel_title.visible = true
-			lbl_panel_body.visible = true
+			lbl_panel_body.visible = screen != Screen.BESTIARY
 	if playing and screen == Screen.NONE:
 		lbl_ammo.visible = game != null and game.player != null and game.player.has_pistol
 		lbl_toast.visible = _toast_t > 0.0
@@ -417,6 +420,12 @@ func show_craft(on: bool) -> void:
 		hide_all_screens()
 
 
+func show_bestiary() -> void:
+	_open(Screen.BESTIARY, "BESTIARY", "")
+	lbl_panel_body.visible = false
+	lbl_panel_title.position.y = 6.0
+
+
 func read_note(text: String) -> void:
 	_open(Screen.NOTE, "NOTE", text)
 
@@ -593,10 +602,12 @@ func _draw_ui() -> void:
 		_canvas.draw_rect(Rect2(0, 0, w, h), Color(0.02, 0.03, 0.05, 1.0))
 		_bar(Rect2(w * 0.5 - 220, h * 0.62, 440, 18), _load_frac, Color(0.78, 0.84, 0.9))
 		return
-	if screen == Screen.PAUSE or screen == Screen.DEATH or screen == Screen.WIN or screen == Screen.NOTE or screen == Screen.CRAFT:
+	if screen == Screen.PAUSE or screen == Screen.DEATH or screen == Screen.WIN or screen == Screen.NOTE or screen == Screen.CRAFT or screen == Screen.BESTIARY:
 		_canvas.draw_rect(Rect2(0, 0, w, h), Color(0.03, 0.04, 0.06, 0.78))
 		if screen == Screen.CRAFT:
 			_draw_craft(font, w, h)
+		elif screen == Screen.BESTIARY:
+			_draw_bestiary(font, w, h)
 		_draw_screen_buttons(font)
 		return
 	if not playing:
@@ -804,6 +815,36 @@ func _draw_screen_buttons(font: Font) -> void:
 		var fs := 30 if r.size.y > 60 else 24
 		var ts: Vector2 = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
 		_canvas.draw_string(font, r.position + Vector2((r.size.x - ts.x) * 0.5, r.size.y * 0.5 + fs * 0.35), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1, 0.98) if en else Color(0.75, 0.75, 0.78))
+
+
+## Every kind of creature in a grid: the ones met show their name, sex and what they do; the rest stay hidden until the player meets them.
+func _draw_bestiary(font: Font, w: float, h: float) -> void:
+	var ids := Bestiary.ids()
+	ids.append("bellkeeper")
+	var cols := 6
+	var cw := (w - 48.0) / cols
+	var rows := int(ceil(float(ids.size()) / cols))
+	var ch := minf(86.0, (h - 160.0) / rows)
+	var met: Dictionary = game.met if game != null else {}
+	var seen := 0
+	for i in ids.size():
+		var id: String = ids[i]
+		var r := Rect2(24 + (i % cols) * cw + 3, 70 + (i / cols) * ch + 3, cw - 6, ch - 6)
+		var known: bool = met.has(id)
+		seen += 1 if known else 0
+		var box := UiArt.box("panel_dark" if known else "panel", 20)
+		if box != null:
+			_canvas.draw_style_box(box, r)
+		else:
+			_canvas.draw_rect(r, Color(0.05, 0.07, 0.1, 0.8))
+		var d := Bestiary.def(id)
+		var name_txt: String = String(d.name) if known else "? ? ?"
+		_canvas.draw_string(font, r.position + Vector2(10, 22), name_txt, HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 20, 15, Color(1, 1, 1, 0.95 if known else 0.4))
+		if known:
+			var sex := Bestiary.sex_of(id)
+			var tr := String(Bestiary.trait_of(id))
+			_canvas.draw_string(font, r.position + Vector2(10, 42), "%s · %s" % ["woman" if sex == "F" else "man", tr], HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 20, 12, Color(0.85, 0.92, 1.0, 0.8))
+	_canvas.draw_string(font, Vector2(24, h - 96), "Met %d of %d" % [seen, ids.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, 0.8))
 
 
 func _draw_craft(font: Font, w: float, h: float) -> void:

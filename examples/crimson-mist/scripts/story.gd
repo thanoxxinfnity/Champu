@@ -22,18 +22,23 @@ var _ambush_enemy: Enemy
 var _boss: Enemy
 
 const SPAWNS := {
-	"clinic": [["mist_walker", Vector3(8.0, 0, -6.0), "dormant"], ["crawler", Vector3(-9.0, 0, -6.5), "dormant"]],
+	"clinic": [["infected_nurse", Vector3(8.0, 0, -6.0), "dormant"], ["crawler", Vector3(-9.0, 0, -6.5), "dormant"], ["office_lady", Vector3(3.0, 0, -18.0), "dormant"]],
 	"market": [
-		["mist_walker", Vector3(-3, 0, -36), "patrol"], ["mist_walker", Vector3(4, 0, -44), "patrol"], ["mist_walker", Vector3(-5, 0, -61), "patrol"],
-		["crawler", Vector3(-4.5, 0, -40.5), "dormant"], ["crawler", Vector3(4, 0, -64), "dormant"],
-		["bloater", Vector3(0, 0, -78), "patrol"], ["mist_walker", Vector3(2, 0, -84), "dormant"]],
+		["mist_walker", Vector3(-3, 0, -36), "patrol"], ["lost_tourist", Vector3(4, 0, -44), "patrol"], ["harbour_hand", Vector3(-5, 0, -61), "patrol"],
+		["crawler", Vector3(-4.5, 0, -40.5), "dormant"], ["hungry_waitress", Vector3(4, 0, -64), "dormant"], ["bloater", Vector3(0, 0, -78), "patrol"],
+		["late_commuter", Vector3(2, 0, -84), "dormant"], ["grocer", Vector3(-6, 0, -50), "dormant"], ["cleaver_cook", Vector3(6, 0, -70), "dormant"],
+		["night_jogger", Vector3(-2, 0, -56), "dormant"], ["plague_doctor", Vector3(7, 0, -75), "dormant"], ["punk_girl", Vector3(-7, 0, -85), "dormant"],
+		["red_veined", Vector3(0, 0, -90), "patrol"], ["housewife", Vector3(-6, 0, -73), "dormant"],
+		["plague_doctor", Vector3(-9.0, 3.5, -82.0), "dormant"]],
 	"church": [
-		["weeper", Vector3(-2, 0, -112), "dormant"], ["mist_walker", Vector3(5, 0, -100), "patrol"], ["mist_walker", Vector3(-4, 0, -96), "patrol"],
-		["mist_walker", Vector3(3, 0, -110), "dormant"]],
+		["weeper", Vector3(-2, 0, -112), "dormant"], ["fallen_priest", Vector3(5, 0, -100), "patrol"], ["pale_bride", Vector3(-4, 0, -96), "patrol"],
+		["lost_student", Vector3(3, 0, -110), "dormant"], ["pale_stalker", Vector3(-6, 0, -118), "dormant"], ["spore_mother", Vector3(6, 0, -120), "patrol"],
+		["granny_creeper", Vector3(0, 0, -104), "dormant"], ["tide_weeper", Vector3(-3, 0, -123), "dormant"]],
 	"road": [
-		["crawler", Vector3(-2, 0, -135), "dormant"], ["crawler", Vector3(2, 0, -140), "dormant"], ["mist_walker", Vector3(0, 0, -148), "patrol"],
-		["mist_walker", Vector3(-3, 0, -156), "patrol"], ["bloater", Vector3(1, 0, -164), "patrol"], ["crawler", Vector3(-2, 0, -170), "dormant"],
-		["mist_walker", Vector3(2, 0, -178), "patrol"], ["crawler", Vector3(0, 0, -184), "dormant"]],
+		["patrolman", Vector3(-2, 0, -135), "dormant"], ["ashen_trooper", Vector3(2, 0, -140), "dormant"], ["cinder_fighter", Vector3(0, 0, -148), "patrol"],
+		["hard_hat", Vector3(-3, 0, -156), "patrol"], ["cinder_nurse", Vector3(1, 0, -164), "patrol"], ["captains_crew", Vector3(-3, 0, -174), "dormant"],
+		["bell_hand", Vector3(-2, 0, -170), "dormant"], ["bloated_baker", Vector3(2, 0, -178), "patrol"], ["wet_widow", Vector3(0, 0, -184), "dormant"],
+		["drowned_girl", Vector3(3, 0, -186), "dormant"]],
 }
 
 const LOOT := {
@@ -43,6 +48,7 @@ const LOOT := {
 	"loot7": ["alcohol", 1, "Search shelf"], "loot8": ["cloth", 1, "Search crates"],
 	"loot9": ["scrap", 1, "Search crates"], "loot10": ["bandage", 1, "Take first-aid kit"],
 	"loot11": ["ammo", 6, "Search crates"], "loot12": ["flare", 1, "Take flare"],
+	"loot13": ["ammo", 8, "Search rooftop crate"],
 }
 
 
