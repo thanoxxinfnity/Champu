@@ -1,0 +1,4 @@
+build/
+.godot/
+raw/
+*.import.bak
