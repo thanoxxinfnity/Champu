@@ -15,7 +15,6 @@ for w in shift_gauntlet vortex_blaster quantum_breaker gravity_carver plasma_mag
 done
 prep loco assets/train/loco.glb vehicle 9000 1024
 prep car_a assets/train/car_a.glb vehicle 7000 1024
-prep car_b assets/train/car_b.glb vehicle 6000 1024
 prep car_c assets/train/car_c.glb vehicle 7000 1024
 for c in a b c d e; do prep city_$c assets/city/city_$c.glb city 9000 1024; done
 prep airship assets/props/airship.glb prop 5000 1024
