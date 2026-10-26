@@ -12,6 +12,7 @@ signal spawned(id: int, pos: Vector3, size: float, vel: Vector3, color_i: int)
 signal broken(pos: Vector3, size: float, color: Color)
 signal incoming(landing: Vector3, eta: float)
 
+const CRATES := ["res://assets/props/crate_a.glb"]
 const COLORS := [Color(0.95, 0.35, 0.3), Color(1.0, 0.7, 0.2), Color(0.35, 0.8, 0.5), Color(0.3, 0.65, 1.0), Color(0.75, 0.45, 1.0), Color(0.9, 0.9, 0.95)]
 
 class Debris:
@@ -28,7 +29,8 @@ class Debris:
 	var on_screen := true
 	var slowed := 0.0              # CHRONO SLIDERS: time scale of this block (0 = normal)
 	var hit_cd := 0.0
-	var mesh: MeshInstance3D
+	var mesh: Node3D                # holder of the crate models (two looks, one shown)
+	var looks: Array[Node3D] = []
 	var shape: CollisionShape3D
 	var notifier: VisibleOnScreenNotifier3D
 
@@ -67,10 +69,18 @@ func _make() -> Debris:
 	d.contact_monitor = true
 	d.max_contacts_reported = 1
 	d.can_sleep = true
-	d.mesh = MeshInstance3D.new()
-	d.mesh.mesh = _shared_box
-	d.mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	d.mesh = Node3D.new()
 	d.add_child(d.mesh)
+	for path in CRATES:
+		var look := ModelKit.fitted(path, 1.0, "center")      # a 1 m crate; the whole holder is scaled to the block's size
+		if look == null:
+			look = Node3D.new()
+			var box := MeshInstance3D.new()
+			box.mesh = _shared_box
+			look.add_child(box)
+		look.visible = false
+		d.mesh.add_child(look)
+		d.looks.append(look)
 	d.shape = CollisionShape3D.new()
 	var bs := BoxShape3D.new()
 	bs.size = Vector3.ONE
@@ -122,7 +132,8 @@ func spawn_block(pos: Vector3, size: float, vel: Vector3, color_i: int, id := -1
 	d.active = true
 	d.visible = true
 	d.mesh.scale = Vector3.ONE * size
-	d.mesh.material_override = Mat.flat(COLORS[d.color_i])
+	for k in d.looks.size():
+		d.looks[k].visible = k == d.color_i % d.looks.size()
 	(d.shape.shape as BoxShape3D).size = Vector3.ONE * size
 	d.mass = 1.0 + size * size
 	d.freeze = false

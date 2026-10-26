@@ -4,6 +4,11 @@ extends RefCounted
 ## A part is [kind, position, size, glow?]: kind "b" = box (size = x,y,z), "c" = cylinder along Z (size = radius, length, unused), "r" = ring (cylinder along Z, flat).
 ## "glow" parts take the weapon's colour and light up; the others are steel greys. Every model points down -Z with its grip at the origin.
 
+## How long each weapon is in the hand, metres (the real models are all different sizes; they are fitted to this).
+const HELD := {"shift_gauntlet": 0.7, "vortex_blaster": 0.9, "quantum_breaker": 1.2, "gravity_carver": 1.0, "plasma_magnet": 0.45, "sonic_impactor": 1.5, "force_gauntlet": 0.6,
+	"seismic_rebounder": 1.0, "saber_grapple": 1.0, "orbital_crush": 0.95, "tactical_beamer": 1.3, "thermo_vaporizer": 0.9, "chrono_sliders": 0.6, "nexus_tether": 0.4,
+	"meteor_burster": 1.1}
+
 const STEEL := Color(0.45, 0.5, 0.6)
 const DARK := Color(0.16, 0.18, 0.24)
 
@@ -28,6 +33,13 @@ const PARTS := {
 
 ## A held model of the weapon. `scale` 1.0 is hand size.
 static func build(id: String, scale := 1.0) -> Node3D:
+	var path := "res://assets/weapons/%s.glb" % id
+	if ModelKit.exists(path):
+		var real := ModelKit.fitted(path, float(HELD.get(id, 0.8)), "center")
+		real.name = "Weapon_" + id
+		real.scale = Vector3.ONE * scale
+		real.set_meta("real", true)
+		return real
 	var root := Node3D.new()
 	root.name = "Weapon_" + id
 	var color: Color = Data.WEAPONS[id].color
@@ -59,6 +71,8 @@ static func build(id: String, scale := 1.0) -> Node3D:
 
 ## The muzzle: where beams and shots start, in the model's own space.
 static func muzzle(id: String) -> Vector3:
+	if ModelKit.exists("res://assets/weapons/%s.glb" % id):
+		return Vector3(0, 0, -float(HELD.get(id, 0.8)) * 0.5)
 	var z := 0.0
 	for part in PARTS.get(id, PARTS["shift_gauntlet"]):
 		var pos: Vector3 = part[1]

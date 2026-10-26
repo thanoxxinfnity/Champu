@@ -32,3 +32,5 @@ trellis-output.glb
 examples/crimson-mist/private/
 examples/crimson-mist/raw/
 *.crimson-mist.env
+
+examples/city-shifter/raw/

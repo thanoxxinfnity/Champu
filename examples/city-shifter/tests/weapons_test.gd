@@ -11,7 +11,8 @@ func _initialize() -> void:
 			ok = ok and w.has(k)
 		T.check(ok, "%s: complete data" % id)
 		var m := WeaponModels.build(id)
-		T.check(m.get_child_count() >= 3 and WeaponModels.muzzle(id).z < 0.0, "%s: model with %d parts" % [id, m.get_child_count()])
+		var meshes := m.find_children("*", "MeshInstance3D", true, false)
+		T.check(m.has_meta("real") and not meshes.is_empty() and WeaponModels.muzzle(id).z < 0.0, "%s: real model with %d meshes" % [id, meshes.size()])
 		m.free()
 	# unlocking
 	var save := {"coins": 0, "best": 0.0, "weapons": []}

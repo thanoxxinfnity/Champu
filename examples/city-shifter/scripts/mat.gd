@@ -55,7 +55,7 @@ static func box(parent: Node, center: Vector3, size: Vector3, m: Material) -> Me
 
 
 ## A static box with a collision shape (layer 1 = world).
-static func solid(parent: Node, center: Vector3, size: Vector3, m: Material, layer := 1) -> StaticBody3D:
+static func solid(parent: Node, center: Vector3, size: Vector3, m: Material, layer := 1, show := true) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.position = center
 	body.collision_layer = layer
@@ -64,6 +64,7 @@ static func solid(parent: Node, center: Vector3, size: Vector3, m: Material, lay
 	mi.mesh = box_mesh(size)
 	mi.material_override = m
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.visible = show
 	body.add_child(mi)
 	var cs := CollisionShape3D.new()
 	var bs := BoxShape3D.new()

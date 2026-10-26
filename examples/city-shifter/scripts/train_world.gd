@@ -13,11 +13,11 @@ var spawn_points: Array[Marker3D] = []
 var progress := 0.0                 # metres travelled
 var speed := Data.TRAIN_SPEED
 var view_dist := 60.0
-var _chunks: Array[MultiMeshInstance3D] = []     # city blocks that slide past: [node, ...], each wraps when it has gone by
+var _chunks: Array[Node3D] = []     # city blocks that slide past: [node, ...], each wraps when it has gone by
 var _chunk_len := 48.0
 var _chunk_n := 5
 var _patterns: Array[Node3D] = []                # periodic things (sleepers, poles): [node] with meta "period"
-var _far: Array[MultiMeshInstance3D] = []
+var _far: Array[Node3D] = []
 var _ships: Array[Node3D] = []
 var _clouds: Array[MeshInstance3D] = []
 var _t := 0.0
@@ -91,53 +91,43 @@ func _environment() -> void:
 	add_child(sun)
 
 
+const CAR_MODELS := ["res://assets/train/car_a.glb", "res://assets/train/car_c.glb"]
+const LOCO_MODEL := "res://assets/train/loco.glb"
+
+
+## The train: real models (a carriage and a flatbed alternating, a locomotive in front) squeezed to the car size, with invisible solid decks, rails and walls
+## underneath that the players actually stand on. Holes in the roof of two cars are drawn as dark pits.
 func _train() -> void:
-	var steel := Mat.flat(Color(0.42, 0.46, 0.55))
-	var dark := Mat.flat(Color(0.16, 0.18, 0.24))
-	var stripe := Mat.flat(Color(0.95, 0.95, 0.98))
-	var warn := Mat.flat(Color(1.0, 0.72, 0.1))
-	var body_cols := [Color(0.2, 0.55, 0.62), Color(0.85, 0.42, 0.2), Color(0.35, 0.4, 0.62), Color(0.72, 0.28, 0.3), Color(0.3, 0.6, 0.4), Color(0.5, 0.5, 0.58)]
+	var dark := Mat.flat(Color(0.12, 0.13, 0.18))
+	var pit := Mat.flat(Color(1.0, 0.45, 0.1), 1.0)
 	var half := Data.CAR_W * 0.5
 	for i in Data.CARS:
 		var cz := car_center_z(i)
-		var body := Mat.flat(body_cols[i % body_cols.size()])
 		var holed := i == 2 or i == 4
-		# the car body under the roof (visual) and the wheels
-		Mat.box(self, Vector3(0, Data.DECK_Y - 1.5, cz), Vector3(Data.CAR_W - 0.1, 2.8, Data.CAR_LEN - 0.3), body)
-		Mat.box(self, Vector3(0, Data.DECK_Y - 3.0, cz), Vector3(Data.CAR_W - 0.6, 0.7, Data.CAR_LEN - 1.0), dark)
-		for wz in [-4.0, -2.8, 2.8, 4.0]:
-			for wx in [-1, 1]:
-				Mat.cyl(self, Vector3(wx * (half - 0.1), 0.0, cz + wz), 0.55, 0.3, dark).rotation_degrees = Vector3(0, 0, 90)
-		# the roof deck: solid; a car with a hole has the deck in two halves
+		var vis := ModelKit.car(CAR_MODELS[i % CAR_MODELS.size()], Data.CAR_W, Data.CAR_LEN - 0.4, Data.DECK_Y)
+		if vis != null:
+			vis.position = Vector3(0, 0, cz)
+			add_child(vis)
+		# the solid roof the players stand on (not drawn: the model above it is what you see)
 		var deck_h := 0.4
 		if holed:
 			var seg := (Data.CAR_LEN - 3.2) * 0.5
-			Mat.solid(self, Vector3(0, Data.DECK_Y - deck_h * 0.5, cz - Data.CAR_LEN * 0.5 + seg * 0.5), Vector3(Data.CAR_W, deck_h, seg), steel)
-			Mat.solid(self, Vector3(0, Data.DECK_Y - deck_h * 0.5, cz + Data.CAR_LEN * 0.5 - seg * 0.5), Vector3(Data.CAR_W, deck_h, seg), steel)
-			Mat.box(self, Vector3(0, Data.DECK_Y - 1.2, cz), Vector3(Data.CAR_W - 0.4, 0.2, 3.2), Mat.flat(Color(1.0, 0.45, 0.1), 1.2))
+			Mat.solid(self, Vector3(0, Data.DECK_Y - deck_h * 0.5, cz - Data.CAR_LEN * 0.5 + seg * 0.5), Vector3(Data.CAR_W, deck_h, seg), dark, 1, false)
+			Mat.solid(self, Vector3(0, Data.DECK_Y - deck_h * 0.5, cz + Data.CAR_LEN * 0.5 - seg * 0.5), Vector3(Data.CAR_W, deck_h, seg), dark, 1, false)
+			Mat.box(self, Vector3(0, Data.DECK_Y + 0.03, cz), Vector3(Data.CAR_W - 0.3, 0.05, 3.2), dark)
 			for hz in [-1.6, 1.6]:
-				Mat.box(self, Vector3(0, Data.DECK_Y + 0.02, cz + hz), Vector3(Data.CAR_W, 0.06, 0.25), warn)
+				Mat.box(self, Vector3(0, Data.DECK_Y + 0.05, cz + hz), Vector3(Data.CAR_W - 0.3, 0.06, 0.2), pit)
 		else:
-			Mat.solid(self, Vector3(0, Data.DECK_Y - deck_h * 0.5, cz), Vector3(Data.CAR_W, deck_h, Data.CAR_LEN), steel)
-		# painted stripes and low side rails (rails collide: a bump, not a fence)
-		Mat.box(self, Vector3(0, Data.DECK_Y + 0.02, cz), Vector3(0.4, 0.05, Data.CAR_LEN - 0.4), stripe)
+			Mat.solid(self, Vector3(0, Data.DECK_Y - deck_h * 0.5, cz), Vector3(Data.CAR_W, deck_h, Data.CAR_LEN), dark, 1, false)
 		for sx in [-1.0, 1.0]:
-			Mat.solid(self, Vector3(sx * (half - 0.08), Data.DECK_Y + 0.3, cz), Vector3(0.16, 0.6, Data.CAR_LEN), dark)
-			for rz in [-5.0, 0.0, 5.0]:
-				Mat.box(self, Vector3(sx * (half - 0.08), Data.DECK_Y + 0.75, cz + rz), Vector3(0.2, 0.3, 0.2), warn)
-		# the coupling gap to the next car: chain and hitch
-		if i < Data.CARS - 1:
-			var gz := cz - Data.CAR_LEN * 0.5 - Data.CAR_GAP * 0.5
-			Mat.box(self, Vector3(0, Data.DECK_Y - 1.6, gz), Vector3(0.5, 0.35, Data.CAR_GAP + 0.6), dark)
-			Mat.box(self, Vector3(0.0, Data.DECK_Y - 1.0, gz), Vector3(1.4, 0.12, Data.CAR_GAP), Mat.flat(Color(0.9, 0.4, 0.1), 0.8))
-	# the engine in front: a cab, a nose and a headlamp
+			Mat.solid(self, Vector3(sx * (half - 0.08), Data.DECK_Y + 0.3, cz), Vector3(0.16, 0.6, Data.CAR_LEN), dark, 1, false)
+	# the locomotive in front
 	var ez := car_center_z(Data.CARS) + 1.0
-	var eng := Mat.flat(Color(0.75, 0.2, 0.18))
-	Mat.solid(self, Vector3(0, Data.DECK_Y - 0.2, ez), Vector3(Data.CAR_W, 0.4, Data.CAR_LEN - 2.0), steel)
-	Mat.box(self, Vector3(0, Data.DECK_Y - 1.5, ez), Vector3(Data.CAR_W - 0.1, 2.8, Data.CAR_LEN - 2.0), eng)
-	Mat.box(self, Vector3(0, Data.DECK_Y + 1.4, ez + 2.0), Vector3(Data.CAR_W - 0.6, 2.8, 4.0), eng)
-	Mat.box(self, Vector3(0, Data.DECK_Y + 2.0, ez + 0.0), Vector3(1.2, 2.0, 1.2), dark)
-	Mat.box(self, Vector3(0, Data.DECK_Y + 1.4, ez - 0.05 - 2.0 + 0.1), Vector3(2.4, 1.0, 0.1), Mat.flat(Color(0.5, 0.85, 1.0), 1.0))
+	var loco := ModelKit.car(LOCO_MODEL, Data.CAR_W, Data.CAR_LEN - 2.0, Data.DECK_Y)
+	if loco != null:
+		loco.position = Vector3(0, 0, ez)
+		add_child(loco)
+	Mat.solid(self, Vector3(0, Data.DECK_Y - 0.2, ez), Vector3(Data.CAR_W, 0.4, Data.CAR_LEN - 2.0), dark, 1, false)
 	Mat.box(self, Vector3(0, Data.DECK_Y - 0.8, ez - (Data.CAR_LEN - 2.0) * 0.5 - 0.1), Vector3(1.0, 0.6, 0.2), Mat.unlit(Color(1.0, 0.95, 0.7)))
 	goal_z = ez + 1.0
 	# spawn markers on the roof of the last car: two columns, four rows
@@ -171,83 +161,59 @@ func _track() -> void:
 	mi.set_meta("base_z", 0.0)
 	add_child(mi)
 	_patterns.append(mi)
-	# lamp poles on both sides
-	var pm := MultiMesh.new()
-	pm.transform_format = MultiMesh.TRANSFORM_3D
-	pm.mesh = Mat.box_mesh(Vector3(0.25, 7.0, 0.25))
-	var pn := 24
-	pm.instance_count = pn
-	for k in pn:
-		var side := -1.0 if k % 2 == 0 else 1.0
-		pm.set_instance_transform(k, Transform3D(Basis.IDENTITY, Vector3(side * 5.4, 2.5, -float(k / 2) * 18.0 + 60.0)))
-	var pmi := MultiMeshInstance3D.new()
-	pmi.multimesh = pm
-	pmi.material_override = Mat.flat(Color(0.2, 0.22, 0.3))
-	pmi.set_meta("period", 36.0)
-	add_child(pmi)
-	_patterns.append(pmi)
-	var lm := MultiMesh.new()
-	lm.transform_format = MultiMesh.TRANSFORM_3D
-	lm.mesh = Mat.box_mesh(Vector3(0.9, 0.3, 0.5))
-	lm.instance_count = pn
-	for k in pn:
-		var side2 := -1.0 if k % 2 == 0 else 1.0
-		lm.set_instance_transform(k, Transform3D(Basis.IDENTITY, Vector3(side2 * 4.9, 6.1, -float(k / 2) * 18.0 + 60.0)))
-	var lmi := MultiMeshInstance3D.new()
-	lmi.multimesh = lm
-	lmi.material_override = Mat.unlit(Color(1.0, 0.85, 0.5))
-	lmi.set_meta("period", 36.0)
-	add_child(lmi)
-	_patterns.append(lmi)
+	# lamp posts on both sides: the real model, one multimesh, sliding by the period
+	var lamp := ModelKit.first_mesh("res://assets/props/lamp.glb")
+	if lamp != null:
+		var lb := lamp.get_aabb()
+		var k := 7.5 / maxf(lb.size.y, 0.0001)           # the model is prepared upright along its own Y (glTF up)
+		var pm := MultiMesh.new()
+		pm.transform_format = MultiMesh.TRANSFORM_3D
+		pm.mesh = lamp
+		var pn := 24
+		pm.instance_count = pn
+		for q in pn:
+			var side := -1.0 if q % 2 == 0 else 1.0
+			var basis := Basis.from_scale(Vector3.ONE * k).rotated(Vector3.UP, 0.0 if side < 0.0 else PI)
+			pm.set_instance_transform(q, Transform3D(basis, Vector3(side * 5.2, -0.6 - lb.position.y * k, -float(q / 2) * 18.0 + 60.0)))
+		var pmi := MultiMeshInstance3D.new()
+		pmi.multimesh = pm
+		pmi.set_meta("period", 36.0)
+		add_child(pmi)
+		_patterns.append(pmi)
 
 
 # ── the city that slides past ────────────────────────────────────────────────
 
+const CITY_NEAR := ["res://assets/city/city_a.glb", "res://assets/city/city_c.glb"]
+const CITY_FAR := "res://assets/city/city_b.glb"
+
+
+## The city is a handful of real skyline models (one mesh each) that slide past: five near blocks a side, wrapping round, and a far skyline that moves slower.
 func _city() -> void:
-	var cols := [Color(0.3, 0.34, 0.5), Color(0.5, 0.36, 0.42), Color(0.24, 0.3, 0.42), Color(0.62, 0.44, 0.36), Color(0.36, 0.42, 0.5), Color(0.55, 0.52, 0.62)]
 	for side in [-1.0, 1.0]:
 		for c in _chunk_n:
-			var mmi := _make_chunk(side, c, 19.0, 9, cols, 5.0, 24.0, true)
-			mmi.position.z = -float(c) * _chunk_len + 30.0
-			add_child(mmi)
-			_chunks.append(mmi)
-	# the skyline far away: fewer, bigger blocks, slower (parallax)
+			var model := ModelKit.fitted(CITY_NEAR[(c + (1 if side > 0.0 else 0)) % CITY_NEAR.size()], _chunk_len * 1.05, "bottom")
+			if model == null:
+				continue
+			var sz: Vector3 = model.get_meta("size")
+			var holder := Node3D.new()
+			holder.add_child(model)
+			model.rotation.y = 0.0 if side < 0.0 else PI
+			holder.position = Vector3(side * (17.0 + sz.x * 0.5), -1.0, -float(c) * _chunk_len + 30.0)
+			add_child(holder)
+			_chunks.append(holder)
 	for side in [-1.0, 1.0]:
 		for c in 3:
-			var far_chunk := _make_chunk(side, c + 40, 70.0, 7, cols, 40.0, 120.0, false)
-			far_chunk.position.z = -float(c) * 120.0 + 60.0
-			far_chunk.set_meta("len", 120.0)
-			add_child(far_chunk)
-			_far.append(far_chunk)
-
-
-func _make_chunk(side: float, seed_i: int, x_off: float, count: int, cols: Array, hmin: float, hmax: float, near: bool) -> MultiMeshInstance3D:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 1000 + seed_i * 7 + (1 if side > 0 else 0)
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	mm.mesh = Mat.box_mesh(Vector3(1, 1, 1))
-	mm.instance_count = count
-	var span := _chunk_len if near else 120.0
-	for k in count:
-		var w := rng.randf_range(6.0, 12.0) * (1.0 if near else 3.0)
-		var d := span / float(count) * rng.randf_range(0.7, 0.95)
-		var h := rng.randf_range(hmin, hmax)
-		var x := side * (x_off + w * 0.5 + rng.randf_range(0.0, 6.0))
-		var z := -float(k) * span / float(count) - span * 0.5 / float(count)
-		mm.set_instance_transform(k, Transform3D(Basis.from_scale(Vector3(w, h, d)), Vector3(x, h * 0.5 - 1.0, z)))
-		var c: Color = cols[rng.randi() % cols.size()]
-		mm.set_instance_color(k, c if near else c.darkened(0.25))
-	var mi := MultiMeshInstance3D.new()
-	mi.multimesh = mm
-	var m := StandardMaterial3D.new()
-	m.vertex_color_use_as_albedo = true
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_PER_VERTEX
-	mi.material_override = m
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# lit windows: a thin emissive-looking strip painted as a second instance set is not worth a draw call; the colour variation carries the look
-	return mi
+			var far_model := ModelKit.fitted(CITY_FAR, 130.0, "bottom")
+			if far_model == null:
+				continue
+			var fsz: Vector3 = far_model.get_meta("size")
+			var fh := Node3D.new()
+			fh.add_child(far_model)
+			fh.position = Vector3(side * (70.0 + fsz.x * 0.5), -2.0, -float(c) * 120.0 + 60.0)
+			fh.set_meta("len", 120.0)
+			add_child(fh)
+			_far.append(fh)
 
 
 func _sky() -> void:
@@ -262,13 +228,15 @@ func _sky() -> void:
 		cm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(cm)
 		_clouds.append(cm)
-	# the siege ships: dark hulls with glowing undersides hanging over the horizon
+	# the siege ships: the airship model, darkened, hanging over the horizon
 	for k in 3:
-		var ship := Node3D.new()
-		Mat.box(ship, Vector3.ZERO, Vector3(26, 5, 8), Mat.flat(Color(0.12, 0.13, 0.2)))
-		Mat.box(ship, Vector3(0, -2.8, 0), Vector3(18, 1.2, 5), Mat.flat(Color(1.0, 0.35, 0.15), 1.6))
-		Mat.box(ship, Vector3(0, 3.2, 0), Vector3(8, 2.4, 5), Mat.flat(Color(0.2, 0.22, 0.32)))
+		var ship := ModelKit.fitted("res://assets/props/airship.glb", 38.0, "center")
+		if ship == null:
+			continue
+		for mi in ship.find_children("*", "MeshInstance3D", true, false):
+			(mi as MeshInstance3D).material_overlay = Mat.unlit(Color(0.12, 0.06, 0.16), 0.55)
 		ship.position = Vector3(-60.0 + k * 55.0, 48.0 + k * 6.0, -60.0 - k * 40.0)
+		ship.rotation.y = -PI * 0.5 + float(k) * 0.3
 		ship.set_meta("phase", float(k) * 2.1)
 		add_child(ship)
 		_ships.append(ship)
@@ -305,11 +273,11 @@ func update(delta: float) -> void:
 func set_view_distance(dist: float) -> void:
 	view_dist = clampf(dist, 30.0, 80.0)
 	for ch in _chunks:
-		ch.visibility_range_end = view_dist + 24.0
-		ch.visibility_range_end_margin = 8.0
-		ch.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
-	for f in _far:
-		f.visibility_range_end = 0.0
+		for mi in ch.find_children("*", "MeshInstance3D", true, false):
+			var g := mi as GeometryInstance3D
+			g.visibility_range_end = view_dist + 30.0
+			g.visibility_range_end_margin = 8.0
+			g.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 	if env != null:
 		env.fog_density = 2.6 / view_dist
 
