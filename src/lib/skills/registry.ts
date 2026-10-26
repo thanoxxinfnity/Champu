@@ -49,6 +49,29 @@ Steps:
 If the bridge is offline, complete steps 1-4 and mark 5-6 as blocked. Do not fabricate a build result.`,
   },
   {
+    command: 'phone-test',
+    name: 'Phone testing (ARTEMIS)',
+    description: 'Drive a real Android phone or emulator with plain-language tasks through Google ARTEMIS (Apache-2.0), set up on the terminal.',
+    suite: 'android',
+    lane: 'B',
+    icon: 'phone',
+    argHint: '<what to do or check on the phone>',
+    template: `Use ARTEMIS (https://github.com/google/artemis, Apache-2.0) to do this on a real Android device or emulator.
+
+Task: {{input}}
+
+ARTEMIS is a Python agent that looks at the phone's screen and UI tree and taps, types and scrolls from a plain-language instruction. It needs a machine that can reach the device over ADB, so it cannot work on a terminal that has no phone attached.
+
+Steps:
+1. Check the terminal first: \`adb devices -l\` must list the device as \`device\` (not \`unauthorized\` or \`offline\`), and \`python3 --version\` must be 3.12 or newer. If no device shows, say so plainly and give the two ways to connect one (USB debugging on a computer, or \`adb pair\` / \`adb connect <ip:port>\` over Wi-Fi) — do not pretend a run happened. If several devices show, ask which serial to use.
+2. Install once: \`git clone --depth 1 https://github.com/google/artemis.git && cd artemis && ./start.sh\` (it installs adb, scrcpy, ffmpeg and uv). It reads the model key from the environment (Gemini by default, OpenAI and compatible endpoints are presets in config/artemis.jsonc) — use a key already held by the terminal; never print it or write it into a file in the project.
+3. Run the task: \`uv run artemis run "<the task, one clear sentence>" --profile flash\` for short, deterministic jobs; use the Pro profile for long jobs that need a plan, checks or a written report. Add the wait time the model needs: a step takes about 5 seconds, so ask for a 25 second wait when you need 30.
+4. Report what actually happened: each screen reached, what was seen, and the screenshots. Say which steps were verified on the device and which were not.
+5. If asked for a repeatable test, write it in the requested framework with explicit waits, based only on the screens ARTEMIS really visited.
+
+If the terminal is offline, stop after the plan and mark steps 1-4 as blocked.`,
+  },
+  {
     command: 'exe-to-apk',
     name: 'EXE → APK',
     description: 'Triage a Windows binary or desktop source tree and migrate it to Android.',
