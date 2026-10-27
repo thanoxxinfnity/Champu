@@ -353,6 +353,10 @@ func _build_ui() -> void:
 		save.name = n if n != "" else "PLAYER"
 		Data.write_save(save)
 		lobby.set_save(save))
+	lobby.settings_changed.connect(func(sens: float, assist: int) -> void:
+		save.settings = {"sens": sens, "assist": assist}
+		Data.write_save(save)
+		_apply_settings())
 	lobby.sound_toggled.connect(func(muted: bool) -> void: audio.set_muted(muted))
 	lobby.play_online.connect(_online_request)
 	online.room_info.connect(lobby.set_room)
@@ -483,6 +487,15 @@ func _show_preview() -> void:
 	lobby3d.add_child(preview)
 	preview.setup(Data.CAST_ORDER[sel])
 	preview.visible = lobby == null or lobby.screen == "home"
+
+
+## Look speed and aim assist from the save, on the touch HUD and on my hero.
+func _apply_settings() -> void:
+	var st: Dictionary = save.get("settings", {})
+	if hud != null:
+		hud.look_sens = 0.0042 * clampf(float(st.get("sens", 1.0)), 0.5, 2.0)
+	if player != null and is_instance_valid(player):
+		player.assist_level = clampi(int(st.get("assist", 2)), 0, 2)
 
 
 func _refresh_lobby() -> void:
@@ -816,6 +829,7 @@ func start_play() -> void:
 	player.setup(self, world, spawner, Data.CAST_ORDER[sel], net.local_id if net.online() else 1, true)
 	player.global_position = world.spawn_points[_slot % world.spawn_points.size()].global_position
 	player.last_safe = player.global_position
+	_apply_settings()
 	player.hurt.connect(func(_a: float) -> void: shake(0.4))
 	player.respawned.connect(func(reason: String) -> void:
 		hud.toast("Back on the roof" if reason == "fell" else "Stability gone — back on the roof"))

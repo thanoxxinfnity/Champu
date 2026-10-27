@@ -17,6 +17,7 @@ signal sound_toggled(muted: bool)
 signal skill_bought(hero: String, skill: String)
 signal screen_changed(name: String)
 signal hero_tapped
+signal settings_changed(sens: float, assist: int)      # look sensitivity 0.5..2.0, aim assist 0 off / 1 low / 2 full lock
 signal view_drag(delta: Vector2)           # a finger or mouse dragging over the 3D model (the 360 view)
 signal view_zoom(factor: float)            # a pinch or the mouse wheel
 signal view_cat(cat: String)               # "heroes" | "weapons" | "rides"
@@ -39,6 +40,10 @@ var _match_pick := "solo"
 var _match_chips := {}
 var _code_in: LineEdit
 var _name_in: LineEdit
+var _sens_in: HSlider
+var _sens_val: Label
+var _assist_btn: UIKit.AnimeButton
+var _assist := 2
 var _room := {}
 var _petal_t := 0.0
 
@@ -599,8 +604,8 @@ func _build_settings() -> Control:
 	p.anchor_bottom = 0.5
 	p.offset_left = -300
 	p.offset_right = 300
-	p.offset_top = -230
-	p.offset_bottom = 200
+	p.offset_top = -300
+	p.offset_bottom = 290
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
 	p.add_child(v)
@@ -624,6 +629,25 @@ func _build_settings() -> Control:
 	_name_in.text_submitted.connect(func(t: String) -> void: name_changed.emit(t.strip_edges()))
 	_name_in.focus_exited.connect(func() -> void: name_changed.emit(_name_in.text.strip_edges()))
 	v.add_child(_name_in)
+	var sl := UIKit.label("LOOK SPEED", v, 20, UIKit.INK)
+	sl.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0))
+	sl.add_theme_constant_override("outline_size", 0)
+	_sens_val = sl
+	_sens_in = HSlider.new()
+	_sens_in.min_value = 0.5
+	_sens_in.max_value = 2.0
+	_sens_in.step = 0.05
+	_sens_in.value = 1.0
+	_sens_in.custom_minimum_size = Vector2(0, 40)
+	_sens_in.value_changed.connect(func(x: float) -> void:
+		_sens_val.text = "LOOK SPEED  x%.2f" % x
+		settings_changed.emit(x, _assist))
+	v.add_child(_sens_in)
+	_assist_btn = UIKit.button("AIM ASSIST: FULL LOCK", v, "bolt", UIKit.ORANGE, Vector2(0, 62), 26)
+	_assist_btn.pressed.connect(func() -> void:
+		_assist = (_assist + 1) % 3
+		_assist_btn.text = _assist_text()
+		settings_changed.emit(_sens_in.value, _assist))
 	var snd := UIKit.button("SOUND: ON", v, "bolt", UIKit.MINT, Vector2(0, 62), 28)
 	snd.pressed.connect(func() -> void:
 		var off := snd.text == "SOUND: ON"
@@ -638,6 +662,10 @@ func _build_settings() -> Control:
 	rec.add_theme_constant_override("outline_size", 0)
 	rec.name = "Record"
 	return root
+
+
+func _assist_text() -> String:
+	return "AIM ASSIST: " + ["OFF", "LOW", "FULL LOCK"][_assist]
 
 
 ## The 360 viewer: the model stands on the stage behind this screen; drag to turn it, pinch or wheel to zoom, the arrows step through the list.
@@ -806,6 +834,11 @@ func _refresh() -> void:
 	_level_badge.queue_redraw()
 	if _name_in != null and not _name_in.has_focus():
 		_name_in.text = String(save.get("name", "PLAYER"))
+		var st: Dictionary = save.get("settings", {})
+		_assist = clampi(int(st.get("assist", 2)), 0, 2)
+		_assist_btn.text = _assist_text()
+		_sens_in.set_value_no_signal(float(st.get("sens", 1.0)))
+		_sens_val.text = "LOOK SPEED  x%.2f" % _sens_in.value
 	var sel: Dictionary = Data.CAST[String(save.get("char", "outlaw"))]
 	var hi: Dictionary = _info.get("home", {})
 	if not hi.is_empty():

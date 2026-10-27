@@ -41,6 +41,10 @@ var arm: SpringArm3D
 var yaw := 0.0
 var pitch := -0.18
 var move_input := Vector2.ZERO          # x right, y forward (stick up = +1)
+var assist_level := 2                    # aim assist, like Free Fire's default: 0 off, 1 low, 2 full lock-on (Settings)
+var lock_target: PlayerController        # the enemy the assist is holding right now
+var _lock_marker: Sprite3D
+var _lock_scan := 0.0
 var look_delta := Vector2.ZERO          # radians this frame (set by the HUD)
 var jet_held := false
 var jet := JetpackSystem.new()           # fuel tank and heat gauge
@@ -162,6 +166,8 @@ func _physics_process(delta: float) -> void:
 	shield = maxf(0.0, shield - delta)
 	slow_t = maxf(0.0, slow_t - delta)
 	_since_hit += delta
+	if not is_bot and cam != null:
+		_update_lock(delta)
 	if alive and lethal and _since_hit > 5.0 and hp < max_hp and float(info.get("regen", 0.0)) > 0.0:
 		hp = minf(max_hp, hp + float(info.regen) * delta)
 	if nametag != null:
@@ -432,6 +438,82 @@ func _play(name: String, db := 0.0, pitch := 1.0) -> void:
 
 func aim_dir() -> Vector3:
 	return (Basis.from_euler(Vector3(0, yaw, 0)) * Basis.from_euler(Vector3(pitch, 0, 0))) * Vector3(0, 0, -1)
+
+
+## The enemy the crosshair is closest to: inside a cone (wider at full assist), in range, alive, on another team and not behind a wall.
+func find_lock(reach := 55.0) -> PlayerController:
+	if assist_level <= 0 or not is_local or is_bot or not alive:
+		return null
+	var half := deg_to_rad(34.0 if assist_level >= 2 else 14.0)
+	var dir := aim_dir()
+	var from := eye()
+	var best: PlayerController = null
+	var best_a := half
+	for t in Combat.enemies(self):
+		var to := Combat.center(t) - from
+		var d := to.length()
+		if d < 1.0 or d > reach:
+			continue
+		var a := dir.angle_to(to / d)
+		if d < 8.0:
+			a *= 0.5                              # close ones are easy to hold
+		if a >= best_a:
+			continue
+		var q := PhysicsRayQueryParameters3D.create(from, Combat.center(t), 1)
+		var hit := get_world_3d().direct_space_state.intersect_ray(q)
+		if not hit.is_empty() and (hit.position as Vector3).distance_to(Combat.center(t)) > 1.5:
+			continue
+		best = t
+		best_a = a
+	return best
+
+
+## The direction a shot really takes: straight at the locked enemy (full assist), or leaning towards it (low), else where the crosshair points.
+func assisted_dir(dir: Vector3) -> Vector3:
+	var t := find_lock()
+	if t == null:
+		return dir
+	var want := (Combat.center(t) - eye()).normalized()
+	var k := 1.0 if assist_level >= 2 else 0.5
+	var out := dir.slerp(want, k) if dir.dot(want) < 0.9999 else want
+	yaw = lerp_angle(yaw, atan2(-out.x, -out.z), 0.6 * k)     # the hero turns to face the target
+	pitch = clampf(lerpf(pitch, asin(clampf(out.y, -1.0, 1.0)), 0.6 * k), -0.75, 0.4)
+	return out.normalized()
+
+
+func _update_lock(delta: float) -> void:
+	_lock_scan -= delta
+	if _lock_scan > 0.0:
+		return
+	_lock_scan = 0.1
+	lock_target = find_lock() if (game != null and game.get("state") == 2) else null
+	if _lock_marker == null:
+		_lock_marker = Sprite3D.new()
+		var img := Image.create(96, 96, false, Image.FORMAT_RGBA8)
+		for y in 96:
+			for x in 96:
+				var r := Vector2(x - 47.5, y - 47.5).length()
+				var a := clampf(1.0 - absf(r - 38.0) / 3.5, 0.0, 1.0)
+				var ang := fposmod(atan2(y - 47.5, x - 47.5), TAU)
+				if r < 30.0 and (absf(x - 47.5) < 2.0 or absf(y - 47.5) < 2.0) and r > 14.0:
+					a = 1.0                       # cross hairs
+				img.set_pixel(x, y, Color(1.0, 0.25, 0.3, a))
+		_lock_marker.texture = ImageTexture.create_from_image(img)
+		_lock_marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_lock_marker.fixed_size = true
+		_lock_marker.pixel_size = 0.0007
+		_lock_marker.no_depth_test = true
+		_lock_marker.shaded = false
+		_lock_marker.render_priority = 5
+		get_tree().root.add_child(_lock_marker)
+	_lock_marker.visible = lock_target != null and is_instance_valid(lock_target)
+	if _lock_marker.visible:
+		_lock_marker.global_position = Combat.center(lock_target)
+
+
+func _exit_tree() -> void:
+	if _lock_marker != null and is_instance_valid(_lock_marker):
+		_lock_marker.queue_free()
 
 
 func flat_forward() -> Vector3:

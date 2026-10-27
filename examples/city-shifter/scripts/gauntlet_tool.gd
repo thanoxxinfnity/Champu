@@ -125,7 +125,7 @@ func give(id: String) -> bool:
 func drop_all() -> Array[String]:
 	var out: Array[String] = []
 	for id in inventory:
-		if id != "shift_gauntlet" and id != "hammer":
+		if id != "shift_gauntlet" and id != "hammer" and id != "nova_blaster":
 			out.append(id)
 	return out
 
@@ -136,8 +136,10 @@ func reset_loadout() -> void:
 	locked.clear()
 	inventory.append("shift_gauntlet")
 	inventory.append("hammer")
+	inventory.append("nova_blaster")                 # everybody starts with the anime pistol
 	charge["shift_gauntlet"] = 1.0
 	charge["hammer"] = 1.0
+	charge["nova_blaster"] = 1.0
 	equip("shift_gauntlet")
 	inventory_changed.emit()
 
@@ -175,6 +177,8 @@ func fire() -> bool:
 	shots += 1
 	var origin := player.eye()
 	var dir := player.aim_dir()
+	if player.is_local and not player.is_bot:
+		dir = player.assisted_dir(dir)               # Free-Fire-style lock: the shot goes at the enemy in the crosshair's cone
 	if melee:
 		_swing(origin, dir)
 		fired.emit(weapon, origin, dir, origin + dir * float(Data.MELEE[weapon].reach))
