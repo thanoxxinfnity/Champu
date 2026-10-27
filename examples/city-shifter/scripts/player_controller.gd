@@ -325,6 +325,8 @@ func _roof_is_solid_here() -> bool:
 
 func fall_out(reason: String) -> void:
 	hp = maxf(hp, max_hp * 0.5)
+	if reason == "fell" and game != null and game.get("hud") != null and is_local and not is_bot:
+		game.hud.falls_caught += 1
 	respawn_at(last_safe + Vector3(0, 0.6, 0), reason)
 
 

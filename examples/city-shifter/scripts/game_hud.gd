@@ -30,6 +30,8 @@ var distance := 0.0
 var round_no := 1
 var coins := 0
 var ping_ms := -1                        # -1 = offline
+var debug_overlay := false               # Settings → DEBUG: frame rate, draw calls, objects, falls caught by the safety floor
+var falls_caught := 0
 var block_name := "STEEL"
 var block_color := Color.WHITE
 var weapon_id := "shift_gauntlet"
@@ -406,6 +408,12 @@ func _draw_all() -> void:
 		_canvas.draw_rect(Rect2(sx, 78, 260, 8), Color(1, 1, 1, 0.14))
 		for m in minimap:
 			_canvas.draw_circle(Vector2(sx + clampf(1.0 - (float(m[0]) / -90.0), 0.0, 1.0) * 260.0, 82), 5.0, m[2])
+	if debug_overlay:
+		var dbg := "FPS %d   DRAW %d   OBJ %d   TRIS %dk   MEM %d MB   FALLS %d" % [Engine.get_frames_per_second(),
+			int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)), int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)),
+			int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME) / 1000.0), int(Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0), falls_caught]
+		_plate(Rect2(16, h - 40, 640, 28), Color(0.05, 0.04, 0.12, 0.8), Color(1, 1, 1, 0.4), 10, 2)
+		_text(dbg, Vector2(26, h - 20), 15, Color(0.6, 1.0, 0.7), HORIZONTAL_ALIGNMENT_LEFT, 620.0)
 	# PING
 	if ping_ms >= 0:
 		_plate(Rect2(w - 366, 14, 110, 30), Color(0.1, 0.07, 0.22, 0.75), Color(1, 1, 1, 0.5), 14, 2)

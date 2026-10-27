@@ -22,6 +22,7 @@ signal lan_find
 signal lan_join(ip: String)
 signal weapon_action(id: String)           # unlock or equip (the train-run gauntlet)
 signal weapon_view(id: String)             # open the 360 viewer on it
+signal debug_toggled(on: bool)
 signal settings_changed(sens: float, assist: int)      # look sensitivity 0.5..2.0, aim assist 0 off / 1 low / 2 full lock
 signal view_drag(delta: Vector2)           # a finger or mouse dragging over the 3D model (the 360 view)
 signal view_zoom(factor: float)            # a pinch or the mouse wheel
@@ -664,7 +665,12 @@ func _build_settings() -> Control:
 		_assist = (_assist + 1) % 3
 		_assist_btn.text = _assist_text()
 		settings_changed.emit(_sens_in.value, _assist))
-	var snd := UIKit.button("SOUND: ON", v, "bolt", UIKit.MINT, Vector2(0, 62), 28)
+	var dbg := UIKit.button("DEBUG INFO: OFF", v, "bolt", UIKit.PURPLE, Vector2(0, 50), 22)
+	dbg.pressed.connect(func() -> void:
+		var on := dbg.text.ends_with("OFF")
+		dbg.text = "DEBUG INFO: ON" if on else "DEBUG INFO: OFF"
+		debug_toggled.emit(on))
+	var snd := UIKit.button("SOUND: ON", v, "bolt", UIKit.MINT, Vector2(0, 56), 26)
 	snd.pressed.connect(func() -> void:
 		var off := snd.text == "SOUND: ON"
 		snd.text = "SOUND: OFF" if off else "SOUND: ON"

@@ -377,6 +377,7 @@ func _build_ui() -> void:
 		save.settings = {"sens": sens, "assist": assist}
 		Data.write_save(save)
 		_apply_settings())
+	lobby.debug_toggled.connect(func(on: bool) -> void: hud.debug_overlay = on)
 	lobby.sound_toggled.connect(func(muted: bool) -> void: audio.set_muted(muted))
 	lobby.play_online.connect(_online_request)
 	online.room_info.connect(lobby.set_room)
