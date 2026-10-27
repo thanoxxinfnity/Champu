@@ -186,6 +186,71 @@ static func draw_icon(ci: CanvasItem, name: String, c: Vector2, s: float, col: C
 			ci.draw_arc(c + Vector2(0, -h * 0.1), h * 0.75, 0, TAU, 20, INK, lw)
 			ci.draw_circle(c + Vector2(-h * 0.3, -h * 0.15), h * 0.2, INK)
 			ci.draw_circle(c + Vector2(h * 0.3, -h * 0.15), h * 0.2, INK)
+		"jet":
+			# a jetpack: two canisters with flames under them
+			for k in [-1.0, 1.0]:
+				var cx: float = c.x + k * h * 0.42
+				var can := Rect2(Vector2(cx - h * 0.28, c.y - h * 0.85), Vector2(h * 0.56, h * 1.1))
+				ci.draw_rect(can, col)
+				ci.draw_rect(can, INK, false, lw)
+				var fl := PackedVector2Array([Vector2(cx - h * 0.2, c.y + h * 0.3), Vector2(cx + h * 0.2, c.y + h * 0.3), Vector2(cx, c.y + h * (0.95 + 0.0))])
+				ci.draw_colored_polygon(fl, Color(1.0, 0.7, 0.2))
+				ci.draw_polyline(PackedVector2Array([fl[0], fl[2], fl[1]]), INK, lw * 0.8)
+		"burst":
+			var bs := PackedVector2Array()
+			for i in 16:
+				var a3 := float(i) / 16.0 * TAU
+				bs.append(c + Vector2(cos(a3), sin(a3)) * h * (0.95 if i % 2 == 0 else 0.5))
+			ci.draw_colored_polygon(bs, col)
+			bs.append(bs[0])
+			ci.draw_polyline(bs, INK, lw)
+			ci.draw_circle(c, h * 0.22, INK)
+		"cube":
+			var top := PackedVector2Array([c + Vector2(0, -h * 0.85), c + Vector2(h * 0.8, -h * 0.4), c + Vector2(0, h * 0.05), c + Vector2(-h * 0.8, -h * 0.4)])
+			var left := PackedVector2Array([c + Vector2(-h * 0.8, -h * 0.4), c + Vector2(0, h * 0.05), c + Vector2(0, h * 0.9), c + Vector2(-h * 0.8, h * 0.45)])
+			var right := PackedVector2Array([c + Vector2(h * 0.8, -h * 0.4), c + Vector2(0, h * 0.05), c + Vector2(0, h * 0.9), c + Vector2(h * 0.8, h * 0.45)])
+			ci.draw_colored_polygon(top, col.lightened(0.25))
+			ci.draw_colored_polygon(left, col)
+			ci.draw_colored_polygon(right, col.darkened(0.25))
+			for poly in [top, left, right]:
+				var pl: PackedVector2Array = poly
+				pl.append(pl[0])
+				ci.draw_polyline(pl, INK, lw * 0.9)
+		"bridge":
+			for k in 3:
+				var pr := Rect2(c + Vector2(-h * 0.9 + float(k) * h * 0.62, -h * 0.2 + float(k) * h * 0.05), Vector2(h * 0.5, h * 0.9))
+				ci.draw_rect(pr, col)
+				ci.draw_rect(pr, INK, false, lw * 0.9)
+			ci.draw_line(c + Vector2(-h * 0.95, -h * 0.35), c + Vector2(h * 0.95, -h * 0.25), INK, lw)
+		"wheel":
+			ci.draw_circle(c, h * 0.85, col)
+			ci.draw_arc(c, h * 0.85, 0, TAU, 24, INK, lw * 1.3)
+			ci.draw_circle(c, h * 0.3, INK)
+			for i in 5:
+				var a4 := float(i) / 5.0 * TAU
+				ci.draw_line(c, c + Vector2(cos(a4), sin(a4)) * h * 0.7, INK, lw * 0.9)
+		"pause":
+			for k in [-1.0, 1.0]:
+				var br := Rect2(c + Vector2(k * h * 0.4 - h * 0.17, -h * 0.65), Vector2(h * 0.34, h * 1.3))
+				ci.draw_rect(br, col)
+				ci.draw_rect(br, INK, false, lw)
+		"trophy":
+			var cup := PackedVector2Array([c + Vector2(-h * 0.6, -h * 0.75), c + Vector2(h * 0.6, -h * 0.75), c + Vector2(h * 0.45, h * 0.1), c + Vector2(h * 0.12, h * 0.4), c + Vector2(-h * 0.12, h * 0.4), c + Vector2(-h * 0.45, h * 0.1)])
+			ci.draw_colored_polygon(cup, col)
+			cup.append(cup[0])
+			ci.draw_polyline(cup, INK, lw)
+			ci.draw_rect(Rect2(c + Vector2(-h * 0.1, h * 0.38), Vector2(h * 0.2, h * 0.3)), INK)
+			ci.draw_rect(Rect2(c + Vector2(-h * 0.45, h * 0.66), Vector2(h * 0.9, h * 0.2)), col)
+			ci.draw_rect(Rect2(c + Vector2(-h * 0.45, h * 0.66), Vector2(h * 0.9, h * 0.2)), INK, false, lw * 0.8)
+		"flame":
+			var fm := PackedVector2Array([c + Vector2(0, -h * 0.95), c + Vector2(h * 0.55, -h * 0.1), c + Vector2(h * 0.45, h * 0.6), c + Vector2(0, h * 0.9), c + Vector2(-h * 0.45, h * 0.6), c + Vector2(-h * 0.55, -h * 0.1)])
+			ci.draw_colored_polygon(fm, col)
+			fm.append(fm[0])
+			ci.draw_polyline(fm, INK, lw * 0.9)
+		"people":
+			ci.draw_circle(c + Vector2(-h * 0.35, -h * 0.3), h * 0.3, col)
+			ci.draw_circle(c + Vector2(h * 0.35, -h * 0.3), h * 0.3, col)
+			ci.draw_circle(c + Vector2(0, h * 0.7), h * 0.55, col)
 		"flag":
 			ci.draw_line(c + Vector2(-h * 0.6, h * 0.9), c + Vector2(-h * 0.6, -h * 0.9), INK, lw * 1.6)
 			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-h * 0.6, -h * 0.85), c + Vector2(h * 0.8, -h * 0.4), c + Vector2(-h * 0.6, 0.0)]), col)
