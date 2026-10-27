@@ -12,7 +12,10 @@ signal fuel_empty
 const CAM_DIST := 4.2
 
 var game: Node
-var world: TrainWorld
+var world: Node                          # TrainWorld or OpenWorld
+var mount: Mount                         # what I sit on (a vehicle or a horse), or null
+var _look_idle := 0.0
+var _mount_seen := -1                    # remote players: the mount id of the last snapshot
 var spawner: OptimizedSkySpawner
 var char_id := "outlaw"
 var info: Dictionary = {}
@@ -50,7 +53,7 @@ var _net_clock := 0.0
 const INTERP_DELAY := 0.16
 
 
-func setup(g: Node, w: TrainWorld, sp: OptimizedSkySpawner, id: String, pid := 1, local := true) -> void:
+func setup(g: Node, w: Node, sp: OptimizedSkySpawner, id: String, pid := 1, local := true) -> void:
 	game = g
 	world = w
 	spawner = sp
@@ -114,6 +117,9 @@ func respawn_at(pos: Vector3, reason := "") -> void:
 func _physics_process(delta: float) -> void:
 	if not is_local:
 		_follow_snapshots(delta)
+		return
+	if mount != null:
+		_mounted(delta)
 		return
 	_hit_cd = maxf(0.0, _hit_cd - delta)
 	stun = maxf(0.0, stun - delta)
@@ -188,7 +194,7 @@ func _physics_process(delta: float) -> void:
 	avatar.jetting = _jetting
 	avatar.thrust = 1.0 if _jetting else (0.5 if _dash_t > 0.0 else 0.0)
 	# safe spot + falling out
-	if is_on_floor() and TrainWorld.over_roof(global_position):
+	if is_on_floor() and (world is OpenWorld or TrainWorld.over_roof(global_position)):
 		_safe_t += delta
 		if _safe_t > 0.4 and _roof_is_solid_here():
 			last_safe = global_position + Vector3(0, 0.1, 0)
@@ -196,6 +202,60 @@ func _physics_process(delta: float) -> void:
 		_safe_t = 0.0
 	if global_position.y < Data.FALL_Y:
 		fall_out("fell")
+
+
+## Sitting on a mount: the mount does the moving (its own input, set by Main), I follow the seat and keep the camera behind it.
+func _mounted(delta: float) -> void:
+	yaw -= look_delta.x
+	pitch = clampf(pitch - look_delta.y, -0.75, 0.4)
+	_look_idle = 0.0 if look_delta.length() > 0.0005 else _look_idle + delta
+	look_delta = Vector2.ZERO
+	if _look_idle > 1.1:
+		yaw = lerp_angle(yaw, mount.yaw, minf(1.0, delta * 1.6))
+	pivot.rotation = Vector3(pitch, yaw, 0)
+	arm.spring_length = lerpf(arm.spring_length, mount.cam_dist, minf(1.0, delta * 3.0))
+	cam.fov = lerpf(cam.fov, 64.0 + clampf(absf(mount.speed) / 30.0, 0.0, 1.0) * 14.0, minf(1.0, delta * 3.0))
+	global_position = mount.seat_global()
+	velocity = Vector3.ZERO
+	avatar.rotation.y = mount.yaw
+	avatar.ground_speed = absf(mount.speed)
+	avatar.airborne = false
+	avatar.jetting = false
+	avatar.thrust = 0.0
+	if global_position.y < Data.FALL_Y:
+		leave()
+
+
+func board(m: Mount) -> void:
+	mount = m
+	m.occupant = peer_id
+	m.is_driven = is_local
+	m.clear_snaps()
+	velocity = Vector3.ZERO
+	avatar.riding = m is Horse
+	avatar.visible = m is Horse
+	_look_idle = 0.0
+	global_position = m.seat_global()
+
+
+func leave() -> void:
+	if mount == null:
+		return
+	var m := mount
+	m.occupant = 0
+	m.is_driven = false
+	m.throttle = 0.0
+	m.steer = 0.0
+	m.action = false
+	var side := Basis(Vector3.UP, m.yaw) * Vector3(2.3 + m.radius * 0.4, 0, 0)
+	mount = null
+	avatar.riding = false
+	avatar.visible = true
+	global_position = Vector3(m.global_position.x + side.x, 0.3, m.global_position.z + side.z)
+	velocity = Vector3.ZERO
+	last_safe = global_position
+	if is_local:
+		arm.spring_length = CAM_DIST
 
 
 func _roof_is_solid_here() -> bool:
@@ -288,7 +348,11 @@ func aim_point(max_range: float) -> Vector3:
 # ── network ──────────────────────────────────────────────────────────────────
 
 func snapshot() -> Array:
-	return [global_position, avatar.rotation.y, Vector2(velocity.x, velocity.z).length(), _jetting, not is_on_floor(), hp]
+	var out := [global_position, avatar.rotation.y, Vector2(velocity.x, velocity.z).length(), _jetting, not is_on_floor(), hp]
+	if mount != null:
+		out.append(mount.mount_id)
+		out.append(mount.state())
+	return out
 
 
 func push_snapshot(s: Array, clock: float) -> void:
@@ -296,12 +360,32 @@ func push_snapshot(s: Array, clock: float) -> void:
 	_snaps.append([clock, s[0], float(s[1]), float(s[2]), bool(s[3]), bool(s[4])])
 	if s.size() > 5:
 		hp = float(s[5])
+	var mid := int(s[6]) if s.size() > 6 else -1
+	if mid != _mount_seen and world != null and world.has_method("get_mount"):
+		if mid >= 0:
+			var m: Mount = world.get_mount(mid)
+			if m != null:
+				board(m)
+				m.is_driven = false
+		elif mount != null:
+			leave()
+		_mount_seen = mid
+	if mid >= 0 and mount != null and s.size() > 7:
+		mount.push_state(s[7], clock)
 	while _snaps.size() > 12:
 		_snaps.pop_front()
 
 
 func _follow_snapshots(delta: float) -> void:
 	_net_clock += delta
+	if mount != null:
+		global_position = mount.seat_global()
+		avatar.rotation.y = mount.yaw
+		avatar.ground_speed = absf(mount.speed)
+		avatar.airborne = false
+		avatar.jetting = false
+		avatar.thrust = 0.0
+		return
 	if _snaps.is_empty():
 		return
 	var t := _net_clock - INTERP_DELAY

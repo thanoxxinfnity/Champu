@@ -8,7 +8,7 @@ func _initialize() -> void:
 	game.start_play()
 	await T.frames(self, 20)
 	var p := game.player
-	var w := game.world
+	var w: TrainWorld = game.world
 	T.check(game.state == Main.State.PLAY, "the run starts")
 	T.check(p.global_position.distance_to(w.spawn_points[0].global_position) < 1.0, "the player spawned on the first spawn marker")
 	T.check(w.spawn_points.size() == 8, "there are 8 spawn markers on the roof")

@@ -12,7 +12,8 @@ var audio: Audio
 var fx: Fx
 var hud: GameHUD
 var net: MultiplayerController
-var world: TrainWorld
+var world                              # TrainWorld or OpenWorld (same members)
+var mode := "train"                     # "train" (the roof run) or "world" (the open world with vehicles and horses)
 var spawner: OptimizedSkySpawner
 var player: PlayerController
 var remotes := {}                       # peer id -> PlayerController
@@ -57,6 +58,8 @@ func _ready() -> void:
 			autostart = true
 		elif a == "--bot":
 			bot_mode = true
+		elif a == "--world":
+			mode = "world"
 		elif a.begins_with("--char="):
 			sel = maxi(0, Data.CAST_ORDER.find(a.substr(7)))
 	save = Data.load_save()
@@ -91,6 +94,7 @@ func _ready() -> void:
 			player.jet_held = false)
 	hud.fire_down.connect(func() -> void: _fire())
 	hud.bridge_pressed.connect(_bridge)
+	hud.ride_pressed.connect(_ride)
 	hud.block_pressed.connect(func() -> void:
 		if player != null:
 			var k := player.tool.cycle_block()
@@ -111,6 +115,16 @@ func _ready() -> void:
 		net.join_start())
 	hud.accept_btn.pressed.connect(func() -> void: net.host_accept(hud.code_in.text))
 	hud.finish_btn.pressed.connect(func() -> void: net.join_finish(hud.code_in.text))
+	var grade := CanvasLayer.new()           # the anime colour grade over the whole 3D picture (under the HUD and the menus)
+	grade.layer = 1
+	add_child(grade)
+	var cr := ColorRect.new()
+	cr.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var gm := ShaderMaterial.new()
+	gm.shader = load("res://shaders/grade.gdshader") as Shader
+	cr.material = gm
+	grade.add_child(cr)
 	_build_lobby()
 	_enter_lobby()
 	if autostart:
@@ -247,8 +261,14 @@ func _build_ui() -> void:
 	col.position = Vector2(930, 150)
 	col.add_theme_constant_override("separation", 12)
 	lobby_root.add_child(col)
-	start_btn = _btn("PLAY SOLO", col, Vector2(300, 70), Color(1.0, 0.62, 0.25))
-	start_btn.pressed.connect(start_play)
+	start_btn = _btn("TRAIN RUN", col, Vector2(300, 70), Color(1.0, 0.62, 0.25))
+	start_btn.pressed.connect(func() -> void:
+		mode = "train"
+		start_play())
+	var world_btn := _btn("OPEN WORLD", col, Vector2(300, 70), Color(0.45, 0.85, 1.0))
+	world_btn.pressed.connect(func() -> void:
+		mode = "world"
+		start_play())
 	var together := _btn("PLAY TOGETHER", col)
 	together.pressed.connect(func() -> void: hud.show_net(true))
 	var armory := _btn("ARMORY  (15)", col)
@@ -489,6 +509,7 @@ func _on_event(kind: String, data: Dictionary) -> void:
 	match kind:
 		"start":
 			if state != State.PLAY:
+				mode = String(data.get("mode", "train"))
 				start_play()
 		"round":
 			round_no = int(data.get("n", round_no))
@@ -504,22 +525,28 @@ func start_play() -> void:
 	if state == State.PLAY:
 		return
 	if net.is_host():
-		net.send_event("start", {})
+		net.send_event("start", {"mode": mode})
 	lobby3d.visible = false
 	lobby_root.visible = false
 	armory_root.visible = false
-	world = TrainWorld.new()
+	if mode == "world":
+		world = OpenWorld.new()
+	else:
+		world = TrainWorld.new()
 	add_child(world)
 	fx = Fx.new()
 	add_child(fx)
-	spawner = OptimizedSkySpawner.new()
-	spawner.world = world
-	spawner.fx = fx
-	spawner.authority = net.role != "client"
-	add_child(spawner)
-	spawner.broken.connect(_on_broken)
-	spawner.incoming.connect(_on_incoming)
-	spawner.spawned.connect(func(_id: int, _pos: Vector3, _size: float, _vel: Vector3, _ci: int) -> void: pass)
+	if mode == "world":
+		spawner = null
+	else:
+		spawner = OptimizedSkySpawner.new()
+		spawner.world = world
+		spawner.fx = fx
+		spawner.authority = net.role != "client"
+		add_child(spawner)
+		spawner.broken.connect(_on_broken)
+		spawner.incoming.connect(_on_incoming)
+		spawner.spawned.connect(func(_id: int, _pos: Vector3, _size: float, _vel: Vector3, _ci: int) -> void: pass)
 	# my slot among everybody who is here
 	var ids: Array = net.roster.keys() if net.online() else [1]
 	ids.sort()
@@ -538,19 +565,33 @@ func start_play() -> void:
 	for id in ids:
 		if id != (net.local_id if net.online() else 1):
 			_spawn_remote(int(id), String(net.roster.get(id, "outlaw")))
-	_equip(String(save.get("weapon", "shift_gauntlet")))
-	hud.owned = _owned()
+	hud.world_mode = mode == "world"
+	hud.round_label = "LAP" if hud.world_mode else "ROUND"
+	hud.strip = not hud.world_mode
+	hud.ride_label = ""
+	if hud.world_mode:
+		world.focus = player
+		world.checkpoint.connect(_on_checkpoint)
+		hud.owned = []
+	else:
+		_equip(String(save.get("weapon", "shift_gauntlet")))
+		hud.owned = _owned()
 	hud.ping_ms = 0 if net.online() else -1
 	hud.block_name = "STEEL"
 	hud.block_color = Data.BLOCKS["steel"].color
 	round_no = 1
 	run_coins = 0
 	run_start_z = world.progress
-	spawner.difficulty = 1.0
+	if spawner != null:
+		spawner.difficulty = 1.0
 	state = State.PLAY
 	hud.set_playing(true)
-	hud.banner("ROUND 1 — reach the engine", 3.2)
-	hud.toast("Bridge the gaps: BRIDGE PLACE, or hold JUMP/JET in the air")
+	if hud.world_mode:
+		hud.banner("OPEN WORLD — drive through the pink gates", 3.4)
+		hud.toast("Walk up to a truck or a horse and press RIDE")
+	else:
+		hud.banner("ROUND 1 — reach the engine", 3.2)
+		hud.toast("Bridge the gaps: BRIDGE PLACE, or hold JUMP/JET in the air")
 	player.cam.make_current()
 	_set_effects_level(2)
 
@@ -565,6 +606,30 @@ func _spawn_remote(id: int, char_id: String) -> void:
 	ids.sort()
 	p.global_position = world.spawn_points[maxi(0, ids.find(id)) % world.spawn_points.size()].global_position
 	remotes[id] = p
+
+
+## RIDE / DRIVE / GET OFF.
+func _ride() -> void:
+	if player == null or state != State.PLAY or mode != "world":
+		return
+	if player.mount != null:
+		player.leave()
+		return
+	var m: Mount = world.nearest_mount(player.global_position)
+	if m != null:
+		player.board(m)
+		audio.play("ui", -4.0, 0.8)
+		hud.toast("%s — stick: drive, JUMP: %s, BOOST: nitro" % [m.title, "jump" if m is Horse else "handbrake"], 3.0)
+
+
+func _on_checkpoint(index: int, total: int, lap: int) -> void:
+	var bonus := 25 + 5 * lap
+	run_coins += bonus
+	round_no = lap
+	audio.play("coin", 0.0, 1.0 + 0.04 * float(index))
+	hud.banner("GATE %d / %d   +$%d" % [(index + total - 1) % total + 1, total, bonus], 1.8)
+	if player != null:
+		fx.ring(world.gates[(index + total - 1) % total][0] + Vector3(0, 3, 0), Color(1, 0.85, 0.3), 5.0)
 
 
 func _owned() -> Array:
@@ -584,7 +649,7 @@ func _equip(id: String) -> void:
 
 
 func _fire() -> void:
-	if player != null and state == State.PLAY:
+	if player != null and state == State.PLAY and mode != "world":
 		if not player.tool.fire():
 			return
 		if net.is_host() or not net.online():
@@ -592,7 +657,7 @@ func _fire() -> void:
 
 
 func _bridge() -> void:
-	if player != null and state == State.PLAY:
+	if player != null and state == State.PLAY and mode != "world":
 		player.tool.place_bridge()
 
 
@@ -615,7 +680,7 @@ func end_run() -> void:
 		return
 	if net.is_host():
 		net.send_event("end", {})
-	var dist := (world.progress - run_start_z) if world != null else 0.0
+	var dist: float = (world.progress - run_start_z) if world != null else 0.0
 	save.best = maxf(float(save.best), dist)
 	save.coins = int(save.coins) + run_coins
 	Data.write_save(save)
@@ -659,7 +724,7 @@ func shake(amount: float) -> void:
 func _cycle_view(btn: Button) -> void:
 	if world == null:
 		return
-	var d := world.view_dist + 15.0
+	var d: float = world.view_dist + 15.0
 	if d > 80.0:
 		d = 30.0
 	world.set_view_distance(d)
@@ -679,13 +744,59 @@ func _physics_process(delta: float) -> void:
 	if state != State.PLAY:
 		return
 	world.update(delta)
+	var open_world := mode == "world"
 	# controls
-	if not bot_mode:                       # (a test bot drives the player directly)
+	if player.mount != null:
+		player.move_input = Vector2.ZERO
+		player.jet_held = false
+		if not bot_mode:
+			player.mount.set_input(hud.move.y, hud.move.x, hud.is_held("jet"), hud.is_held("fire"))
+	elif not bot_mode:                      # (a test bot drives the player directly)
 		player.move_input = hud.move
 		player.jet_held = hud.is_held("jet")
 	player.look_delta += hud.take_look()
-	if hud.is_held("fire"):
+	if hud.is_held("fire") and not open_world:
 		_fire()
+	if open_world:
+		_world_frame(delta)
+	else:
+		_train_frame(delta)
+	# network
+	if net.online():
+		_net_t -= delta
+		if _net_t <= 0.0:
+			_net_t = 1.0 / 15.0
+			net.send_state(player.snapshot())
+		if net.is_host() and spawner != null:
+			_debris_t -= delta
+			if _debris_t <= 0.0:
+				_debris_t = 1.0 / 8.0
+				net.send_debris(spawner.pack_snapshot())
+	# camera shake
+	_shake = maxf(0.0, _shake - delta * 2.2)
+	if player.cam != null:
+		player.cam.rotation = Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * _shake * 0.03
+	_watch_fps(delta)
+
+
+func _world_frame(_delta: float) -> void:
+	var near: Mount = world.nearest_mount(player.global_position) if player.mount == null else null
+	if player.mount != null:
+		hud.ride_label = "GET OFF"
+	elif near != null:
+		hud.ride_label = ("RIDE" if near is Horse else "DRIVE") + "\n" + near.title.get_slice(" ", near.title.get_slice_count(" ") - 1)
+	else:
+		hud.ride_label = ""
+	hud.stability = player.hp / player.max_hp
+	hud.fuel = player.fuel / player.max_fuel
+	hud.distance = world.progress
+	hud.round_no = world.lap
+	hud.coins = run_coins
+	hud.cooldown = (1.0 - player.mount.boost) if player.mount != null else 0.0
+	hud.minimap = []
+
+
+func _train_frame(delta: float) -> void:
 	# the rain follows the players
 	var zs := player.global_position.z
 	var n := 1
@@ -708,22 +819,6 @@ func _physics_process(delta: float) -> void:
 	_goal_cd = maxf(0.0, _goal_cd - delta)
 	if player.global_position.z < world.goal_z + 7.0 and _goal_cd <= 0.0 and player.is_on_floor():
 		_round_cleared()
-	# network
-	if net.online():
-		_net_t -= delta
-		if _net_t <= 0.0:
-			_net_t = 1.0 / 15.0
-			net.send_state(player.snapshot())
-		if net.is_host():
-			_debris_t -= delta
-			if _debris_t <= 0.0:
-				_debris_t = 1.0 / 8.0
-				net.send_debris(spawner.pack_snapshot())
-	# camera shake
-	_shake = maxf(0.0, _shake - delta * 2.2)
-	if player.cam != null:
-		player.cam.rotation = Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * _shake * 0.03
-	_watch_fps(delta)
 
 
 func _round_cleared() -> void:

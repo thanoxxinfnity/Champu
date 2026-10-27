@@ -16,6 +16,7 @@ signal block_pressed
 signal weapon_chosen(id: String)
 signal pause_pressed
 signal net_pressed
+signal ride_pressed
 
 var move := Vector2.ZERO
 var look := Vector2.ZERO                 # radians since last read
@@ -36,6 +37,10 @@ var toast_t := 0.0
 var banner_text := ""
 var banner_t := 0.0
 var net_text := ""
+var ride_label := ""                    # "" = no mount near; else the RIDE button's text (RIDE / DRIVE / GET OFF)
+var world_mode := false                  # the open world: no bridge/block buttons or weapon strip, SHATTER WAVE becomes BOOST
+var round_label := "ROUND"
+var strip := true                        # the train strip at the top (off in the open world)
 var minimap: Array = []                  # [[z, x, color], ...] players on the train, for the strip at the top
 
 var _canvas: Control
@@ -83,6 +88,7 @@ func _layout() -> void:
 		"fire": {"rect": Rect2(w - 360, h - 150, 120, 120), "id": -1, "held": false, "label": "SHATTER\nWAVE"},
 		"bridge": {"rect": Rect2(w - 330, h - 290, 110, 110), "id": -1, "held": false, "label": "BRIDGE\nPLACE"},
 		"block": {"rect": Rect2(w - 205, h - 330, 90, 90), "id": -1, "held": false, "label": "SELECT\nBLOCK"},
+		"ride": {"rect": Rect2(w - 500, h - 250, 120, 120), "id": -1, "held": false, "label": "RIDE"},
 		"pause": {"rect": Rect2(w - 74, 16, 56, 56), "id": -1, "held": false, "label": "II"},
 		"net": {"rect": Rect2(w - 140, 16, 56, 56), "id": -1, "held": false, "label": "NET"},
 	}
@@ -152,6 +158,8 @@ func _touch(idx: int, pos: Vector2, down: bool) -> void:
 		return
 	# a button?
 	for k in _btn:
+		if (k == "ride" and ride_label == "") or (world_mode and (k == "bridge" or k == "block")):
+			continue
 		if (_btn[k].rect as Rect2).grow(10).has_point(pos):
 			_btn[k].id = idx
 			_btn[k].held = true
@@ -259,12 +267,13 @@ func _draw_all() -> void:
 	_bar(Rect2(24, 82, 220, 14), fuel, Color(1.0, 0.65, 0.15) if fuel > 0.25 else Color(1.0, 0.3, 0.2))
 	# top-centre: distance and round
 	_text("%d m" % int(distance), Vector2(w * 0.5, 40), 28, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, 0.0)
-	_text("ROUND %d   ·   $%d" % [round_no, coins], Vector2(w * 0.5, 66), 17, Color(1, 0.88, 0.5), HORIZONTAL_ALIGNMENT_CENTER, 0.0)
+	_text("%s %d   ·   $%d" % [round_label, round_no, coins], Vector2(w * 0.5, 66), 17, Color(1, 0.88, 0.5), HORIZONTAL_ALIGNMENT_CENTER, 0.0)
 	# the train strip: where everyone is on the roof
 	var sx := w * 0.5 - 130.0
-	_canvas.draw_rect(Rect2(sx, 78, 260, 8), Color(1, 1, 1, 0.14))
-	for m in minimap:
-		_canvas.draw_circle(Vector2(sx + clampf(1.0 - (float(m[0]) / -90.0), 0.0, 1.0) * 260.0, 82), 5.0, m[2])
+	if strip:
+		_canvas.draw_rect(Rect2(sx, 78, 260, 8), Color(1, 1, 1, 0.14))
+		for m in minimap:
+			_canvas.draw_circle(Vector2(sx + clampf(1.0 - (float(m[0]) / -90.0), 0.0, 1.0) * 260.0, 82), 5.0, m[2])
 	# PING
 	if ping_ms >= 0:
 		_text("PING: %d ms" % ping_ms, Vector2(w - 330, 30), 18, MultiplayerController.ping_color(ping_ms))
@@ -272,6 +281,8 @@ func _draw_all() -> void:
 		_text(net_text, Vector2(w - 330, 30), 15, Color(1, 1, 1, 0.7))
 	# buttons
 	for k in _btn:
+		if (k == "ride" and ride_label == "") or (world_mode and (k == "bridge" or k == "block")):
+			continue
 		var b: Dictionary = _btn[k]
 		var r: Rect2 = b.rect
 		var accent := Color.WHITE
@@ -282,12 +293,13 @@ func _draw_all() -> void:
 		_glass(r, b.held, accent)
 		if k == "fire" and cooldown > 0.02:
 			_canvas.draw_arc(r.get_center(), r.size.x * 0.5 - 8.0, -PI * 0.5, -PI * 0.5 + TAU * cooldown, 30, Color(1, 1, 1, 0.8), 4.0, true)
-		var lines := String(b.label).split("\n")
+		var lines := (ride_label if k == "ride" else ("BOOST" if (world_mode and k == "fire") else String(b.label))).split("\n")
 		var fs := 20 if k == "jet" else (13 if k != "pause" and k != "net" else 16)
 		for i in lines.size():
 			var yy := r.get_center().y + (float(i) - float(lines.size() - 1) * 0.5) * (fs + 3.0) + fs * 0.35
 			_text(lines[i], Vector2(r.position.x, yy), fs, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, r.size.x)
-	_text(block_name, Vector2(_btn["block"].rect.position.x, _btn["block"].rect.position.y - 8), 13, block_color, HORIZONTAL_ALIGNMENT_CENTER, _btn["block"].rect.size.x)
+	if not world_mode:
+		_text(block_name, Vector2(_btn["block"].rect.position.x, _btn["block"].rect.position.y - 8), 13, block_color, HORIZONTAL_ALIGNMENT_CENTER, _btn["block"].rect.size.x)
 	# the joystick, under the thumb
 	if _stick_id != -1:
 		_canvas.draw_circle(_stick_origin, 90.0, Color(1, 1, 1, 0.08))

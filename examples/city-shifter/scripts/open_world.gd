@@ -1,0 +1,495 @@
+class_name OpenWorld
+extends Node3D
+## The open world: an anime countryside with a looping road, a small Japanese town with a stable, a river with an arched bridge, mountains on the horizon and
+## a jungle on both sides of the road. Everything you see is a real model (generated, then prepared for phones: assets/world, assets/vehicles, assets/animals);
+## the jungle is thousands of them as MultiMesh cells (one draw call per kind per cell) that disappear beyond the view distance. Vehicles and horses stand by the
+## town. Eight glowing gates round the loop are the goal: pass them in order for coins.
+## The same members as TrainWorld (spawn_points, progress, view_dist, update, set_view_distance, set_far_visible), so Main drives both the same way.
+
+signal checkpoint(index: int, total: int, lap: int)
+
+const ROAD_W := 9.0
+const LOOP := [Vector2(-60, 0), Vector2(60, 0), Vector2(130, -50), Vector2(160, -130), Vector2(110, -210), Vector2(20, -250), Vector2(-90, -220),
+	Vector2(-160, -150), Vector2(-170, -60), Vector2(-120, -10)]
+const HALF := 330.0                       # the world is HALF*2 square
+const CELL := 80.0
+const TREES := [
+	["res://assets/world/tree_jungle_a.glb", 11.0, 0.34], ["res://assets/world/tree_jungle_b.glb", 10.0, 0.28],
+	["res://assets/world/palm.glb", 9.0, 0.2], ["res://assets/world/cherry_tree.glb", 7.0, 0.08]]
+const UNDER := [["res://assets/world/bush.glb", 1.3, 12], ["res://assets/world/fern.glb", 1.1, 12], ["res://assets/world/rock_small.glb", 1.2, 4],
+	["res://assets/world/rock_big.glb", 3.2, 1]]
+
+var spawn_points: Array[Marker3D] = []
+var progress := 0.0
+var goal_z := -1.0e9
+var speed := 0.0
+var view_dist := 60.0
+var mounts: Array = []                    # Mount
+var path: PackedVector2Array = PackedVector2Array()      # the road, a point every ~6 m
+var gates: Array = []                     # [position, node]
+var next_gate := 0
+var lap := 1
+var focus: Node3D                         # the local player (petals and the checkpoint test follow it)
+var _cells: Array = []                    # MultiMeshInstance3D
+var _far: Array = []
+var _env: Environment
+var _petals: CPUParticles3D
+var _gate_t := 0.0
+var _beam: MeshInstance3D
+
+
+func _ready() -> void:
+	_environment()
+	_ground()
+	_road()
+	_river()
+	_town()
+	_mountains()
+	_jungle()
+	_gates()
+	_petals_fx()
+	for i in 8:
+		var m := Marker3D.new()
+		m.position = Vector3(-8.0 + float(i % 4) * 2.2, 0.3, 3.0 + float(i / 4) * 2.2)
+		add_child(m)
+		spawn_points.append(m)
+	_spawn_mounts()
+	set_view_distance(view_dist)
+
+
+# ── sky, light, ground ───────────────────────────────────────────────────────
+
+func _environment() -> void:
+	_env = Environment.new()
+	_env.background_mode = Environment.BG_SKY
+	_env.sky = Anime.sky()
+	_env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	_env.ambient_light_energy = 0.9
+	_env.fog_enabled = true
+	_env.fog_light_color = Color(0.8, 0.88, 1.0)
+	_env.fog_density = 0.006
+	_env.fog_sky_affect = 0.25
+	_env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	var we := WorldEnvironment.new()
+	we.environment = _env
+	add_child(we)
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-38, -22, 0)
+	sun.light_color = Color(1.0, 0.95, 0.85)
+	sun.light_energy = 1.25
+	sun.shadow_enabled = false
+	add_child(sun)
+
+
+func _ground() -> void:
+	var mi := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(HALF * 2.0 + 400.0, HALF * 2.0 + 400.0)
+	mi.mesh = pm
+	var sm := ShaderMaterial.new()
+	sm.shader = load("res://shaders/ground.gdshader") as Shader
+	mi.material_override = sm
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	var body := StaticBody3D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3(HALF * 2.0 + 100.0, 2.0, HALF * 2.0 + 100.0)
+	cs.shape = bs
+	cs.position.y = -1.0
+	body.add_child(cs)
+	add_child(body)
+
+
+# ── the road ─────────────────────────────────────────────────────────────────
+
+func _spline(pts: Array, t: float) -> Vector2:
+	var n := pts.size()
+	var i := int(floor(t))
+	var f := t - float(i)
+	var p0: Vector2 = pts[(i - 1 + n) % n]
+	var p1: Vector2 = pts[i % n]
+	var p2: Vector2 = pts[(i + 1) % n]
+	var p3: Vector2 = pts[(i + 2) % n]
+	return 0.5 * ((2.0 * p1) + (-p0 + p2) * f + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * f * f + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * f * f * f)
+
+
+func _road() -> void:
+	var raw := PackedVector2Array()
+	for seg in LOOP.size():
+		for k in 8:
+			raw.append(_spline(LOOP, float(seg) + float(k) / 8.0))
+	# resample evenly (~6 m)
+	path = PackedVector2Array()
+	var acc := 0.0
+	path.append(raw[0])
+	for i in range(1, raw.size() + 1):
+		var a: Vector2 = raw[i - 1]
+		var b: Vector2 = raw[i % raw.size()]
+		acc += a.distance_to(b)
+		if acc >= 6.0:
+			path.append(b)
+			acc = 0.0
+	var verts := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var idx := PackedInt32Array()
+	var run := 0.0
+	var n := path.size()
+	for i in n + 1:
+		var p: Vector2 = path[i % n]
+		var q: Vector2 = path[(i + 1) % n]
+		var r: Vector2 = path[(i - 1 + n) % n]
+		var tdir := (q - r).normalized()
+		var nrm := Vector2(-tdir.y, tdir.x)
+		verts.append(Vector3(p.x + nrm.x * ROAD_W * 0.5, 0.06, p.y + nrm.y * ROAD_W * 0.5))
+		verts.append(Vector3(p.x - nrm.x * ROAD_W * 0.5, 0.06, p.y - nrm.y * ROAD_W * 0.5))
+		uvs.append(Vector2(0.0, run / 8.0))
+		uvs.append(Vector2(1.0, run / 8.0))
+		run += p.distance_to(path[(i + 1) % n])
+		if i < n:
+			var b := i * 2
+			idx.append_array([b, b + 2, b + 1, b + 1, b + 2, b + 3])
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = verts
+	arr[Mesh.ARRAY_TEX_UV] = uvs
+	arr[Mesh.ARRAY_INDEX] = idx
+	var am := ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	var mi := MeshInstance3D.new()
+	mi.mesh = am
+	var sm := ShaderMaterial.new()
+	sm.shader = load("res://shaders/road.gdshader") as Shader
+	mi.material_override = sm
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+
+
+func road_distance(p: Vector2) -> float:
+	var best := 1.0e9
+	for q in path:
+		best = minf(best, p.distance_to(q))
+	return best
+
+
+func _river() -> void:
+	# a river across the road where it bends east, with the arched bridge on top
+	var at := Vector2(100, -28)
+	var mi := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(16.0, 420.0)
+	mi.mesh = pm
+	var sm := ShaderMaterial.new()
+	sm.shader = load("res://shaders/water.gdshader") as Shader
+	mi.material_override = sm
+	mi.position = Vector3(at.x, 0.03, at.y)
+	mi.rotation.y = deg_to_rad(-52.0)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	var br := ModelKit.fitted("res://assets/world/bridge_arch.glb", 15.0, "bottom")
+	if br != null:
+		br.position = Vector3(at.x, 0.0, at.y)
+		br.rotation.y = deg_to_rad(-52.0 + 90.0 + 0.0)
+		add_child(br)
+		Anime.style(br)
+
+
+# ── the town ─────────────────────────────────────────────────────────────────
+
+func _place(path_: String, pos: Vector3, yaw: float, length: float, collide := false) -> Node3D:
+	var m := ModelKit.fitted(path_, length, "bottom")
+	if m == null:
+		return null
+	m.position = pos
+	m.rotation.y = yaw
+	add_child(m)
+	Anime.style(m)
+	if collide:
+		var sz: Vector3 = m.get_meta("size")
+		var body := StaticBody3D.new()
+		body.collision_layer = 1
+		body.collision_mask = 0
+		body.position = pos + Vector3(0, sz.y * 0.5, 0)
+		body.rotation.y = yaw
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = sz * 0.9
+		cs.shape = bs
+		body.add_child(cs)
+		add_child(body)
+	return m
+
+
+func _town() -> void:
+	for i in 6:
+		var x := -44.0 + float(i) * 17.0
+		var north := i % 2 == 0
+		_place("res://assets/world/shop_house.glb", Vector3(x, 0, -13.5 if north else 13.5), 0.0 if north else PI, 11.0, true)
+	for i in 8:
+		var x := -40.0 + float(i) * 11.5
+		_place("res://assets/world/stone_lantern.glb", Vector3(x, 0, -6.5 if i % 2 == 0 else 6.5), 0.0, 2.2)
+	_place("res://assets/world/torii.glb", Vector3(-56, 0, 0), PI * 0.5, 13.0)
+	_place("res://assets/world/torii.glb", Vector3(58, 0, 0), PI * 0.5, 13.0)
+	_place("res://assets/world/vending.glb", Vector3(-30, 0, -8.5), 0.0, 2.1, true)
+	_place("res://assets/world/vending.glb", Vector3(20, 0, 8.5), PI, 2.1, true)
+	_place("res://assets/world/road_sign.glb", Vector3(66, 0, 6), PI * 0.5, 3.0)
+	_place("res://assets/world/stable.glb", Vector3(30, 0, 27), PI, 12.0, true)
+	for i in 5:
+		_place("res://assets/world/cherry_tree.glb", Vector3(-46.0 + float(i) * 24.0, 0, -22.0 if i % 2 == 0 else 22.0), float(i), 8.0)
+
+
+func _mountains() -> void:
+	# a ring of huge boulders as the mountains on the horizon (the same real rock model, scaled up and fogged)
+	if not ModelKit.exists("res://assets/world/rock_big.glb"):
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for i in 26:
+		var a := float(i) / 26.0 * TAU
+		var r := HALF + 70.0 + rng.randf() * 40.0
+		var m := ModelKit.fitted("res://assets/world/rock_big.glb", 90.0 + rng.randf() * 80.0, "bottom")
+		m.position = Vector3(cos(a) * r, -6.0, sin(a) * r)
+		m.rotation.y = rng.randf() * TAU
+		m.scale = Vector3(1.0, 1.4 + rng.randf() * 0.8, 1.0)
+		add_child(m)
+		Anime.style(m)
+		_far.append(m)
+
+
+# ── the jungle ───────────────────────────────────────────────────────────────
+
+func _jungle() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2024
+	var kinds: Array = []          # [mesh, target height, weight/count, is_tree]
+	for t in TREES:
+		var mesh := ModelKit.first_mesh(String(t[0]))
+		if mesh != null:
+			Anime.style_mesh(mesh)
+			kinds.append([mesh, float(t[1]), float(t[2]), true, String(t[0])])
+	for u in UNDER:
+		var mesh2 := ModelKit.first_mesh(String(u[0]))
+		if mesh2 != null:
+			Anime.style_mesh(mesh2)
+			kinds.append([mesh2, float(u[1]), float(u[2]), false, String(u[0])])
+	if kinds.is_empty():
+		return
+	var n := int(ceil(HALF * 2.0 / CELL))
+	for cx in n:
+		for cz in n:
+			var o := Vector2(-HALF + float(cx) * CELL, -HALF + float(cz) * CELL)
+			var per_kind: Array = []
+			for k in kinds:
+				per_kind.append([])
+			var count := 40
+			for j in count:
+				var p := o + Vector2(rng.randf(), rng.randf()) * CELL
+				var near_road := road_distance(p) < ROAD_W * 0.5 + 4.0
+				var in_town := absf(p.x) < 70.0 and p.y > -30.0 and p.y < 46.0
+				if near_road or in_town:
+					continue
+				# trees: weighted pick; undergrowth fills the rest
+				var roll := rng.randf()
+				var ki := -1
+				var acc := 0.0
+				for q in kinds.size():
+					if bool(kinds[q][3]):
+						acc += float(kinds[q][2]) * 0.9
+						if roll < acc and ki < 0:
+							ki = q
+				if ki < 0:
+					var u_idx: Array = []
+					for q in kinds.size():
+						if not bool(kinds[q][3]):
+							for rep in int(kinds[q][2]):
+								u_idx.append(q)
+					if u_idx.is_empty():
+						continue
+					ki = u_idx[rng.randi() % u_idx.size()]
+				if String(kinds[ki][4]).ends_with("cherry_tree.glb") and p.length() > 150.0:
+					continue
+				per_kind[ki].append(p)
+			for q in kinds.size():
+				var pts: Array = per_kind[q]
+				if pts.is_empty():
+					continue
+				var mm := MultiMesh.new()
+				mm.transform_format = MultiMesh.TRANSFORM_3D
+				mm.mesh = kinds[q][0]
+				mm.instance_count = pts.size()
+				var bb := (kinds[q][0] as Mesh).get_aabb()
+				var base := float(kinds[q][1]) / maxf(bb.size.y, 0.01)
+				var mid := o + Vector2(CELL, CELL) * 0.5            # the node sits in the middle of its cell: the visibility range measures from there
+				for i in pts.size():
+					var p2: Vector2 = pts[i]
+					var s := base * rng.randf_range(0.8, 1.35)
+					var b := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s * rng.randf_range(0.92, 1.12), s))
+					mm.set_instance_transform(i, Transform3D(b, Vector3(p2.x - mid.x, 0.0, p2.y - mid.y)))
+				var mmi := MultiMeshInstance3D.new()
+				mmi.multimesh = mm
+				mmi.position = Vector3(mid.x, 0.0, mid.y)
+				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				add_child(mmi)
+				_cells.append(mmi)
+
+
+# ── gates (the goal) ─────────────────────────────────────────────────────────
+
+func _gates() -> void:
+	var n := path.size()
+	var count := 8
+	for g in count:
+		var p: Vector2 = path[(g * n / count + n / count) % n]
+		var q: Vector2 = path[(g * n / count + n / count + 1) % n]
+		var yaw := atan2(-(q.x - p.x), -(q.y - p.y))
+		var root := Node3D.new()
+		root.position = Vector3(p.x, 0, p.y)
+		root.rotation.y = yaw
+		add_child(root)
+		var ring := MeshInstance3D.new()
+		var tm := TorusMesh.new()
+		tm.inner_radius = 4.6
+		tm.outer_radius = 5.2
+		tm.rings = 20
+		tm.ring_segments = 8
+		ring.mesh = tm
+		ring.rotation_degrees = Vector3(90, 0, 0)
+		ring.position.y = 5.2
+		ring.material_override = Mat.unlit(Color(1.0, 0.45, 0.75), 0.9)
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(ring)
+		gates.append([Vector3(p.x, 0, p.y), root, ring])
+	_beam = MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 1.2
+	cm.bottom_radius = 1.2
+	cm.height = 60.0
+	cm.radial_segments = 10
+	cm.rings = 1
+	_beam.mesh = cm
+	_beam.material_override = Mat.unlit(Color(1.0, 0.85, 0.3), 0.28)
+	_beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_beam)
+	_mark_gate()
+
+
+func _mark_gate() -> void:
+	for i in gates.size():
+		var ring: MeshInstance3D = gates[i][2]
+		ring.visible = true
+		ring.scale = Vector3.ONE * (1.0 if i == next_gate else 0.7)
+		ring.material_override = Mat.unlit(Color(1.0, 0.85, 0.3) if i == next_gate else Color(0.6, 0.55, 0.8), 0.9 if i == next_gate else 0.45)
+	var p: Vector3 = gates[next_gate][0]
+	_beam.position = p + Vector3(0, 30.0, 0)
+
+
+func gate_position() -> Vector3:
+	return gates[next_gate][0]
+
+
+# ── mounts ───────────────────────────────────────────────────────────────────
+
+func _spawn_mounts() -> void:
+	var specs := [["truck", Vector3(-32, 0, 9.5), -PI * 0.5], ["monster", Vector3(-14, 0, 10.0), -PI * 0.5], ["car", Vector3(4, 0, 9.0), -PI * 0.5],
+		["car", Vector3(36, 0, -9.0), PI * 0.5]]
+	var id := 0
+	for s in specs:
+		var k: String = s[0]
+		var v := Vehicle.new()
+		add_child(v)
+		v.setup(id, k)
+		v.position = s[1]
+		v.yaw = s[2]
+		v.rotation.y = v.yaw
+		mounts.append(v)
+		id += 1
+	for i in 3:
+		var h := Horse.new()
+		add_child(h)
+		h.setup(id)
+		h.position = Vector3(24.0 + float(i) * 5.0, 0, 20.0 - float(i % 2) * 2.0)
+		h.yaw = PI * 0.5 + float(i) * 0.3
+		h.rotation.y = h.yaw
+		mounts.append(h)
+		id += 1
+
+
+func get_mount(id: int) -> Mount:
+	for m in mounts:
+		if (m as Mount).mount_id == id:
+			return m
+	return null
+
+
+## The free mount closest to `pos` within its own reach, or null.
+func nearest_mount(pos: Vector3) -> Mount:
+	var best: Mount = null
+	var bd := 1.0e9
+	for m in mounts:
+		var mm := m as Mount
+		if not mm.is_free():
+			continue
+		var d := pos.distance_to(mm.global_position)
+		if d < mm.radius + 1.2 and d < bd:
+			bd = d
+			best = mm
+	return best
+
+
+# ── per frame ────────────────────────────────────────────────────────────────
+
+func update(delta: float) -> void:
+	_gate_t += delta
+	if focus != null:
+		_petals.global_position = focus.global_position + Vector3(0, 9, 0)
+		var fp := focus.global_position
+		var g: Vector3 = gates[next_gate][0]
+		if Vector2(fp.x - g.x, fp.z - g.z).length() < 8.0 and fp.y < 9.0:
+			next_gate += 1
+			progress += 100.0
+			if next_gate >= gates.size():
+				next_gate = 0
+				lap += 1
+			checkpoint.emit(next_gate, gates.size(), lap)
+			_mark_gate()
+	var pulse := 1.0 + 0.06 * sin(_gate_t * 4.0)
+	(gates[next_gate][2] as MeshInstance3D).scale = Vector3.ONE * pulse
+
+
+func _petals_fx() -> void:
+	_petals = CPUParticles3D.new()
+	_petals.amount = 90
+	_petals.lifetime = 9.0
+	_petals.preprocess = 9.0
+	_petals.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	_petals.emission_box_extents = Vector3(22, 1, 22)
+	_petals.direction = Vector3(0.4, -1, 0.2)
+	_petals.spread = 25.0
+	_petals.initial_velocity_min = 0.6
+	_petals.initial_velocity_max = 1.4
+	_petals.gravity = Vector3(0.3, -0.4, 0.1)
+	_petals.angular_velocity_min = -120.0
+	_petals.angular_velocity_max = 120.0
+	var qm := QuadMesh.new()
+	qm.size = Vector2(0.16, 0.1)
+	_petals.mesh = qm
+	_petals.material_override = Mat.unlit(Color(1.0, 0.72, 0.82))
+	add_child(_petals)
+
+
+func set_view_distance(d: float) -> void:
+	view_dist = clampf(d, 30.0, 80.0)
+	for c in _cells:
+		var g := c as GeometryInstance3D
+		g.visibility_range_end = view_dist + 25.0
+		g.visibility_range_end_margin = 12.0
+		g.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+	if _env != null:
+		_env.fog_density = 2.2 / (view_dist + 60.0) * 0.5
+
+
+func set_far_visible(on: bool) -> void:
+	for f in _far:
+		(f as Node3D).visible = on

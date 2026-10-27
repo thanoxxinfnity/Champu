@@ -7,6 +7,7 @@ extends Node3D
 
 const MODEL_DIR := "res://assets/cast/"
 const CLIPS := {"walk": "walk", "run": "run"}
+const PACK := "res://assets/cast/jetpack.glb"
 
 var char_id := ""
 var rig: RigAnimator
@@ -21,7 +22,9 @@ var hurt_t := 0.0
 var _holder: Node3D
 var _t := 0.0
 var _clip_t := 0.0
-var _flame: MeshInstance3D
+var riding := false             # sitting on a horse (or in a vehicle: then the avatar is hidden by the player)
+var _flames: Array = []
+var _pack_size := Vector3(0.4, 0.62, 0.3)
 var _pack: Node3D
 var _lean := 0.0
 var _parts: Dictionary = {}     # stand-in limbs
@@ -46,6 +49,7 @@ func setup(id: String) -> void:
 			rig.position.y = -box.position.y * k
 			rig.rotation.y = PI          # the glb faces +Z, the game faces -Z
 			_tint(rig.model, info.get("tint", Color.WHITE))
+			Anime.style(rig.model, true, 0.012)
 			_make_pack()
 			return
 		rig.queue_free()
@@ -120,32 +124,42 @@ func _make_pack() -> void:
 	_pack = Node3D.new()
 	_holder.add_child(_pack)
 	_pack.position = Vector3(0, height * 0.66, height * 0.14)      # on the back (+Z is behind: the avatar faces -Z)
-	var body := Mat.flat(Color(0.35, 0.38, 0.46))
-	for sx in [-0.12, 0.12]:
-		Mat.cyl(_pack, Vector3(sx * height, 0, 0), 0.085 * height, 0.42 * height, body)
-		Mat.cyl(_pack, Vector3(sx * height, -0.26 * height, 0), 0.06 * height, 0.08 * height, Mat.flat(Color(0.95, 0.75, 0.2), 0.8))
-	_flame = MeshInstance3D.new()
-	var cm := CylinderMesh.new()
-	cm.top_radius = 0.1
-	cm.bottom_radius = 0.0
-	cm.height = 0.7
-	cm.radial_segments = 6
-	cm.rings = 1
-	_flame.mesh = cm
-	_flame.material_override = Mat.unlit(Color(1.0, 0.6, 0.15))
-	_flame.position = Vector3(0, -0.6 * height, 0)
-	_flame.visible = false
-	_pack.add_child(_flame)
+	var real := ModelKit.fitted(PACK, height * 0.42, "center")
+	if real != null:
+		_pack.add_child(real)
+		_pack_size = real.get_meta("size")
+		_pack.position = Vector3(0, height * 0.66, height * 0.12 + _pack_size.z * 0.5)
+		Anime.style(real, true, 0.012)
+	else:
+		var body := Mat.flat(Color(0.35, 0.38, 0.46))
+		for sx in [-0.12, 0.12]:
+			Mat.cyl(_pack, Vector3(sx * height, 0, 0), 0.085 * height, 0.42 * height, body)
+			Mat.cyl(_pack, Vector3(sx * height, -0.26 * height, 0), 0.06 * height, 0.08 * height, Mat.flat(Color(0.95, 0.75, 0.2), 0.8))
+	for sx in [-1.0, 1.0]:
+		var fl := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.07
+		cm.bottom_radius = 0.0
+		cm.height = 0.7
+		cm.radial_segments = 6
+		cm.rings = 1
+		fl.mesh = cm
+		fl.material_override = Mat.unlit(Color(1.0, 0.6, 0.15))
+		fl.position = Vector3(sx * _pack_size.x * 0.24, -_pack_size.y * 0.5 - 0.3, 0.0)
+		fl.visible = false
+		_pack.add_child(fl)
+		_flames.append(fl)
 
 
 func _process(delta: float) -> void:
 	_t += delta
 	attack_t = maxf(0.0, attack_t - delta)
 	hurt_t = maxf(0.0, hurt_t - delta)
-	_flame.visible = thrust > 0.05
-	_flame.scale = Vector3(1.0, 0.4 + thrust * 1.3 + 0.2 * sin(_t * 40.0), 1.0)
+	for f in _flames:
+		(f as MeshInstance3D).visible = thrust > 0.05
+		(f as MeshInstance3D).scale = Vector3(1.0, 0.4 + thrust * 1.3 + 0.2 * sin(_t * 40.0 + (f as Node3D).position.x * 9.0), 1.0)
 	var want_lean := 0.0
-	if jetting or airborne:
+	if (jetting or airborne) and not riding:
 		want_lean = clampf(ground_speed / 8.0, 0.0, 1.0) * 28.0 + (14.0 if jetting else 0.0)
 	_lean = lerpf(_lean, want_lean, minf(1.0, delta * 8.0))
 	_holder.rotation.x = -deg_to_rad(_lean)
@@ -163,6 +177,14 @@ func _clip(name: String) -> AnimClip:
 
 
 func _pose() -> Dictionary:
+	if riding:
+		# in the saddle: thighs forward and out, shins down, hands forward on the reins; the body follows the horse's speed
+		var lean := clampf(ground_speed / 12.0, 0.0, 1.0)
+		var bump := sin(_t * (6.0 + ground_speed * 1.3)) * 0.04 * clampf(ground_speed / 6.0, 0.0, 1.0)
+		return {"lean": 4.0 + 20.0 * lean, "crouch": 0.03 + 0.03 * lean + bump,
+			"uL": Vector3(0.12, -0.78, 0.6), "fL": Vector3(0.04, -0.25, 1.0), "uR": Vector3(0.12, -0.78, 0.6), "fR": Vector3(0.04, -0.25, 1.0),
+			"tL": Vector3(0.55, -0.55, 0.62), "sL": Vector3(0.22, -1.0, -0.2), "ftL": Vector3(0.0, -0.45, 1.0),
+			"tR": Vector3(0.55, -0.55, 0.62), "sR": Vector3(0.22, -1.0, -0.2), "ftR": Vector3(0.0, -0.45, 1.0), "head": -6.0 * lean}
 	if hurt_t > 0.0:
 		return CMPoses.hurt(1.0 - hurt_t / 0.4)
 	if attack_t > 0.0:
