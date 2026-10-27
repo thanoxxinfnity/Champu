@@ -43,15 +43,10 @@ var lobby_cam: Camera3D
 var preview: Avatar
 var ui: CanvasLayer
 var lobby_root: Control
+var lobby: LobbyUI
 var armory_root: Control
 var pause_root: Control
-var lbl_name: Label
-var lbl_role: Label
-var lbl_perk: Label
-var lbl_coins: Label
-var lbl_net: Label
 var bars := {}
-var start_btn: Button
 var weapon_cards := {}
 
 
@@ -141,37 +136,97 @@ func _ready() -> void:
 # ── the lobby ────────────────────────────────────────────────────────────────
 
 func _build_lobby() -> void:
+	# the stage: a pastel anime sky, a round platform under the hero, cherry trees, a torii gate and lanterns, petals drifting down
 	lobby3d = Node3D.new()
 	add_child(lobby3d)
 	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.09, 0.13, 0.3)
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.7, 0.75, 0.95)
-	env.ambient_light_energy = 0.8
+	env.background_mode = Environment.BG_SKY
+	env.sky = Anime.sky()
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_energy = 1.0
+	env.fog_enabled = true
+	env.fog_light_color = Color(1.0, 0.86, 0.9)
+	env.fog_density = 0.012
 	lobby_env = WorldEnvironment.new()
 	lobby_env.environment = env
 	lobby3d.add_child(lobby_env)
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-40, 30, 0)
-	sun.light_color = Color(1.0, 0.85, 0.7)
+	sun.rotation_degrees = Vector3(-30, 35, 0)
+	sun.light_color = Color(1.0, 0.92, 0.82)
+	sun.light_energy = 1.3
 	lobby3d.add_child(sun)
 	var rim := OmniLight3D.new()
-	rim.position = Vector3(-2.5, 2.2, -2.0)
-	rim.light_color = Color(0.4, 0.7, 1.0)
-	rim.light_energy = 2.0
-	rim.omni_range = 8.0
+	rim.position = Vector3(-2.2, 2.0, -1.8)
+	rim.light_color = Color(1.0, 0.6, 0.85)
+	rim.light_energy = 2.2
+	rim.omni_range = 9.0
 	lobby3d.add_child(rim)
-	Mat.cyl(lobby3d, Vector3(0, -0.06, 0), 1.0, 0.12, Mat.flat(Color(0.22, 0.26, 0.4)))
-	Mat.cyl(lobby3d, Vector3(0, 0.0, 0), 0.9, 0.04, Mat.flat(Color(0.9, 0.45, 0.15), 0.6))
+	var rim2 := OmniLight3D.new()
+	rim2.position = Vector3(2.4, 1.8, -1.5)
+	rim2.light_color = Color(0.5, 0.8, 1.0)
+	rim2.light_energy = 1.8
+	rim2.omni_range = 9.0
+	lobby3d.add_child(rim2)
+	# the ground and the platform
+	var ground := MeshInstance3D.new()
+	var gm := PlaneMesh.new()
+	gm.size = Vector2(120, 120)
+	ground.mesh = gm
+	var gs := ShaderMaterial.new()
+	gs.shader = load("res://shaders/ground.gdshader") as Shader
+	ground.material_override = gs
+	ground.position.y = -0.16
+	lobby3d.add_child(ground)
+	Mat.cyl(lobby3d, Vector3(0, -0.06, 0), 1.25, 0.2, Mat.flat(Color(0.98, 0.92, 0.85)))
+	Mat.cyl(lobby3d, Vector3(0, 0.045, 0), 1.0, 0.02, Mat.flat(Color(1.0, 0.45, 0.65), 0.7))
+	var ring := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 1.22
+	tm.outer_radius = 1.32
+	ring.mesh = tm
+	ring.position.y = 0.04
+	ring.material_override = Mat.unlit(Color(1.0, 0.85, 0.35))
+	lobby3d.add_child(ring)
+	# scenery from the real world models
+	var put := func(path: String, pos: Vector3, length: float, yaw: float) -> void:
+		var m := ModelKit.fitted(path, length, "bottom")
+		if m != null:
+			m.position = pos
+			m.rotation.y = yaw
+			lobby3d.add_child(m)
+			Anime.style(m)
+	put.call("res://assets/world/torii.glb", Vector3(0, 0, -7.5), 6.0, 0.0)
+	put.call("res://assets/world/stone_lantern.glb", Vector3(-3.0, 0, -3.5), 1.6, 0.3)
+	put.call("res://assets/world/stone_lantern.glb", Vector3(3.0, 0, -3.5), 1.6, -0.3)
 	for i in 7:
-		var a := float(i) / 7.0 * TAU
-		Mat.box(lobby3d, Vector3(cos(a) * 3.6, 0.6 + float(i % 3) * 0.7, sin(a) * 3.6 - 2.0), Vector3(0.5, 1.2 + float(i % 3), 0.5), Mat.flat(Color(0.2, 0.26, 0.45)))
+		var a := lerpf(-1.2, 1.2, float(i) / 6.0) + 0.0
+		put.call("res://assets/world/cherry_tree.glb", Vector3(sin(a) * 9.0 + (-3.0 if i % 2 == 0 else 3.0), 0, -cos(a) * 9.0 - 1.0 - float(i % 3) * 2.0), 5.0 + float(i % 3), float(i))
+	put.call("res://assets/world/pagoda.glb", Vector3(-9.0, 0, -14.0), 9.0, 0.5)
+	put.call("res://assets/world/windmill.glb", Vector3(10.0, 0, -13.0), 8.0, -0.4)
+	var petals := CPUParticles3D.new()
+	petals.amount = 70
+	petals.lifetime = 8.0
+	petals.preprocess = 8.0
+	petals.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	petals.emission_box_extents = Vector3(8, 0.5, 5)
+	petals.position = Vector3(0, 6.0, -2.0)
+	petals.direction = Vector3(0.5, -1, 0.2)
+	petals.spread = 30.0
+	petals.initial_velocity_min = 0.5
+	petals.initial_velocity_max = 1.2
+	petals.gravity = Vector3(0.3, -0.5, 0.1)
+	petals.angular_velocity_min = -150.0
+	petals.angular_velocity_max = 150.0
+	var qm := QuadMesh.new()
+	qm.size = Vector2(0.14, 0.09)
+	petals.mesh = qm
+	petals.material_override = Mat.unlit(Color(1.0, 0.72, 0.82))
+	lobby3d.add_child(petals)
 	lobby_cam = Camera3D.new()
-	lobby_cam.position = Vector3(0, 1.25, 3.3)
-	lobby_cam.fov = 40.0
+	lobby_cam.position = Vector3(0.0, 1.25, 3.6)
+	lobby_cam.fov = 36.0
 	lobby3d.add_child(lobby_cam)
-	lobby_cam.look_at(Vector3(0, 0.95, 0))
+	lobby_cam.look_at(Vector3(0, 1.0, 0))
 	lobby_cam.make_current()
 	_build_ui()
 	_show_preview()
@@ -215,73 +270,35 @@ func _build_ui() -> void:
 	ui = CanvasLayer.new()
 	ui.layer = 20
 	add_child(ui)
-	# ── the lobby screen
-	lobby_root = Control.new()
-	lobby_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	lobby_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ui.add_child(lobby_root)
-	var title := _lbl("CITY SHIFTER", lobby_root, 44, Color.WHITE)
-	title.position = Vector2(36, 18)
-	var sub := _lbl("SKY SIEGE", lobby_root, 24, Color(1.0, 0.75, 0.35))
-	sub.position = Vector2(40, 72)
-	lbl_coins = _lbl("", lobby_root, 20, Color(1.0, 0.88, 0.5))
-	lbl_coins.position = Vector2(40, 108)
-	# stats (left)
-	var sp := PanelContainer.new()
-	sp.position = Vector2(36, 190)
-	sp.custom_minimum_size = Vector2(300, 190)
-	sp.add_theme_stylebox_override("panel", _style(Color(0.05, 0.08, 0.2, 0.7)))
-	lobby_root.add_child(sp)
-	var sv := VBoxContainer.new()
-	sp.add_child(sv)
-	for k in ["SPEED", "JET FUEL", "STABILITY"]:
-		var l := _lbl(k, sv, 15, Color(1, 1, 1, 0.8))
-		var pb := ProgressBar.new()
-		pb.custom_minimum_size = Vector2(260, 16)
-		pb.show_percentage = false
-		pb.max_value = 1.0
-		sv.add_child(pb)
-		bars[k] = pb
-	# name, role, perk (bottom centre)
-	var nb := VBoxContainer.new()
-	nb.position = Vector2(380, 520)
-	nb.custom_minimum_size = Vector2(520, 160)
-	nb.alignment = BoxContainer.ALIGNMENT_CENTER
-	lobby_root.add_child(nb)
-	lbl_name = _lbl("", nb, 38)
-	lbl_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl_role = _lbl("", nb, 20, Color(1, 0.8, 0.5))
-	lbl_role.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl_perk = _lbl("", nb, 17, Color(1, 1, 1, 0.85))
-	lbl_perk.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl_perk.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lbl_perk.custom_minimum_size = Vector2(520, 0)
-	var prev := _btn("<", lobby_root, Vector2(70, 70))
-	prev.position = Vector2(300, 330)
-	prev.pressed.connect(func() -> void: _step(-1))
-	var next := _btn(">", lobby_root, Vector2(70, 70))
-	next.position = Vector2(910, 330)
-	next.pressed.connect(func() -> void: _step(1))
-	# buttons (right)
-	var col := VBoxContainer.new()
-	col.position = Vector2(930, 150)
-	col.add_theme_constant_override("separation", 12)
-	lobby_root.add_child(col)
-	start_btn = _btn("TRAIN RUN", col, Vector2(300, 70), Color(1.0, 0.62, 0.25))
-	start_btn.pressed.connect(func() -> void:
-		mode = "train"
+	# ── the lobby screen (the anime menu: scripts/lobby_ui.gd)
+	lobby = LobbyUI.new()
+	lobby_root = lobby
+	ui.add_child(lobby)
+	lobby.set_save(save)
+	lobby.play_offline.connect(func(m: String, mt: String) -> void:
+		mode = m
+		match_type = mt
 		start_play())
-	var world_btn := _btn("OPEN WORLD", col, Vector2(300, 70), Color(0.45, 0.85, 1.0))
-	world_btn.pressed.connect(func() -> void:
-		mode = "world"
-		start_play())
-	var together := _btn("PLAY TOGETHER", col)
-	together.pressed.connect(func() -> void: hud.show_net(true))
-	var armory := _btn("ARMORY  (15)", col)
-	armory.pressed.connect(func() -> void: _open_armory(true))
-	lbl_net = _lbl("", col, 15, Color(0.7, 1.0, 0.8))
-	lbl_net.custom_minimum_size = Vector2(300, 0)
-	lbl_net.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lobby.open_armory.connect(func() -> void: _open_armory(true))
+	lobby.char_preview.connect(func(id: String) -> void:
+		sel = maxi(0, Data.CAST_ORDER.find(id))
+		_show_preview())
+	lobby.char_selected.connect(func(id: String) -> void:
+		sel = maxi(0, Data.CAST_ORDER.find(id))
+		save.char = id
+		Data.write_save(save)
+		audio.play("ui", -4.0)
+		_show_preview()
+		lobby.set_save(save))
+	lobby.char_bought.connect(_buy_char)
+	lobby.name_changed.connect(func(n: String) -> void:
+		save.name = n if n != "" else "PLAYER"
+		Data.write_save(save)
+		lobby.set_save(save))
+	lobby.sound_toggled.connect(func(muted: bool) -> void: audio.set_muted(muted))
+	lobby.play_online.connect(_online_request)
+	lobby.leave_online.connect(_online_leave)
+	lobby.start_room.connect(_online_start)
 	# ── the armory
 	armory_root = Control.new()
 	armory_root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -398,15 +415,6 @@ func _open_armory(on: bool) -> void:
 	_refresh_cards()
 
 
-func _step(dir: int) -> void:
-	sel = (sel + dir + Data.CAST_ORDER.size()) % Data.CAST_ORDER.size()
-	save.char = Data.CAST_ORDER[sel]
-	Data.write_save(save)
-	_show_preview()
-	_refresh_lobby()
-	audio.play("ui", -6.0)
-
-
 func _show_preview() -> void:
 	if preview != null:
 		preview.queue_free()
@@ -416,26 +424,36 @@ func _show_preview() -> void:
 
 
 func _refresh_lobby() -> void:
-	var id: String = Data.CAST_ORDER[sel]
-	var info: Dictionary = Data.CAST[id]
-	lbl_name.text = String(info.name)
-	lbl_role.text = String(info.role)
-	lbl_perk.text = String(info.perk)
-	bars["SPEED"].value = float(info.speed) / 8.0
-	bars["JET FUEL"].value = float(info.fuel) * float(info.get("fuel_mult", 1.0)) / 140.0
-	bars["STABILITY"].value = float(info.hp) / 160.0
-	lbl_coins.text = "$%d      LEVEL %d      BEST %d m" % [int(save.coins), Data.level_for(float(save.best)), int(save.best)]
-	if net.is_host():
-		start_btn.text = "START (%d players)" % net.roster.size()
-		lbl_net.text = "You are the host. Players in room: %d" % net.roster.size()
-	elif net.role == "client":
-		start_btn.text = "WAITING FOR HOST"
-		start_btn.disabled = true
-		lbl_net.text = "Connected as player %d" % net.local_id
-	else:
-		start_btn.text = "PLAY SOLO"
-		start_btn.disabled = false
-		lbl_net.text = ""
+	if lobby != null:
+		lobby.set_save(save)
+
+
+## Buy a hero in the shop.
+func _buy_char(id: String) -> void:
+	if Data.char_buyable(id, save) != "":
+		return
+	save.coins = int(save.coins) - int(Data.CAST[id].price)
+	(save.chars as Array).append(id)
+	save.char = id
+	Data.write_save(save)
+	sel = maxi(0, Data.CAST_ORDER.find(id))
+	audio.play("coin", 0.0, 1.2)
+	_show_preview()
+	lobby.set_save(save)
+
+
+# online: see Online (the matchmaker) — wired in the next step
+func _online_request(kind: String, mt: String, code: String) -> void:
+	match_type = mt
+	lobby.set_room({"state": "none", "status": "The matchmaking server is not connected yet."})
+
+
+func _online_leave() -> void:
+	pass
+
+
+func _online_start() -> void:
+	pass
 
 
 func _enter_lobby() -> void:
@@ -449,6 +467,7 @@ func _enter_lobby() -> void:
 	pause_root.visible = false
 	hud.set_playing(false)
 	_refresh_lobby()
+	lobby.show_screen("home")
 
 
 func _process(delta: float) -> void:
