@@ -518,6 +518,11 @@ func _refresh() -> void:
 
 
 ## The online room (or the search): `info` = {state: "none"|"searching"|"room", code, status, players: [{name, team, host, you}], host: bool, max}.
+func set_status(text: String) -> void:
+	if _status != null:
+		_status.text = text
+
+
 func set_room(info: Dictionary) -> void:
 	_room = info
 	if _status == null:

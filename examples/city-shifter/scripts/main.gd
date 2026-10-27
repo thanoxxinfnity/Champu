@@ -13,6 +13,7 @@ var fx: Fx
 var hud: GameHUD
 var net: MultiplayerController
 var world                              # TrainWorld or OpenWorld (same members)
+var online: OnlineSession
 var mc: MatchController                # the open-world match (score, bots, loot, respawns)
 var match_type := "solo"               # "solo" or "team" (teams of 4)
 var mode := "train"                     # "train" (the roof run) or "world" (the open world with vehicles and horses)
@@ -81,6 +82,19 @@ func _ready() -> void:
 	net.fx_received.connect(_on_remote_fx)
 	net.slab_received.connect(_on_remote_slab)
 	net.event_received.connect(_on_event)
+	online = OnlineSession.new()
+	online.name = "Online"
+	add_child(online)
+	online.setup(net, String(save.get("server", Data.MATCH_SERVER)))
+	online.match_ready.connect(func() -> void:
+		mode = "world"
+		match_type = online.mt
+		start_play())
+	online.offline_instead.connect(func(mt: String) -> void:
+		mode = "world"
+		match_type = mt
+		start_play()
+		hud.toast("Nobody else was online — bots will fill the match", 3.6))
 	hud = GameHUD.new()
 	add_child(hud)
 	hud.jump_down.connect(func() -> void:
@@ -297,6 +311,9 @@ func _build_ui() -> void:
 		lobby.set_save(save))
 	lobby.sound_toggled.connect(func(muted: bool) -> void: audio.set_muted(muted))
 	lobby.play_online.connect(_online_request)
+	online.room_info.connect(lobby.set_room)
+	online.status.connect(lobby.set_status)
+	online.failed.connect(func(msg: String) -> void: lobby.set_room({"state": "none", "status": msg}))
 	lobby.leave_online.connect(_online_leave)
 	lobby.start_room.connect(_online_start)
 	# ── the armory
@@ -442,18 +459,25 @@ func _buy_char(id: String) -> void:
 	lobby.set_save(save)
 
 
-# online: see Online (the matchmaker) — wired in the next step
+## ONLINE: the matchmaking server finds the players (quick match) or hosts a custom room; OnlineSession then opens the WebRTC star.
 func _online_request(kind: String, mt: String, code: String) -> void:
 	match_type = mt
-	lobby.set_room({"state": "none", "status": "The matchmaking server is not connected yet."})
+	if not MultiplayerController.available():
+		lobby.set_room({"state": "none", "status": "Online play needs WebRTC, which this build does not have. Solo and team matches with bots work offline."})
+		return
+	if kind == "join" and code.length() != 4:
+		lobby.set_room({"state": "none", "status": "Type the 4-letter room code first"})
+		return
+	lobby.set_room({"state": "none", "status": "Connecting to the server…"})
+	online.begin(kind, mt, code, String(save.get("name", "PLAYER")), Data.CAST_ORDER[sel])
 
 
 func _online_leave() -> void:
-	pass
+	online.leave()
 
 
 func _online_start() -> void:
-	pass
+	online.start_room()
 
 
 func _enter_lobby() -> void:
@@ -537,6 +561,7 @@ func _on_event(kind: String, data: Dictionary) -> void:
 		"start":
 			if state != State.PLAY:
 				mode = String(data.get("mode", "train"))
+				match_type = String(data.get("mt", match_type))
 				start_play()
 		"smash":
 			if state == State.PLAY and mode == "world":
@@ -555,7 +580,7 @@ func start_play() -> void:
 	if state == State.PLAY:
 		return
 	if net.is_host():
-		net.send_event("start", {"mode": mode})
+		net.send_event("start", {"mode": mode, "mt": match_type})
 	lobby3d.visible = false
 	if lobby_env.get_parent() != null:
 		lobby3d.remove_child(lobby_env)
@@ -585,6 +610,7 @@ func start_play() -> void:
 	_slot = maxi(0, ids.find(net.local_id if net.online() else 1))
 	player = PlayerController.new()
 	world.add_child(player)
+	player.display_name = String(save.get("name", "PLAYER")) if mode == "world" else ""
 	player.setup(self, world, spawner, Data.CAST_ORDER[sel], net.local_id if net.online() else 1, true)
 	player.global_position = world.spawn_points[_slot % world.spawn_points.size()].global_position
 	player.last_safe = player.global_position
@@ -645,6 +671,8 @@ func start_play() -> void:
 	if spawner != null:
 		spawner.difficulty = 1.0
 	state = State.PLAY
+	if online.active():
+		online.finish()
 	hud.set_playing(true)
 	if hud.world_mode:
 		hud.banner("%s MATCH — most kills wins" % ("TEAM" if match_type == "team" else "SOLO"), 3.4)
@@ -660,6 +688,7 @@ func _spawn_remote(id: int, char_id: String) -> void:
 	if remotes.has(id) or world == null:
 		return
 	var p := PlayerController.new()
+	p.display_name = String(online.names.get(id, ""))
 	world.add_child(p)
 	p.setup(self, world, spawner, char_id, id, false)
 	var ids: Array = net.roster.keys()
@@ -759,6 +788,8 @@ func end_run() -> void:
 	save.coins = int(save.coins) + run_coins
 	Data.write_save(save)
 	get_tree().paused = false
+	if online.active():
+		online.leave()
 	audio.set_rumble(true)
 	audio.set_engine(-1.0, 1.0)
 	if mc != null:

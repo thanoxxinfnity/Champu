@@ -102,13 +102,13 @@ func host() -> bool:
 
 
 ## Joiner: makes the offer code (asynchronously: `code_ready("offer", …)`).
-func join_start() -> bool:
+func join_start(want_id := 0) -> bool:
 	if not available():
 		status_changed.emit("WebRTC is not available in this build")
 		return false
 	reset()
 	role = "client"
-	local_id = randi_range(2, 1 << 28)
+	local_id = want_id if want_id >= 2 else randi_range(2, 1 << 28)
 	peer = WebRTCMultiplayerPeer.new()
 	peer.create_client(local_id)
 	multiplayer.multiplayer_peer = peer

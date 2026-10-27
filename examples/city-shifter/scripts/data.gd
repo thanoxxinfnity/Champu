@@ -85,6 +85,8 @@ const VIEW_RADIUS := 50.0             # how far everybody sees: the same for all
 const HAND_SLOTS := 5                 # weapons you can carry (the hammer included)
 const MATCH_SECONDS := 360.0
 const MAX_PLAYERS := 15
+## The matchmaking server (server/server.py). Change it here or with the "server" key in the save file; see server/README.md.
+const MATCH_SERVER := "wss://city-shifter-match.hf.space"
 const TEAM_SIZE := 4
 
 ## Melee: a swing in front of you. `reach` m, `arc` half-angle degrees, `cd` seconds, `smash` = also breaks blocks and trees around the hit.
