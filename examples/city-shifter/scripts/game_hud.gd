@@ -44,6 +44,16 @@ var world_mode := false                  # the open world: no bridge/block butto
 var round_label := "ROUND"
 var gate_angle := 0.0                    # radians, + = the next gate is to the left of where the camera looks
 var gate_dist := -1.0                    # metres to the next gate (open world), -1 = none
+var map_path := PackedVector2Array()     # the open world map: the road loop, the gates, the river, the places; you and the others (world x, z)
+var map_gates := PackedVector2Array()
+var map_next := 0
+var map_river: Array = []
+var map_places: Array = []               # [Vector2, name]
+var map_half := 330.0
+var map_you := Vector2.ZERO
+var map_yaw := 0.0
+var map_others := PackedVector2Array()
+var map_big := false                     # tap the little map to open it
 var strip := true                        # the train strip at the top (off in the open world)
 var minimap: Array = []                  # [[z, x, color], ...] players on the train, for the strip at the top
 
@@ -160,6 +170,13 @@ func _touch(idx: int, pos: Vector2, down: bool) -> void:
 					if k == "jet":
 						jump_up.emit()
 		return
+	if world_mode and not map_path.is_empty():
+		if map_big:
+			map_big = false                  # any tap closes the big map
+			return
+		if _map_rect().grow(8).has_point(pos):
+			map_big = true
+			return
 	# a button?
 	for k in _btn:
 		if (k == "ride" and ride_label == "") or (world_mode and (k == "bridge" or k == "block")):
@@ -237,6 +254,43 @@ func release(name: String) -> void:
 		_touch(50 + _btn.keys().find(name), (_btn[name].rect as Rect2).get_center(), false)
 
 
+func _map_rect() -> Rect2:
+	var w := _size.x
+	return Rect2(w - 196, 86, 172, 172)
+
+
+## One map drawing for both sizes: `r` is the square it fills.
+func _draw_map(r: Rect2, big: bool) -> void:
+	var c := _canvas
+	var k := r.size.x / (map_half * 2.0)
+	var o := r.position + r.size * 0.5
+	var tf := func(p: Vector2) -> Vector2:
+		return o + p * k
+	c.draw_rect(r, Color(0.08, 0.14, 0.28, 0.82 if big else 0.62))
+	c.draw_rect(r, Color(1, 1, 1, 0.7), false, 2.0)
+	if map_river.size() == 2:
+		c.draw_line(tf.call(map_river[0]), tf.call(map_river[1]), Color(0.35, 0.8, 1.0, 0.85), 5.0 if big else 3.0)
+	for i in map_path.size():
+		c.draw_line(tf.call(map_path[i]), tf.call(map_path[(i + 1) % map_path.size()]), Color(0.95, 0.9, 0.8, 0.95), 4.0 if big else 2.5)
+	for i in map_gates.size():
+		var g: Vector2 = tf.call(map_gates[i])
+		c.draw_circle(g, 7.0 if big else 4.0, Color(1.0, 0.85, 0.3) if i == map_next else Color(0.7, 0.6, 0.9, 0.8))
+	for pl in map_places:
+		var pp: Vector2 = tf.call(pl[0])
+		c.draw_rect(Rect2(pp - Vector2(3, 3), Vector2(6, 6)), Color(1.0, 0.55, 0.7))
+		if big:
+			_text(String(pl[1]), pp + Vector2(8, 5), 16, Color(1, 0.8, 0.9))
+	for q in map_others:
+		c.draw_circle(tf.call(q), 6.0 if big else 3.5, Color(0.5, 0.9, 1.0))
+	var me: Vector2 = tf.call(map_you)
+	c.draw_set_transform(me, -map_yaw, Vector2.ONE)
+	c.draw_colored_polygon(PackedVector2Array([Vector2(0, -10), Vector2(7, 8), Vector2(0, 4), Vector2(-7, 8)]) if big else PackedVector2Array([Vector2(0, -7), Vector2(5, 6), Vector2(0, 3), Vector2(-5, 6)]), Color(1, 1, 1))
+	c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if big:
+		_text("N", Vector2(o.x - 6, r.position.y + 22), 20, Color(1, 1, 1, 0.9))
+		_text("tap to close", Vector2(r.position.x, r.end.y + 22), 15, Color(1, 1, 1, 0.7), HORIZONTAL_ALIGNMENT_CENTER, r.size.x)
+
+
 # ── drawing ──────────────────────────────────────────────────────────────────
 
 func _glass(r: Rect2, held := false, accent := Color.WHITE) -> void:
@@ -293,6 +347,12 @@ func _draw_all() -> void:
 		_text("PING: %d ms" % ping_ms, Vector2(w - 330, 30), 18, MultiplayerController.ping_color(ping_ms))
 	elif net_text != "":
 		_text(net_text, Vector2(w - 330, 30), 15, Color(1, 1, 1, 0.7))
+	if world_mode and not map_path.is_empty():
+		if map_big:
+			var side := minf(h - 90.0, w - 40.0)
+			_draw_map(Rect2((w - side) * 0.5, 30, side, side), true)
+		else:
+			_draw_map(_map_rect(), false)
 	# buttons
 	for k in _btn:
 		if (k == "ride" and ride_label == "") or (world_mode and (k == "bridge" or k == "block")):

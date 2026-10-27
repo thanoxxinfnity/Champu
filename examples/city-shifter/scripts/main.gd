@@ -579,6 +579,18 @@ func start_play() -> void:
 	hud.ride_label = ""
 	if hud.world_mode:
 		world.focus = player
+		world.audio = audio
+		hud.map_path = world.path
+		var gp := PackedVector2Array()
+		for g in world.gates:
+			gp.append(Vector2((g[0] as Vector3).x, (g[0] as Vector3).z))
+		hud.map_gates = gp
+		hud.map_river = [OpenWorld.RIVER_AT - OpenWorld.RIVER_DIR * 130.0, OpenWorld.RIVER_AT + OpenWorld.RIVER_DIR * 130.0]
+		hud.map_places = [[Vector2(0, 14), "TOWN"], [Vector2(-10, 43), "CAR PARK"], [Vector2(60, 31), "STABLE"], [Vector2(-70, -24), "PAGODA"], [Vector2(40, -30), "WINDMILL"],
+			[Vector2(100, -28), "BRIDGE"], [Vector2(-120, -130), "JUNGLE"]]
+		hud.map_half = OpenWorld.HALF
+		hud.map_big = false
+		audio.set_rumble(false)
 		world.checkpoint.connect(_on_checkpoint)
 		world.smashed.connect(_on_smashed)
 		hud.owned = []
@@ -702,6 +714,8 @@ func end_run() -> void:
 	save.coins = int(save.coins) + run_coins
 	Data.write_save(save)
 	get_tree().paused = false
+	audio.set_rumble(true)
+	audio.set_engine(-1.0, 1.0)
 	for id in remotes.keys():
 		(remotes[id] as Node).queue_free()
 	remotes.clear()
@@ -813,6 +827,13 @@ func _world_frame(_delta: float) -> void:
 	hud.coins = run_coins
 	hud.cooldown = (1.0 - player.mount.boost) if player.mount != null else 0.0
 	hud.minimap = []
+	hud.map_you = Vector2(player.global_position.x, player.global_position.z)
+	hud.map_yaw = player.yaw
+	hud.map_next = world.next_gate
+	var others := PackedVector2Array()
+	for id in remotes:
+		others.append(Vector2((remotes[id] as Node3D).global_position.x, (remotes[id] as Node3D).global_position.z))
+	hud.map_others = others
 	var to_gate: Vector3 = world.gate_position() - player.global_position
 	to_gate.y = 0.0
 	hud.gate_dist = to_gate.length()

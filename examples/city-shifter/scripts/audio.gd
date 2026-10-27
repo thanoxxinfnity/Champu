@@ -11,6 +11,8 @@ var _flat: Array[AudioStreamPlayer] = []
 var _i := 0
 var _rumble: AudioStreamPlayer
 var _jet: AudioStreamPlayer
+var _engine: AudioStreamPlayer
+var _rumble_on := true
 var _rng := RandomNumberGenerator.new()
 var master := 1.0
 var muted := false
@@ -23,8 +25,10 @@ func _ready() -> void:
 		_flat.append(p)
 	_rumble = AudioStreamPlayer.new()
 	_jet = AudioStreamPlayer.new()
+	_engine = AudioStreamPlayer.new()
 	add_child(_rumble)
 	add_child(_jet)
+	add_child(_engine)
 	_thread = Thread.new()
 	_thread.start(_build)
 
@@ -44,9 +48,12 @@ func _process(_d: float) -> void:
 		_rumble.volume_db = -14.0
 		_jet.stream = _streams["jet"]
 		_jet.volume_db = -80.0
+		_engine.stream = _streams["engine"]
+		_engine.volume_db = -80.0
 		if not muted:
 			_rumble.play()
 			_jet.play()
+			_engine.play()
 
 
 func play(name: String, db := 0.0, pitch := 1.0) -> void:
@@ -67,14 +74,30 @@ func set_jet(level: float) -> void:
 		_jet.pitch_scale = 0.85 + level * 0.4
 
 
+## The vehicle engine (own driver only): `level` 0..1 how fast, `pitch` follows the revs. 0 level = silent.
+func set_engine(level: float, pitch: float) -> void:
+	if ready_ok and not muted:
+		_engine.volume_db = -80.0 if level < 0.0 else lerpf(-24.0, -9.0, clampf(level, 0.0, 1.0))
+		_engine.pitch_scale = clampf(pitch, 0.5, 3.0)
+
+
+## The train rumble belongs to the roof run: off in the open world.
+func set_rumble(on: bool) -> void:
+	_rumble_on = on
+	if ready_ok and not muted:
+		_rumble.volume_db = -14.0 if on else -80.0
+
+
 func set_muted(on: bool) -> void:
 	muted = on
 	if on:
 		_rumble.stop()
 		_jet.stop()
+		_engine.stop()
 	elif ready_ok:
 		_rumble.play()
 		_jet.play()
+		_engine.play()
 
 
 # ── synthesis ────────────────────────────────────────────────────────────────
@@ -83,6 +106,8 @@ func _build() -> void:
 	_rng.seed = 3
 	_streams["rumble"] = _rumble_loop(4.0)
 	_streams["jet"] = _jet_loop(1.5)
+	_streams["engine"] = _engine_loop(0.5)
+	_streams["hoof"] = _thud(0.1, 260.0, 0.55)
 	_streams["zap"] = _zap(0.22, 900.0, 220.0)
 	_streams["zap_low"] = _zap(0.3, 360.0, 90.0)
 	_streams["boom"] = _boom(0.9)
@@ -125,6 +150,20 @@ func _rumble_loop(dur: float) -> AudioStreamWAV:
 		lp += ((_rng.randf() * 2.0 - 1.0) - lp) * 0.02
 		var clack := pow(maxf(0.0, sin(TAU * 4.0 * t / dur * dur)), 40.0)     # four clacks per loop
 		b[i] = (lp * 3.2 + sin(TAU * 38.0 * t) * 0.18) * 0.7 + clack * 0.35 * sin(TAU * 220.0 * t) * exp(-fmod(t, dur / 4.0) * 18.0)
+	return _wav(b, true)
+
+
+func _engine_loop(dur: float) -> AudioStreamWAV:
+	# a rough four-stroke: a low note with harmonics, a pulse at the firing rate and a little noise (the period divides the loop so it joins without a click)
+	var b := _buf(dur)
+	var lp := 0.0
+	for i in b.size():
+		var t := float(i) / RATE
+		lp += ((_rng.randf() * 2.0 - 1.0) - lp) * 0.3
+		var f := 60.0
+		var v := sin(TAU * f * t) * 0.5 + sin(TAU * f * 2.0 * t) * 0.3 + sin(TAU * f * 3.0 * t) * 0.18 + sin(TAU * f * 5.0 * t) * 0.08
+		var pulse := 0.65 + 0.35 * sin(TAU * 20.0 * t)
+		b[i] = v * pulse * 0.8 + lp * 0.08
 	return _wav(b, true)
 
 

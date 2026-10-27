@@ -15,6 +15,8 @@ var _vy := 0.0
 var _t := 0.0
 var _speed_v := 0.0
 var _holder: Node3D
+var _last_step := 0
+signal hoofed(strength: float)
 
 
 static func available() -> bool:
@@ -113,6 +115,11 @@ static func _gait_speed(thr: float) -> float:
 
 func _animate(delta: float) -> void:
 	if rigged:
+		var step := int(floor(rig.phase * 4.0))
+		if step != _last_step:
+			_last_step = step
+			if absf(_speed_v) > 0.6 and is_on_floor():
+				hoofed.emit(clampf(absf(_speed_v) / GALLOP, 0.0, 1.0))
 		rig.update(delta, _speed_v, not is_on_floor() and global_position.y > 0.25, steer if (occupant != 0) else 0.0)
 		view.position.y = rig.bob
 		view.rotation.x = rig.pitch * 0.3

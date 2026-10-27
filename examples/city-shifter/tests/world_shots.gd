@@ -25,6 +25,9 @@ func _initialize() -> void:
 	await process_frame
 	game.start_play()
 	await snap("w0_spawn", 40)
+	game.hud.map_big = true
+	await snap("w0_map", 5)
+	game.hud.map_big = false
 	var p := game.player
 	var w: OpenWorld = game.world
 	print("mounts: ", w.mounts.size(), " road points ", w.path.size())

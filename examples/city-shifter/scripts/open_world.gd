@@ -12,6 +12,8 @@ signal smashed(at: Vector3, count: int)
 const ROAD_W := 9.0
 const LOOP := [Vector2(-60, 0), Vector2(60, 0), Vector2(130, -50), Vector2(160, -130), Vector2(110, -210), Vector2(20, -250), Vector2(-90, -220),
 	Vector2(-160, -150), Vector2(-170, -60), Vector2(-120, -10)]
+const RIVER_AT := Vector2(100, -28)
+const RIVER_DIR := Vector2(0.58, 0.81)
 const HALF := 330.0                       # the world is HALF*2 square
 const CELL := 80.0
 const TREES := [
@@ -34,6 +36,7 @@ var gates: Array = []                     # [position, node]
 var next_gate := 0
 var lap := 1
 var focus: Node3D                         # the local player (petals and the checkpoint test follow it)
+var audio: Audio                          # set by Main: engine, hooves
 var _cells: Array = []                    # MultiMeshInstance3D
 var _plants := {}                         # Vector2i cell -> Array of [MultiMesh, instance index, Vector2 position, is_tree, scale]
 var _gone := {}                           # "cell:index:kind" of the plants already smashed
@@ -182,7 +185,7 @@ func road_distance(p: Vector2) -> float:
 
 func _river() -> void:
 	# a river across the road where it bends east, with the arched bridge on top
-	var at := Vector2(100, -28)
+	var at := RIVER_AT
 	var mi := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(16.0, 260.0)
@@ -427,11 +430,20 @@ func _spawn_mounts() -> void:
 			var h := Horse.new()
 			add_child(h)
 			h.setup(id)
+			h.hoofed.connect(_on_hoof.bind(h))
 			h.position = Vector3(48.0 + float(i) * 4.0, 0, 22.0 + float(i % 2) * 3.0)
 			h.yaw = PI * 0.5 + float(i) * 0.4
 			h.rotation.y = h.yaw
 			mounts.append(h)
 			id += 1
+
+
+func _on_hoof(strength: float, h: Horse) -> void:
+	if audio == null or focus == null:
+		return
+	var d := focus.global_position.distance_to(h.global_position)
+	if d < 28.0:
+		audio.play("hoof", lerpf(-8.0, -22.0, clampf(d / 28.0, 0.0, 1.0)) + strength * 3.0, randf_range(0.85, 1.15))
 
 
 func get_mount(id: int) -> Mount:
@@ -489,6 +501,14 @@ func nearest_mount(pos: Vector3) -> Mount:
 
 func update(delta: float) -> void:
 	_gate_t += delta
+	if audio != null and focus != null:
+		var pc := focus as PlayerController
+		if pc != null and pc.mount is Vehicle:
+			var v := pc.mount as Vehicle
+			var f := clampf(absf(v.speed) / float(v.spec.max), 0.0, 1.0)
+			audio.set_engine(0.15 + f * 0.85, 0.7 + f * 1.5 + (0.25 if v.boosting else 0.0))
+		else:
+			audio.set_engine(-1.0, 1.0)
 	if focus != null:
 		_petals.global_position = focus.global_position + Vector3(0, 9, 0)
 		var fp := focus.global_position

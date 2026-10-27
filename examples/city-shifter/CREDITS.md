@@ -18,3 +18,11 @@ The six characters (`assets/cast/`) and the 15 gauntlet weapons (`assets/weapons
 | crate_a | Wooden Crate | YadroGames | CC BY | https://sketchfab.com/3d-models/wooden-crate-e12fde1101b84b6da40056336a7b309d |
 | lamp | Street Lamp | bez_glaza | CC BY | https://sketchfab.com/3d-models/street-lamp-6881aa1e84b047d79860fa9297e05e22 |
 | loco | Fantasy Locomotive Train FREE | Daniil Kulinich | CC BY | https://sketchfab.com/3d-models/fantasy-locomotive-train-free-f0b7fdaaacd2473f877f62f350a766a5 |
+
+## Open world (generated models)
+
+All of these were generated for this game, then prepared for phones with Blender (`tools/prep_world.sh`, `tools/prep_vehicles.sh`, `tools/autorig_quad.py`):
+
+* **Triverse** (text-to-model, `tools/gen_world.py tv`): the jetpack, the rigged horse, every car body (hatchback, supercar, pickup, taxi, cargo truck, fire engine, monster truck and the rest of the garage) and the tyres.
+* **NVIDIA TRELLIS** (text-to-model, `tools/nv_gen.py`): the trees, bushes, rocks, the town (shop houses, torii gates, lanterns, vending machines, pagoda, windmill, stable, bridge) and the camping props.
+* The road, grass, river and sky are shaders (`shaders/`), the anime colour grade is `shaders/grade.gdshader`.
