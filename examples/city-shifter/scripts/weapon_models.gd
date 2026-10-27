@@ -32,16 +32,27 @@ const PARTS := {
 
 
 ## A held model of the weapon. `scale` 1.0 is hand size.
+static func held_length(id: String) -> float:
+	if Data.MELEE.has(id):
+		return float(Data.MELEE[id].len)
+	return float(HELD.get(id, 0.8))
+
+
 static func build(id: String, scale := 1.0) -> Node3D:
 	var path := "res://assets/weapons/%s.glb" % id
 	if ModelKit.exists(path):
-		var real := ModelKit.fitted(path, float(HELD.get(id, 0.8)), "center")
+		var real := ModelKit.fitted(path, held_length(id), "center")
 		real.name = "Weapon_" + id
 		real.scale = Vector3.ONE * scale
 		real.set_meta("real", true)
 		return real
 	var root := Node3D.new()
 	root.name = "Weapon_" + id
+	if Data.MELEE.has(id):                       # (no model yet: a plain bar with a head)
+		Mat.box(root, Vector3(0, 0, -0.3), Vector3(0.06, 0.06, 0.9), Mat.flat(Color(0.5, 0.35, 0.2)))
+		Mat.box(root, Vector3(0, 0, -0.75), Vector3(0.3, 0.2, 0.3), Mat.flat(Data.MELEE[id].color))
+		root.scale = Vector3.ONE * scale
+		return root
 	var color: Color = Data.WEAPONS[id].color
 	for part in PARTS.get(id, PARTS["shift_gauntlet"]):
 		var kind: String = part[0]
@@ -71,8 +82,8 @@ static func build(id: String, scale := 1.0) -> Node3D:
 
 ## The muzzle: where beams and shots start, in the model's own space.
 static func muzzle(id: String) -> Vector3:
-	if ModelKit.exists("res://assets/weapons/%s.glb" % id):
-		return Vector3(0, 0, -float(HELD.get(id, 0.8)) * 0.5)
+	if ModelKit.exists("res://assets/weapons/%s.glb" % id) or Data.MELEE.has(id):
+		return Vector3(0, 0, -held_length(id) * 0.5)
 	var z := 0.0
 	for part in PARTS.get(id, PARTS["shift_gauntlet"]):
 		var pos: Vector3 = part[1]

@@ -20,6 +20,7 @@ var fuel := 100.0
 var heat := 0.0
 var hot := false                 # cut out by overheating
 var thrusting := false
+var cool_mult := 1.0
 
 
 func can_thrust() -> bool:
@@ -48,7 +49,7 @@ func burn(delta: float) -> bool:
 ## One frame without thrust: cools, and refills the tank (fast on the ground).
 func rest(delta: float, on_floor: bool) -> void:
 	thrusting = false
-	heat = maxf(0.0, heat - COOL * delta * (1.4 if hot else 1.0))
+	heat = maxf(0.0, heat - COOL * cool_mult * delta * (1.4 if hot else 1.0))
 	if hot and heat <= RECOVER_AT:
 		hot = false
 		recovered.emit()

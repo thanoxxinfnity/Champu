@@ -3,7 +3,7 @@ extends Node3D
 ## Effects for a phone: no particle simulations. Impact shards are 96 tiny boxes in ONE multimesh integrated on the CPU for under a second; rings and beams are
 ## a few pooled flat meshes that grow and fade. Everything is created once and reused.
 
-const N := 96
+const N := 160
 var _mm: MultiMesh
 var _mmi: MultiMeshInstance3D
 var _pos := PackedVector3Array()
@@ -18,6 +18,10 @@ var _ring_i := 0
 var _beams: Array[MeshInstance3D] = []
 var _beam_t := PackedFloat32Array()
 var _beam_i := 0
+var _orbs: Array[MeshInstance3D] = []
+var _orb_t := PackedFloat32Array()
+var _orb_r := PackedFloat32Array()
+var _orb_i := 0
 var level := 2                 # 0 = no effects (LOW), 1 = fewer, 2 = all
 
 
@@ -44,7 +48,7 @@ func _ready() -> void:
 		_life[i] = 0.0
 		_mm.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3.ZERO), Vector3(0, -500, 0)))
 		_mm.set_instance_color(i, Color.WHITE)
-	for i in 8:
+	for i in 16:
 		var r := MeshInstance3D.new()
 		var cm := CylinderMesh.new()
 		cm.top_radius = 1.0
@@ -57,16 +61,30 @@ func _ready() -> void:
 		r.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(r)
 		_rings.append(r)
-	_ring_t.resize(8)
-	_ring_r.resize(8)
-	for i in 6:
+	_ring_t.resize(16)
+	_ring_r.resize(16)
+	for i in 14:
 		var b := MeshInstance3D.new()
 		b.mesh = Mat.box_mesh(Vector3(1, 1, 1))
 		b.visible = false
 		b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(b)
 		_beams.append(b)
-	_beam_t.resize(6)
+	_beam_t.resize(14)
+	for i in 10:                         # glow balls: muzzle flashes and impact flares
+		var o := MeshInstance3D.new()
+		var sm := SphereMesh.new()
+		sm.radius = 0.5
+		sm.height = 1.0
+		sm.radial_segments = 8
+		sm.rings = 4
+		o.mesh = sm
+		o.visible = false
+		o.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(o)
+		_orbs.append(o)
+	_orb_t.resize(10)
+	_orb_r.resize(10)
 
 
 func shards(at: Vector3, c: Color, count := 10, speed := 6.0) -> void:
@@ -112,7 +130,41 @@ func beam(a: Vector3, b: Vector3, c: Color, width := 0.18, dur := 0.18) -> void:
 	_beam_t[i] = dur
 
 
+## A glow ball that swells and fades in 0.25 s: muzzle flash, impact flare.
+func flash(at: Vector3, c: Color, size := 1.0) -> void:
+	if level == 0:
+		return
+	var i := _orb_i
+	_orb_i = (_orb_i + 1) % _orbs.size()
+	var o := _orbs[i]
+	o.global_position = at
+	o.material_override = Mat.unlit(c, 0.8)
+	o.scale = Vector3.ONE * 0.2
+	o.visible = true
+	_orb_t[i] = 0.25
+	_orb_r[i] = size
+
+
+## A melee swing: a fan of short beams across the arc.
+func slash(at: Vector3, dir: Vector3, c: Color, reach: float, half_deg: float) -> void:
+	if level == 0:
+		return
+	var n := 5
+	for k in n:
+		var a := deg_to_rad(lerpf(-half_deg, half_deg, float(k) / float(n - 1)))
+		var d := dir.rotated(Vector3.UP, a)
+		beam(at + d * reach * 0.35, at + d * reach, c, 0.07 + 0.05 * (1.0 - absf(float(k) - 2.0) / 2.0), 0.14)
+	flash(at + dir * reach * 0.7, c, 0.9)
+
+
 func _process(delta: float) -> void:
+	for i in _orbs.size():
+		if _orb_t[i] > 0.0:
+			_orb_t[i] -= delta
+			var k := clampf(1.0 - _orb_t[i] / 0.25, 0.0, 1.0)
+			_orbs[i].scale = Vector3.ONE * _orb_r[i] * lerpf(0.4, 1.4, k) * (1.0 - k * 0.5)
+			if _orb_t[i] <= 0.0:
+				_orbs[i].visible = false
 	var any := false
 	for i in N:
 		if _life[i] > 0.0:

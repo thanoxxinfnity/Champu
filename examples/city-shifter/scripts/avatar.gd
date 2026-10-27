@@ -22,6 +22,7 @@ var hurt_t := 0.0
 var _holder: Node3D
 var _t := 0.0
 var _clip_t := 0.0
+var _blinking := false
 var riding := false             # sitting on a horse (or in a vehicle: then the avatar is hidden by the player)
 var _flames: Array = []
 var _pack_size := Vector3(0.4, 0.62, 0.3)
@@ -29,6 +30,18 @@ var _pack: Node3D
 var _lean := 0.0
 var _parts: Dictionary = {}     # stand-in limbs
 var _last: Dictionary = {}
+
+
+var outline := true             # the ink outline doubles the triangles: only my own avatar has it in a match
+
+
+## Farther than the view radius nothing of this avatar is drawn.
+func _limit_range(n: Node) -> void:
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		var g := mi as GeometryInstance3D
+		g.visibility_range_end = Data.VIEW_RADIUS + 6.0
+		g.visibility_range_end_margin = 4.0
+		g.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 
 
 func setup(id: String) -> void:
@@ -49,7 +62,9 @@ func setup(id: String) -> void:
 			rig.position.y = -box.position.y * k
 			rig.rotation.y = PI          # the glb faces +Z, the game faces -Z
 			_tint(rig.model, info.get("tint", Color.WHITE))
-			Anime.style(rig.model, true, 0.012)
+			Anime.style(rig.model, outline, 0.012)
+			if not outline:
+				_limit_range(rig.model)
 			_make_pack()
 			return
 		rig.queue_free()
@@ -149,6 +164,16 @@ func _make_pack() -> void:
 		fl.visible = false
 		_pack.add_child(fl)
 		_flames.append(fl)
+
+
+## Spawn protection: the whole figure blinks.
+func modulate_blink(on: bool) -> void:
+	if on:
+		visible = int(Time.get_ticks_msec() / 120) % 2 == 0
+		_blinking = true
+	elif _blinking:
+		visible = true
+		_blinking = false
 
 
 func _process(delta: float) -> void:

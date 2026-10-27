@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dtngayvp5rmcw"
-path="res://.godot/imported/truck_body_albedo.jpg-8865fae981d6827bb908ef7e18dab88a.ctex"
+uid="uid://cn8slkvaksq1i"
+path="res://.godot/imported/school_Image_0.jpg-d9c8b6619deddc0fa04e61e3db753a1e.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "0b194ea7ccd08166c9738cf66a718dbf"
+"md5": "29726d79e930f1bae3b06bae1316acda"
 }
 
 [deps]
 
-source_file="res://tmp_v/truck_body_albedo.jpg"
-dest_files=["res://.godot/imported/truck_body_albedo.jpg-8865fae981d6827bb908ef7e18dab88a.ctex"]
+source_file="res://assets/cast/school_Image_0.jpg"
+dest_files=["res://.godot/imported/school_Image_0.jpg-d9c8b6619deddc0fa04e61e3db753a1e.ctex"]
 
 [params]
 

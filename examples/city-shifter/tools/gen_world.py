@@ -57,6 +57,21 @@ NV = [
     ('tent', 'small colourful camping tent, no ground, no grass base'),
     ('windmill', 'small japanese wooden water mill with a wheel, no ground'),
     ('pagoda', 'small red japanese pagoda tower with curved roofs, no ground'),
+    # melee weapons (held props, no ground)
+    ('w_hammer_big', 'huge two handed war sledgehammer with a giant square steel head and long wooden handle, anime fantasy weapon, no ground'),
+    ('w_hammer', 'medium wooden handled hammer with a steel head, anime style tool weapon, no ground'),
+    ('w_katana', 'anime katana sword with a glowing blue edge and black handle, no ground'),
+    ('w_axe', 'big battle axe with a double bladed steel head and red handle, anime style, no ground'),
+    ('w_spear', 'long anime spear with a gold leaf shaped tip and a red tassel, no ground'),
+    # more characters, T-pose for the auto-rig
+    ('c_kunoichi', 'anime kunoichi girl ninja with purple scarf, full body standing in T-pose with both arms stretched straight out sideways, front view, plain background'),
+    ('c_samurai', 'anime samurai young man in red and black armor, full body standing in T-pose with both arms stretched straight out sideways, front view, plain background'),
+    ('c_mage', 'anime mage girl with long white hair and a blue robe, full body standing in T-pose with both arms stretched straight out sideways, front view, plain background'),
+    ('c_school', 'anime high school girl in a sailor uniform with short pink hair, full body standing in T-pose with both arms stretched straight out sideways, front view, plain background'),
+    ('c_cyber', 'anime cyberpunk boy with neon green jacket and goggles, full body standing in T-pose with both arms stretched straight out sideways, front view, plain background'),
+    ('c_pirate', 'anime pirate captain man with a tricorn hat and long coat, full body standing in T-pose with both arms stretched straight out sideways, front view, plain background'),
+    ('c_knight', 'anime knight girl in shiny silver armor with a blonde ponytail, full body standing in T-pose with both arms stretched straight out sideways, front view, plain background'),
+    ('c_monk', 'anime warrior monk bald man in orange robes, full body standing in T-pose with both arms stretched straight out sideways, front view, plain background'),
 ]
 which = sys.argv[1] if len(sys.argv) > 1 else ''
 ok = True

@@ -8,6 +8,7 @@ extends CharacterBody3D
 signal hurt(amount: float)
 signal respawned(reason: String)
 signal fuel_empty
+signal died(killer: PlayerController)
 
 const CAM_DIST := 4.2
 
@@ -20,6 +21,17 @@ var spawner: OptimizedSkySpawner
 var char_id := "outlaw"
 var info: Dictionary = {}
 var peer_id := 1
+var team := 0                            # team index (in solo every player is its own team)
+var display_name := ""
+var is_bot := false                      # simulated here by a BotBrain (no camera, no touch)
+var lethal := false                      # the match: hp 0 is a death (the train run stays non-lethal)
+var alive := true
+var kills := 0
+var deaths := 0
+var shield := 0.0                        # seconds of spawn protection
+var slow_t := 0.0                        # seconds of CHRONO/TETHER slowdown
+var last_hit_by: PlayerController
+var nametag: Label3D
 var is_local := true
 var avatar: Avatar
 var tool: GauntletTool
@@ -74,8 +86,12 @@ func setup(g: Node, w: Node, sp: OptimizedSkySpawner, id: String, pid := 1, loca
 	hp = max_hp
 	max_fuel = float(info.fuel) * float(info.get("fuel_mult", 1.0))
 	fuel = max_fuel
+	jet.cool_mult = float(info.get("cool_mult", 1.0))
 	name = "Player%d" % pid
 	collision_layer = 4 if local else 0
+	add_to_group("actors")
+	if display_name == "":
+		display_name = String(info.name)
 	collision_mask = 1
 	var cs := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
@@ -85,11 +101,12 @@ func setup(g: Node, w: Node, sp: OptimizedSkySpawner, id: String, pid := 1, loca
 	cs.position.y = 0.88
 	add_child(cs)
 	avatar = Avatar.new()
+	avatar.outline = local and not is_bot
 	add_child(avatar)
 	avatar.setup(id)
 	floor_snap_length = 0.3
 	floor_max_angle = deg_to_rad(50.0)
-	if local:
+	if local and not is_bot:
 		pivot = Node3D.new()
 		pivot.position.y = 1.55
 		add_child(pivot)
@@ -102,7 +119,7 @@ func setup(g: Node, w: Node, sp: OptimizedSkySpawner, id: String, pid := 1, loca
 		cam = Camera3D.new()
 		cam.fov = 64.0
 		cam.near = 0.1
-		cam.far = 260.0
+		cam.far = 260.0 if not (game != null and game.get("mode") == "world") else Data.VIEW_RADIUS * 2.4
 		cam.h_offset = 0.5
 		cam.v_offset = 0.15
 		arm.add_child(cam)
@@ -110,6 +127,18 @@ func setup(g: Node, w: Node, sp: OptimizedSkySpawner, id: String, pid := 1, loca
 	tool = GauntletTool.new()
 	tool.player = self
 	add_child(tool)
+	if not (local and not is_bot):
+		nametag = Label3D.new()
+		nametag.text = display_name
+		nametag.font_size = 40
+		nametag.pixel_size = 0.0065
+		nametag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		nametag.no_depth_test = true
+		nametag.render_priority = 5
+		nametag.outline_size = 12
+		nametag.position = Vector3(0, info.height + 0.55, 0)
+		nametag.visibility_range_end = 45.0
+		add_child(nametag)
 	set_physics_process(true)
 
 
@@ -127,6 +156,13 @@ func _physics_process(delta: float) -> void:
 	if not is_local:
 		_follow_snapshots(delta)
 		return
+	shield = maxf(0.0, shield - delta)
+	slow_t = maxf(0.0, slow_t - delta)
+	if nametag != null:
+		nametag.visible = alive
+	avatar.modulate_blink(shield > 0.0)
+	if not alive:
+		return
 	if mount != null:
 		_mounted(delta)
 		return
@@ -139,15 +175,16 @@ func _physics_process(delta: float) -> void:
 	yaw -= look_delta.x
 	pitch = clampf(pitch - look_delta.y, -0.75, 0.4)
 	look_delta = Vector2.ZERO
-	pivot.rotation = Vector3(pitch, yaw, 0)
-	# camera pull-back while jetting so the whole gap stays in view
-	arm.spring_length = lerpf(arm.spring_length, CAM_DIST + (0.8 if _jetting else 0.0), minf(1.0, delta * 3.0))
-	cam.fov = lerpf(cam.fov, 70.0 if (_jetting or _dash_t > 0.0) else 64.0, minf(1.0, delta * 4.0))
+	if pivot != null:
+		pivot.rotation = Vector3(pitch, yaw, 0)
+		# camera pull-back while jetting so the whole gap stays in view
+		arm.spring_length = lerpf(arm.spring_length, CAM_DIST + (0.8 if _jetting else 0.0), minf(1.0, delta * 3.0))
+		cam.fov = lerpf(cam.fov, 70.0 if (_jetting or _dash_t > 0.0) else 64.0, minf(1.0, delta * 4.0))
 	var on_floor := is_on_floor()
 	# horizontal: camera-relative stick
 	var basis_y := Basis(Vector3.UP, yaw)
 	var dir := basis_y * Vector3(move_input.x, 0.0, -move_input.y)
-	var spd: float = float(info.speed) * speed_mult * (1.0 if stun <= 0.0 else 0.25) * (1.7 if boost_t > 0.0 else 1.0)
+	var spd: float = float(info.speed) * speed_mult * (1.0 if stun <= 0.0 else 0.25) * (1.7 if boost_t > 0.0 else 1.0) * (0.55 if slow_t > 0.0 else 1.0)
 	var accel := 38.0 if on_floor else 14.0
 	var target := dir * spd
 	if _dash_t > 0.0:
@@ -314,12 +351,64 @@ func _check_debris() -> void:
 		break
 
 
+## A weapon or a fall hurts me. In the match (`lethal`) hp 0 is a death; no friendly fire. `from` may be null (a block, the world).
+func take_damage(amount: float, from: PlayerController = null, knock := Vector3.ZERO, slow := 0.0) -> void:
+	if not alive or shield > 0.0:
+		return
+	if from != null and from != self and from.team == team and lethal:
+		return
+	hp -= amount * float(info.get("dmg_taken", 1.0))
+	last_hit_by = from if from != null else last_hit_by
+	avatar.hurt_t = 0.35
+	velocity += knock
+	slow_t = maxf(slow_t, slow)
+	_play("hurt", -6.0, randf_range(0.9, 1.15))
+	hurt.emit(amount)
+	if hp <= 0.0 and lethal:
+		die(from if from != null else last_hit_by)
+
+
+func die(killer: PlayerController) -> void:
+	if not alive:
+		return
+	alive = false
+	hp = 0.0
+	deaths += 1
+	if mount != null:
+		leave()
+	velocity = Vector3.ZERO
+	avatar.visible = false
+	if tool != null and tool.held != null:
+		tool.held.visible = false
+	if game != null and game.get("fx") != null:
+		game.fx.shards(global_position + Vector3(0, 1.0, 0), Color(1.0, 0.8, 0.9), 16, 6.0)
+		game.fx.ring(global_position + Vector3(0, 0.2, 0), Color(1.0, 0.5, 0.7), 3.0)
+	died.emit(killer)
+
+
+func revive(pos: Vector3) -> void:
+	alive = true
+	hp = max_hp
+	shield = 3.0
+	stun = 0.0
+	slow_t = 0.0
+	jet.refill()
+	global_position = pos
+	last_safe = pos
+	velocity = Vector3.ZERO
+	avatar.visible = true
+	if tool != null and tool.held != null:
+		tool.held.visible = true
+
+
 func take_hit(amount: float) -> void:
 	hp -= amount * float(info.get("dmg_taken", 1.0))
 	avatar.hurt_t = 0.4
 	_play("hurt", -4.0, 1.0)
 	hurt.emit(amount)
-	if hp <= 0.0:
+	if hp <= 0.0 and lethal:
+		die(null)
+	elif hp <= 0.0:
 		stun = 1.4
 		hp = max_hp * 0.5
 		respawn_at(last_safe + Vector3(0, 0.6, 0), "stability")

@@ -13,6 +13,8 @@ var fx: Fx
 var hud: GameHUD
 var net: MultiplayerController
 var world                              # TrainWorld or OpenWorld (same members)
+var mc: MatchController                # the open-world match (score, bots, loot, respawns)
+var match_type := "solo"               # "solo" or "team" (teams of 4)
 var mode := "train"                     # "train" (the roof run) or "world" (the open world with vehicles and horses)
 var spawner: OptimizedSkySpawner
 var player: PlayerController
@@ -96,6 +98,9 @@ func _ready() -> void:
 	hud.fire_down.connect(func() -> void: _fire())
 	hud.bridge_pressed.connect(_bridge)
 	hud.ride_pressed.connect(_ride)
+	hud.results_closed.connect(func() -> void:
+		hud.results = {}
+		end_run())
 	hud.block_pressed.connect(func() -> void:
 		if player != null:
 			var k := player.tool.cycle_block()
@@ -544,17 +549,17 @@ func start_play() -> void:
 	add_child(world)
 	fx = Fx.new()
 	add_child(fx)
+	spawner = OptimizedSkySpawner.new()
+	spawner.world = world
+	spawner.fx = fx
+	spawner.authority = net.role != "client"
 	if mode == "world":
-		spawner = null
-	else:
-		spawner = OptimizedSkySpawner.new()
-		spawner.world = world
-		spawner.fx = fx
-		spawner.authority = net.role != "client"
-		add_child(spawner)
-		spawner.broken.connect(_on_broken)
-		spawner.incoming.connect(_on_incoming)
-		spawner.spawned.connect(func(_id: int, _pos: Vector3, _size: float, _vel: Vector3, _ci: int) -> void: pass)
+		spawner.open = true
+		spawner.rate = 0.45
+	add_child(spawner)
+	spawner.broken.connect(_on_broken)
+	spawner.incoming.connect(_on_incoming)
+	spawner.spawned.connect(func(_id: int, _pos: Vector3, _size: float, _vel: Vector3, _ci: int) -> void: pass)
 	# my slot among everybody who is here
 	var ids: Array = net.roster.keys() if net.online() else [1]
 	ids.sort()
@@ -593,7 +598,22 @@ func start_play() -> void:
 		audio.set_rumble(false)
 		world.checkpoint.connect(_on_checkpoint)
 		world.smashed.connect(_on_smashed)
-		hud.owned = []
+		var others: Array = []
+		for id in remotes:
+			others.append(remotes[id])
+		mc = MatchController.new()
+		mc.name = "Match"
+		add_child(mc)
+		mc.setup(self, world, spawner, match_type)
+		mc.online = net.online()
+		mc.is_authority = not net.online() or net.is_host()
+		mc.finished.connect(_on_match_finished)
+		mc.begin(player, others, not net.online())
+		hud.match_on = true
+		hud.team_mode = match_type == "team"
+		hud.results = {}
+		hud.show_board = false
+		hud.owned = player.tool.inventory.duplicate()
 	else:
 		_equip(String(save.get("weapon", "shift_gauntlet")))
 		hud.owned = _owned()
@@ -608,8 +628,8 @@ func start_play() -> void:
 	state = State.PLAY
 	hud.set_playing(true)
 	if hud.world_mode:
-		hud.banner("OPEN WORLD — drive through the pink gates", 3.4)
-		hud.toast("Walk up to a truck or a horse and press RIDE")
+		hud.banner("%s MATCH — most kills wins" % ("TEAM" if match_type == "team" else "SOLO"), 3.4)
+		hud.toast("Grab weapons from the ground. Your gauntlets recharge in 60 s.", 3.6)
 	else:
 		hud.banner("ROUND 1 — reach the engine", 3.2)
 		hud.toast("Bridge the gaps: BRIDGE PLACE, or hold JUMP/JET in the air")
@@ -670,7 +690,13 @@ func _owned() -> Array:
 
 
 func _equip(id: String) -> void:
-	if player == null or not Data.weapon_unlocked(id, save):
+	if player == null:
+		return
+	if mode == "world":
+		if player.tool.inventory.has(id):
+			player.tool.equip(id)
+		return
+	if not Data.weapon_unlocked(id, save):
 		return
 	player.tool.equip(id)
 	hud.weapon_id = id
@@ -678,7 +704,7 @@ func _equip(id: String) -> void:
 
 
 func _fire() -> void:
-	if player != null and state == State.PLAY and mode != "world":
+	if player != null and state == State.PLAY:
 		if not player.tool.fire():
 			return
 		if net.is_host() or not net.online():
@@ -686,7 +712,7 @@ func _fire() -> void:
 
 
 func _bridge() -> void:
-	if player != null and state == State.PLAY and mode != "world":
+	if player != null and state == State.PLAY:
 		player.tool.place_bridge()
 
 
@@ -716,6 +742,12 @@ func end_run() -> void:
 	get_tree().paused = false
 	audio.set_rumble(true)
 	audio.set_engine(-1.0, 1.0)
+	if mc != null:
+		mc.stop()
+		mc.queue_free()
+		mc = null
+	hud.match_on = false
+	hud.results = {}
 	for id in remotes.keys():
 		(remotes[id] as Node).queue_free()
 	remotes.clear()
@@ -746,6 +778,25 @@ func add_coins(n: int, at := Vector3.ZERO) -> void:
 	run_coins += n
 	if audio != null:
 		audio.play("coin", -10.0, randf_range(0.9, 1.2))
+
+
+## A short message at the bottom of the screen.
+func toast(text: String, secs := 2.2) -> void:
+	hud.toast(text, secs)
+
+
+## The cross-hair flickers and a number floats: my shot landed.
+func hit_marker(amount: float, at: Vector3) -> void:
+	hud.hit_t = 0.25
+	hud.hit_dmg = amount
+	audio.play("ping", -8.0, 1.0 + minf(amount, 80.0) * 0.006)
+	fx.flash(at, Color(1.0, 0.95, 0.7), 0.7)
+
+
+## Another phone's player was hit by me: the hit goes to that phone, which keeps its own player's hp. (Overridden by the match: see MatchController.)
+func send_hit(target_peer: int, amount: float, knock: Vector3, slow: float) -> void:
+	if net.online():
+		net.send_hit(target_peer, amount, knock, slow)
 
 
 func shake(amount: float) -> void:
@@ -786,7 +837,7 @@ func _physics_process(delta: float) -> void:
 		player.move_input = hud.move
 		player.jet_held = hud.is_held("jet")
 	player.look_delta += hud.take_look()
-	if hud.is_held("fire") and not open_world:
+	if hud.is_held("fire") and player.mount == null:
 		_fire()
 	if open_world:
 		_world_frame(delta)
@@ -818,6 +869,7 @@ func _world_frame(_delta: float) -> void:
 		hud.ride_label = ("RIDE" if near is Horse else "DRIVE") + "\n" + near.title.get_slice(" ", near.title.get_slice_count(" ") - 1)
 	else:
 		hud.ride_label = ""
+	hud.fire_label = "BOOST" if player.mount != null else "FIRE"
 	hud.stability = player.hp / player.max_hp
 	hud.fuel = player.jet.fuel_frac()
 	hud.heat = player.jet.heat_frac()
@@ -825,19 +877,53 @@ func _world_frame(_delta: float) -> void:
 	hud.distance = world.progress
 	hud.round_no = world.lap
 	hud.coins = run_coins
-	hud.cooldown = (1.0 - player.mount.boost) if player.mount != null else 0.0
 	hud.minimap = []
 	hud.map_you = Vector2(player.global_position.x, player.global_position.z)
 	hud.map_yaw = player.yaw
 	hud.map_next = world.next_gate
 	var others := PackedVector2Array()
-	for id in remotes:
-		others.append(Vector2((remotes[id] as Node3D).global_position.x, (remotes[id] as Node3D).global_position.z))
+	for a in mc.actors:
+		if a != player and a.alive and a.team == player.team:
+			others.append(Vector2(a.global_position.x, a.global_position.z))
 	hud.map_others = others
 	var to_gate: Vector3 = world.gate_position() - player.global_position
 	to_gate.y = 0.0
 	hud.gate_dist = to_gate.length()
 	hud.gate_angle = player.flat_forward().signed_angle_to(to_gate.normalized(), Vector3.UP) if to_gate.length() > 0.1 else 0.0
+	# the match
+	hud.match_on = mc != null and (mc.running or not hud.results.is_empty())
+	if mc != null:
+		hud.time_left = mc.time_left
+		hud.my_kills = player.kills
+		hud.team_kills = int(mc.team_score.get(player.team, 0))
+		hud.death_t = float(mc._respawn.get(player, 0.0))
+		hud.feed = mc.feed
+		hud.owned = player.tool.inventory.duplicate()
+		hud.weapon_id = player.tool.weapon
+		var ch := {}
+		for id in player.tool.inventory:
+			ch[id] = [player.tool.charge_of(id), player.tool.is_locked(id)]
+		hud.charges = ch
+		hud.cooldown = (1.0 - player.mount.boost) if player.mount != null else player.tool.cd_left / maxf(player.tool.cooldown_for(player.tool.weapon), 0.01)
+		if hud.show_board:
+			hud.board = mc.scoreboard()
+
+
+func _on_match_finished(r: Dictionary) -> void:
+	var mine: Dictionary = r.get("me", {})
+	var won := bool(mine.get("won", false))
+	var coins := 20 + int(mine.get("kills", 0)) * 10 + (80 if won else 0)
+	run_coins += coins
+	save.coins = int(save.coins) + run_coins
+	save.matches = int(save.get("matches", 0)) + 1
+	save.wins = int(save.get("wins", 0)) + (1 if won else 0)
+	Data.write_save(save)
+	run_coins = 0
+	hud.board = r.get("board", [])
+	hud.results = {"won": won, "kills": int(mine.get("kills", 0)), "deaths": int(mine.get("deaths", 0)), "coins": coins}
+	audio.play("coin", 0.0, 0.8 if not won else 1.2)
+	if net.is_host():
+		net.send_event("end", {})
 
 
 func _train_frame(delta: float) -> void:

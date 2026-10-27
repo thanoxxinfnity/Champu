@@ -26,10 +26,11 @@ const UNDER := [["res://assets/world/bush.glb", 1.3, 12], ["res://assets/world/f
 	["res://assets/world/rock_small.glb", 1.2, 4], ["res://assets/world/log.glb", 1.6, 2], ["res://assets/world/rock_big.glb", 3.2, 1]]
 
 var spawn_points: Array[Marker3D] = []
+var blocked: Array[Rect2] = []            # (x, z) footprints of the houses and the like: nothing is dropped inside them
 var progress := 0.0
 var goal_z := -1.0e9
 var speed := 0.0
-var view_dist := 60.0
+var view_dist := Data.VIEW_RADIUS
 var mounts: Array = []                    # Mount
 var path: PackedVector2Array = PackedVector2Array()      # the road, a point every ~6 m
 var gates: Array = []                     # [position, node]
@@ -217,6 +218,8 @@ func _place(path_: String, pos: Vector3, yaw: float, length: float, collide := f
 	Anime.style(m)
 	if collide:
 		var sz: Vector3 = m.get_meta("size")
+		var half := maxf(sz.x, sz.z) * 0.5
+		blocked.append(Rect2(pos.x - half, pos.z - half, half * 2.0, half * 2.0))
 		var body := StaticBody3D.new()
 		body.collision_layer = 1
 		body.collision_mask = 0
@@ -482,6 +485,15 @@ func smash(at: Vector3, reach: float, local := true) -> int:
 	return trees
 
 
+## Where weapons and people gather: [centre, radius, weight].
+func pois() -> Array:
+	return [[Vector2(0, 18), 55.0, 3.0], [Vector2(-10, 43), 35.0, 1.5], [Vector2(60, 31), 25.0, 1.5], [Vector2(-70, -24), 28.0, 1.0], [Vector2(40, -30), 25.0, 1.0],
+		[Vector2(-72, 20), 20.0, 0.8], [Vector2(100, -28), 25.0, 0.8], [Vector2(-150, -120), 60.0, 1.2], [Vector2(130, -170), 50.0, 1.0]] + _extra_pois
+
+
+var _extra_pois: Array = []
+
+
 ## The free mount closest to `pos` within its own reach, or null.
 func nearest_mount(pos: Vector3) -> Mount:
 	var best: Mount = null
@@ -547,7 +559,7 @@ func _petals_fx() -> void:
 
 
 func set_view_distance(d: float) -> void:
-	view_dist = clampf(d, 30.0, 80.0)
+	view_dist = clampf(d, 30.0, Data.VIEW_RADIUS)          # nobody sees farther than 50 m: no advantage
 	for c in _cells:
 		var g := c as GeometryInstance3D
 		g.visibility_range_end = view_dist + 25.0

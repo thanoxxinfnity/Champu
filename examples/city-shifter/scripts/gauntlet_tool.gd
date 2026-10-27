@@ -6,6 +6,8 @@ extends Node3D
 
 signal fired(weapon: String, origin: Vector3, dir: Vector3, point: Vector3)
 signal placed(pos: Vector3, axis: int, kind: String)
+signal inventory_changed
+signal dropped(id: String)
 
 const SLAB := Vector3(2.0, 0.5, 1.0)
 
@@ -32,6 +34,10 @@ var _grapple_to := Vector3.INF
 var _grapple_t := 0.0
 var _slow_t := 0.0
 var shots := 0
+# the match: what I carry and how full each gauntlet is (melee weapons need no charge)
+var inventory: Array[String] = []
+var charge := {}                                 # id -> 0..1
+var locked := {}                                 # id -> true while an emptied gauntlet refills to 100 %
 
 
 func _ready() -> void:
@@ -69,7 +75,7 @@ func _make_slab() -> StaticBody3D:
 
 
 func equip(id: String) -> void:
-	if not Data.WEAPONS.has(id):
+	if not Data.WEAPONS.has(id) and not Data.MELEE.has(id):
 		return
 	weapon = id
 	if held != null:
@@ -82,8 +88,61 @@ func equip(id: String) -> void:
 
 
 func cooldown_for(id: String) -> float:
+	if Data.MELEE.has(id):
+		return float(Data.MELEE[id].cd)
 	var w: Dictionary = Data.WEAPONS[id]
 	return (0.25 + float(w.cd) * 1.1) * float(player.info.get("cd_mult", 1.0))
+
+
+## Pick up a weapon: a new one goes into a free hand slot (the full pack swaps the one in my hand, which drops); one I already carry is simply refilled.
+func give(id: String) -> bool:
+	if not Data.WEAPONS.has(id) and not Data.MELEE.has(id):
+		return false
+	if inventory.has(id):
+		charge[id] = 1.0
+		locked.erase(id)
+		inventory_changed.emit()
+		return true
+	if inventory.size() >= Data.HAND_SLOTS:
+		var out := weapon if inventory.has(weapon) else inventory[inventory.size() - 1]
+		inventory.erase(out)
+		charge.erase(out)
+		locked.erase(out)
+		dropped.emit(out)
+	inventory.append(id)
+	charge[id] = 1.0
+	equip(id)
+	inventory_changed.emit()
+	return true
+
+
+## Everything but the free starting pair falls where I die.
+func drop_all() -> Array[String]:
+	var out: Array[String] = []
+	for id in inventory:
+		if id != "shift_gauntlet" and id != "hammer":
+			out.append(id)
+	return out
+
+
+func reset_loadout() -> void:
+	inventory.clear()
+	charge.clear()
+	locked.clear()
+	inventory.append("shift_gauntlet")
+	inventory.append("hammer")
+	charge["shift_gauntlet"] = 1.0
+	charge["hammer"] = 1.0
+	equip("shift_gauntlet")
+	inventory_changed.emit()
+
+
+func charge_of(id: String) -> float:
+	return float(charge.get(id, 1.0))
+
+
+func is_locked(id: String) -> bool:
+	return bool(locked.get(id, false))
 
 
 func cycle_block() -> String:
@@ -96,20 +155,37 @@ func cycle_block() -> String:
 # ── firing ───────────────────────────────────────────────────────────────────
 
 func fire() -> bool:
-	if cd_left > 0.0 or player == null or player.stun > 0.0:
+	if cd_left > 0.0 or player == null or player.stun > 0.0 or not player.alive:
 		return false
-	var w: Dictionary = Data.WEAPONS[weapon]
+	var melee := Data.MELEE.has(weapon)
+	var match_on: bool = player.lethal
+	if match_on and not melee and is_locked(weapon):
+		player.game.toast("%s is recharging: %d s" % [String(Data.WEAPONS[weapon].name), int(ceil((1.0 - charge_of(weapon)) * Data.CHARGE_SECONDS))], 1.2)
+		return false
 	cd_left = cooldown_for(weapon)
 	firing_t = 0.3
-	player.avatar.attack_t = 0.3
+	player.avatar.attack_t = 0.3 if not melee else minf(0.45, cd_left * 0.7)
 	shots += 1
 	var origin := player.eye()
 	var dir := player.aim_dir()
+	if melee:
+		_swing(origin, dir)
+		fired.emit(weapon, origin, dir, origin + dir * float(Data.MELEE[weapon].reach))
+		return true
+	var w: Dictionary = Data.WEAPONS[weapon]
+	if match_on:
+		var left := charge_of(weapon) - float(Data.DAMAGE[weapon].cost)
+		charge[weapon] = maxf(0.0, left)
+		if left <= 0.001:
+			locked[weapon] = true
+			player.game.toast("%s is empty: 60 s to refill" % String(w.name), 1.6)
+		inventory_changed.emit()
 	var rng_m: float = lerpf(7.0, 42.0, float(w.range))
 	var force: float = lerpf(6.0, 30.0, float(w.force))
 	var point := origin + dir * rng_m
 	var col: Color = w.color
 	player.game.audio.play("zap" if float(w.force) < 0.6 else "zap_low", -3.0, randf_range(0.9, 1.1))
+	player.game.fx.flash(_muzzle_point(), col, 0.8)
 	match String(w.kind):
 		"shove": _shove(origin, dir, rng_m, force, col)
 		"vortex": _vortex(origin, dir, rng_m, force, col)
@@ -126,8 +202,98 @@ func fire() -> bool:
 		"slow": _slow(col)
 		"tether": _tether(origin, col)
 		"meteor": point = _meteor(dir, rng_m, force, col)
+	_hurt(String(w.kind), origin, dir, rng_m, force, point)
 	fired.emit(weapon, origin, dir, point)
 	return true
+
+
+## A melee swing: everybody in the arc is cut, and the heavy ones also smash blocks and trees where they land.
+func _swing(origin: Vector3, dir: Vector3) -> void:
+	var m: Dictionary = Data.MELEE[weapon]
+	var reach: float = m.reach
+	var col: Color = m.color
+	var flat := Vector3(dir.x, 0.0, dir.z).normalized()
+	var chest := player.global_position + Vector3(0, 1.2, 0)
+	player.game.audio.play("whoosh", -4.0, randf_range(0.9, 1.2) if float(m.cd) < 0.5 else randf_range(0.6, 0.8))
+	player.game.fx.slash(chest, flat, col, reach, float(m.arc))
+	if player.lethal:
+		var dmg: float = float(Data.DAMAGE[weapon].dmg) * float(player.info.get("melee_mult", 1.0))
+		var hits := 0
+		for t in Combat.in_cone(Combat.enemies(player), chest, flat, reach, float(m.arc)):
+			if Combat.hurt(player, t, dmg, flat * (6.0 + dmg * 0.1) + Vector3(0, 3.5, 0)):
+				player.game.fx.shards(Combat.center(t), col, 8, 6.0)
+				hits += 1
+		if hits > 0:
+			player.game.shake(0.25 + minf(0.5, dmg * 0.005))
+	if bool(m.smash):
+		var p := chest + flat * reach * 0.7
+		if player.spawner != null:
+			for d in player.spawner.in_sphere(p, reach * 0.8):
+				_shatter(d, 1)
+		if player.world != null and player.world.has_method("smash"):
+			if player.world.smash(p, reach * 0.9) > 0:
+				player.game.shake(0.3)
+		player.game.fx.shards(p, col, 8, 5.0)
+		player.game.fx.ring(Vector3(p.x, player.global_position.y + 0.1, p.z), col, reach * 0.8)
+
+
+## What a gauntlet shot does to people (the block-breaking half is in the handlers above). Only in a match.
+func _hurt(kind: String, origin: Vector3, dir: Vector3, rng_m: float, force: float, point: Vector3) -> void:
+	if not player.lethal:
+		return
+	var dmg: float = Data.DAMAGE[weapon].dmg
+	var foes := Combat.enemies(player)
+	if foes.is_empty():
+		return
+	var up := Vector3(0, 3.5, 0)
+	match kind:
+		"shove":
+			for t in Combat.in_cone(foes, origin, dir, rng_m * 0.55, 42.0):
+				Combat.hurt(player, t, dmg, dir * force * 0.5 + up)
+		"slam":
+			var c := player.global_position + player.flat_forward() * 1.6
+			for t in Combat.in_sphere(foes, c, lerpf(3.0, 5.5, rng_m / 42.0)):
+				Combat.hurt(player, t, dmg, (Combat.center(t) - c).normalized() * force * 0.4 + up)
+		"carve", "beam":
+			var line := Combat.on_line(foes, origin, dir, rng_m, 0.7 if kind == "carve" else 0.4)
+			if not line.is_empty():
+				Combat.hurt(player, line[0], dmg, dir * 4.0)
+				player.game.fx.flash(Combat.center(line[0]), Data.WEAPONS[weapon].color, 1.0)
+		"pierce":
+			for t in Combat.on_line(foes, origin, dir, rng_m, 0.9):
+				Combat.hurt(player, t, dmg, dir * force * 0.4 + up)
+		"magnet":
+			for t in Combat.in_cone(foes, origin, dir, 16.0, 50.0):
+				Combat.hurt(player, t, dmg, (player.global_position - t.global_position).normalized() * 11.0 + up)
+		"punch":
+			var c2 := Combat.in_cone(foes, origin, dir, 3.4, 45.0)
+			if not c2.is_empty():
+				Combat.hurt(player, c2[0], dmg, dir * force * 0.8 + Vector3(0, 5.0, 0))
+		"ring":
+			for t in Combat.in_sphere(foes, player.global_position, 8.0):
+				Combat.hurt(player, t, dmg, (t.global_position - player.global_position).normalized() * 12.0 + up)
+		"grapple":
+			for t in Combat.in_sphere(foes, point, 2.6):
+				Combat.hurt(player, t, dmg, (player.global_position - t.global_position).normalized() * 10.0 + up)
+		"crush":
+			for t in Combat.in_sphere(foes, point, 3.4):
+				Combat.hurt(player, t, dmg, Vector3(0, 6.0, 0))
+		"vaporize":
+			for t in Combat.in_cone(foes, origin, dir, 9.0, 32.0):
+				Combat.hurt(player, t, dmg, dir * 4.0)
+		"slow":
+			for t in Combat.in_sphere(foes, player.global_position, 12.0):
+				Combat.hurt(player, t, dmg, Vector3.ZERO, 3.0)
+		"tether":
+			var n := 0
+			for t in Combat.in_sphere(foes, origin, 26.0):
+				Combat.hurt(player, t, dmg, Vector3.ZERO, 2.0)
+				n += 1
+				if n >= 3:
+					break
+		"meteor":
+			for t in Combat.in_sphere(foes, point, 7.0):
+				Combat.hurt(player, t, dmg, (Combat.center(t) - point).normalized() * force * 0.5 + Vector3(0, 7.0, 0))
 
 
 ## Everything weapons do to blocks goes through here (so coins and shatter sound stay in one place).
@@ -392,6 +558,14 @@ func release_all() -> void:
 
 func _physics_process(delta: float) -> void:
 	cd_left = maxf(0.0, cd_left - delta)
+	if player != null and player.lethal:
+		for id in inventory:
+			if not Data.MELEE.has(id) and charge_of(id) < 1.0:
+				charge[id] = minf(1.0, charge_of(id) + delta / Data.CHARGE_SECONDS * float(player.info.get("charge_mult", 1.0)))
+				if is_locked(id) and charge_of(id) >= 0.999:
+					locked.erase(id)
+					charge[id] = 1.0
+					inventory_changed.emit()
 	firing_t = maxf(0.0, firing_t - delta)
 	_last_slab_t += delta
 	# slabs age out; a glass slab flickers before it breaks

@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://g52xnj6dejl3"
-path="res://.godot/imported/truck_body.glb-394cf8efc025242e00bf7c826aff5ac4.scn"
+uid="uid://uj3y287h31er"
+path="res://.godot/imported/knight.glb-d45d6a9351f3ee15e9ab8850b85f70d1.scn"
 
 [deps]
 
-source_file="res://tmp_v/truck_body.glb"
-dest_files=["res://.godot/imported/truck_body.glb-394cf8efc025242e00bf7c826aff5ac4.scn"]
+source_file="res://assets/cast/knight.glb"
+dest_files=["res://.godot/imported/knight.glb-d45d6a9351f3ee15e9ab8850b85f70d1.scn"]
 
 [params]
 

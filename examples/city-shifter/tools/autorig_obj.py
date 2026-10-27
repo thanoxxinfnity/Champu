@@ -80,6 +80,20 @@ if max_tris and ntris > max_tris:
     mod = body.modifiers.new('dec', 'DECIMATE')
     mod.ratio = max_tris / ntris
     bpy.ops.object.modifier_apply(modifier='dec')
+if '--flat-mat' in argv:      # generated models whose metal/roughness texture would make them mirror-black: keep only the base colour
+    for ma in body.data.materials:
+        if ma and ma.use_nodes:
+            nt = ma.node_tree
+            bsdf = next((x for x in nt.nodes if x.type == 'BSDF_PRINCIPLED'), None)
+            for nd in list(nt.nodes):
+                if nd.type == 'TEX_IMAGE' and not any(l.from_node == nd and l.to_socket.name == 'Base Color' for l in nt.links):
+                    nt.nodes.remove(nd)
+            for nd in list(nt.nodes):
+                if nd.type in ('SEPARATE_COLOR', 'SEPARATE_RGB', 'MATH'):
+                    nt.nodes.remove(nd)
+            if bsdf:
+                bsdf.inputs['Metallic'].default_value = 0.0
+                bsdf.inputs['Roughness'].default_value = 0.85
 for ma in body.data.materials:
     if ma and ma.use_nodes:
         for nd in ma.node_tree.nodes:

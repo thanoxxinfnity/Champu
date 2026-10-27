@@ -29,12 +29,15 @@ class Debris:
 	var on_screen := true
 	var slowed := 0.0              # CHRONO SLIDERS: time scale of this block (0 = normal)
 	var hit_cd := 0.0
+	var est_v := 0.0               # (clients) speed estimated from the snapshots
 	var mesh: Node3D                # holder of the crate models (two looks, one shown)
 	var looks: Array[Node3D] = []
 	var shape: CollisionShape3D
 	var notifier: VisibleOnScreenNotifier3D
 
-var world: TrainWorld
+var world: Node                    # TrainWorld (its speed carries the blocks away) or OpenWorld
+var open := false                  # the open world: blocks fall anywhere around the players and lie where they land
+var foci: Array[Vector3] = []      # (open world) where the players are: the sky drops blocks within ~45 m of them
 var fx: Fx
 var pool: Array[Debris] = []
 var active: Array[Debris] = []
@@ -148,6 +151,9 @@ func spawn_block(pos: Vector3, size: float, vel: Vector3, color_i: int, id := -1
 
 ## Host: choose a block for the rain and tell everybody.
 func rain_one() -> void:
+	if open:
+		_rain_open()
+		return
 	var span := Vector2(-Data.CAR_W * 0.5 + 0.4, Data.CAR_W * 0.5 - 0.4)
 	var pos := Vector3(_rng.randf_range(span.x, span.y), _rng.randf_range(30.0, 38.0), clampf(focus_z + _rng.randf_range(-14.0, 14.0), -85.0, -2.0))
 	var size := _rng.randf_range(0.7, 1.5) + minf(difficulty * 0.08, 0.5)
@@ -158,6 +164,24 @@ func rain_one() -> void:
 		return
 	spawned.emit(d.id, pos, size, vel, ci)
 	incoming.emit(Vector3(pos.x, Data.DECK_Y, pos.z), 2.2)
+
+
+## Open world: pick a player, a spot within 45 m of them, high up.
+func _rain_open() -> void:
+	if foci.is_empty():
+		return
+	var f: Vector3 = foci[_rng.randi() % foci.size()]
+	var a := _rng.randf() * TAU
+	var r := sqrt(_rng.randf()) * 45.0
+	var pos := Vector3(f.x + cos(a) * r, _rng.randf_range(28.0, 40.0), f.z + sin(a) * r)
+	var size := _rng.randf_range(0.8, 1.7)
+	var vel := Vector3(0, -_rng.randf_range(5.0, 10.0), 0)
+	var ci := _rng.randi() % COLORS.size()
+	var d := spawn_block(pos, size, vel, ci)
+	if d == null:
+		return
+	spawned.emit(d.id, pos, size, vel, ci)
+	incoming.emit(Vector3(pos.x, 0.05, pos.z), 2.4)
 
 
 func _physics_process(delta: float) -> void:
@@ -178,7 +202,7 @@ func _physics_process(delta: float) -> void:
 		var dt := delta * (0.25 if d.slowed > 0.0 else 1.0)
 		d.slowed = maxf(0.0, d.slowed - delta)
 		var pos := d.global_position
-		if not d.faller and pos.y < Data.DECK_Y - 0.9:
+		if not open and not d.faller and pos.y < Data.DECK_Y - 0.9:
 			_to_faller(d)
 		if d.faller:
 			d.fall_v += 22.0 * dt
@@ -207,6 +231,13 @@ func _to_faller(d: Debris) -> void:
 
 ## The three rules (plus a sanity bound at the sides).
 func _should_release(d: Debris, pos: Vector3) -> bool:
+	if open:
+		if pos.y < Data.DEBRIS_FLOOR or d.age > 24.0:
+			return true
+		for f in foci:
+			if Vector2(pos.x - f.x, pos.z - f.z).length() < 95.0:
+				return false
+		return true
 	return pos.y < Data.DEBRIS_FLOOR or pos.z > Data.DEBRIS_BEHIND or d.age > Data.DEBRIS_TTL or absf(pos.x) > 140.0
 
 
@@ -353,5 +384,7 @@ func _follow(delta: float) -> void:
 		var t: Array = _targets.get(d.id, [])
 		if t.is_empty():
 			continue
+		var before := d.global_position
 		d.global_position = d.global_position.lerp(t[0], minf(1.0, delta * 14.0))
+		d.est_v = lerpf(d.est_v, before.distance_to(d.global_position) / maxf(delta, 0.0001), 0.5)
 		d.global_rotation = Vector3(lerp_angle(d.global_rotation.x, t[1].x, minf(1.0, delta * 10.0)), lerp_angle(d.global_rotation.y, t[1].y, minf(1.0, delta * 10.0)), lerp_angle(d.global_rotation.z, t[1].z, minf(1.0, delta * 10.0)))

@@ -21,6 +21,8 @@ signal shot_received(id: int, weapon: String, yaw: float, pitch: float)
 signal fx_received(id: int, weapon: String, origin: Vector3, point: Vector3)
 signal slab_received(pos: Vector3, axis: int, kind: String)
 signal event_received(kind: String, data: Dictionary)
+signal hit_received(target: int, amount: float, knock: Vector3, slow: float, from: int)
+signal report_received(from: int, kind: String, data: Dictionary)
 
 const STUN := "stun:stun.l.google.com:19302"
 const GATHER_MAX := 6.0
@@ -393,6 +395,42 @@ func rpc_pong(t_ms: int) -> void:
 			worst = maxi(worst, int(ping_by_peer[k]))
 		ping_ms = worst
 		ping_updated.emit(ping_ms)
+
+
+## A hit on another phone's player (or a bot, which lives on the host): this phone is the judge of its own player, the host relays.
+@rpc("any_peer", "reliable")
+func rpc_hit(target: int, amount: float, knock: Vector3, slow: float, from: int) -> void:
+	if target == local_id or (role == "host" and target >= 100):
+		hit_received.emit(target, amount, knock, slow, from)
+	elif role == "host" and roster.has(target):
+		rpc_hit.rpc_id(target, target, amount, knock, slow, from)
+
+
+func send_hit(target: int, amount: float, knock: Vector3, slow: float) -> void:
+	if not online() or multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		return
+	if role == "client":
+		rpc_hit.rpc_id(1, target, amount, knock, slow, local_id)
+	elif target >= 100:
+		hit_received.emit(target, amount, knock, slow, 1)
+	elif roster.has(target):
+		rpc_hit.rpc_id(target, target, amount, knock, slow, 1)
+
+
+## A client tells the host something it must decide (my player died, I took a weapon, I am ready): the host reads it as `report_received`.
+@rpc("any_peer", "reliable")
+func rpc_report(kind: String, data: Dictionary) -> void:
+	if role == "host":
+		report_received.emit(multiplayer.get_remote_sender_id(), kind, data)
+
+
+func send_report(kind: String, data: Dictionary) -> void:
+	if not online() or multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		return
+	if role == "client":
+		rpc_report.rpc_id(1, kind, data)
+	else:
+		report_received.emit(1, kind, data)
 
 
 ## Colour of the PING readout: green under 100 ms, orange to 200, red above.

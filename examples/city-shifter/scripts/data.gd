@@ -70,6 +70,41 @@ const WEAPONS := {
 	"meteor_burster": {"name": "METEOR BURSTER", "kind": "meteor", "range": 0.65, "force": 1.0, "cd": 0.2, "price": 4000, "level": 15, "color": Color(0.4, 1.0, 0.4),
 		"note": "A meteor of gravity: a massive impact where you aim."},
 }
+## The match: damage (to people) and charge cost (fraction of the 60 s tank) per shot. Melee weapons cost nothing. The 15 gauntlets keep their block-breaking jobs too.
+const DAMAGE := {
+	"shift_gauntlet": {"dmg": 14.0, "cost": 0.12}, "vortex_blaster": {"dmg": 26.0, "cost": 0.30}, "quantum_breaker": {"dmg": 38.0, "cost": 0.35},
+	"gravity_carver": {"dmg": 24.0, "cost": 0.20}, "plasma_magnet": {"dmg": 9.0, "cost": 0.25}, "sonic_impactor": {"dmg": 30.0, "cost": 0.25},
+	"force_gauntlet": {"dmg": 52.0, "cost": 0.22}, "seismic_rebounder": {"dmg": 22.0, "cost": 0.28}, "saber_grapple": {"dmg": 14.0, "cost": 0.25},
+	"orbital_crush": {"dmg": 36.0, "cost": 0.30}, "tactical_beamer": {"dmg": 24.0, "cost": 0.20}, "thermo_vaporizer": {"dmg": 34.0, "cost": 0.30},
+	"chrono_sliders": {"dmg": 6.0, "cost": 0.45}, "nexus_tether": {"dmg": 10.0, "cost": 0.40}, "meteor_burster": {"dmg": 62.0, "cost": 0.60},
+	"hammer": {"dmg": 46.0, "cost": 0.0}, "hammer_big": {"dmg": 82.0, "cost": 0.0}, "katana": {"dmg": 30.0, "cost": 0.0}, "axe": {"dmg": 42.0, "cost": 0.0},
+	"spear": {"dmg": 34.0, "cost": 0.0},
+}
+const CHARGE_SECONDS := 60.0          # an emptied gauntlet needs a whole minute to be full again (and cannot fire until it is); every one refills while you use another
+const VIEW_RADIUS := 50.0             # how far everybody sees: the same for all, nobody can raise it (no advantage)
+const HAND_SLOTS := 5                 # weapons you can carry (the hammer included)
+const MATCH_SECONDS := 360.0
+const MAX_PLAYERS := 15
+const TEAM_SIZE := 4
+
+## Melee: a swing in front of you. `reach` m, `arc` half-angle degrees, `cd` seconds, `smash` = also breaks blocks and trees around the hit.
+const MELEE := {
+	"hammer": {"name": "BREAKER HAMMER", "kind": "swing", "reach": 3.0, "arc": 55.0, "cd": 0.8, "smash": true, "color": Color(0.9, 0.7, 0.3), "model": "hammer", "len": 1.1,
+		"note": "Breaks blocks, trees and bones. Everybody carries one."},
+	"hammer_big": {"name": "TITAN SLEDGE", "kind": "swing", "reach": 4.2, "arc": 70.0, "cd": 1.3, "smash": true, "color": Color(1.0, 0.45, 0.2), "model": "hammer_big", "len": 1.6,
+		"note": "Huge and slow. One hit takes most of a life."},
+	"katana": {"name": "BLUE KATANA", "kind": "swing", "reach": 2.7, "arc": 45.0, "cd": 0.38, "smash": false, "color": Color(0.3, 0.8, 1.0), "model": "katana", "len": 1.2,
+		"note": "Fast cuts."},
+	"axe": {"name": "WAR AXE", "kind": "swing", "reach": 3.0, "arc": 60.0, "cd": 0.7, "smash": true, "color": Color(0.9, 0.3, 0.3), "model": "axe", "len": 1.3,
+		"note": "Heavy and wide: breaks things too."},
+	"spear": {"name": "GOLD SPEAR", "kind": "swing", "reach": 4.6, "arc": 25.0, "cd": 0.6, "smash": false, "color": Color(1.0, 0.85, 0.3), "model": "spear", "len": 2.2,
+		"note": "Long reach, narrow thrust."},
+}
+const ABBR := {"shift_gauntlet": "SHF", "vortex_blaster": "VTX", "quantum_breaker": "QBK", "gravity_carver": "GRV", "plasma_magnet": "PLM", "sonic_impactor": "SNC",
+	"force_gauntlet": "FRC", "seismic_rebounder": "SSM", "saber_grapple": "SBR", "orbital_crush": "ORB", "tactical_beamer": "TAC", "thermo_vaporizer": "THM",
+	"chrono_sliders": "CHR", "nexus_tether": "NXS", "meteor_burster": "MTR", "hammer": "HAM", "hammer_big": "TIT", "katana": "KAT", "axe": "AXE", "spear": "SPR"}
+const MELEE_ORDER := ["hammer", "hammer_big", "katana", "axe", "spear"]
+
 const WEAPON_ORDER := ["shift_gauntlet", "vortex_blaster", "quantum_breaker", "gravity_carver", "plasma_magnet", "sonic_impactor", "force_gauntlet", "seismic_rebounder",
 	"saber_grapple", "orbital_crush", "tactical_beamer", "thermo_vaporizer", "chrono_sliders", "nexus_tether", "meteor_burster"]
 
@@ -81,15 +116,33 @@ const CAST := {
 	"tracker": {"name": "TRACKER", "role": "Scout in orange", "model": "tracker", "height": 1.72, "speed": 6.8, "fuel": 110.0, "hp": 90.0, "tint": Color.WHITE,
 		"perk": "Sky sense: debris is marked before it lands.", "mark": true, "male": false},
 	"viper": {"name": "VIPER", "role": "Purple-haired tracker", "model": "tracker2", "height": 1.72, "speed": 7.0, "fuel": 100.0, "hp": 90.0, "tint": Color.WHITE,
-		"perk": "Light feet: jetpack fuel lasts 20% longer.", "fuel_mult": 1.2, "male": false},
+		"perk": "Light feet: jetpack fuel lasts 20% longer.", "fuel_mult": 1.2, "male": false, "price": 500},
 	"engineer": {"name": "HEAVY ENGINEER", "role": "Builds bridges, takes hits", "model": "engineer", "height": 1.9, "speed": 5.6, "fuel": 90.0, "hp": 150.0, "tint": Color.WHITE,
-		"perk": "Steel hands: bridge blocks last twice as long.", "bridge_mult": 2.0, "male": true},
+		"perk": "Steel hands: bridge blocks last twice as long.", "bridge_mult": 2.0, "male": true, "price": 800},
 	"ninja": {"name": "TECH-NINJA", "role": "Fast and quiet", "model": "ninja", "height": 1.75, "speed": 7.4, "fuel": 120.0, "hp": 80.0, "tint": Color.WHITE,
-		"perk": "Blink: the air dash costs half the fuel.", "dash_mult": 0.5, "male": true},
+		"perk": "Blink: the air dash costs half the fuel.", "dash_mult": 0.5, "male": true, "price": 500},
 	"mechanic": {"name": "MECHANIC", "role": "Fixes what falls", "model": "mechanic", "height": 1.72, "speed": 6.2, "fuel": 100.0, "hp": 110.0, "tint": Color.WHITE,
 		"perk": "Repair kit: coins from shards +50%.", "coin_mult": 1.5, "male": false},
+	"school": {"name": "SAKURA", "role": "Sailor-suit sprinter", "model": "school", "height": 1.6, "speed": 7.1, "fuel": 100.0, "hp": 85.0, "tint": Color.WHITE,
+		"perk": "Light as a petal: runs 10% faster.", "male": false, "price": 500},
+	"kunoichi": {"name": "KAGE", "role": "Purple-scarf kunoichi", "model": "kunoichi", "height": 1.65, "speed": 7.2, "fuel": 110.0, "hp": 85.0, "tint": Color.WHITE,
+		"perk": "Shadow step: the air dash costs 40% less fuel.", "dash_mult": 0.6, "male": false, "price": 800},
+	"cyber": {"name": "NEON", "role": "Goggles and a green jacket", "model": "cyber", "height": 1.7, "speed": 6.6, "fuel": 100.0, "hp": 95.0, "tint": Color.WHITE,
+		"perk": "Overclock: the jetpack cools 35% faster.", "cool_mult": 1.35, "male": true, "price": 800},
+	"samurai": {"name": "RYUJIN", "role": "Red-armour swordsman", "model": "samurai", "height": 1.8, "speed": 6.3, "fuel": 95.0, "hp": 110.0, "tint": Color.WHITE,
+		"perk": "Bushido: melee weapons hit 25% harder.", "melee_mult": 1.25, "male": true, "price": 1200},
+	"mage": {"name": "YUKINE", "role": "Frost-robe mage", "model": "mage", "height": 1.62, "speed": 6.2, "fuel": 100.0, "hp": 80.0, "tint": Color.WHITE,
+		"perk": "Arcane tank: gauntlets recharge 25% faster.", "charge_mult": 1.25, "male": false, "price": 1200},
+	"monk": {"name": "GENSHO", "role": "Orange-robe warrior monk", "model": "monk", "height": 1.75, "speed": 6.0, "fuel": 100.0, "hp": 120.0, "tint": Color.WHITE,
+		"perk": "Stone skin: takes 15% less damage.", "dmg_taken": 0.85, "male": true, "price": 1200},
+	"pirate": {"name": "CAPTAIN KURO", "role": "Coat and tricorn", "model": "pirate", "height": 1.8, "speed": 6.2, "fuel": 100.0, "hp": 100.0, "tint": Color.WHITE,
+		"perk": "Plunder: +50% coins from every match.", "coin_mult": 1.5, "male": true, "price": 1600},
+	"knight": {"name": "LUMINA", "role": "Silver-armour knight", "model": "knight", "height": 1.7, "speed": 5.8, "fuel": 90.0, "hp": 140.0, "tint": Color.WHITE,
+		"perk": "Plate armour: 140 HP.", "male": false, "price": 1600},
 }
-const CAST_ORDER := ["outlaw", "tracker", "engineer", "viper", "ninja", "mechanic"]
+const CAST_ORDER := ["outlaw", "tracker", "mechanic", "viper", "ninja", "school", "engineer", "kunoichi", "cyber", "samurai", "mage", "monk", "pirate", "knight"]
+## Free at the start; every other survivor is bought in the shop (a character has a small perk, never a weapon: nobody buys an advantage that matters).
+const STARTERS := ["outlaw", "tracker", "mechanic"]
 
 # ── progression ──────────────────────────────────────────────────────────────
 ## Level from the best distance ever reached: 1 at the start, +1 per 600 m.
@@ -97,11 +150,35 @@ static func level_for(best_m: float) -> int:
 	return 1 + int(best_m / 600.0)
 
 
+static func is_melee(id: String) -> bool:
+	return MELEE.has(id)
+
+
+## Name, colour and the rest for any weapon id (gauntlet or melee).
+static func info_of(id: String) -> Dictionary:
+	return MELEE[id] if MELEE.has(id) else WEAPONS[id]
+
+
 static func weapon_unlocked(id: String, save: Dictionary) -> bool:
+	if MELEE.has(id):
+		return true
 	var w: Dictionary = WEAPONS[id]
 	if int(w.price) == 0:
 		return true
 	return (save.get("weapons", []) as Array).has(id)
+
+
+static func char_owned(id: String, save: Dictionary) -> bool:
+	return STARTERS.has(id) or (save.get("chars", []) as Array).has(id)
+
+
+## "" when it can be bought now, else why not.
+static func char_buyable(id: String, save: Dictionary) -> String:
+	if char_owned(id, save):
+		return "owned"
+	if int(save.get("coins", 0)) < int(CAST[id].price):
+		return "needs $%d" % int(CAST[id].price)
+	return ""
 
 
 static func weapon_buyable(id: String, save: Dictionary) -> String:
@@ -117,7 +194,7 @@ static func weapon_buyable(id: String, save: Dictionary) -> String:
 
 
 static func load_save() -> Dictionary:
-	var d := {"coins": 0, "best": 0.0, "weapons": [], "char": "outlaw", "weapon": "shift_gauntlet"}
+	var d := {"coins": 0, "best": 0.0, "weapons": [], "chars": [], "char": "outlaw", "weapon": "shift_gauntlet", "name": "PLAYER", "matches": 0, "wins": 0}
 	if FileAccess.file_exists(SAVE_PATH):
 		var got = JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH))
 		if got is Dictionary:
