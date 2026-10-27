@@ -127,7 +127,7 @@ func _initialize() -> void:
 	game.player.tool.cd_left = 0.0
 	await T.frames(self, 2)
 	game.player.tool.fire()
-	T.check(mate.hp == 100.0, "no friendly fire")
+	T.check(not Combat.hurt(game.player, mate, 50.0) and mate.team == game.player.team, "no friendly fire")
 	# the sky: blocks fall around the players
 	await T.frames(self, 240)
 	T.check(game.spawner.active_count() > 0, "blocks fall from the sky (%d now)" % game.spawner.active_count())

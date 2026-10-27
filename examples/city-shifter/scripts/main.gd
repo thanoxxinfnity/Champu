@@ -657,7 +657,7 @@ func start_play() -> void:
 		hud.map_gates = gp
 		hud.map_river = [OpenWorld.RIVER_AT - OpenWorld.RIVER_DIR * 130.0, OpenWorld.RIVER_AT + OpenWorld.RIVER_DIR * 130.0]
 		hud.map_places = [[Vector2(0, 14), "TOWN"], [Vector2(-10, 43), "CAR PARK"], [Vector2(60, 31), "STABLE"], [Vector2(-70, -24), "PAGODA"], [Vector2(40, -30), "WINDMILL"],
-			[Vector2(100, -28), "BRIDGE"], [Vector2(-120, -130), "JUNGLE"]]
+			[Vector2(100, -28), "BRIDGE"], [Vector2(-120, -130), "JUNGLE"], [Vector2(-170, 165), "DOWNTOWN"]]
 		hud.map_half = OpenWorld.HALF
 		hud.map_big = false
 		audio.set_rumble(false)

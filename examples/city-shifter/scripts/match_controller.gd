@@ -61,7 +61,12 @@ func _make_spawns() -> void:
 			var p := path[(i * path.size()) / 14]
 			_spawns.append(Vector3(p.x + r.randf_range(-3.0, 3.0), 0.4, p.y + r.randf_range(-3.0, 3.0)))
 		else:
-			_spawns.append(Vector3(r.randf_range(-250, 250), 0.4, r.randf_range(-250, 250)))
+			var q := Vector2(r.randf_range(-250, 250), r.randf_range(-250, 250))
+			for tries in 8:
+				if not world.is_blocked(q):
+					break
+				q = Vector2(r.randf_range(-250, 250), r.randf_range(-250, 250))
+			_spawns.append(Vector3(q.x, 0.4, q.y))
 
 
 ## Everybody who plays: `humans` = [[peer id, char id, name], ...] (me first); bots fill up to the cap when `fill`.
@@ -162,6 +167,11 @@ func random_point_near(p: Vector3, r: float) -> Vector3:
 	var ang := _rng.randf() * TAU
 	var d := _rng.randf_range(r * 0.3, r)
 	var q := Vector3(clampf(p.x + cos(ang) * d, -OpenWorld.HALF + 20.0, OpenWorld.HALF - 20.0), 0.0, clampf(p.z + sin(ang) * d, -OpenWorld.HALF + 20.0, OpenWorld.HALF - 20.0))
+	for tries in 6:
+		if not world.is_blocked(Vector2(q.x, q.z)):
+			break
+		ang = _rng.randf() * TAU
+		q = Vector3(clampf(p.x + cos(ang) * d, -OpenWorld.HALF + 20.0, OpenWorld.HALF - 20.0), 0.0, clampf(p.z + sin(ang) * d, -OpenWorld.HALF + 20.0, OpenWorld.HALF - 20.0))
 	return q
 
 

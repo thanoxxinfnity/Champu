@@ -114,6 +114,29 @@ func _initialize() -> void:
 	var hit := w.smash(Vector3(120, 0, -100), 60.0)
 	T.check(hit > 5, "a sweep through the jungle knocks trees down (%d)" % hit)
 	T.check(w.smash(Vector3(120, 0, -100), 60.0) == 0, "and they stay down")
+	# downtown: towers with solid walls, parked vehicles, nothing on the ground inside a building
+	var dt := w.district
+	T.check(dt != null and dt.building_count >= 12 and dt.tallest > 30.0, "downtown has %d towers, the tallest %.0f m" % [dt.building_count, dt.tallest])
+	var parked := 0
+	for m in w.mounts:
+		if dt.rect.grow(2.0).has_point(Vector2(m.global_position.x, m.global_position.z)):
+			parked += 1
+	T.check(parked >= 6, "%d vehicles are parked in the streets of downtown" % parked)
+	var b: Rect2 = dt.blocked[0]
+	var ray := PhysicsRayQueryParameters3D.create(Vector3(b.position.x - 8.0, 6.0, b.get_center().y), Vector3(b.get_center().x, 6.0, b.get_center().y), 1)
+	T.check(not w.get_world_3d().direct_space_state.intersect_ray(ray).is_empty(), "a tower is solid: a ray stops at its wall")
+	var inside := 0
+	for uid in game.mc.loot.items:
+		var it: Dictionary = game.mc.loot.items[uid]
+		if w.is_blocked(Vector2((it.pos as Vector3).x, (it.pos as Vector3).z)):
+			inside += 1
+	T.check(inside == 0, "no weapon lies inside a building (%d)" % inside)
+	var dl := 0
+	for uid in game.mc.loot.items:
+		var it2: Dictionary = game.mc.loot.items[uid]
+		if dt.rect.grow(10.0).has_point(Vector2((it2.pos as Vector3).x, (it2.pos as Vector3).z)):
+			dl += 1
+	T.check(dl >= 8, "weapons lie in the streets of downtown (%d)" % dl)
 	game.end_run()
 	T.check(game.state == Main.State.LOBBY, "leaving returns to the lobby")
 	T.done(self)

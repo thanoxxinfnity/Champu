@@ -54,6 +54,7 @@ func _ready() -> void:
 	_road()
 	_river()
 	_town()
+	_district()
 	_mountains()
 	_jungle()
 	_gates()
@@ -255,6 +256,47 @@ func _town() -> void:
 		_place("res://assets/world/cherry_tree.glb", Vector3(-46.0 + float(i) * 24.0, 0, -22.0 if i % 2 == 0 else 22.0), float(i), 8.0)
 
 
+const DISTRICT_AT := Vector2(-170, 165)
+var district: CityDistrict
+
+
+## Downtown: towers, streets, a plaza with cherry trees, parked vehicles (see CityDistrict).
+func _district() -> void:
+	district = CityDistrict.new()
+	district.name = "Downtown"
+	add_child(district)
+	district.build(DISTRICT_AT)
+	for r in district.blocked:
+		blocked.append(r)
+	_extra_pois.append([district.plaza, 60.0, 3.0])
+	for c in district.get_children():
+		if c is GeometryInstance3D:
+			(c as GeometryInstance3D).visibility_range_end = 330.0
+	var pz := district.plaza
+	for i in 8:
+		var a := float(i) / 8.0 * TAU
+		_place("res://assets/world/cherry_tree.glb", Vector3(pz.x + cos(a) * 11.0, 0, pz.y + sin(a) * 11.0), a, 8.0)
+	for i in 6:
+		var a2 := float(i) / 6.0 * TAU + 0.3
+		_place("res://assets/world/stone_lantern.glb", Vector3(pz.x + cos(a2) * 6.5, 0, pz.y + sin(a2) * 6.5), 0.0, 2.2)
+	_place("res://assets/world/torii.glb", Vector3(pz.x, 0, pz.y + 14.5), 0.0, 13.0)
+	_place("res://assets/world/torii.glb", Vector3(pz.x, 0, pz.y - 14.5), 0.0, 13.0)
+	_place("res://assets/world/pagoda.glb", Vector3(pz.x, 0, pz.y), 0.0, 14.0, true)
+	var ext := CityDistrict.extent()
+	for i in 6:
+		var o := district.rect.position + Vector2(CityDistrict.STREET + 2.0 + float(i) * 24.0, CityDistrict.STREET + 1.0)
+		_place("res://assets/world/vending.glb", Vector3(o.x, 0, o.y), 0.0, 2.1, true)
+	_place("res://assets/world/road_sign.glb", Vector3(district.rect.position.x + ext + 2.0, 0, DISTRICT_AT.y), -PI * 0.5, 3.0)
+
+
+## True when a (x, z) point lies inside a building, a shop or another solid prop.
+func is_blocked(p: Vector2) -> bool:
+	for r in blocked:
+		if (r as Rect2).has_point(p):
+			return true
+	return false
+
+
 func _mountains() -> void:
 	# a ring of huge boulders as the mountains on the horizon (the same real rock model, scaled up and fogged)
 	if not ModelKit.exists("res://assets/world/rock_big.glb"):
@@ -303,7 +345,7 @@ func _jungle() -> void:
 				var p := o + Vector2(rng.randf(), rng.randf()) * CELL
 				var near_road := road_distance(p) < ROAD_W * 0.5 + 4.0
 				var in_town := absf(p.x) < 82.0 and p.y > -34.0 and p.y < 56.0
-				if near_road or in_town:
+				if near_road or in_town or (district != null and district.rect.grow(10.0).has_point(p)):
 					continue
 				# trees: weighted pick; undergrowth fills the rest
 				var roll := rng.randf()
@@ -428,6 +470,25 @@ func _spawn_mounts() -> void:
 		mounts.append(v)
 		id += 1
 		slot += 1
+	if district != null:
+		var kinds := ["taxi", "police", "sports", "van", "bus", "ambulance", "firetruck", "car", "truck", "pickup"]
+		var n := 0
+		for si in district.car_slots.size():
+			if si % 3 != 1 or n >= kinds.size():
+				continue
+			var k: String = kinds[n]
+			n += 1
+			if not Vehicle.available(k):
+				continue
+			var spot: Array = district.car_slots[si]
+			var v2 := Vehicle.new()
+			add_child(v2)
+			v2.setup(id, k)
+			v2.position = spot[0]
+			v2.yaw = float(spot[1])
+			v2.rotation.y = v2.yaw
+			mounts.append(v2)
+			id += 1
 	if Horse.available():
 		for i in 4:
 			var h := Horse.new()
