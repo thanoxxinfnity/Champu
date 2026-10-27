@@ -604,8 +604,8 @@ func _build_settings() -> Control:
 	p.anchor_bottom = 0.5
 	p.offset_left = -300
 	p.offset_right = 300
-	p.offset_top = -300
-	p.offset_bottom = 290
+	p.offset_top = -258
+	p.offset_bottom = 272
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
 	p.add_child(v)
