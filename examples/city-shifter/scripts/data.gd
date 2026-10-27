@@ -78,7 +78,7 @@ const WEAPON_ORDER := ["shift_gauntlet", "vortex_blaster", "quantum_breaker", "g
 const CAST := {
 	"outlaw": {"name": "OUTLAW", "role": "Drifter with a red scarf", "model": "outlaw", "height": 1.78, "speed": 6.4, "fuel": 100.0, "hp": 100.0, "tint": Color.WHITE,
 		"perk": "Quick draw: gauntlet cooldown -15%.", "cd_mult": 0.85, "male": true},
-	"tracker": {"name": "TRACKER", "role": "Scout in orange", "model": "tracker2", "height": 1.72, "speed": 6.8, "fuel": 110.0, "hp": 90.0, "tint": Color(1.0, 0.8, 0.55),
+	"tracker": {"name": "TRACKER", "role": "Scout in orange", "model": "tracker", "height": 1.72, "speed": 6.8, "fuel": 110.0, "hp": 90.0, "tint": Color.WHITE,
 		"perk": "Sky sense: debris is marked before it lands.", "mark": true, "male": false},
 	"viper": {"name": "VIPER", "role": "Purple-haired tracker", "model": "tracker2", "height": 1.72, "speed": 7.0, "fuel": 100.0, "hp": 90.0, "tint": Color.WHITE,
 		"perk": "Light feet: jetpack fuel lasts 20% longer.", "fuel_mult": 1.2, "male": false},

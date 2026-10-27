@@ -14,3 +14,4 @@ rig engineer engineer 1.9 9000
 rig ninja ninja 1.75 9000
 rig tracker2 tracker2 1.72 9000 --hair
 rig mechanic mechanic 1.72 9000 --hair
+rig tracker tracker 1.72 9000 --hair
