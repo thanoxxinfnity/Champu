@@ -540,6 +540,8 @@ func _on_peer_joined(id: int, char_id: String) -> void:
 
 func _on_peer_left(id: int) -> void:
 	if remotes.has(id):
+		if mc != null:
+			mc.drop_actor(remotes[id] as PlayerController)
 		(remotes[id] as Node).queue_free()
 		remotes.erase(id)
 		hud.toast("Player %d left" % id)

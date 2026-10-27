@@ -192,6 +192,10 @@ func on_died(victim: PlayerController, killer: PlayerController) -> void:
 	_respawn[victim] = RESPAWN_S
 
 
+func drop_actor(p: PlayerController) -> void:
+	actors.erase(p)
+
+
 func actor_by_id(id: int) -> PlayerController:
 	for a in actors:
 		if a.peer_id == id:

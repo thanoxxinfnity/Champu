@@ -69,4 +69,5 @@ func _initialize() -> void:
 		T.check(await _until(func() -> bool: return other.kills == 1, 15.0), "client: the host's kill count reached me (%d)" % other.kills)
 		T.check(await _until(func() -> bool: return game.player.alive, 60.0), "client: I respawned after 4 s")
 		await _until(func() -> bool: return FileAccess.file_exists(code_file + ".done"), 40.0)
+		other = null   # the host quits next; do not touch its freed actor
 	T.done(self)
