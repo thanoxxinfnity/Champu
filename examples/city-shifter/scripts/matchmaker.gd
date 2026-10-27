@@ -81,6 +81,14 @@ func start() -> void:
 	send({"t": "start"})
 
 
+func set_ready(_r: bool) -> void:
+	pass                                   # (the server version starts when the host says so)
+
+
+func all_ready() -> bool:
+	return true
+
+
 func leave() -> void:
 	if is_open() and ready_ok:
 		ws.send_text(JSON.stringify({"t": "leave"}))

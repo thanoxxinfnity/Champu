@@ -105,6 +105,10 @@ func start_room() -> void:
 	mm.start()
 
 
+func set_ready(r: bool) -> void:
+	mm.set_ready(r)
+
+
 func leave() -> void:
 	_reset()
 
@@ -149,7 +153,8 @@ func _on_room(m: Dictionary) -> void:
 	mt = String(m.get("mt", mt))
 	var list: Array = []
 	for p in m.get("players", []):
-		list.append({"id": int(p.id), "name": String(p.name), "team": int(p.team), "host": bool(p.host), "you": int(p.id) == my_id})
+		list.append({"id": int(p.id), "name": String(p.name), "team": int(p.team), "host": bool(p.host), "you": int(p.id) == my_id,
+			"char": String(p.get("char", "outlaw")), "ready": bool(p.get("ready", true))})
 	var key := JSON.stringify([m.get("code"), list, m.get("host")])
 	var cd = m.get("countdown")
 	var st := ""
@@ -161,7 +166,8 @@ func _on_room(m: Dictionary) -> void:
 		st = "Waiting for the host to start"
 	if key != _listing:
 		_listing = key
-		room_info.emit({"state": "room", "code": String(m.get("code", "")), "players": list, "max": int(m.get("max", Data.MAX_PLAYERS)), "host": bool(m.get("host", false)), "status": st})
+		room_info.emit({"state": "room", "code": String(m.get("code", "")), "players": list, "max": int(m.get("max", Data.MAX_PLAYERS)), "host": bool(m.get("host", false)), "status": st,
+			"all_ready": bool(m.get("all_ready", true)), "quick": String(m.get("code", "")) == "QUICK"})
 	else:
 		status.emit(st)
 

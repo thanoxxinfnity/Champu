@@ -17,6 +17,7 @@ const PLAYER_SPEED := 6.2
 const JET_FUEL := 100.0
 const JET_THRUST := 28.0
 const FALL_Y := -8.0
+const SKYDIVE_Y := 240.0             # a match begins with every player falling from this height
 
 # ── debris / blocks ──────────────────────────────────────────────────────────
 const DEBRIS_CAP := 50

@@ -32,6 +32,7 @@ var best_run := 0.0
 var fps_avg := 60.0
 var autostart := false
 var bot_mode := false
+var skydive := true                     # a match begins in the sky (tests switch it off)
 var _shake := 0.0
 var _net_t := 0.0
 var _debris_t := 0.0
@@ -308,7 +309,13 @@ func _build_ui() -> void:
 	ui.layer = 20
 	add_child(ui)
 	# ── the lobby screen (the anime menu: scripts/lobby_ui.gd)
+	social = Social.new()
+	social.name = "Social"
+	add_child(social)
+	if String(save.get("name", "PLAYER")) != "PLAYER":
+		social.set_player_name(String(save.name))
 	lobby = LobbyUI.new()
+	lobby.social = social
 	lobby_root = lobby
 	ui.add_child(lobby)
 	lobby.set_save(save)
@@ -338,6 +345,8 @@ func _build_ui() -> void:
 		audio.play("coin", -4.0, 1.5)
 		lobby.set_save(save))
 	lobby.screen_changed.connect(func(n: String) -> void:
+		if n != "squad":
+			_clear_squad()
 		if preview != null:
 			preview.visible = n == "home"
 		if n == "view":
@@ -372,7 +381,27 @@ func _build_ui() -> void:
 	lobby.name_changed.connect(func(n: String) -> void:
 		save.name = n if n != "" else "PLAYER"
 		Data.write_save(save)
+		social.set_player_name(String(save.name))
 		lobby.set_save(save))
+	lobby.friend_add.connect(func(u: int) -> void:
+		if social.add_friend(u):
+			audio.play("ui", -4.0))
+	lobby.friend_remove.connect(func(u: int) -> void: social.remove_friend(u))
+	lobby.squad_invite.connect(func(u: int) -> void:
+		social.invite(u, String(lobby._room.get("code", "")), match_type))
+	lobby.squad_ready.connect(func(on: bool) -> void: online.set_ready(on))
+	social.friends_changed.connect(func() -> void: lobby.refresh_friends())
+	social.request_received.connect(func(u: int, n: String) -> void:
+		lobby.ask("%s (UID %d) added you as a friend. Add them back?" % [n, u], "ADD BACK", "NO", func(yes: bool) -> void:
+			if yes:
+				social.add_friend(u, n)))
+	social.invite_received.connect(func(_u: int, n: String, code: String, mt: String) -> void:
+		if state != State.LOBBY or code == "":
+			return
+		lobby.ask("%s invites you to the Squad Lobby!" % n, "ACCEPT", "DECLINE", func(yes: bool) -> void:
+			if yes:
+				lobby.show_screen("online")
+				_online_request("join", mt, code)))
 	lobby.settings_changed.connect(func(sens: float, assist: int) -> void:
 		save.settings = {"sens": sens, "assist": assist}
 		Data.write_save(save)
@@ -380,7 +409,11 @@ func _build_ui() -> void:
 	lobby.debug_toggled.connect(func(on: bool) -> void: hud.debug_overlay = on)
 	lobby.sound_toggled.connect(func(muted: bool) -> void: audio.set_muted(muted))
 	lobby.play_online.connect(_online_request)
-	online.room_info.connect(lobby.set_room)
+	online.room_info.connect(func(info: Dictionary) -> void:
+		lobby.set_room(info)
+		if String(info.get("state", "")) == "room" and not bool(info.get("quick", false)):
+			social.room_code = String(info.get("code", ""))
+			_show_squad(info.get("players", [])))
 	online.status.connect(lobby.set_status)
 	online.failed.connect(func(msg: String) -> void: lobby.set_room({"state": "none", "status": msg}))
 	lobby.leave_online.connect(_online_leave)
@@ -563,7 +596,51 @@ func _online_request(kind: String, mt: String, code: String) -> void:
 	online.begin(kind, mt, code, String(save.get("name", "PLAYER")), Data.CAST_ORDER[sel])
 
 
+# ── the squad lobby: up to 4 heroes on pedestals, the host in the middle ───────
+
+var social: Social
+var _squad_nodes: Array = []
+const SQUAD_SLOTS := [Vector3(-0.55, 0, 0.0), Vector3(-1.5, 0, -0.5), Vector3(0.4, 0, -0.5), Vector3(-2.35, 0, -1.0)]
+
+
+func _show_squad(players: Array) -> void:
+	_clear_squad()
+	if preview != null:
+		preview.visible = false
+	for i in mini(4, players.size()):
+		var pl: Dictionary = players[i]
+		var slot := Node3D.new()
+		slot.position = SQUAD_SLOTS[i]
+		lobby3d.add_child(slot)
+		_squad_nodes.append(slot)
+		Mat.cyl(slot, Vector3(0, 0.03, 0), 0.42, 0.06, Mat.flat(Color(1.0, 0.85, 0.35) if bool(pl.get("host", false)) else Color(0.55, 0.8, 1.0), 0.6))
+		var a := Avatar.new()
+		slot.add_child(a)
+		a.setup(String(pl.get("char", "outlaw")))
+		a.scale = Vector3.ONE * 0.86
+		a.rotation.y = 0.25
+		var tag := Label3D.new()
+		tag.text = "%s%s" % [String(pl.get("name", "PLAYER")), "  ★" if bool(pl.get("host", false)) else ("  ✔" if bool(pl.get("ready", false)) else "")]
+		tag.position = Vector3(0, 1.75, 0)
+		tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		tag.font_size = 40
+		tag.pixel_size = 0.004
+		tag.outline_size = 12
+		tag.modulate = Color(1, 0.95, 0.6) if bool(pl.get("you", false)) else Color.WHITE
+		slot.add_child(tag)
+
+
+func _clear_squad() -> void:
+	for n in _squad_nodes:
+		(n as Node).queue_free()
+	_squad_nodes.clear()
+
+
 func _online_leave() -> void:
+	_clear_squad()
+	social.room_code = ""
+	if preview != null and lobby.screen == "home":
+		preview.visible = true
 	if _lan_mode:
 		_lan_mode = false
 		lan.stop()
@@ -952,6 +1029,10 @@ func start_play() -> void:
 		mc.is_authority = not net.online() or net.is_host()
 		mc.finished.connect(_on_match_finished)
 		mc.begin(player, others, not net.online())
+		if skydive and not bot_mode:
+			for a in mc.actors:
+				(a as Node3D).global_position.y += Data.SKYDIVE_Y      # everybody starts together, falling from the sky
+			hud.toast("SKYDIVE! Steer with the stick, JUMP opens the jetpack", 4.0)
 		hud.match_on = true
 		hud.team_mode = match_type == "team"
 		hud.results = {}

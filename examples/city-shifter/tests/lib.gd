@@ -22,6 +22,7 @@ static func boot(tree: SceneTree, character := "outlaw") -> Main:
 	var game: Main = (load("res://scenes/main.tscn") as PackedScene).instantiate()
 	tree.root.add_child(game)
 	game.sel = maxi(0, Data.CAST_ORDER.find(character))
+	game.skydive = OS.get_environment("CS_SKYDIVE") == "1"
 	await tree.process_frame
 	return game
 

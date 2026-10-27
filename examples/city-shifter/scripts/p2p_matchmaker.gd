@@ -33,6 +33,7 @@ var _members := {}                   # my room as the host sees it: uid -> {n, c
 var _go_sent := false
 var _ids := {}                       # uid -> room id (1 = host)
 var _guest_wait := 0.0
+var _ready_of := {}                 # uid -> bool (squad READY)
 
 
 func open(_server_url: String, pname: String, cid: String) -> void:
@@ -85,8 +86,9 @@ func quick(mt: String) -> void:
 func create(mt: String) -> void:
 	_mt = mt
 	_mode = "host"
-	_code = "%06d" % randi_range(0, 999999)
+	_code = make_code()
 	_members = {uid: {"n": user_name, "c": char_id}}
+	_ready_of = {}
 	_listen("%s-c-%s" % [APP, _code], int(Time.get_unix_time_from_system()) - 2)
 	_beat = SEEK_EVERY
 	_host_room()
@@ -100,8 +102,31 @@ func join(code: String) -> void:
 	_beat = SEEK_EVERY
 
 
+## A squad code like SKY79X: letters and digits that cannot be mixed up (no O/0, I/1).
+static func make_code() -> String:
+	const A := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+	var out := ""
+	for i in 6:
+		out += A[randi() % A.length()]
+	return out
+
+
+func all_ready() -> bool:
+	for u in _members:
+		if int(u) != uid and not bool(_ready_of.get(int(u), false)):
+			return false
+	return _members.size() >= 2
+
+
+## A guest says READY or CANCEL; the host shows it on every phone and opens START when everybody is ready.
+func set_ready(r: bool) -> void:
+	if _mode == "guest":
+		_ready_of[uid] = r
+		_publish(_sub_topic, {"t": "ready", "u": uid, "r": r})
+
+
 func start() -> void:
-	if _mode == "host" and _members.size() >= 2:
+	if _mode == "host" and all_ready():
 		_send_go(_members.keys())
 
 
@@ -198,7 +223,7 @@ func _process(delta: float) -> void:
 						_mode = ""
 						alone.emit()
 					else:
-						_code = "%06d" % randi_range(0, 999999)
+						_code = make_code()
 						_send_go(ids)
 		"host":
 			if _beat >= SEEK_EVERY:
@@ -254,7 +279,8 @@ func _players_of(ids: Array, info: Dictionary) -> Array:
 	var out := []
 	for i in ids.size():
 		var u := int(ids[i])
-		out.append({"id": int(_ids[u]), "name": String(info.get(u, {}).get("n", "PLAYER")), "team": _team_of(i), "host": i == 0})
+		out.append({"id": int(_ids[u]), "name": String(info.get(u, {}).get("n", "PLAYER")), "team": _team_of(i), "host": i == 0,
+			"char": String(info.get(u, {}).get("c", "outlaw")), "ready": i == 0 or bool(_ready_of.get(u, false))})
 	return out
 
 
@@ -274,10 +300,13 @@ func _host_room() -> void:
 	ids.push_front(uid)
 	_assign(ids)
 	var players := _players_of(ids, _members)
-	room = {"t": "room", "code": _code, "mt": _mt, "you": 1, "host": true, "players": players, "max": Data.MAX_PLAYERS}
+	room = {"t": "room", "code": _code, "mt": _mt, "you": 1, "host": true, "players": players, "max": Data.MAX_PLAYERS, "all_ready": all_ready()}
 	in_room = true
 	room_changed.emit(room)
-	_publish(_sub_topic, {"t": "room", "code": _code, "mt": _mt, "list": ids, "names": _members})
+	var rd := {}
+	for u in _ready_of:
+		rd[str(u)] = _ready_of[u]
+	_publish(_sub_topic, {"t": "room", "code": _code, "mt": _mt, "list": ids, "names": _members, "ready": rd})
 
 
 func _send_go(ids: Array) -> void:
@@ -328,6 +357,11 @@ func _on_relay(m: Dictionary) -> void:
 					_room_from_seekers()
 			if _mode == "host" and _members.has(from_u):
 				_members.erase(from_u)
+				_ready_of.erase(from_u)
+				_host_room()
+		"ready":
+			if _mode == "host" and _members.has(from_u):
+				_ready_of[from_u] = bool(m.get("r", false))
 				_host_room()
 		"join":
 			if _mode == "host" and from_u != uid and not _members.has(from_u) and _members.size() < Data.MAX_PLAYERS:
@@ -342,6 +376,10 @@ func _on_relay(m: Dictionary) -> void:
 				var info := {}
 				for k in names:
 					info[int(k)] = names[k]
+				var rd: Dictionary = m.get("ready", {})
+				_ready_of = {}
+				for k in rd:
+					_ready_of[int(k)] = bool(rd[k])
 				_mt = String(m.get("mt", _mt))
 				_assign(ids)
 				room = {"t": "room", "code": _code, "mt": _mt, "you": int(_ids.get(uid, 0)), "host": false, "players": _players_of(ids, info), "max": Data.MAX_PLAYERS}

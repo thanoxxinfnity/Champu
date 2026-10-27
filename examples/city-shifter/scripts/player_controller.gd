@@ -219,6 +219,8 @@ func _physics_process(delta: float) -> void:
 			_play("whoosh", -10.0, 1.3)
 	else:
 		velocity.y -= g * delta
+		if global_position.y > 25.0:
+			velocity.y = maxf(velocity.y, -32.0)     # skydive: the body falls flat at a steady speed, the stick steers
 		if jet_held and stun <= 0.0 and not _jet_edge and jet.burn(delta):
 			_jetting = true
 			velocity.y = minf(velocity.y + (Data.JET_THRUST) * delta, 8.5)

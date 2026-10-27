@@ -17,6 +17,10 @@ signal sound_toggled(muted: bool)
 signal skill_bought(hero: String, skill: String)
 signal screen_changed(name: String)
 signal hero_tapped
+signal squad_ready(on: bool)
+signal squad_invite(uid: int)
+signal friend_add(uid: int)
+signal friend_remove(uid: int)
 signal lan_host                            # host a game on this Wi-Fi / hotspot (no server)
 signal lan_find
 signal lan_join(ip: String)
@@ -34,6 +38,7 @@ var browsing := "outlaw"                 # the hero shown on the stage
 var screen := "home"
 var screens := {}
 var _top_name: Label
+var social: Social                       # set by Main: my UID and friends
 var _top_sub: Label
 var _top_coins: Label
 var _level_badge: Control
@@ -67,6 +72,8 @@ func _ready() -> void:
 	screens["settings"] = _build_settings()
 	screens["view"] = _build_view()
 	screens["weapons"] = _build_weapons()
+	screens["friends"] = _build_friends()
+	screens["squad"] = _build_squad()
 	for k in screens:
 		add_child(screens[k])
 	show_screen("home")
@@ -124,6 +131,9 @@ func _build_top() -> void:
 	_top_coins = UIKit.label("0", ch, 32, UIKit.INK, true)
 	_top_coins.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0))
 	_top_coins.add_theme_constant_override("outline_size", 0)
+	# friends
+	var fr := UIKit.button("FRIENDS", bar, "people", UIKit.MINT, Vector2(176, 74), 24)
+	fr.pressed.connect(func() -> void: show_screen("friends"))
 	# the battle card
 	var mycard := UIKit.button("CARD", bar, "star", UIKit.ORANGE, Vector2(150, 74), 26)
 	mycard.pressed.connect(_open_my_card)
@@ -690,6 +700,261 @@ func _assist_text() -> String:
 	return "AIM ASSIST: " + ["OFF", "LOW", "FULL LOCK"][_assist]
 
 
+# ── friends, squad, popups ───────────────────────────────────────────────────
+
+var _friend_list: VBoxContainer
+var _uid_label: Label
+var _add_in: LineEdit
+var _squad := {}
+var _squad_friends: VBoxContainer
+var _popup: Control
+
+
+func _friend_row(parent: Control, u: int, n: String, on: bool, invite: bool) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	parent.add_child(row)
+	var dot := Control.new()
+	dot.custom_minimum_size = Vector2(22, 40)
+	dot.draw.connect(func() -> void: dot.draw_circle(Vector2(11, 20), 8.0, UIKit.MINT if on else Color(0.6, 0.58, 0.66)))
+	row.add_child(dot)
+	var l := UIKit.label(n, row, 20, UIKit.INK)
+	l.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0))
+	l.add_theme_constant_override("outline_size", 0)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	l.clip_text = true
+	l.custom_minimum_size = Vector2(120, 0)
+	if invite:
+		var b := UIKit.button("+ INVITE", row, "", UIKit.MINT if on else Color(0.65, 0.62, 0.8), Vector2(130, 44), 18)
+		b.disabled = not on
+		b.pressed.connect(func() -> void:
+			squad_invite.emit(u)
+			b.text = "SENT"
+			b.disabled = true)
+	else:
+		var x := UIKit.button("REMOVE", row, "", UIKit.PINK, Vector2(120, 44), 16)
+		x.pressed.connect(func() -> void: friend_remove.emit(u))
+
+
+func _build_friends() -> Control:
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var p := UIKit.panel(root, Color(0.99, 0.95, 0.88, 0.96), 26)
+	p.set_anchors_preset(Control.PRESET_CENTER)
+	p.anchor_left = 0.5
+	p.anchor_right = 0.5
+	p.anchor_top = 0.5
+	p.anchor_bottom = 0.5
+	p.offset_left = -360
+	p.offset_right = 360
+	p.offset_top = -258
+	p.offset_bottom = 266
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	p.add_child(v)
+	var hdr := HBoxContainer.new()
+	v.add_child(hdr)
+	var tl := UIKit.label("FRIENDS", hdr, 40, UIKit.MINT, true)
+	tl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var back := UIKit.button("", hdr, "back", UIKit.PINK, Vector2(70, 56))
+	back.pressed.connect(func() -> void: show_screen("home"))
+	var me := HBoxContainer.new()
+	me.add_theme_constant_override("separation", 10)
+	v.add_child(me)
+	_uid_label = UIKit.label("YOUR UID  --------", me, 26, UIKit.PURPLE, true)
+	_uid_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var cp := UIKit.button("COPY", me, "check", UIKit.SKY, Vector2(140, 50), 20)
+	cp.pressed.connect(func() -> void:
+		if social != null:
+			DisplayServer.clipboard_set(str(social.uid))
+			cp.text = "COPIED")
+	var add := HBoxContainer.new()
+	add.add_theme_constant_override("separation", 10)
+	v.add_child(add)
+	_add_in = LineEdit.new()
+	_add_in.placeholder_text = "FRIEND'S UID (8 digits)"
+	_add_in.max_length = 8
+	_add_in.custom_minimum_size = Vector2(420, 54)
+	_add_in.add_theme_font_override("font", UIKit.body_font())
+	_add_in.add_theme_font_size_override("font_size", 24)
+	_add_in.add_theme_stylebox_override("normal", UIKit.box(Color.WHITE, UIKit.INK, 12, 3, 0))
+	_add_in.add_theme_stylebox_override("focus", UIKit.box(Color(1, 0.98, 0.85), UIKit.PINK, 12, 4, 0))
+	_add_in.add_theme_color_override("font_color", UIKit.INK)
+	_add_in.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+	add.add_child(_add_in)
+	var ab := UIKit.button("ADD", add, "plus", UIKit.MINT, Vector2(200, 54), 24)
+	ab.pressed.connect(func() -> void:
+		var t := _add_in.text.strip_edges()
+		if t.is_valid_int() and t.length() == 8:
+			friend_add.emit(int(t))
+			_add_in.text = "")
+	var sc := ScrollContainer.new()
+	sc.custom_minimum_size = Vector2(0, 250)
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(sc)
+	_friend_list = VBoxContainer.new()
+	_friend_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_friend_list.add_theme_constant_override("separation", 6)
+	sc.add_child(_friend_list)
+	return root
+
+
+## The friends list on both screens (with INVITE in the squad drawer).
+func refresh_friends() -> void:
+	if social == null:
+		return
+	if _uid_label != null:
+		_uid_label.text = "YOUR UID  %d" % social.uid
+	for box in [_friend_list, _squad_friends]:
+		if box == null:
+			continue
+		for c in box.get_children():
+			c.queue_free()
+		var ids: Array = social.friends.keys()
+		ids.sort_custom(func(a, b) -> bool: return social.is_online(int(a)) and not social.is_online(int(b)))
+		if ids.is_empty():
+			var e := UIKit.label("No friends yet. Share your UID, or type a friend's UID above.", box, 17, UIKit.INK)
+			e.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0))
+			e.add_theme_constant_override("outline_size", 0)
+			e.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			e.custom_minimum_size = Vector2(280, 0)
+		for u in ids:
+			_friend_row(box, int(u), String(social.friends[u].get("n", "UID %d" % int(u))), social.is_online(int(u)), box == _squad_friends)
+
+
+func _build_squad() -> Control:
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# the code, top centre
+	var cp := UIKit.panel(root, Color(0.99, 0.95, 0.88, 0.96), 22)
+	cp.position = Vector2(380, 104)
+	cp.custom_minimum_size = Vector2(500, 70)
+	var ch := HBoxContainer.new()
+	ch.add_theme_constant_override("separation", 10)
+	cp.add_child(ch)
+	var code := UIKit.label("SQUAD  ------", ch, 34, UIKit.PINK, true)
+	code.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var copy := UIKit.button("COPY", ch, "check", UIKit.SKY, Vector2(130, 50), 20)
+	copy.pressed.connect(func() -> void:
+		DisplayServer.clipboard_set(String(_room.get("code", "")))
+		copy.text = "COPIED")
+	# friends drawer, right
+	var fp := UIKit.panel(root, Color(0.99, 0.95, 0.88, 0.95), 22)
+	fp.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	fp.anchor_left = 1.0
+	fp.anchor_right = 1.0
+	fp.offset_left = -360
+	fp.offset_right = -18
+	fp.offset_top = 104
+	fp.offset_bottom = 520
+	var fv := VBoxContainer.new()
+	fv.add_theme_constant_override("separation", 6)
+	fp.add_child(fv)
+	UIKit.label("INVITE FRIENDS", fv, 24, UIKit.MINT, true)
+	var sc := ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	fv.add_child(sc)
+	_squad_friends = VBoxContainer.new()
+	_squad_friends.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_squad_friends.add_theme_constant_override("separation", 6)
+	sc.add_child(_squad_friends)
+	# ready / start / leave, bottom right
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.position = Vector2(690, 548)
+	root.add_child(row)
+	var go := UIKit.button("START MATCH", row, "play", UIKit.MINT, Vector2(330, 72), 30)
+	go.pressed.connect(func() -> void:
+		if bool(_room.get("host", false)):
+			start_room.emit()
+		else:
+			var on := go.text == "READY"
+			squad_ready.emit(on)
+			go.text = "CANCEL" if on else "READY")
+	var lv := UIKit.button("LEAVE", row, "back", UIKit.PINK, Vector2(220, 72), 26)
+	lv.pressed.connect(func() -> void:
+		leave_online.emit()
+		set_room({"state": "none", "status": ""})
+		show_screen("online"))
+	var st := UIKit.label("", root, 18, UIKit.CREAM)
+	st.position = Vector2(380, 184)
+	st.custom_minimum_size = Vector2(500, 0)
+	st.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_squad = {"code": code, "go": go, "status": st, "copy": copy}
+	return root
+
+
+func refresh_squad() -> void:
+	if _squad.is_empty():
+		return
+	var host := bool(_room.get("host", false))
+	(_squad.code as Label).text = "SQUAD  %s" % String(_room.get("code", ""))
+	var go: UIKit.AnimeButton = _squad.go
+	var n := (_room.get("players", []) as Array).size()
+	if host:
+		go.text = "START MATCH"
+		go.disabled = n < 2 or not bool(_room.get("all_ready", true))
+		(_squad.status as Label).text = "%d / 4 in the squad — %s" % [n, "everybody is ready" if not go.disabled else ("waiting for READY" if n >= 2 else "invite friends or share the code")]
+	else:
+		if go.text == "START MATCH":
+			go.text = "READY"
+		go.disabled = false
+		(_squad.status as Label).text = "%d / 4 in the squad — tap READY, the host starts" % n
+	go.accent = UIKit.MINT if not go.disabled else Color(0.65, 0.62, 0.8)
+	go.queue_redraw()
+	refresh_friends()
+
+
+## A question over everything: an invite, a friend request.
+func ask(text: String, yes: String, no: String, on_answer: Callable) -> void:
+	if _popup != null:
+		_popup.queue_free()
+	_popup = Control.new()
+	_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_popup.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_popup)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.45)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_popup.add_child(dim)
+	var p := UIKit.panel(_popup, Color(0.99, 0.95, 0.88, 0.98), 24)
+	p.set_anchors_preset(Control.PRESET_CENTER)
+	p.anchor_left = 0.5
+	p.anchor_right = 0.5
+	p.anchor_top = 0.5
+	p.anchor_bottom = 0.5
+	p.offset_left = -330
+	p.offset_right = 330
+	p.offset_top = -120
+	p.offset_bottom = 120
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 16)
+	p.add_child(v)
+	var l := UIKit.label(text, v, 24, UIKit.INK, true)
+	l.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0))
+	l.add_theme_constant_override("outline_size", 0)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(600, 0)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_child(row)
+	var y := UIKit.button(yes, row, "check", UIKit.MINT, Vector2(260, 64), 26)
+	var n := UIKit.button(no, row, "back", UIKit.PINK, Vector2(220, 64), 24)
+	var pop := _popup
+	y.pressed.connect(func() -> void:
+		pop.queue_free()
+		on_answer.call(true))
+	n.pressed.connect(func() -> void:
+		pop.queue_free()
+		on_answer.call(false))
+
+
 ## The weapons: every gauntlet and melee weapon as a tile with its drawn icon; the panel on the right shows the picked one big, with its numbers,
 ## what it does, a 360 view and (for the gauntlets of the train run) unlock or equip.
 var _wpick := "nova_blaster"
@@ -968,6 +1233,8 @@ func show_screen(name: String) -> void:
 	_refresh()
 	if name == "weapons":
 		_refresh_weapons()
+	if name == "friends" or name == "squad":
+		refresh_friends()
 
 
 func _skill_points(id: String) -> int:
@@ -1012,7 +1279,7 @@ func _refresh() -> void:
 	if _top_name == null or save.is_empty():
 		return
 	_top_name.text = String(save.get("name", "PLAYER"))
-	_top_sub.text = "%d matches · %d wins" % [int(save.get("matches", 0)), int(save.get("wins", 0))]
+	_top_sub.text = ("UID %d  ·  " % social.uid if social != null else "") + "%d matches · %d wins" % [int(save.get("matches", 0)), int(save.get("wins", 0))]
 	_top_coins.text = str(int(save.get("coins", 0)))
 	_level_badge.queue_redraw()
 	if _name_in != null and not _name_in.has_focus():
@@ -1075,6 +1342,10 @@ func set_status(text: String) -> void:
 
 func set_room(info: Dictionary) -> void:
 	_room = info
+	if String(info.get("state", "")) == "room" and not bool(info.get("quick", false)) and String(info.get("code", "")) != "WI-FI":
+		if screen != "squad":
+			show_screen("squad")
+		refresh_squad()
 	if _status == null:
 		return
 	_status.text = String(info.get("status", ""))
