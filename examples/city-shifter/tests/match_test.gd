@@ -29,7 +29,7 @@ func _initialize() -> void:
 	T.check(w.view_dist <= 50.0 and Data.VIEW_RADIUS == 50.0, "everybody sees 50 m, no more (%.0f)" % w.view_dist)
 	w.set_view_distance(500.0)
 	T.check(w.view_dist == 50.0, "nobody can raise it")
-	T.check(p.tool.inventory.size() == 2 and p.tool.inventory.has("shift_gauntlet") and p.tool.inventory.has("hammer"), "I start with a gauntlet and a hammer")
+	T.check(p.tool.inventory.size() == 3 and p.tool.inventory.has("shift_gauntlet") and p.tool.inventory.has("hammer") and p.tool.inventory.has("nova_blaster"), "I start with a gauntlet, a hammer and the Nova Blaster")
 	T.check(p.lethal and p.alive and p.hp > 0.0, "the match is lethal and I am alive")
 	# pick up: stand on a weapon
 	var uid := -1

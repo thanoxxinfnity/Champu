@@ -9,6 +9,7 @@ func _initialize() -> void:
 	await T.frames(self, 30)
 	var w: OpenWorld = game.world
 	var p := game.player
+	p.shield = 9999.0                         # (the bots are hunting: this test is about driving, not about surviving)
 	T.check(game.state == Main.State.PLAY and w is OpenWorld, "the open world starts")
 	T.check(w.path.size() > 60, "the road is a long loop (%d points)" % w.path.size())
 	T.check(w.road_distance(Vector2(-60, 0)) < 1.0, "the road runs through the town")
