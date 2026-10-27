@@ -23,24 +23,24 @@ func _initialize() -> void:
 	for k in Vehicle.SPEC:
 		if Vehicle.available(k):
 			kinds.append(k)
-	var cols := 4
+	var cols := 5
 	for i in kinds.size():
 		var v := Vehicle.new()
 		w.add_child(v)
 		v.setup(i, kinds[i])
-		v.position = Vector3(0, -float(i / cols) * 4.5, -float(i % cols) * 11.0)
+		v.position = Vector3(0, -float(i / cols) * 6.0, -float(i % cols) * 12.0)
 		var l := Label3D.new()
 		l.text = String(kinds[i])
 		l.font_size = 96
 		l.pixel_size = 0.005
-		l.position = v.position + Vector3(0, 3.6, 0)
+		l.position = v.position + Vector3(0, 4.6, 0)
 		l.rotation_degrees = Vector3(0, 90, 0)
 		w.add_child(l)
 	var cam := Camera3D.new()
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
-	cam.size = 14.0
+	cam.size = 30.0
 	w.add_child(cam)
-	cam.position = Vector3(30, -4.0, -16.0)
+	cam.position = Vector3(40, -4.0, -24.0)
 	cam.rotation_degrees = Vector3(0, 90, 0)
 	cam.make_current()
 	for i in 6:

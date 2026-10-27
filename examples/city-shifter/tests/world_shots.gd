@@ -10,7 +10,7 @@ func snap(name: String, frames := 20) -> void:
 		await physics_frame
 		await process_frame
 	root.get_texture().get_image().save_png("%s/%s.png" % [out, name])
-	print("shot ", name)
+	print("shot ", name, "  draw calls ", RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME), "  tris ", RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME))
 
 
 func _initialize() -> void:

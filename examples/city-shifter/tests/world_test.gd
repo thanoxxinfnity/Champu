@@ -110,6 +110,10 @@ func _initialize() -> void:
 		if c is MultiMeshInstance3D:
 			cells += 1
 	T.check(cells > 20, "the jungle is %d multimesh cells" % cells)
+	# a big sweep through the jungle flattens trees (and a second sweep finds none left)
+	var hit := w.smash(Vector3(120, 0, -100), 60.0)
+	T.check(hit > 5, "a sweep through the jungle knocks trees down (%d)" % hit)
+	T.check(w.smash(Vector3(120, 0, -100), 60.0) == 0, "and they stay down")
 	game.end_run()
 	T.check(game.state == Main.State.LOBBY, "leaving returns to the lobby")
 	T.done(self)

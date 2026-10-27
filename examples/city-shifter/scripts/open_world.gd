@@ -7,6 +7,7 @@ extends Node3D
 ## The same members as TrainWorld (spawn_points, progress, view_dist, update, set_view_distance, set_far_visible), so Main drives both the same way.
 
 signal checkpoint(index: int, total: int, lap: int)
+signal smashed(at: Vector3, count: int)
 
 const ROAD_W := 9.0
 const LOOP := [Vector2(-60, 0), Vector2(60, 0), Vector2(130, -50), Vector2(160, -130), Vector2(110, -210), Vector2(20, -250), Vector2(-90, -220),
@@ -34,6 +35,8 @@ var next_gate := 0
 var lap := 1
 var focus: Node3D                         # the local player (petals and the checkpoint test follow it)
 var _cells: Array = []                    # MultiMeshInstance3D
+var _plants := {}                         # Vector2i cell -> Array of [MultiMesh, instance index, Vector2 position, is_tree, scale]
+var _gone := {}                           # "cell:index:kind" of the plants already smashed
 var _far: Array = []
 var _env: Environment
 var _petals: CPUParticles3D
@@ -328,11 +331,15 @@ func _jungle() -> void:
 				var bb := (kinds[q][0] as Mesh).get_aabb()
 				var base := float(kinds[q][1]) / maxf(bb.size.y, 0.01)
 				var mid := o + Vector2(CELL, CELL) * 0.5            # the node sits in the middle of its cell: the visibility range measures from there
+				var ckey := Vector2i(cx, cz)
+				if not _plants.has(ckey):
+					_plants[ckey] = []
 				for i in pts.size():
 					var p2: Vector2 = pts[i]
 					var s := base * rng.randf_range(0.8, 1.35)
 					var b := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s * rng.randf_range(0.92, 1.12), s))
 					mm.set_instance_transform(i, Transform3D(b, Vector3(p2.x - mid.x, 0.0, p2.y - mid.y)))
+					(_plants[ckey] as Array).append([mm, i, p2, bool(kinds[q][3]), float(kinds[q][1]), Transform3D(b, Vector3(p2.x - mid.x, 0.0, p2.y - mid.y)), q])
 				var mmi := MultiMeshInstance3D.new()
 				mmi.multimesh = mm
 				mmi.position = Vector3(mid.x, 0.0, mid.y)
@@ -432,6 +439,35 @@ func get_mount(id: int) -> Mount:
 		if (m as Mount).mount_id == id:
 			return m
 	return null
+
+
+## Everything that grows within `reach` metres of `at` (flat) is knocked flat: its instance shrinks to nothing and a burst of leaves flies. Trees slow whoever hits them.
+## Returns how many trees were hit. `local` false = this is another phone's smash (no event is sent back).
+func smash(at: Vector3, reach: float, local := true) -> int:
+	var trees := 0
+	var any := 0
+	var c0 := Vector2i(int(floor((at.x + HALF) / CELL)), int(floor((at.z + HALF) / CELL)))
+	for dx in range(-1, 2):
+		for dz in range(-1, 2):
+			var key := Vector2i(c0.x + dx, c0.y + dz)
+			if not _plants.has(key):
+				continue
+			for e in _plants[key]:
+				var tag := "%d:%d:%d" % [key.x, key.y, int(e[1]) * 31 + int(e[6])]
+				if _gone.has(tag):
+					continue
+				var pp: Vector2 = e[2]
+				var rr := reach + (0.0 if bool(e[3]) else -0.6)
+				if Vector2(at.x, at.z).distance_to(pp) < rr:
+					_gone[tag] = true
+					var t: Transform3D = e[5]
+					(e[0] as MultiMesh).set_instance_transform(int(e[1]), Transform3D(Basis().scaled(Vector3.ONE * 0.0001), t.origin))
+					any += 1
+					if bool(e[3]):
+						trees += 1
+	if any > 0:
+		smashed.emit(at, any if local else -any)
+	return trees
 
 
 ## The free mount closest to `pos` within its own reach, or null.

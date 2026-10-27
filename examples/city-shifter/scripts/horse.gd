@@ -45,6 +45,7 @@ func setup(id: int) -> void:
 		var skel := _find_skeleton(m)
 		rigged = skel != null and rig.setup(skel)
 		Anime.style(m, true, 0.025)
+		_cull(m)
 	else:
 		Mat.box(view, Vector3(0, 1.0, 0), Vector3(0.7, 1.0, 2.0), Mat.flat(Color(0.9, 0.85, 0.8)))
 	seat = Marker3D.new()

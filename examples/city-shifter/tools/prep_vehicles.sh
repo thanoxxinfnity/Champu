@@ -12,7 +12,7 @@ prep() {   # name yaw r tris [--front y --rear y --r r]
 }
 prep car 180 0.09 6000 "--front 0.265 --rear -0.30 --r 0.085"
 prep truck 0 0.08 7000
-prep monster 180 0.16 7000
+prep monster 180 0.19 7000 "--front 0.30 --rear -0.36 --r 0.19"
 prep sports 180 0.08 6000
 prep pickup 180 0.085 6500
 prep jeep 180 0.09 6500

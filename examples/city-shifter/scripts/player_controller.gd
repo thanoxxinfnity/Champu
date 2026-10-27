@@ -31,8 +31,17 @@ var pitch := -0.18
 var move_input := Vector2.ZERO          # x right, y forward (stick up = +1)
 var look_delta := Vector2.ZERO          # radians this frame (set by the HUD)
 var jet_held := false
-var fuel := Data.JET_FUEL
-var max_fuel := Data.JET_FUEL
+var jet := JetpackSystem.new()           # fuel tank and heat gauge
+var fuel: float:
+	get:
+		return jet.fuel
+	set(v):
+		jet.fuel = v
+var max_fuel: float:
+	get:
+		return jet.max_fuel
+	set(v):
+		jet.max_fuel = v
 var hp := 100.0
 var max_hp := 100.0
 var speed_mult := 1.0
@@ -152,7 +161,7 @@ func _physics_process(delta: float) -> void:
 	if on_floor:
 		if not _was_floor:
 			_on_land()
-		fuel = minf(max_fuel, fuel + 30.0 * delta)
+		jet.rest(delta, true)
 		velocity.y = maxf(velocity.y, -1.0)
 		if (_jump_buffer > 0.0 or jet_held) and stun <= 0.0 and _jet_edge:
 			velocity.y = 9.0
@@ -161,13 +170,12 @@ func _physics_process(delta: float) -> void:
 			_play("whoosh", -10.0, 1.3)
 	else:
 		velocity.y -= g * delta
-		if jet_held and fuel > 0.0 and stun <= 0.0 and not _jet_edge:
+		if jet_held and stun <= 0.0 and not _jet_edge and jet.burn(delta):
 			_jetting = true
 			velocity.y = minf(velocity.y + (Data.JET_THRUST) * delta, 8.5)
-			fuel = maxf(0.0, fuel - 26.0 * delta)
 			if fuel <= 0.0:
 				fuel_empty.emit()
-		elif _jet_edge and fuel >= 18.0:
+		elif _jet_edge and fuel >= 18.0 and not jet.hot:
 			# a second press in the air: a dash forward
 			_jet_edge = false
 			var cost := 18.0 * float(info.get("dash_mult", 1.0))
@@ -175,6 +183,8 @@ func _physics_process(delta: float) -> void:
 			_dash_t = 0.22
 			velocity.y = maxf(velocity.y, 2.0)
 			_play("whoosh", -4.0, 0.8)
+	if not on_floor and not _jetting:
+		jet.rest(delta, false)
 	if on_floor and jet_held and _jet_edge:
 		_jet_edge = false
 	_was_floor = on_floor

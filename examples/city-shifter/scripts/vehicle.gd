@@ -64,9 +64,10 @@ func setup(id: int, k: String) -> void:
 	var body := ModelKit.fitted("%s%s_body.glb" % [DIR, k], L, "bottom")
 	if body != null:
 		view.add_child(body)
-		Anime.style(body, true, 0.012)
+		Anime.style(body)                 # (no ink outline: the generated bodies are triangle soup and the hull would fray)
 	else:
 		Mat.box(view, Vector3(0, H * 0.5, 0), Vector3(W, H, L), Mat.flat(Color(0.8, 0.3, 0.4)))
+	_cull(view)
 	var tire_path := "%s%s.glb" % [DIR, String(spec.get("tire", "tire"))]
 	var pts: Array = data.get("wheels", [[-0.17, 0.08, -0.3], [0.17, 0.08, -0.3], [-0.17, 0.08, 0.3], [0.17, 0.08, 0.3]])
 	for i in pts.size():
@@ -143,6 +144,11 @@ func _drive(delta: float) -> void:
 	velocity = forward() * speed
 	velocity.y = -4.0
 	var before := speed
+	if is_driven and absf(speed) > 6.0 and get_parent() != null and get_parent().has_method("smash"):
+		# the front of the vehicle flattens whatever grows there (a big truck reaches wider); trees slow it down
+		var hits: int = get_parent().smash(global_position + forward() * (float(spec.len) * 0.4 * signf(speed)), 1.2 + float(spec.len) * 0.12)
+		if hits > 0:
+			speed *= pow(0.93, hits)
 	move_and_slide()
 	if is_on_wall():
 		var k := get_wall_normal()

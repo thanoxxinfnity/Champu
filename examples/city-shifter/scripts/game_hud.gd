@@ -23,6 +23,8 @@ var look := Vector2.ZERO                 # radians since last read
 var playing := false
 var stability := 1.0
 var fuel := 1.0
+var heat := 0.0                          # jetpack heat 0..1 (OVERHEAT at 1)
+var overheated := false
 var distance := 0.0
 var round_no := 1
 var coins := 0
@@ -40,6 +42,8 @@ var net_text := ""
 var ride_label := ""                    # "" = no mount near; else the RIDE button's text (RIDE / DRIVE / GET OFF)
 var world_mode := false                  # the open world: no bridge/block buttons or weapon strip, SHATTER WAVE becomes BOOST
 var round_label := "ROUND"
+var gate_angle := 0.0                    # radians, + = the next gate is to the left of where the camera looks
+var gate_dist := -1.0                    # metres to the next gate (open world), -1 = none
 var strip := true                        # the train strip at the top (off in the open world)
 var minimap: Array = []                  # [[z, x, color], ...] players on the train, for the strip at the top
 
@@ -265,9 +269,19 @@ func _draw_all() -> void:
 	_bar(Rect2(24, 36, 220, 14), stability, Color(1.0, 0.4, 0.4) if stability < 0.35 else Color(0.5, 1.0, 0.6))
 	_text("JET FUEL", Vector2(24, 76), 14, Color(1, 1, 1, 0.8))
 	_bar(Rect2(24, 82, 220, 14), fuel, Color(1.0, 0.65, 0.15) if fuel > 0.25 else Color(1.0, 0.3, 0.2))
+	_text("HEAT", Vector2(24, 116), 12, Color(1, 1, 1, 0.7))
+	_bar(Rect2(24, 120, 220, 8), heat, Color(1.0, 0.25, 0.2) if (overheated or heat > 0.8) else Color(1.0, 0.8, 0.3))
+	if overheated:
+		_text("OVERHEAT", Vector2(120, 116), 12, Color(1.0, 0.3, 0.25, 0.6 + 0.4 * sin(_t * 12.0)))
 	# top-centre: distance and round
 	_text("%d m" % int(distance), Vector2(0, 40), 28, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, w)
 	_text("%s %d   ·   $%d" % [round_label, round_no, coins], Vector2(0, 66), 17, Color(1, 0.88, 0.5), HORIZONTAL_ALIGNMENT_CENTER, w)
+	if world_mode and gate_dist >= 0.0:
+		var ctr := Vector2(w * 0.5, 112.0)
+		_canvas.draw_set_transform(ctr, -gate_angle, Vector2.ONE)
+		_canvas.draw_colored_polygon(PackedVector2Array([Vector2(0, -24), Vector2(17, 14), Vector2(0, 6), Vector2(-17, 14)]), Color(1.0, 0.85, 0.3, 0.95))
+		_canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		_text("%d m" % int(gate_dist), Vector2(0, 148), 15, Color(1, 0.9, 0.5), HORIZONTAL_ALIGNMENT_CENTER, w)
 	# the train strip: where everyone is on the roof
 	var sx := w * 0.5 - 130.0
 	if strip:

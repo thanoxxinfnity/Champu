@@ -514,6 +514,9 @@ func _on_event(kind: String, data: Dictionary) -> void:
 			if state != State.PLAY:
 				mode = String(data.get("mode", "train"))
 				start_play()
+		"smash":
+			if state == State.PLAY and mode == "world":
+				world.smash(Vector3(float(data.x), 0.0, float(data.z)), 2.0, false)
 		"round":
 			round_no = int(data.get("n", round_no))
 			hud.banner("ROUND %d" % round_no)
@@ -577,6 +580,7 @@ func start_play() -> void:
 	if hud.world_mode:
 		world.focus = player
 		world.checkpoint.connect(_on_checkpoint)
+		world.smashed.connect(_on_smashed)
 		hud.owned = []
 	else:
 		_equip(String(save.get("weapon", "shift_gauntlet")))
@@ -625,6 +629,14 @@ func _ride() -> void:
 		player.board(m)
 		audio.play("ui", -4.0, 0.8)
 		hud.toast("%s — stick: drive, JUMP: %s, BOOST: nitro" % [m.title, "jump" if m is Horse else "handbrake"], 3.0)
+
+
+func _on_smashed(at: Vector3, count: int) -> void:
+	if count > 0 and fx != null:
+		fx.shards(at + Vector3(0, 1.0, 0), Color(0.45, 0.85, 0.3), mini(count * 4, 14), 4.0)
+		audio.play("place", -8.0, randf_range(0.6, 0.9))
+		if net.online():
+			net.send_event("smash", {"x": at.x, "z": at.z})
 
 
 func _on_checkpoint(index: int, total: int, lap: int) -> void:
@@ -793,12 +805,18 @@ func _world_frame(_delta: float) -> void:
 	else:
 		hud.ride_label = ""
 	hud.stability = player.hp / player.max_hp
-	hud.fuel = player.fuel / player.max_fuel
+	hud.fuel = player.jet.fuel_frac()
+	hud.heat = player.jet.heat_frac()
+	hud.overheated = player.jet.hot
 	hud.distance = world.progress
 	hud.round_no = world.lap
 	hud.coins = run_coins
 	hud.cooldown = (1.0 - player.mount.boost) if player.mount != null else 0.0
 	hud.minimap = []
+	var to_gate: Vector3 = world.gate_position() - player.global_position
+	to_gate.y = 0.0
+	hud.gate_dist = to_gate.length()
+	hud.gate_angle = player.flat_forward().signed_angle_to(to_gate.normalized(), Vector3.UP) if to_gate.length() > 0.1 else 0.0
 
 
 func _train_frame(delta: float) -> void:
@@ -811,7 +829,9 @@ func _train_frame(delta: float) -> void:
 	spawner.focus_z = zs / float(n)
 	# hud
 	hud.stability = player.hp / player.max_hp
-	hud.fuel = player.fuel / player.max_fuel
+	hud.fuel = player.jet.fuel_frac()
+	hud.heat = player.jet.heat_frac()
+	hud.overheated = player.jet.hot
 	hud.distance = world.progress - run_start_z
 	hud.round_no = round_no
 	hud.coins = run_coins
@@ -836,7 +856,7 @@ func _round_cleared() -> void:
 	audio.play("coin", 0.0, 0.8)
 	player.respawn_at(world.spawn_points[_slot % world.spawn_points.size()].global_position + Vector3(0, 0.3, 0))
 	player.last_safe = player.global_position
-	player.fuel = player.max_fuel
+	player.jet.refill()
 	if net.is_host():
 		net.send_event("round", {"n": round_no})
 

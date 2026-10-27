@@ -95,3 +95,12 @@ func seat_global() -> Vector3:
 
 func forward() -> Vector3:
 	return Vector3(-sin(yaw), 0.0, -cos(yaw))
+
+
+## Far away it is not drawn at all (and not outlined): every mesh under `n` gets a visibility range.
+func _cull(n: Node) -> void:
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		var g := mi as GeometryInstance3D
+		g.visibility_range_end = 110.0
+		g.visibility_range_end_margin = 10.0
+		g.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
