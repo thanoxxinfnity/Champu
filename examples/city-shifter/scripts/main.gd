@@ -82,6 +82,8 @@ func _ready() -> void:
 	net.fx_received.connect(_on_remote_fx)
 	net.slab_received.connect(_on_remote_slab)
 	net.event_received.connect(_on_event)
+	net.hit_received.connect(_on_hit)
+	net.report_received.connect(_on_report)
 	online = OnlineSession.new()
 	online.name = "Online"
 	add_child(online)
@@ -533,8 +535,8 @@ func _on_state(id: int, snap: Array) -> void:
 
 
 func _on_remote_shot(id: int, weapon: String, yaw: float, pitch: float) -> void:
-	if not net.is_host() or not remotes.has(id):
-		return
+	if not net.is_host() or not remotes.has(id) or mode == "world":
+		return                           # (in the match each phone judges its own shots and sends the hits)
 	var p: PlayerController = remotes[id]
 	p.yaw = yaw
 	p.pitch = pitch
@@ -563,6 +565,24 @@ func _on_event(kind: String, data: Dictionary) -> void:
 				mode = String(data.get("mode", "train"))
 				match_type = String(data.get("mt", match_type))
 				start_play()
+		"kill":
+			if mc != null and not net.is_host():
+				_count_kill(int(data.get("k", -1)), int(data.get("v", -1)))
+		"take":
+			if mc != null and not net.is_host():
+				var by := mc.actor_by_id(int(data.get("by", -1)))
+				if by != null:
+					mc._apply_take(by, int(data.get("u", -1)))
+		"drop":
+			if mc != null and mc.loot != null and not net.is_host():
+				mc.loot.drop(String(data.get("id", "")), Vector3(float(data.x), 0.0, float(data.z)), int(data.get("u", -1)))
+		"clock":
+			if mc != null and not net.is_host():
+				mc.time_left = float(data.get("t", mc.time_left))
+				mc.changed.emit()
+		"results":
+			if mc != null and not net.is_host():
+				_client_results(data)
 		"smash":
 			if state == State.PLAY and mode == "world":
 				world.smash(Vector3(float(data.x), 0.0, float(data.z)), 2.0, false)
@@ -781,7 +801,7 @@ func _canvas_redraw() -> void:
 func end_run() -> void:
 	if state != State.PLAY and state != State.PAUSE:
 		return
-	if net.is_host():
+	if net.is_host() and (mc == null or mc.running):
 		net.send_event("end", {})
 	var dist: float = (world.progress - run_start_z) if world != null else 0.0
 	save.best = maxf(float(save.best), dist)
@@ -973,7 +993,63 @@ func _on_match_finished(r: Dictionary) -> void:
 	hud.results = {"won": won, "kills": int(mine.get("kills", 0)), "deaths": int(mine.get("deaths", 0)), "coins": coins}
 	audio.play("coin", 0.0, 0.8 if not won else 1.2)
 	if net.is_host():
-		net.send_event("end", {})
+		net.send_event("results", {"board": r.get("board", []), "winner": int(r.get("winner_team", -1)), "ts": r.get("team_score", {})})
+
+
+## A kill the host announced (or my own, as the host): the score, the feed, the victim's death count.
+func _count_kill(killer_id: int, victim_id: int) -> void:
+	var v := mc.actor_by_id(victim_id)
+	if v != null and not v.is_local and not v.is_bot:
+		v.deaths += 1
+	mc.score_kill(killer_id, victim_id)
+
+
+## The host says the match is over: show my result from its scoreboard.
+func _client_results(d: Dictionary) -> void:
+	var board: Array = d.get("board", [])
+	var winner := int(d.get("winner", -1))
+	var ts: Dictionary = d.get("ts", {})
+	mc.running = false
+	var me_row := {}
+	for row in board:
+		if int(row.get("id", -1)) == net.local_id:
+			me_row = row
+	var best := -1
+	for t in ts:
+		best = maxi(best, int(ts[t]))
+	var r := {"board": board, "winner_team": winner, "team_score": ts,
+		"me": {"kills": int(me_row.get("kills", 0)), "deaths": int(me_row.get("deaths", 0)), "team": int(me_row.get("team", -1)), "won": int(me_row.get("team", -2)) == winner and best > 0}}
+	_on_match_finished(r)
+
+
+## A hit from another phone's player lands on my player (I am the judge of my own hp).
+func _on_hit(target: int, amount: float, knock: Vector3, slow: float, from: int) -> void:
+	if state != State.PLAY or player == null or target != net.local_id:
+		return
+	var src: PlayerController = mc.actor_by_id(from) if mc != null else null
+	player.take_damage(amount, src, knock, slow)
+
+
+## The host decides what a client reports: a death (the kill count), taking a weapon (first come), dropping one (it gets a shared number).
+func _on_report(from: int, kind: String, data: Dictionary) -> void:
+	if mc == null or not net.is_host():
+		return
+	match kind:
+		"died":
+			var k := int(data.get("k", -1))
+			_count_kill(k, from)
+			net.send_event("kill", {"k": k, "v": from})
+		"take":
+			var uid := int(data.get("u", -1))
+			var a := mc.actor_by_id(from)
+			if a != null and mc.loot != null and mc.loot.items.has(uid) and bool(mc.loot.items[uid].alive):
+				mc._apply_take(a, uid)
+				net.send_event("take", {"u": uid, "by": from})
+		"drop":
+			var at := Vector3(float(data.x), 0.0, float(data.z))
+			var uid2: int = mc.loot.next_uid
+			mc.loot.drop(String(data.id), at, uid2)
+			net.send_event("drop", {"id": String(data.id), "x": at.x, "z": at.z, "u": uid2})
 
 
 func _train_frame(delta: float) -> void:

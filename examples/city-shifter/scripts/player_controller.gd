@@ -459,6 +459,13 @@ func push_snapshot(s: Array, clock: float) -> void:
 	_snaps.append([clock, s[0], float(s[1]), float(s[2]), bool(s[3]), bool(s[4])])
 	if s.size() > 5:
 		hp = float(s[5])
+		if lethal and not is_local and not is_bot:
+			var up := hp > 0.0                                 # a remote player is dead on my screen while its hp is 0
+			if up != alive:
+				alive = up
+				avatar.visible = up
+				if tool != null and tool.held != null:
+					tool.held.visible = up
 	var mid := int(s[6]) if s.size() > 6 else -1
 	if mid != _mount_seen and world != null and world.has_method("get_mount"):
 		if mid >= 0:

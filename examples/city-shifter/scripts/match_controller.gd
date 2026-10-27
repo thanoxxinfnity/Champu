@@ -33,6 +33,7 @@ var _brains: Array[BotBrain] = []
 var _rng := RandomNumberGenerator.new()
 var _spawns: Array[Vector3] = []
 var _tick := 0.0
+var _clock_t := 0.0
 
 
 func setup(g: Node, w: OpenWorld, sp: OptimizedSkySpawner, m: String) -> void:
@@ -230,8 +231,12 @@ func drop_weapon(id: String, at: Vector3) -> void:
 func _physics_process(delta: float) -> void:
 	if not running:
 		return
-	if is_authority:
-		time_left = maxf(0.0, time_left - delta)
+	time_left = maxf(0.0, time_left - delta)                 # (a client counts along and is corrected every few seconds)
+	if online and is_authority:
+		_clock_t -= delta
+		if _clock_t <= 0.0:
+			_clock_t = 4.0
+			game.net.send_event("clock", {"t": time_left})
 	for f in feed:
 		f[1] = float(f[1]) - delta
 	while not feed.is_empty() and float(feed[0][1]) <= 0.0:
