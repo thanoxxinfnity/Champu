@@ -16,6 +16,7 @@ var world                              # TrainWorld or OpenWorld (same members)
 var online: OnlineSession
 var loading: LoadingScreen
 var _loading_now := false
+var _emote_i := -1
 var _start_sent := false
 var mc: MatchController                # the open-world match (score, bots, loot, respawns)
 var match_type := "solo"               # "solo" or "team" (teams of 4)
@@ -310,6 +311,11 @@ func _build_ui() -> void:
 		_show_preview()
 		lobby.set_save(save))
 	lobby.char_bought.connect(_buy_char)
+	lobby.hero_tapped.connect(func() -> void:
+		if preview != null:
+			_emote_i = (_emote_i + 1) % CMPoses.EMOTES.size()
+			preview.play_emote(CMPoses.EMOTES[_emote_i])
+			audio.play("ui", -6.0, 1.0 + 0.1 * float(_emote_i)))
 	lobby.skill_bought.connect(func(_hero: String, _skill: String) -> void:
 		Data.write_save(save)
 		audio.play("coin", -4.0, 1.5)

@@ -34,3 +34,4 @@ examples/crimson-mist/raw/
 *.crimson-mist.env
 
 examples/city-shifter/raw/
+examples/city-shifter/private/

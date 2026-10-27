@@ -2,7 +2,11 @@ extends SceneTree
 ## Hero skills: buying levels costs coins and stops at the top, the levels change the hero's real stats (health, speed, jetpack, damage taken, vehicle speed),
 ## they belong to one hero each, they are saved, and the battle-card data (rarity, stats) exists for every hero.   godot --headless --path . --fixed-fps 60 -s tests/skills_test.gd
 
+var _orig_save := {}
+
+
 func _initialize() -> void:
+	_orig_save = Data.load_save()
 	var save := Data.load_save()
 	save.coins = 100000
 	save.skills = {}
@@ -58,4 +62,5 @@ func _initialize() -> void:
 		T.check(st.size() == 3 and float(st[0]) > 0.0 and ResourceLoader.exists("res://assets/ui/cards/%s.png" % id) and ResourceLoader.exists("res://assets/ui/full/%s.png" % id), "%s has a battle card, stats and portraits" % id)
 	T.check(rar.size() == 4, "all four rarities are used (%s)" % str(rar.keys()))
 	T.check(Data.CAST_ORDER.size() >= 18 and Data.CAST.has("kafu") and Data.CAST.has("rachel") and Data.CAST.has("rina") and Data.CAST.has("mococo"), "the four anime girls are in the shop (%d heroes)" % Data.CAST_ORDER.size())
+	Data.write_save(_orig_save)               # (the game saves at the end of a run: leave no skills behind for the other tests)
 	T.done(self)

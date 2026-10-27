@@ -6,6 +6,7 @@ extends Node3D
 ## The jetpack is a pair of cylinders on the back with a flame that follows the thrust.
 
 const MODEL_DIR := "res://assets/cast/"
+const PRIVATE_DIR := "res://private/cast/"
 const CLIPS := {"walk": "walk", "run": "run"}
 const PACK := "res://assets/cast/jetpack.glb"
 
@@ -51,6 +52,8 @@ func setup(id: String) -> void:
 	_holder = Node3D.new()
 	add_child(_holder)
 	var path := "%s%s.glb" % [MODEL_DIR, String(info.get("model", id))]
+	if ResourceLoader.exists("%s%s.glb" % [PRIVATE_DIR, id]):
+		path = "%s%s.glb" % [PRIVATE_DIR, id]          # the owner's own licensed model (never in the repository), when it is on this machine
 	if ResourceLoader.exists(path):
 		var scene := load(path) as PackedScene
 		rig = RigAnimator.new()
@@ -62,7 +65,7 @@ func setup(id: String) -> void:
 			rig.position.y = -box.position.y * k
 			rig.rotation.y = PI          # the glb faces +Z, the game faces -Z
 			_tint(rig.model, info.get("tint", Color.WHITE))
-			Anime.style_char(rig.model, outline, 0.012)
+			Anime.style_char(rig.model, outline, 0.012, 0.72 if path.begins_with(PRIVATE_DIR) else 1.0)
 			if not outline:
 				_limit_range(rig.model)
 			_make_pack()
@@ -201,7 +204,24 @@ func _clip(name: String) -> AnimClip:
 	return AnimClip.load_clip(String(CLIPS.get(name, name)))
 
 
+## Play a named emote (CMPoses.EMOTES) for `secs`; used by the lobby when you tap your hero.
+func play_emote(name: String, secs := 2.6) -> void:
+	_emote = name
+	_emote_t = 0.0
+	_emote_left = secs
+
+
+var _emote := ""
+var _emote_t := 0.0
+var _emote_left := 0.0
+
+
 func _pose() -> Dictionary:
+	if _emote_left > 0.0:
+		var dt := get_process_delta_time()
+		_emote_t += dt
+		_emote_left -= dt
+		return CMPoses.emote(_emote, _emote_t)
 	if riding:
 		# in the saddle: thighs forward and out, shins down, hands forward on the reins; the body follows the horse's speed
 		var lean := clampf(ground_speed / 12.0, 0.0, 1.0)

@@ -16,6 +16,7 @@ signal name_changed(new_name: String)
 signal sound_toggled(muted: bool)
 signal skill_bought(hero: String, skill: String)
 signal screen_changed(name: String)
+signal hero_tapped
 
 var save: Dictionary = {}
 var browsing := "outlaw"                 # the hero shown on the stage
@@ -77,10 +78,7 @@ func _build_top() -> void:
 		var hid := String(save.get("char", "outlaw"))
 		var rc: Dictionary = HeroCard.RARITY[Data.rarity_of(hid)]
 		_level_badge.draw_style_box(UIKit.box(rc.bot, UIKit.INK, 14, 3, 0), Rect2(0, 0, 62, 62))
-		var tex := load("res://assets/ui/cards/%s.png" % hid) as Texture2D if ResourceLoader.exists("res://assets/ui/cards/%s.png" % hid) else null
-		if tex != null:
-			var ts := tex.get_size()
-			_level_badge.draw_texture_rect_region(tex, Rect2(5, 5, 52, 52), Rect2(ts.x * 0.18, ts.y * 0.04, ts.x * 0.64, ts.x * 0.64))
+		HeroCard.draw_art(_level_badge, hid, Rect2(4, 4, 54, 54), 11.0, Color.WHITE, Rect2(0.12, 0.02, 0.76, 0.57))
 		_level_badge.draw_circle(Vector2(50, 50), 13.0, UIKit.PURPLE)
 		_level_badge.draw_arc(Vector2(50, 50), 13.0, 0, TAU, 20, UIKit.INK, 3.0)
 		UIKit.draw_text(_level_badge, str(Data.level_for(float(save.get("best", 0.0)))), Vector2(37, 57), 17, UIKit.CREAM, true, HORIZONTAL_ALIGNMENT_CENTER, 26.0))
@@ -207,6 +205,23 @@ func _build_home() -> Control:
 	b4.pressed.connect(func() -> void: play_offline.emit("train", "solo"))
 	var b5 := UIKit.button("WEAPONS", col, "sword", UIKit.PURPLE, Vector2(380, 56), 24, "Unlock gauntlets for the train run")
 	b5.pressed.connect(func() -> void: open_armory.emit())
+	# tapping the hero makes it do an emote
+	var tap := Button.new()
+	tap.flat = true
+	tap.focus_mode = Control.FOCUS_NONE
+	for st in ["normal", "hover", "pressed", "disabled", "focus"]:
+		tap.add_theme_stylebox_override(st, StyleBoxEmpty.new())
+	tap.set_anchors_preset(Control.PRESET_CENTER)
+	tap.anchor_left = 0.5
+	tap.anchor_right = 0.5
+	tap.anchor_top = 0.5
+	tap.anchor_bottom = 0.5
+	tap.offset_left = -220
+	tap.offset_right = 130
+	tap.offset_top = -250
+	tap.offset_bottom = 230
+	tap.pressed.connect(func() -> void: hero_tapped.emit())
+	root.add_child(tap)
 	# the hero name tag, bottom centre-left
 	var tag := VBoxContainer.new()
 	tag.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -348,11 +363,12 @@ func _make_card(id: String, key: String) -> Control:
 		var top: Color = rc.top
 		var bot: Color = rc.bot
 		b.draw_style_box(UIKit.box(bot, UIKit.PINK if picked else UIKit.INK, 14, 5 if picked else 3, 3), Rect2(2, 2, 136, 138))
-		b.draw_polygon(PackedVector2Array([Vector2(8, 8), Vector2(132, 8), Vector2(132, 132), Vector2(8, 132)]), PackedColorArray([top, top, bot, bot]))
-		if tex != null:
-			var ts := tex.get_size()
-			var k := 118.0 / ts.y
-			b.draw_texture_rect(tex, Rect2(Vector2(70.0 - ts.x * k * 0.5, 12.0), ts * k), false, Color.WHITE if owned else Color(0.2, 0.17, 0.32))
+		if not HeroCard.draw_art(b, id, Rect2(6, 6, 128, 128), 11.0, Color.WHITE if owned else Color(0.55, 0.5, 0.72), Rect2(0.0, 0.0, 1.0, 0.75)):
+			b.draw_polygon(PackedVector2Array([Vector2(8, 8), Vector2(132, 8), Vector2(132, 132), Vector2(8, 132)]), PackedColorArray([top, top, bot, bot]))
+			if tex != null:
+				var ts := tex.get_size()
+				var k := 118.0 / ts.y
+				b.draw_texture_rect(tex, Rect2(Vector2(70.0 - ts.x * k * 0.5, 12.0), ts * k), false, Color.WHITE if owned else Color(0.2, 0.17, 0.32))
 		b.draw_style_box(UIKit.box(Color(UIKit.INK.r, UIKit.INK.g, UIKit.INK.b, 0.88), UIKit.INK, 8, 2, 0), Rect2(8, 112, 124, 24))
 		UIKit.draw_text(b, String(info.get("short", info.name)), Vector2(10, 130), 18, UIKit.CREAM, true, HORIZONTAL_ALIGNMENT_CENTER, 120.0)
 		if not owned:
@@ -457,12 +473,13 @@ func _skill_row(sid: String) -> Control:
 		row.draw_arc(Vector2(32, 29), 21, 0, TAU, 20, UIKit.INK, 3.0)
 		UIKit.draw_icon(row, String(d.icon), Vector2(32, 29), 26, UIKit.CREAM)
 		var tw := row.size.x - 64.0 - 136.0
-		UIKit.draw_text(row, String(d.name), Vector2(62, 22), 20, UIKit.INK, true, HORIZONTAL_ALIGNMENT_LEFT, tw)
+		UIKit.draw_text(row, String(d.name), Vector2(62, 22), 22, UIKit.INK, true, HORIZONTAL_ALIGNMENT_LEFT, tw - 70.0)
+		UIKit.draw_text(row, "LV %d/%d" % [lv, Data.SKILL_MAX], Vector2(62 + tw - 66.0, 22), 17, UIKit.PURPLE if lv < Data.SKILL_MAX else UIKit.ORANGE, true, HORIZONTAL_ALIGNMENT_RIGHT, 66.0)
 		for i in Data.SKILL_MAX:
 			var on := i < lv
-			row.draw_style_box(UIKit.box(UIKit.YELLOW if on else Color(0.85, 0.82, 0.9), UIKit.INK, 3, 2, 0), Rect2(62 + i * (tw / float(Data.SKILL_MAX)), 28, tw / float(Data.SKILL_MAX) - 3.0, 9))
-		var now := Data.skill_now(sid, lv)
-		UIKit.draw_text(row, now if lv > 0 else String(d.per).replace("per level", "") + " each level", Vector2(62, 52), 13, Color(0.3, 0.2, 0.45), false, HORIZONTAL_ALIGNMENT_LEFT, tw)
+			row.draw_style_box(UIKit.box(UIKit.YELLOW if on else Color(0.85, 0.82, 0.9), UIKit.INK, 3, 2, 0), Rect2(62 + i * (tw / float(Data.SKILL_MAX)), 29, tw / float(Data.SKILL_MAX) - 3.0, 9))
+		var now := Data.skill_now(sid, lv) if lv > 0 else String(d.per) + " per level"
+		UIKit.draw_text(row, now, Vector2(62, 53), 15, Color(0.3, 0.2, 0.45), false, HORIZONTAL_ALIGNMENT_LEFT, tw)
 		pass)
 	_skill_rows[sid] = {"row": row, "button": btn}
 	return row

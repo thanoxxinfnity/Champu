@@ -39,7 +39,7 @@ static func style(n: Node, outline := false, width := 0.018) -> void:
 
 
 ## For people: the toon styling, then every opaque material is swapped for the cel shader of shaders/toon_char.gdshader (the same texture, crisp light steps, violet shadows, rim light).
-static func style_char(n: Node, outline := false, width := 0.018) -> void:
+static func style_char(n: Node, outline := false, width := 0.018, bright := 1.0) -> void:
 	style(n, outline, width)
 	if DisplayServer.get_name() == "headless":
 		return
@@ -50,15 +50,16 @@ static func style_char(n: Node, outline := false, width := 0.018) -> void:
 		for sidx in m.mesh.get_surface_count():
 			var src := m.mesh.surface_get_material(sidx)
 			if src is BaseMaterial3D and (src as BaseMaterial3D).transparency == BaseMaterial3D.TRANSPARENCY_DISABLED:
-				m.set_surface_override_material(sidx, _char_of(src as BaseMaterial3D))
+				m.set_surface_override_material(sidx, _char_of(src as BaseMaterial3D, bright))
 
 
 static var _char := {}
 
 
-static func _char_of(src: BaseMaterial3D) -> ShaderMaterial:
-	if _char.has(src):
-		return _char[src]
+static func _char_of(src: BaseMaterial3D, bright := 1.0) -> ShaderMaterial:
+	var key := [src, bright]
+	if _char.has(key):
+		return _char[key]
 	var sm := ShaderMaterial.new()
 	sm.shader = load("res://shaders/toon_char.gdshader") as Shader
 	sm.set_shader_parameter("albedo", src.albedo_color)
@@ -67,7 +68,8 @@ static func _char_of(src: BaseMaterial3D) -> ShaderMaterial:
 		sm.set_shader_parameter("has_tex", true)
 	else:
 		sm.set_shader_parameter("has_tex", false)
-	_char[src] = sm
+	sm.set_shader_parameter("bright", bright)
+	_char[key] = sm
 	return sm
 
 

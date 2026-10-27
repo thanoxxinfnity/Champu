@@ -29,6 +29,38 @@ var _tex := {}
 var _t := 0.0
 
 
+static var _art := {}
+
+
+static func art_of(id: String) -> Texture2D:
+	if not _art.has(id):
+		var p := "res://assets/ui/art/%s.jpg" % id
+		_art[id] = load(p) as Texture2D if ResourceLoader.exists(p) else null
+	return _art[id]
+
+
+## The hero's illustration inside a rounded rectangle: `src` = the part of the picture to show (fractions 0..1 of x, y, w, h).
+static func draw_art(ci: CanvasItem, id: String, r: Rect2, radius: float, tint := Color.WHITE, src := Rect2(0, 0, 1, 1)) -> bool:
+	var tex := art_of(id)
+	if tex == null:
+		return false
+	var pts := PackedVector2Array()
+	var uvs := PackedVector2Array()
+	var cols := PackedColorArray()
+	var rad := minf(radius, minf(r.size.x, r.size.y) * 0.5)
+	var corners := [[r.position + Vector2(rad, rad), PI], [r.position + Vector2(r.size.x - rad, rad), PI * 1.5], [r.position + Vector2(r.size.x - rad, r.size.y - rad), 0.0], [r.position + Vector2(rad, r.size.y - rad), PI * 0.5]]
+	for c in corners:
+		for k in 7:
+			var a: float = float(c[1]) + float(k) / 6.0 * PI * 0.5
+			var pt: Vector2 = (c[0] as Vector2) + Vector2(cos(a), sin(a)) * rad
+			pts.append(pt)
+			var f := (pt - r.position) / r.size
+			uvs.append(Vector2(src.position.x + f.x * src.size.x, src.position.y + f.y * src.size.y))
+			cols.append(tint)
+	ci.draw_polygon(pts, cols, uvs, tex)
+	return true
+
+
 func _ready() -> void:
 	clip_contents = true
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -60,30 +92,26 @@ func _draw() -> void:
 	var bot: Color = rc.bot
 	var rim: Color = rc.rim
 	var u := w / 300.0                   # everything below is designed for a 300-wide card
-	# the body: a vertical gradient inside a rounded ink frame
+	# the body: the illustration inside a rounded ink frame (a gradient and the 3D portrait when there is no illustration)
 	draw_style_box(UIKit.box(bot, UIKit.INK, int(24 * u), maxi(4, int(6 * u)), 0), Rect2(Vector2.ZERO, size))
 	var gi := 7.0 * u
-	draw_polygon(PackedVector2Array([Vector2(gi, gi + 14 * u), Vector2(w - gi, gi + 14 * u), Vector2(w - gi, h - gi), Vector2(gi, h - gi)]),
-		PackedColorArray([top, top, bot, bot]))
-	# light rays from behind the hero
 	var ctr := Vector2(w * 0.5, h * 0.42)
-	for i in 9:
-		var a0 := float(i) / 9.0 * TAU + _t * 0.05
-		var a1 := a0 + TAU / 18.0
-		draw_colored_polygon(PackedVector2Array([ctr, ctr + Vector2(cos(a0), sin(a0)) * h, ctr + Vector2(cos(a1), sin(a1)) * h]), Color(1, 1, 1, 0.1))
-	draw_circle(ctr, w * 0.34, Color(1, 1, 1, 0.16))
-	draw_circle(ctr, w * 0.24, Color(1, 1, 1, 0.14))
-	# the portrait, standing on the name plate
-	var tex := _portrait(hero_id)
-	var art := Rect2(gi + 2, h * 0.07, w - gi * 2 - 4, h * 0.66)
-	if tex != null:
-		var ts := tex.get_size()
-		var k := minf(art.size.x / ts.x, art.size.y / ts.y) * 1.08
-		var dr := Vector2(ts.x * k, ts.y * k)
-		var tint := Color(1, 1, 1, 1) if not locked else Color(0.34, 0.28, 0.5, 1)
-		draw_texture_rect(tex, Rect2(Vector2(w * 0.5 - dr.x * 0.5, art.end.y - dr.y + dr.y * 0.02), dr), false, tint)
-	else:
-		UIKit.draw_icon(self, "user", ctr, w * 0.4, Color(1, 1, 1, 0.8))
+	var tint := Color(1, 1, 1, 1) if not locked else Color(0.5, 0.45, 0.68, 1)
+	if not draw_art(self, hero_id, Rect2(gi, gi, w - gi * 2.0, h - gi * 2.0), 18.0 * u, tint, Rect2(0.5 - 0.5 * (w - gi * 2.0) / (h - gi * 2.0) / 0.75, 0.0, (w - gi * 2.0) / (h - gi * 2.0) / 0.75, 1.0)):
+		draw_polygon(PackedVector2Array([Vector2(gi, gi + 14 * u), Vector2(w - gi, gi + 14 * u), Vector2(w - gi, h - gi), Vector2(gi, h - gi)]),
+			PackedColorArray([top, top, bot, bot]))
+		for i in 9:
+			var a0 := float(i) / 9.0 * TAU + _t * 0.05
+			var a1 := a0 + TAU / 18.0
+			draw_colored_polygon(PackedVector2Array([ctr, ctr + Vector2(cos(a0), sin(a0)) * h, ctr + Vector2(cos(a1), sin(a1)) * h]), Color(1, 1, 1, 0.1))
+		draw_circle(ctr, w * 0.34, Color(1, 1, 1, 0.16))
+		var tex := _portrait(hero_id)
+		var art := Rect2(gi + 2, h * 0.07, w - gi * 2 - 4, h * 0.66)
+		if tex != null:
+			var ts := tex.get_size()
+			var k := minf(art.size.x / ts.x, art.size.y / ts.y) * 1.08
+			var dr := Vector2(ts.x * k, ts.y * k)
+			draw_texture_rect(tex, Rect2(Vector2(w * 0.5 - dr.x * 0.5, art.end.y - dr.y + dr.y * 0.02), dr), false, tint)
 	# inner rim
 	draw_style_box(_rim_box(rim, int(20 * u), maxi(2, int(3 * u))), Rect2(Vector2(gi, gi), size - Vector2(gi, gi) * 2.0))
 	# the rarity chip (top-left) and the stars (top-right)
@@ -93,7 +121,7 @@ func _draw() -> void:
 	for i in int(rc.stars):
 		UIKit.draw_icon(self, "star", Vector2(w - 28 * u - float(i) * 24 * u, 28 * u), 22 * u, Color(1.0, 0.88, 0.3))
 	if locked:
-		UIKit.draw_icon(self, "lock", ctr, w * 0.3, UIKit.YELLOW)
+		UIKit.draw_icon(self, "lock", Vector2(w - 40 * u, h * 0.2), w * 0.14, UIKit.YELLOW)
 	# the name plate
 	var plate := Rect2(12 * u, h * 0.7, w - 24 * u, 58 * u)
 	draw_style_box(UIKit.box(Color(UIKit.INK.r, UIKit.INK.g, UIKit.INK.b, 0.92), UIKit.INK, int(14 * u), 3, 0), plate)

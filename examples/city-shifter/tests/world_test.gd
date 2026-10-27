@@ -70,6 +70,7 @@ func _initialize() -> void:
 	T.check(remote.global_position.distance_to(p.global_position) < 6.0, "the remote follows the driver (%.1f m behind)" % remote.global_position.distance_to(p.global_position))
 	game.hud.move = Vector2.ZERO
 	remote.queue_free()
+	await T.frames(self, 3)
 	car.is_driven = true                     # (both phones share one world in this test: the remote took the car over)
 	car.occupant = p.peer_id
 	# get off

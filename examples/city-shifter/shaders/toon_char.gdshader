@@ -10,13 +10,14 @@ uniform vec3 shade_tint : source_color = vec3(0.62, 0.56, 0.92);
 uniform vec3 rim_col : source_color = vec3(1.0, 0.82, 0.93);
 uniform float rim_amt = 0.3;
 uniform float sat = 1.14;
+uniform float bright = 1.0;            // already-bright textures (the MMD models) are dimmed
 
 void fragment() {
 	vec4 t = has_tex ? texture(albedo_tex, UV) : vec4(1.0);
 	vec3 c = t.rgb * albedo.rgb;
 	float l = dot(c, vec3(0.299, 0.587, 0.114));
 	c = mix(vec3(l), c, sat);
-	ALBEDO = c;
+	ALBEDO = c * bright;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
 }

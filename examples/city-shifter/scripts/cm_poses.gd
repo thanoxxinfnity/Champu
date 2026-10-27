@@ -83,3 +83,49 @@ static func death(k: float) -> Dictionary:
 static func sit_scared(t: float) -> Dictionary:
 	return {"lean": 36.0, "crouch": 0.32, "head": 14.0, "uL": Vector3(0.1, -0.5, 0.8), "fL": Vector3(-0.4, 0.5, 0.7), "uR": Vector3(0.1, -0.5, 0.8), "fR": Vector3(-0.4, 0.5, 0.7),
 		"tL": Vector3(0.1, -0.2, 1.0), "sL": Vector3(0.1, -1.0, 0.1), "tR": Vector3(-0.1, -0.2, 1.0), "sR": Vector3(-0.1, -1.0, 0.1)}
+
+
+# ── emotes (the lobby hero, the victory screen) ──────────────────────────────
+
+const EMOTES := ["wave", "victory", "flex", "peace", "bow"]
+
+
+## `name` at time `t` (seconds since it started); any other name is the idle breathing.
+static func emote(name: String, t: float) -> Dictionary:
+	var p := idle(t)
+	match name:
+		"wave":
+			p["uL"] = Vector3(0.72, 0.5, 0.2)
+			p["fL"] = Vector3(0.18 + 0.55 * sin(t * 9.0), 0.92, 0.25)
+			p["lean"] = 2.0
+			p["head"] = 6.0 * sin(t * 2.0)
+			p["twist"] = -6.0
+		"victory":
+			var j := absf(sin(t * 5.0))
+			p["uL"] = Vector3(0.45, 0.85, 0.1)
+			p["fL"] = Vector3(0.3, 0.95, 0.1)
+			p["uR"] = Vector3(0.45, 0.85, 0.1)
+			p["fR"] = Vector3(0.3, 0.95, 0.1)
+			p["crouch"] = -0.05 * j
+			p["lean"] = -4.0
+			p["head"] = -8.0
+		"flex":
+			p["uL"] = Vector3(0.95, 0.05, 0.1)
+			p["fL"] = Vector3(0.2, 0.97, 0.15)
+			p["uR"] = Vector3(0.95, 0.05, 0.1)
+			p["fR"] = Vector3(0.2, 0.97, 0.15)
+			p["crouch"] = 0.03
+			p["lean"] = -2.0
+		"peace":
+			p["uL"] = Vector3(0.2, 0.15, 0.95)
+			p["fL"] = Vector3(0.05, 0.9, 0.55)
+			p["twist"] = 10.0
+			p["head"] = 8.0
+			p["lean"] = -3.0
+		"bow":
+			var k := clampf(sin(t * 1.5), 0.0, 1.0)
+			p["lean"] = 6.0 + 24.0 * k
+			p["head"] = 10.0 * k
+			p["uL"] = Vector3(0.1, -0.97, 0.2)
+			p["uR"] = Vector3(0.1, -0.97, 0.2)
+	return p

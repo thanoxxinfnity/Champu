@@ -141,13 +141,13 @@ const CAST := {
 		"perk": "Plunder: +50% coins from every match.", "coin_mult": 1.5, "male": true, "price": 1600},
 	"knight": {"name": "LUMINA ARGENT", "short": "LUMINA", "title": "Silver Paladin", "role": "Silver-armour knight", "model": "knight", "height": 1.7, "speed": 5.8, "fuel": 90.0, "hp": 140.0, "tint": Color.WHITE,
 		"perk": "Plate armour: 140 HP.", "male": false, "price": 1600},
-	"kafu": {"name": "KAFU", "short": "KAFU", "title": "Silver Idol", "role": "Moonlit stage idol", "model": "kafu", "height": 1.58, "speed": 6.9, "fuel": 105.0, "hp": 85.0, "tint": Color.WHITE,
+	"kafu": {"name": "KAFU", "short": "KAFU", "title": "Silver Idol", "role": "Silver-haired idol in a lavender coat", "model": "kafu", "height": 1.58, "speed": 6.9, "fuel": 105.0, "hp": 85.0, "tint": Color.WHITE,
 		"perk": "Encore: gauntlets recharge 20% faster.", "charge_mult": 1.2, "male": false, "price": 2000},
-	"rachel": {"name": "RACHEL GARDNER", "short": "RACHEL", "title": "Field Nurse", "role": "Hooded medic with a long braid", "model": "rachel", "height": 1.68, "speed": 6.5, "fuel": 100.0, "hp": 100.0, "tint": Color.WHITE,
+	"rachel": {"name": "RACHEL GARDNER", "short": "RACHEL", "title": "Field Nurse", "role": "Gentle medic with endless blonde hair", "model": "rachel", "height": 1.68, "speed": 6.5, "fuel": 100.0, "hp": 100.0, "tint": Color.WHITE,
 		"perk": "First aid: heals 4 HP a second when not hit for 5 s.", "regen": 4.0, "male": false, "price": 2000},
-	"rina": {"name": "RINA NAKAJIMA", "short": "RINA", "title": "Crimson Cheer", "role": "Red-suit blonde sprinter", "model": "rina", "height": 1.62, "speed": 7.2, "fuel": 100.0, "hp": 85.0, "tint": Color.WHITE,
+	"rina": {"name": "RINA NAKAJIMA", "short": "RINA", "title": "Crimson Cheer", "role": "Blonde sprinter in a red sport suit", "model": "rina", "height": 1.62, "speed": 7.2, "fuel": 100.0, "hp": 85.0, "tint": Color.WHITE,
 		"perk": "Cheer up: the jetpack cools 30% faster.", "cool_mult": 1.3, "male": false, "price": 2000},
-	"mococo": {"name": "MOCOCO ABYSSGARD", "short": "MOCOCO", "title": "Fox of the Abyss", "role": "Pink fox-girl with a fluffy tail", "model": "mococo_full", "height": 1.55, "speed": 7.0, "fuel": 110.0, "hp": 85.0, "tint": Color.WHITE,
+	"mococo": {"name": "MOCOCO ABYSSGARD", "short": "MOCOCO", "title": "Fox of the Abyss", "role": "Fox-girl with a big fluffy tail", "model": "mococo_full", "height": 1.55, "speed": 7.0, "fuel": 110.0, "hp": 85.0, "tint": Color.WHITE,
 		"perk": "Fox reflexes: the air dash costs 40% less fuel.", "dash_mult": 0.6, "male": false, "price": 2000},
 }
 const CAST_ORDER := ["outlaw", "tracker", "mechanic", "viper", "ninja", "school", "engineer", "kunoichi", "cyber", "samurai", "mage", "monk", "pirate", "knight", "kafu", "rachel", "rina", "mococo"]

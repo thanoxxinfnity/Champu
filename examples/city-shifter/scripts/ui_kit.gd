@@ -247,6 +247,19 @@ static func draw_icon(ci: CanvasItem, name: String, c: Vector2, s: float, col: C
 			ci.draw_colored_polygon(fm, col)
 			fm.append(fm[0])
 			ci.draw_polyline(fm, INK, lw * 0.9)
+		"shield":
+			var sh := PackedVector2Array([c + Vector2(-h * 0.75, -h * 0.7), c + Vector2(0, -h * 0.95), c + Vector2(h * 0.75, -h * 0.7), c + Vector2(h * 0.7, h * 0.15), c + Vector2(0, h * 0.95), c + Vector2(-h * 0.7, h * 0.15)])
+			ci.draw_colored_polygon(sh, col)
+			sh.append(sh[0])
+			ci.draw_polyline(sh, INK, lw)
+			ci.draw_line(c + Vector2(0, -h * 0.7), c + Vector2(0, h * 0.7), INK, lw * 0.7)
+		"horse":
+			var hs := PackedVector2Array([c + Vector2(-h * 0.7, h * 0.8), c + Vector2(-h * 0.55, -h * 0.2), c + Vector2(-h * 0.15, -h * 0.6), c + Vector2(h * 0.1, -h * 0.9), c + Vector2(h * 0.25, -h * 0.55),
+				c + Vector2(h * 0.85, -h * 0.05), c + Vector2(h * 0.7, h * 0.2), c + Vector2(h * 0.25, h * 0.05), c + Vector2(h * 0.1, h * 0.8)])
+			ci.draw_colored_polygon(hs, col)
+			hs.append(hs[0])
+			ci.draw_polyline(hs, INK, lw)
+			ci.draw_circle(c + Vector2(h * 0.18, -h * 0.45), h * 0.07, INK)
 		"people":
 			ci.draw_circle(c + Vector2(-h * 0.35, -h * 0.3), h * 0.3, col)
 			ci.draw_circle(c + Vector2(h * 0.35, -h * 0.3), h * 0.3, col)
