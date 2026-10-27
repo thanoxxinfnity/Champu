@@ -390,16 +390,59 @@ func _jungle_prepare() -> void:
 	_jr.seed = 2024
 	var kinds: Array = []          # [mesh, target height, weight/count, is_tree]
 	for t in TREES:
-		var mesh := ModelKit.first_mesh(String(t[0]))
+		var mesh := _strip_plate(ModelKit.first_mesh(String(t[0])))
 		if mesh != null:
-			Anime.style_mesh(mesh)
+			Anime.style_mesh(mesh, true)
 			kinds.append([mesh, float(t[1]), float(t[2]), true, String(t[0])])
 	for u in UNDER:
 		var mesh2 := ModelKit.first_mesh(String(u[0]))
+		if not String(u[0]).contains("rock") and not String(u[0]).contains("log"):
+			mesh2 = _strip_plate(mesh2)
 		if mesh2 != null:
-			Anime.style_mesh(mesh2)
+			Anime.style_mesh(mesh2, true)
 			kinds.append([mesh2, float(u[1]), float(u[2]), false, String(u[0])])
 	_jkinds = kinds
+
+
+## Generated plants often stand on a flat disc of ground (a pale or orange plate around the trunk that looks like a hole in the grass): every triangle
+## in the lowest few percent of the model that lies away from the trunk is dropped.
+func _strip_plate(mesh: Mesh) -> Mesh:
+	if mesh == null:
+		return null
+	var bb := mesh.get_aabb()
+	var y_cut := bb.position.y + bb.size.y * 0.27
+	var c := Vector2(bb.position.x + bb.size.x * 0.5, bb.position.z + bb.size.z * 0.5)
+	var trunk := maxf(bb.size.x, bb.size.z) * 0.15
+	var out := ArrayMesh.new()
+	var dropped := 0
+	var base := 1.0e9
+	for si in mesh.get_surface_count():
+		var arr := mesh.surface_get_arrays(si)
+		var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX] if arr[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		if idx.is_empty():
+			for i in verts.size():
+				idx.append(i)
+		var keep := PackedInt32Array()
+		for t in range(0, idx.size() - 2, 3):
+			var a := verts[idx[t]]
+			var b := verts[idx[t + 1]]
+			var d := verts[idx[t + 2]]
+			var n := (b - a).cross(d - a)
+			var flat := n.length() > 0.0 and absf(n.normalized().y) > 0.6
+			var short := maxf(a.y, maxf(b.y, d.y)) - minf(a.y, minf(b.y, d.y)) < bb.size.y * 0.06     # the rim of the plate: a low sliver
+			var m := (a + b + d) / 3.0
+			if (flat or short) and m.y < y_cut and Vector2(m.x, m.z).distance_to(c) > trunk:
+				dropped += 1
+				continue
+			keep.append_array([idx[t], idx[t + 1], idx[t + 2]])
+			base = minf(base, minf(a.y, minf(b.y, d.y)))
+		arr[Mesh.ARRAY_INDEX] = keep
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+		out.surface_set_material(out.get_surface_count() - 1, mesh.surface_get_material(si))
+	var res: Mesh = out if dropped > 0 else mesh
+	res.set_meta("base_y", base if base < 1.0e8 else bb.position.y)
+	return res
 
 
 ## One slice of the grid columns (the rng runs on from slice to slice, so every phone grows the same jungle).
@@ -455,6 +498,7 @@ func _jungle_slice(part: int) -> void:
 				mm.instance_count = pts.size()
 				var bb := (kinds[q][0] as Mesh).get_aabb()
 				var base := float(kinds[q][1]) / maxf(bb.size.y, 0.01)
+				var sink: float = (kinds[q][0] as Mesh).get_meta("base_y", bb.position.y)   # the lowest kept point goes a little into the ground: no tree hangs in the air
 				var mid := o + Vector2(CELL, CELL) * 0.5            # the node sits in the middle of its cell: the visibility range measures from there
 				var ckey := Vector2i(cx, cz)
 				if not _plants.has(ckey):
@@ -462,9 +506,11 @@ func _jungle_slice(part: int) -> void:
 				for i in pts.size():
 					var p2: Vector2 = pts[i]
 					var s := base * rng.randf_range(0.8, 1.35)
-					var b := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s * rng.randf_range(0.92, 1.12), s))
-					mm.set_instance_transform(i, Transform3D(b, Vector3(p2.x - mid.x, 0.0, p2.y - mid.y)))
-					(_plants[ckey] as Array).append([mm, i, p2, bool(kinds[q][3]), float(kinds[q][1]), Transform3D(b, Vector3(p2.x - mid.x, 0.0, p2.y - mid.y)), q])
+					var sy := s * rng.randf_range(0.92, 1.12)
+					var b := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, sy, s))
+					var y0 := -sink * sy - (0.25 if bool(kinds[q][3]) else 0.05)
+					mm.set_instance_transform(i, Transform3D(b, Vector3(p2.x - mid.x, y0, p2.y - mid.y)))
+					(_plants[ckey] as Array).append([mm, i, p2, bool(kinds[q][3]), float(kinds[q][1]), Transform3D(b, Vector3(p2.x - mid.x, y0, p2.y - mid.y)), q])
 				var mmi := MultiMeshInstance3D.new()
 				mmi.multimesh = mm
 				mmi.position = Vector3(mid.x, 0.0, mid.y)

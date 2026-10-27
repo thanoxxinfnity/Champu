@@ -94,6 +94,17 @@ func _ready() -> void:
 	net.event_received.connect(_on_event)
 	net.hit_received.connect(_on_hit)
 	net.report_received.connect(_on_report)
+	lan = LanBeacon.new()
+	add_child(lan)
+	lan.found.connect(func(_ip: String, _n: String, _c: int) -> void:
+		var hosts := []
+		for ip in lan.heard:
+			hosts.append({"ip": ip, "name": String(lan.heard[ip][0]), "players": int(lan.heard[ip][1])})
+		lobby.set_room({"state": "lan", "status": "Games on this Wi-Fi:", "hosts": hosts}))
+	net.connected.connect(func() -> void:
+		if _lan_mode:
+			await get_tree().create_timer(0.4).timeout
+			_lan_room())
 	online = OnlineSession.new()
 	online.name = "Online"
 	add_child(online)
@@ -337,6 +348,15 @@ func _build_ui() -> void:
 		else:
 			_view_clear())
 	lobby.view_drag.connect(_on_view_drag)
+	lobby.weapon_action.connect(func(id: String) -> void:
+		if Data.WEAPONS.has(id):
+			_card_pressed(id)
+			lobby.set_save(save))
+	lobby.weapon_view.connect(func(id: String) -> void:
+		lobby.show_screen("view")
+		view_cat = "weapons"
+		view_i = (Data.WEAPON_ORDER + Data.MELEE_ORDER).find(id)
+		_view_show())
 	lobby.view_zoom.connect(func(f: float) -> void:
 		_view_zoom = clampf(_view_zoom * f, 0.5, 2.2)
 		if view_pivot != null:
@@ -364,6 +384,18 @@ func _build_ui() -> void:
 	online.failed.connect(func(msg: String) -> void: lobby.set_room({"state": "none", "status": msg}))
 	lobby.leave_online.connect(_online_leave)
 	lobby.start_room.connect(_online_start)
+	lobby.lan_host.connect(_lan_host)
+	lobby.lan_find.connect(func() -> void:
+		_lan_mode = false
+		net.reset()
+		lan.start_find()
+		lobby.set_room({"state": "lan", "status": "Looking for games on this Wi-Fi… (the host taps HOST ON WI-FI)", "hosts": []}))
+	lobby.lan_join.connect(func(ip: String) -> void:
+		_lan_mode = true
+		lan.stop()
+		net.char_id = Data.CAST_ORDER[sel]
+		if net.join_lan(ip):
+			lobby.set_room({"state": "none", "status": "Joining the game on %s…" % ip}))
 	# ── the armory
 	armory_root = Control.new()
 	armory_root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -531,11 +563,54 @@ func _online_request(kind: String, mt: String, code: String) -> void:
 
 
 func _online_leave() -> void:
+	if _lan_mode:
+		_lan_mode = false
+		lan.stop()
+		net.reset()
+		return
 	online.leave()
 
 
 func _online_start() -> void:
+	if _lan_mode:
+		if net.is_host() and net.roster.size() >= 2:
+			lan.stop()
+			mode = "world"
+			match_type = lobby._match_pick
+			begin_match()
+		return
 	online.start_room()
+
+
+# ── the same Wi-Fi / hotspot (ENet, no server) ───────────────────────────────
+
+var lan: LanBeacon
+var _lan_mode := false
+
+
+func _lan_host() -> void:
+	online.leave()
+	net.char_id = Data.CAST_ORDER[sel]
+	if net.host_lan():
+		_lan_mode = true
+		lan.start_host(String(save.get("name", "PLAYER")))
+		_lan_room()
+
+
+## The room as everybody in it sees it: who is in, the host can start.
+func _lan_room() -> void:
+	if not _lan_mode or lobby == null:
+		return
+	var ids: Array = net.roster.keys()
+	ids.sort()
+	var players := []
+	for i in ids.size():
+		var cid := String(net.roster[ids[i]])
+		players.append({"name": "YOU" if ids[i] == net.local_id else String(Data.CAST.get(cid, Data.CAST["outlaw"]).get("short", "PLAYER")),
+			"team": i, "host": ids[i] == 1, "you": ids[i] == net.local_id})
+	lan.players = ids.size()
+	lobby.set_room({"state": "room", "code": "WI-FI", "players": players, "host": net.is_host(), "max": Data.MAX_PLAYERS,
+		"status": "On this Wi-Fi. The host starts when everybody is in." if net.is_host() else "Connected — waiting for the host to start."})
 
 
 func _enter_lobby() -> void:
@@ -675,6 +750,8 @@ func _on_code_ready(kind: String, code: String) -> void:
 
 func _on_peer_joined(id: int, char_id: String) -> void:
 	_refresh_lobby()
+	if state == State.LOBBY:
+		_lan_room()
 	if state == State.PLAY:
 		_spawn_remote(id, char_id)
 		hud.toast("Player %d joined" % id)
@@ -688,6 +765,8 @@ func _on_peer_left(id: int) -> void:
 		remotes.erase(id)
 		hud.toast("Player %d left" % id)
 	_refresh_lobby()
+	if state == State.LOBBY:
+		_lan_room()
 
 
 func _on_state(id: int, snap: Array) -> void:

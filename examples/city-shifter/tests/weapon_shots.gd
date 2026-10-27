@@ -36,10 +36,10 @@ func _initialize() -> void:
 			p.tool.anim_t = float(k) * dur if float(k) < 1.0 else 5.0
 			p.tool.set_process(false)
 			p.shield = 0.0
-			cam.global_position = p.global_position + Vector3(2.3, 1.7, -3.0)
-			cam.look_at(p.global_position + Vector3(0.1, 1.15, 0.0))
 			for _n in 3:
 				p.tool._process(0.0)
+				cam.global_position = p.global_position + Vector3(1.5, 1.5, -2.4)
+				cam.look_at(p.global_position + Vector3(0.0, 1.15, 0.0))
 				await process_frame
 			var img := root.get_texture().get_image()
 			img.save_png("%s/%s_%d.png" % [out, id, i])

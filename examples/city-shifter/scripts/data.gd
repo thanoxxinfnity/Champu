@@ -69,7 +69,7 @@ const WEAPONS := {
 		"note": "Marks falling blocks and ties them together."},
 	"meteor_burster": {"name": "METEOR BURSTER", "kind": "meteor", "range": 0.65, "force": 1.0, "cd": 0.2, "price": 4000, "level": 15, "color": Color(0.4, 1.0, 0.4),
 		"note": "A meteor of gravity: a massive impact where you aim."},
-	"nova_blaster": {"name": "NOVA BLASTER", "kind": "pierce", "range": 0.9, "force": 0.4, "cd": 0.35, "price": 4600, "level": 16, "color": Color(0.35, 0.9, 1.0),
+	"nova_blaster": {"name": "NOVA BLASTER", "kind": "pierce", "range": 0.9, "force": 0.4, "cd": 0.35, "price": 0, "level": 0, "color": Color(0.35, 0.9, 1.0),
 		"note": "A fast anime pistol: a bright bolt through a whole line of debris."},
 	"genesis_cannon": {"name": "GENESIS CANNON", "kind": "meteor", "range": 0.8, "force": 1.0, "cd": 0.85, "price": 6000, "level": 18, "color": Color(0.7, 0.6, 1.0),
 		"note": "The universal destruction weapon: one blast, a huge crater."},

@@ -22,14 +22,14 @@ const STYLES := {
 		[1.0, REST_POS, REST_DIR]]},
 	"overhead": {"dur": 0.7, "two": true, "keys": [
 		[0.0, REST_POS, REST_DIR],
-		[0.28, Vector3(0.22, 1.9, -0.05), Vector3(0.0, 0.95, -0.3)],
-		[0.4, Vector3(0.2, 2.0, 0.1), Vector3(0.0, 1.0, 0.3)],
-		[0.52, Vector3(0.14, 1.05, -0.72), Vector3(0.0, -0.75, -0.65)],
-		[0.72, Vector3(0.14, 1.0, -0.7), Vector3(0.0, -0.7, -0.7)],
+		[0.3, Vector3(0.42, 1.5, 0.12), Vector3(0.35, 0.75, 0.55)],
+		[0.42, Vector3(0.38, 1.6, 0.2), Vector3(0.3, 0.8, 0.6)],
+		[0.56, Vector3(0.12, 1.0, -0.62), Vector3(-0.1, -0.7, -0.7)],
+		[0.74, Vector3(0.12, 0.98, -0.6), Vector3(-0.1, -0.65, -0.75)],
 		[1.0, REST_POS, REST_DIR]]},
 	"slash": {"dur": 0.45, "two": false, "keys": [
 		[0.0, REST_POS, REST_DIR],
-		[0.22, Vector3(0.62, 1.3, -0.02), Vector3(0.55, 0.4, 0.5)],
+		[0.22, Vector3(0.5, 1.15, -0.1), Vector3(0.6, 0.35, 0.4)],
 		[0.45, Vector3(0.12, 1.2, -0.62), Vector3(-0.15, 0.0, -1.0)],
 		[0.62, Vector3(-0.36, 1.08, -0.5), Vector3(-0.9, -0.3, -0.35)],
 		[1.0, REST_POS, REST_DIR]]},
@@ -98,8 +98,13 @@ static func _turn(a: Vector3, b: Vector3, u: float) -> Vector3:
 ## How far the grip sits behind the model's centre (the model is centred on itself), so the hand is on the handle or the pistol grip.
 static func grip_back(id: String) -> float:
 	var len := WeaponModels.held_length(id)
-	if Data.MELEE.has(id):
-		return len * (0.18 if id != "spear" else 0.05)
+	match id:
+		"hammer", "hammer_big", "axe", "quantum_breaker":
+			return len * 0.36                     # at the end of the handle, the head far out
+		"katana":
+			return len * 0.33
+		"spear":
+			return len * 0.08
 	return len * 0.14
 
 

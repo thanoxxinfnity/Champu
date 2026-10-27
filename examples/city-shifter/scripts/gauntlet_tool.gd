@@ -631,10 +631,11 @@ func _physics_process(delta: float) -> void:
 	if player == null or not player.is_local:
 		ghost.visible = false
 		return
-	# the ghost slab shows where the next one goes
-	ghost.visible = true
-	ghost.global_position = next_slab_pos()
-	ghost.rotation = Vector3(0, 0 if _axis == 0 else PI * 0.5, 0)
+	# the ghost slab shows where the next one goes, only for a moment after a slab is placed (it is not a thing standing in front of you)
+	ghost.visible = _last_slab_t < 1.2
+	if ghost.visible:
+		ghost.global_position = next_slab_pos()
+		ghost.rotation = Vector3(0, 0 if _axis == 0 else PI * 0.5, 0)
 	var spawner := player.spawner
 	if _vortex_t > 0.0:
 		_vortex_t -= delta

@@ -17,6 +17,11 @@ signal sound_toggled(muted: bool)
 signal skill_bought(hero: String, skill: String)
 signal screen_changed(name: String)
 signal hero_tapped
+signal lan_host                            # host a game on this Wi-Fi / hotspot (no server)
+signal lan_find
+signal lan_join(ip: String)
+signal weapon_action(id: String)           # unlock or equip (the train-run gauntlet)
+signal weapon_view(id: String)             # open the 360 viewer on it
 signal settings_changed(sens: float, assist: int)      # look sensitivity 0.5..2.0, aim assist 0 off / 1 low / 2 full lock
 signal view_drag(delta: Vector2)           # a finger or mouse dragging over the 3D model (the 360 view)
 signal view_zoom(factor: float)            # a pinch or the mouse wheel
@@ -60,6 +65,7 @@ func _ready() -> void:
 	screens["online"] = _build_online()
 	screens["settings"] = _build_settings()
 	screens["view"] = _build_view()
+	screens["weapons"] = _build_weapons()
 	for k in screens:
 		add_child(screens[k])
 	show_screen("home")
@@ -213,8 +219,8 @@ func _build_home() -> Control:
 	b3.pressed.connect(func() -> void: show_screen("online"))
 	var b4 := UIKit.button("TRAIN RUN", col, "train", UIKit.ORANGE, Vector2(380, 66), 30, "The classic roof run")
 	b4.pressed.connect(func() -> void: play_offline.emit("train", "solo"))
-	var b5 := UIKit.button("WEAPONS", col, "sword", UIKit.PURPLE, Vector2(380, 56), 24, "Unlock gauntlets for the train run")
-	b5.pressed.connect(func() -> void: open_armory.emit())
+	var b5 := UIKit.button("WEAPONS", col, "sword", UIKit.PURPLE, Vector2(380, 56), 24, "Every weapon: numbers, 3D view, unlock")
+	b5.pressed.connect(func() -> void: show_screen("weapons"))
 	# tapping the hero makes it do an emote
 	var tap := Button.new()
 	tap.flat = true
@@ -522,10 +528,10 @@ func _build_online() -> Control:
 	p.anchor_right = 0.5
 	p.anchor_top = 0.5
 	p.anchor_bottom = 0.5
-	p.offset_left = -430
-	p.offset_right = 430
-	p.offset_top = -270
-	p.offset_bottom = 250
+	p.offset_left = -626
+	p.offset_right = 626
+	p.offset_top = -258
+	p.offset_bottom = 266
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
 	p.add_child(v)
@@ -550,12 +556,12 @@ func _build_online() -> Control:
 	chips.add_theme_constant_override("separation", 8)
 	left.add_child(chips)
 	for m in [["solo", "SOLO  1 v 1", "user"], ["team", "TEAM  4 v 4", "team"]]:
-		var c := UIKit.button(String(m[1]), chips, String(m[2]), UIKit.SKY if m[0] == _match_pick else Color(0.6, 0.6, 0.75), Vector2(190, 56), 20)
+		var c := UIKit.button(String(m[1]), chips, String(m[2]), UIKit.SKY if m[0] == _match_pick else Color(0.6, 0.6, 0.75), Vector2(180, 56), 20)
 		c.pressed.connect(func() -> void:
 			_match_pick = String(m[0])
 			_refresh_chips())
 		_match_chips[String(m[0])] = c
-	var find := UIKit.button("FIND PLAYERS", left, "globe", UIKit.MINT, Vector2(392, 70), 32, "Random players join until the room is full")
+	var find := UIKit.button("FIND PLAYERS", left, "globe", UIKit.MINT, Vector2(368, 70), 30, "Random players join until the room is full")
 	find.pressed.connect(func() -> void: play_online.emit("quick", _match_pick, ""))
 	# custom room
 	var right := VBoxContainer.new()
@@ -563,7 +569,7 @@ func _build_online() -> Control:
 	right.add_theme_constant_override("separation", 8)
 	row.add_child(right)
 	var l2 := UIKit.label("CUSTOM ROOM", right, 26, UIKit.ORANGE, true)
-	var create := UIKit.button("CREATE ROOM", right, "plus", UIKit.ORANGE, Vector2(392, 60), 28, "You get a 4-letter code to share")
+	var create := UIKit.button("CREATE ROOM", right, "plus", UIKit.ORANGE, Vector2(368, 60), 28, "You get a 4-letter code to share")
 	create.pressed.connect(func() -> void: play_online.emit("create", _match_pick, ""))
 	var jr := HBoxContainer.new()
 	jr.add_theme_constant_override("separation", 8)
@@ -579,8 +585,18 @@ func _build_online() -> Control:
 	_code_in.add_theme_stylebox_override("focus", UIKit.box(Color(1, 0.98, 0.85), UIKit.PINK, 12, 4, 0))
 	_code_in.add_theme_color_override("font_color", UIKit.INK)
 	jr.add_child(_code_in)
-	var join := UIKit.button("JOIN", jr, "key", UIKit.PURPLE, Vector2(260, 56), 26)
+	var join := UIKit.button("JOIN", jr, "key", UIKit.PURPLE, Vector2(240, 56), 26)
 	join.pressed.connect(func() -> void: play_online.emit("join", _match_pick, _code_in.text.strip_edges().to_upper()))
+	# the same Wi-Fi or hotspot: no internet server needed
+	var wifi := VBoxContainer.new()
+	wifi.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wifi.add_theme_constant_override("separation", 8)
+	row.add_child(wifi)
+	UIKit.label("SAME WI-FI / HOTSPOT", wifi, 26, UIKit.SKY, true)
+	var lh := UIKit.button("HOST ON WI-FI", wifi, "people", UIKit.SKY, Vector2(368, 60), 26, "Friends on your Wi-Fi or hotspot join")
+	lh.pressed.connect(func() -> void: lan_host.emit())
+	var lf := UIKit.button("FIND ON WI-FI", wifi, "globe", UIKit.PURPLE, Vector2(368, 56), 26)
+	lf.pressed.connect(func() -> void: lan_find.emit())
 	# the room
 	_status = UIKit.label("", v, 20, UIKit.INK)
 	_status.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0))
@@ -666,6 +682,164 @@ func _build_settings() -> Control:
 
 func _assist_text() -> String:
 	return "AIM ASSIST: " + ["OFF", "LOW", "FULL LOCK"][_assist]
+
+
+## The weapons: every gauntlet and melee weapon as a tile with its drawn icon; the panel on the right shows the picked one big, with its numbers,
+## what it does, a 360 view and (for the gauntlets of the train run) unlock or equip.
+var _wpick := "nova_blaster"
+var _wtiles := {}
+var _wdetail := {}
+
+
+func _weapon_stats(id: String) -> Array:
+	var dmg: float = float(Data.DAMAGE.get(id, {"dmg": 0.0}).dmg)
+	if Data.MELEE.has(id):
+		var m: Dictionary = Data.MELEE[id]
+		return [dmg / 90.0, clampf(1.0 - (float(m.cd) - 0.3) / 1.1, 0.05, 1.0), float(m.reach) / 4.6, 0.0]
+	var w: Dictionary = Data.WEAPONS[id]
+	var cd := 0.25 + float(w.cd) * 1.1
+	return [dmg / 90.0, clampf(1.0 - (cd - 0.4) / 1.0, 0.05, 1.0), float(w.range), float(Data.DAMAGE.get(id, {"cost": 0.0}).cost) / 0.75]
+
+
+func _build_weapons() -> Control:
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var gp := UIKit.panel(root, Color(0.99, 0.95, 0.88, 0.95), 24)
+	gp.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	gp.offset_left = 18
+	gp.offset_top = 104
+	gp.offset_right = 700
+	gp.offset_bottom = 628
+	var gv := VBoxContainer.new()
+	gv.add_theme_constant_override("separation", 8)
+	gp.add_child(gv)
+	UIKit.label("WEAPONS", gv, 34, UIKit.PURPLE, true)
+	var sc := ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	gv.add_child(sc)
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	sc.add_child(grid)
+	for id in Data.WEAPON_ORDER + Data.MELEE_ORDER:
+		var t := Button.new()
+		t.custom_minimum_size = Vector2(150, 132)
+		t.focus_mode = Control.FOCUS_NONE
+		t.flat = true
+		for st in ["normal", "hover", "pressed", "disabled", "focus"]:
+			t.add_theme_stylebox_override(st, StyleBoxEmpty.new())
+		var tex: Texture2D = load("res://assets/ui/weapons/%s.png" % id) if ResourceLoader.exists("res://assets/ui/weapons/%s.png" % id) else null
+		var wid: String = id
+		t.draw.connect(func() -> void:
+			var r := Rect2(Vector2(2, 2), t.size - Vector2(4, 4))
+			var col: Color = Data.MELEE[wid].color if Data.MELEE.has(wid) else Data.WEAPONS[wid].color
+			var picked := wid == _wpick
+			t.draw_style_box(UIKit.box(Color(1, 1, 1) if not picked else Color(1.0, 0.95, 0.75), UIKit.INK if not picked else UIKit.PINK, 14, 4 if picked else 3, 3), r)
+			t.draw_rect(Rect2(r.position + Vector2(6, 6), Vector2(r.size.x - 12, 6)), col)
+			if tex != null:
+				t.draw_texture_rect(tex, Rect2(r.position + Vector2(r.size.x * 0.5 - 44, 12), Vector2(88, 88)), false)
+			var nm: String = Data.MELEE[wid].name if Data.MELEE.has(wid) else Data.WEAPONS[wid].name
+			UIKit.draw_text(t, nm, r.position + Vector2(6, r.size.y - 10), 15, UIKit.CREAM, true, HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 12)
+			if not save.is_empty() and not Data.MELEE.has(wid) and not Data.weapon_unlocked(wid, save):
+				UIKit.draw_icon(t, "lock", r.position + Vector2(r.size.x - 20, 26), 13, UIKit.YELLOW))
+		t.pressed.connect(func() -> void:
+			_wpick = wid
+			_refresh_weapons())
+		grid.add_child(t)
+		_wtiles[id] = t
+	var ip := UIKit.panel(root, Color(0.99, 0.95, 0.88, 0.95), 24)
+	ip.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	ip.anchor_left = 1.0
+	ip.anchor_right = 1.0
+	ip.offset_left = -560
+	ip.offset_right = -18
+	ip.offset_top = 104
+	ip.offset_bottom = 628
+	var iv := VBoxContainer.new()
+	iv.add_theme_constant_override("separation", 6)
+	ip.add_child(iv)
+	var big := Control.new()
+	big.custom_minimum_size = Vector2(0, 150)
+	big.draw.connect(func() -> void:
+		var tex2: Texture2D = load("res://assets/ui/weapons/%s.png" % _wpick) if ResourceLoader.exists("res://assets/ui/weapons/%s.png" % _wpick) else null
+		var col2: Color = Data.MELEE[_wpick].color if Data.MELEE.has(_wpick) else Data.WEAPONS[_wpick].color
+		big.draw_circle(Vector2(big.size.x * 0.5, 75), 70, Color(col2.r, col2.g, col2.b, 0.25))
+		if tex2 != null:
+			big.draw_texture_rect(tex2, Rect2(Vector2(big.size.x * 0.5 - 75, 0), Vector2(150, 150)), false))
+	iv.add_child(big)
+	var nm2 := UIKit.label("", iv, 32, UIKit.PINK, true)
+	nm2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	nm2.clip_text = true
+	var kind := UIKit.label("", iv, 16, UIKit.PURPLE)
+	kind.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	kind.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0))
+	kind.add_theme_constant_override("outline_size", 0)
+	var bars := Control.new()
+	bars.custom_minimum_size = Vector2(0, 104)
+	bars.draw.connect(func() -> void:
+		var v := _weapon_stats(_wpick)
+		var labels := ["DAMAGE", "FIRE RATE", "RANGE", "CHARGE USE"]
+		var cols := [UIKit.PINK, UIKit.ORANGE, UIKit.SKY, UIKit.MINT]
+		for i in 4:
+			var y := 6.0 + i * 25.0
+			UIKit.draw_text(bars, labels[i], Vector2(10, y + 16), 15, UIKit.INK, false, HORIZONTAL_ALIGNMENT_LEFT, 120)
+			var r := Rect2(Vector2(140, y + 3), Vector2(bars.size.x - 160, 16))
+			bars.draw_style_box(UIKit.box(Color(0.85, 0.82, 0.9), UIKit.INK, 8, 3, 0), r)
+			var f: float = clampf(float(v[i]), 0.0, 1.0)
+			if i == 3 and Data.MELEE.has(_wpick):
+				UIKit.draw_text(bars, "NO AMMO", r.position + Vector2(8, 13), 13, UIKit.INK, false, HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 16)
+			elif f > 0.02:
+				bars.draw_style_box(UIKit.box(cols[i], UIKit.INK, 8, 3, 0), Rect2(r.position, Vector2(maxf(16.0, r.size.x * f), r.size.y))))
+	iv.add_child(bars)
+	var note := UIKit.label("", iv, 16, UIKit.INK)
+	note.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0))
+	note.add_theme_constant_override("outline_size", 0)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size = Vector2(500, 62)
+	note.max_lines_visible = 3
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	iv.add_child(row)
+	var vb := UIKit.button("3D VIEW", row, "cube", UIKit.SKY, Vector2(200, 60), 24)
+	vb.pressed.connect(func() -> void: weapon_view.emit(_wpick))
+	var act := UIKit.button("", row, "check", UIKit.MINT, Vector2(300, 60), 22)
+	act.pressed.connect(func() -> void: weapon_action.emit(_wpick))
+	_wdetail = {"big": big, "name": nm2, "kind": kind, "bars": bars, "note": note, "act": act}
+	return root
+
+
+func _refresh_weapons() -> void:
+	if _wdetail.is_empty():
+		return
+	var id := _wpick
+	var melee := Data.MELEE.has(id)
+	(_wdetail.name as Label).text = String(Data.MELEE[id].name if melee else Data.WEAPONS[id].name)
+	(_wdetail.kind as Label).text = ("Melee  ·  everybody can pick it up" if melee else "Gauntlet  ·  %s  ·  level %d" % [String(Data.WEAPONS[id].kind), int(Data.WEAPONS[id].level)])
+	(_wdetail.note as Label).text = String(Data.MELEE[id].note if melee else Data.WEAPONS[id].note)
+	var act: UIKit.AnimeButton = _wdetail.act
+	if melee:
+		act.text = "FOUND IN MATCHES"
+		act.disabled = true
+	else:
+		var why := Data.weapon_buyable(id, save) if not save.is_empty() else ""
+		if why == "owned":
+			act.text = "EQUIPPED" if String(save.get("weapon", "")) == id else "EQUIP"
+			act.disabled = false
+		elif why == "":
+			act.text = "UNLOCK  $%d" % int(Data.WEAPONS[id].price)
+			act.disabled = false
+		else:
+			act.text = why.to_upper()
+			act.disabled = true
+	act.accent = UIKit.MINT if not act.disabled else Color(0.65, 0.62, 0.8)
+	for k in _wdetail:
+		if _wdetail[k] is Control:
+			(_wdetail[k] as Control).queue_redraw()
+	for t in _wtiles.values():
+		(t as Control).queue_redraw()
 
 
 ## The 360 viewer: the model stands on the stage behind this screen; drag to turn it, pinch or wheel to zoom, the arrows step through the list.
@@ -786,6 +960,8 @@ func show_screen(name: String) -> void:
 		browsing = String(save.get("char", "outlaw"))
 		char_preview.emit(browsing)
 	_refresh()
+	if name == "weapons":
+		_refresh_weapons()
 
 
 func _skill_points(id: String) -> int:
@@ -816,6 +992,7 @@ func set_save(s: Dictionary) -> void:
 	save = s
 	browsing = String(save.get("char", browsing))
 	_refresh()
+	_refresh_weapons()
 
 
 func _refresh_chips() -> void:
@@ -897,6 +1074,16 @@ func set_room(info: Dictionary) -> void:
 	_status.text = String(info.get("status", ""))
 	for c in _room_box.get_children():
 		c.queue_free()
+	if String(info.get("state", "none")) == "lan":
+		var hosts: Array = info.get("hosts", [])
+		var hl := HBoxContainer.new()
+		hl.add_theme_constant_override("separation", 10)
+		_room_box.add_child(hl)
+		for h in hosts.slice(0, 3):
+			var ip: String = h.ip
+			var b := UIKit.button("JOIN %s" % String(h.name), hl, "play", UIKit.MINT, Vector2(300, 60), 22, "%s  ·  %d players" % [ip, int(h.players)])
+			b.pressed.connect(func() -> void: lan_join.emit(ip))
+		return
 	if String(info.get("state", "none")) != "room":
 		return
 	var hdr := UIKit.label("ROOM  %s     %d / %d" % [String(info.get("code", "")), (info.get("players", []) as Array).size(), int(info.get("max", Data.MAX_PLAYERS))], _room_box, 30, UIKit.PINK, true)

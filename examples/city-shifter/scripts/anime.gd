@@ -74,13 +74,21 @@ static func _char_of(src: BaseMaterial3D, bright := 1.0) -> ShaderMaterial:
 
 
 ## The same for a bare mesh (MultiMesh patterns): its surface materials are swapped for toon ones.
-static func style_mesh(mesh: Mesh) -> void:
+## `near_fade`: the plant dissolves (dither) when the camera comes within a couple of metres, so the third-person camera never sits inside a canopy
+## full of giant leaves.
+static func style_mesh(mesh: Mesh, near_fade := false) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
 	for s in mesh.get_surface_count():
 		var mat := mesh.surface_get_material(s)
 		if mat is BaseMaterial3D:
-			mesh.surface_set_material(s, _toon_of(mat as BaseMaterial3D))
+			var t := _toon_of(mat as BaseMaterial3D)
+			if near_fade:
+				t = t.duplicate() as BaseMaterial3D
+				t.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER
+				t.distance_fade_min_distance = 1.2
+				t.distance_fade_max_distance = 3.5
+			mesh.surface_set_material(s, t)
 
 
 static func _toon_of(mat: BaseMaterial3D) -> BaseMaterial3D:

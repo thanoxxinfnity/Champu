@@ -11,7 +11,7 @@ func _initialize() -> void:
 			var f := WeaponAnim.frame(id, t, 1.75)
 			ok = ok and (f.pos as Vector3).length() < 3.0 and absf((f.dir as Vector3).length() - 1.0) < 0.01
 		T.check(ok, "%s: frames stay near the body with a unit direction" % id)
-	T.check(WeaponAnim.frame("hammer", 0.28 * WeaponAnim.duration("hammer"), 1.75).pos.y > 1.7, "the hammer goes up over the head")
+	T.check(WeaponAnim.frame("hammer", 0.28 * WeaponAnim.duration("hammer"), 1.75).pos.y > 1.4, "the hammer is drawn back over the shoulder")
 	T.check(WeaponAnim.frame("hammer", 0.55 * WeaponAnim.duration("hammer"), 1.75).pos.y < 1.3, "and comes down")
 	T.check(WeaponAnim.frame("katana", 0.62 * WeaponAnim.duration("katana"), 1.75).pos.x < 0.0, "the katana cuts across to the left")
 	T.check(WeaponAnim.frame("spear", 0.42 * WeaponAnim.duration("spear"), 1.75).pos.z < -0.6, "the spear is thrust forward")
@@ -42,5 +42,5 @@ func _initialize() -> void:
 		worst = maxf(worst, h.distance_to(grip))
 		top = maxf(top, h.y)
 	T.check(worst < 0.45, "through the swing the hand stays on the weapon (worst %.2f m)" % worst)
-	T.check(top > p.global_position.y + 1.6, "and the hand really goes up (%.2f m)" % (top - p.global_position.y))
+	T.check(top > p.global_position.y + 1.3, "and the hand really goes up (%.2f m)" % (top - p.global_position.y))
 	T.done(self)

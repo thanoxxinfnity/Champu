@@ -38,10 +38,18 @@ static func held_length(id: String) -> float:
 	return float(HELD.get(id, 0.8))
 
 
+## Models that came out of the generator head-last (the heavy end at +Z): turned round so the business end points down -Z like every other weapon.
+const BACKWARDS := ["hammer", "axe", "quantum_breaker"]
+
+
 static func build(id: String, scale := 1.0) -> Node3D:
 	var path := "res://assets/weapons/%s.glb" % id
 	if ModelKit.exists(path):
 		var real := ModelKit.fitted(path, held_length(id), "center")
+		if id in BACKWARDS:
+			for c in real.get_children():
+				(c as Node3D).rotate_y(PI)
+				(c as Node3D).position = Vector3(-(c as Node3D).position.x, (c as Node3D).position.y, -(c as Node3D).position.z)
 		real.name = "Weapon_" + id
 		real.scale = Vector3.ONE * scale
 		real.set_meta("real", true)

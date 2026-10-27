@@ -28,7 +28,7 @@ const STUN := "stun:stun.l.google.com:19302"
 const GATHER_MAX := 6.0
 
 var role := "none"                  # "none" | "host" | "client"
-var peer: WebRTCMultiplayerPeer
+var peer: MultiplayerPeer            # WebRTC (internet, through the matchmaking server) or ENet (the same Wi-Fi / hotspot, no server)
 var local_id := 1
 var char_id := "outlaw"
 var roster := {}                    # id -> char_id (host and clients)
@@ -93,11 +93,47 @@ func host() -> bool:
 	role = "host"
 	local_id = 1
 	roster = {1: char_id}
-	peer = WebRTCMultiplayerPeer.new()
-	peer.create_server()
+	var rtc := WebRTCMultiplayerPeer.new()
+	rtc.create_server()
+	peer = rtc
 	multiplayer.multiplayer_peer = peer
 	_hook()
 	status_changed.emit("HOSTING — send the room code to a friend, then paste their code")
+	return true
+
+
+const LAN_PORT := 7777
+
+
+## The same Wi-Fi or a phone's hotspot: the host opens an ENet server, the others connect to its address (found by LanBeacon). No server on the internet.
+func host_lan() -> bool:
+	reset()
+	var e := ENetMultiplayerPeer.new()
+	if e.create_server(LAN_PORT, Data.MAX_PLAYERS - 1) != OK:
+		status_changed.emit("Could not open the game on this Wi-Fi (port %d busy?)" % LAN_PORT)
+		return false
+	role = "host"
+	local_id = 1
+	roster = {1: char_id}
+	peer = e
+	multiplayer.multiplayer_peer = peer
+	_hook()
+	status_changed.emit("Hosting on this Wi-Fi — friends tap FIND ON WI-FI")
+	return true
+
+
+func join_lan(ip: String) -> bool:
+	reset()
+	var e := ENetMultiplayerPeer.new()
+	if e.create_client(ip, LAN_PORT) != OK:
+		status_changed.emit("Could not reach %s" % ip)
+		return false
+	role = "client"
+	peer = e
+	multiplayer.multiplayer_peer = peer
+	local_id = multiplayer.get_unique_id()
+	_hook()
+	status_changed.emit("Joining %s…" % ip)
 	return true
 
 
@@ -109,13 +145,14 @@ func join_start(want_id := 0) -> bool:
 	reset()
 	role = "client"
 	local_id = want_id if want_id >= 2 else randi_range(2, 1 << 28)
-	peer = WebRTCMultiplayerPeer.new()
-	peer.create_client(local_id)
+	var rtc := WebRTCMultiplayerPeer.new()
+	rtc.create_client(local_id)
+	peer = rtc
 	multiplayer.multiplayer_peer = peer
 	_hook()
 	var c := _new_conn()
 	_wire(c, 1, "offer")
-	peer.add_peer(c, 1)
+	(peer as WebRTCMultiplayerPeer).add_peer(c, 1)
 	c.create_offer()
 	status_changed.emit("Making your join code…")
 	return true
@@ -133,7 +170,7 @@ func host_accept(code: String) -> bool:
 		return false
 	var c := _new_conn()
 	_wire(c, id, "answer")
-	peer.add_peer(c, id)
+	(peer as WebRTCMultiplayerPeer).add_peer(c, id)
 	c.set_remote_description("offer", String(d.sdp))
 	_add_ice(c, d.get("ice", []))
 	status_changed.emit("Making the answer code for player %d…" % id)
