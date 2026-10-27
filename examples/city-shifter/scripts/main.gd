@@ -63,6 +63,7 @@ var weapon_cards := {}
 
 
 func _ready() -> void:
+	Engine.max_fps = 30                 # the menu runs at 30 fps (a match at 60)
 	for a in OS.get_cmdline_user_args():
 		if a == "--autostart":
 			autostart = true
@@ -706,6 +707,7 @@ func _lan_room() -> void:
 
 func _enter_lobby() -> void:
 	state = State.LOBBY
+	Engine.max_fps = 30                 # the menu does not need 60 frames: half the work, a cooler phone
 	lobby3d.visible = true
 	if lobby_env.get_parent() == null:
 		lobby3d.add_child(lobby_env)
@@ -965,6 +967,7 @@ func begin_match() -> void:
 func start_play() -> void:
 	if state == State.PLAY:
 		return
+	Engine.max_fps = 60
 	if net.is_host() and not _start_sent:
 		net.send_event("start", {"mode": mode, "mt": match_type})
 	_start_sent = false

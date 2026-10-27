@@ -359,7 +359,7 @@ func rpc_shot(weapon: String, yaw: float, pitch: float) -> void:
 		shot_received.emit(multiplayer.get_remote_sender_id(), weapon, yaw, pitch)
 
 
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "unreliable")              # (a beam or a flash: if one is lost nobody misses it; damage goes reliable in rpc_hit)
 func rpc_fx(id: int, weapon: String, origin: Vector3, point: Vector3) -> void:
 	fx_received.emit(id, weapon, origin, point)
 	if role == "host":
