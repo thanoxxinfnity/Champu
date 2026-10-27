@@ -58,6 +58,17 @@ func _initialize() -> void:
 	game.view_i = Data.WEAPON_ORDER.size() + Data.MELEE_ORDER.find("hammer_big")
 	game._view_show()
 	await wait(2.0)
+	game.lobby.show_screen("weapons")
+	await wait(2.0)
+	game.lobby._wpick = "genesis_cannon"
+	game.lobby._refresh_weapons()
+	await wait(1.5)
+	game.online.room_info.emit({"state": "room", "code": "SKY79X", "host": true, "all_ready": true, "quick": false, "max": 4, "status": "",
+		"players": [{"id": 1, "name": "YOU", "team": 0, "host": true, "you": true, "char": "kafu", "ready": true},
+			{"id": 2, "name": "TEJAS_OP", "team": 0, "host": false, "you": false, "char": "rachel", "ready": true},
+			{"id": 3, "name": "RIYA", "team": 0, "host": false, "you": false, "char": "rina", "ready": true}]})
+	await wait(3.0)
+	game._clear_squad()
 	game.lobby.show_screen("home")
 	await wait(1.0)
 	# ── loading and the first steps
@@ -68,9 +79,14 @@ func _initialize() -> void:
 	while game.state != Main.State.PLAY and guard < 900:
 		await process_frame
 		guard += 1
-	await wait(1.5)
 	p = game.player
 	p.assist_level = 2
+	# ── the skydive: everybody starts 240 m up
+	p.move_input = Vector2(0, 0.6)
+	await wait(9.0, func(i: int) -> void:
+		keep_alive()
+		p.yaw += 0.004 * sin(float(i) * 0.03))
+	p.move_input = Vector2.ZERO
 	for b in game.mc._brains:
 		b.set_physics_process(true)
 	game.hud.toast("Aim assist: the shot goes at the enemy", 3.0)

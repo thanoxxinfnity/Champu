@@ -1042,7 +1042,7 @@ func start_play() -> void:
 		mc.is_authority = not net.online() or net.is_host()
 		mc.finished.connect(_on_match_finished)
 		mc.begin(player, others, not net.online())
-		if skydive and not bot_mode:
+		if skydive:
 			for a in mc.actors:
 				(a as Node3D).global_position.y += Data.SKYDIVE_Y      # everybody starts together, falling from the sky
 			hud.toast("SKYDIVE! Steer with the stick, JUMP opens the jetpack", 4.0)
