@@ -27,6 +27,7 @@ var char_id := "outlaw"
 var _wait := 0.0
 var _listing := ""
 var _pending_offers: Array = []
+var _linked := false                # a joiner whose direct link to the host is open
 
 
 func setup(n: MultiplayerController, server_url := "") -> void:
@@ -43,13 +44,15 @@ func setup(n: MultiplayerController, server_url := "") -> void:
 		_reset()
 		offline_instead.emit(m))
 	mm.closed.connect(func(why: String) -> void:
-		if phase == "playing":
-			return
+		if phase == "playing" or _linked:
+			return                                  # (the host closes its server link once everybody is connected: the players already talk directly)
 		_reset()
 		failed.emit("The room was closed (%s)" % why))
 	net.code_ready.connect(_on_code)
 	net.peer_joined.connect(func(_id: int, _c: String) -> void: _check_all())
-	net.connected.connect(func() -> void: status.emit("Connected — waiting for the host to start…"))
+	net.connected.connect(func() -> void:
+		_linked = true
+		status.emit("Connected — waiting for the host to start…"))
 	_url = server_url if server_url != "" else Data.MATCH_SERVER
 	set_process(false)
 
@@ -106,6 +109,7 @@ func _reset() -> void:
 		net.reset()
 	phase = "idle"
 	_listing = ""
+	_linked = false
 	names.clear()
 	teams.clear()
 	expected = 0

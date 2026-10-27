@@ -35,3 +35,7 @@ All of these were generated for this game, then prepared for phones with Blender
 - Kafu, Rachel and Rina are the generated, auto-rigged stand-in heroes of Crimson Mist (Triverse text/image-to-3D, `tools/autorig_obj.py`); Mococo is generated with NVIDIA TRELLIS and rigged the same way. No licensed character pack is shipped.
 - Battle-card portraits (`assets/ui/cards`, `assets/ui/full`) and the weapon icons (`assets/ui/weapons`) are rendered from the game's own models by `tests/portrait_baker.gd` and `tests/icon_baker.gd`.
 - The cel shader (`shaders/toon_char.gdshader`), the loading screen, the hero cards and the destructible downtown are original code of this repository.
+
+## v0.5
+- Battle-card illustrations (`assets/ui/art`) are AI-generated with NVIDIA FLUX.1-dev by `tools/nv_art.py` (one prompt per hero, written from the hero's model).
+- `tools/apose.py` (Blender): smooths the skin weights of the generated heroes and bakes an A-pose rest pose. `tools/prep_private.py` (Blender): game-ready copy of licensed anime models that live only in the owner's gitignored `private/` folder; `Avatar` uses them when present, the generated stand-ins otherwise.
