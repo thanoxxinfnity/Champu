@@ -69,6 +69,10 @@ const WEAPONS := {
 		"note": "Marks falling blocks and ties them together."},
 	"meteor_burster": {"name": "METEOR BURSTER", "kind": "meteor", "range": 0.65, "force": 1.0, "cd": 0.2, "price": 4000, "level": 15, "color": Color(0.4, 1.0, 0.4),
 		"note": "A meteor of gravity: a massive impact where you aim."},
+	"nova_blaster": {"name": "NOVA BLASTER", "kind": "pierce", "range": 0.9, "force": 0.4, "cd": 0.3, "price": 4600, "level": 16, "color": Color(0.35, 0.9, 1.0),
+		"note": "A fast anime pistol: a bright bolt through a whole line of debris."},
+	"genesis_cannon": {"name": "GENESIS CANNON", "kind": "meteor", "range": 0.8, "force": 1.0, "cd": 0.85, "price": 6000, "level": 18, "color": Color(0.7, 0.6, 1.0),
+		"note": "The universal destruction weapon: one blast, a huge crater."},
 }
 ## The match: damage (to people) and charge cost (fraction of the 60 s tank) per shot. Melee weapons cost nothing. The 15 gauntlets keep their block-breaking jobs too.
 const DAMAGE := {
@@ -77,6 +81,7 @@ const DAMAGE := {
 	"force_gauntlet": {"dmg": 52.0, "cost": 0.22}, "seismic_rebounder": {"dmg": 22.0, "cost": 0.28}, "saber_grapple": {"dmg": 14.0, "cost": 0.25},
 	"orbital_crush": {"dmg": 36.0, "cost": 0.30}, "tactical_beamer": {"dmg": 24.0, "cost": 0.20}, "thermo_vaporizer": {"dmg": 34.0, "cost": 0.30},
 	"chrono_sliders": {"dmg": 6.0, "cost": 0.45}, "nexus_tether": {"dmg": 10.0, "cost": 0.40}, "meteor_burster": {"dmg": 62.0, "cost": 0.60},
+	"nova_blaster": {"dmg": 20.0, "cost": 0.12}, "genesis_cannon": {"dmg": 90.0, "cost": 0.75},
 	"hammer": {"dmg": 46.0, "cost": 0.0}, "hammer_big": {"dmg": 82.0, "cost": 0.0}, "katana": {"dmg": 30.0, "cost": 0.0}, "axe": {"dmg": 42.0, "cost": 0.0},
 	"spear": {"dmg": 34.0, "cost": 0.0},
 }
@@ -104,11 +109,11 @@ const MELEE := {
 }
 const ABBR := {"shift_gauntlet": "SHF", "vortex_blaster": "VTX", "quantum_breaker": "QBK", "gravity_carver": "GRV", "plasma_magnet": "PLM", "sonic_impactor": "SNC",
 	"force_gauntlet": "FRC", "seismic_rebounder": "SSM", "saber_grapple": "SBR", "orbital_crush": "ORB", "tactical_beamer": "TAC", "thermo_vaporizer": "THM",
-	"chrono_sliders": "CHR", "nexus_tether": "NXS", "meteor_burster": "MTR", "hammer": "HAM", "hammer_big": "TIT", "katana": "KAT", "axe": "AXE", "spear": "SPR"}
+	"chrono_sliders": "CHR", "nexus_tether": "NXS", "meteor_burster": "MTR", "nova_blaster": "NVA", "genesis_cannon": "GEN", "hammer": "HAM", "hammer_big": "TIT", "katana": "KAT", "axe": "AXE", "spear": "SPR"}
 const MELEE_ORDER := ["hammer", "hammer_big", "katana", "axe", "spear"]
 
 const WEAPON_ORDER := ["shift_gauntlet", "vortex_blaster", "quantum_breaker", "gravity_carver", "plasma_magnet", "sonic_impactor", "force_gauntlet", "seismic_rebounder",
-	"saber_grapple", "orbital_crush", "tactical_beamer", "thermo_vaporizer", "chrono_sliders", "nexus_tether", "meteor_burster"]
+	"saber_grapple", "orbital_crush", "tactical_beamer", "thermo_vaporizer", "chrono_sliders", "nexus_tether", "meteor_burster", "nova_blaster", "genesis_cannon"]
 
 # ── the survivors ────────────────────────────────────────────────────────────
 ## model = file in assets/cast (a rigged glb; a built-in stand-in when it is missing), tint recolours the shared model of the variant.

@@ -133,7 +133,7 @@ mn, mx = dims()
 if kind == 'gun':
     # the heavy end (centroid) is the butt: it must be at -Y so the muzzle points to +Y
     c = sum((v.co for v in ob.data.vertices), Vector()) / len(ob.data.vertices)
-    if c.y > (mn.y + mx.y) * 0.5:
+    if (c.y > (mn.y + mx.y) * 0.5) != (os.environ.get('PREP_FLIP') == '1'):     # PREP_FLIP=1: the heavy end is the muzzle (a gun with a fat barrel)
         rot(0, 0, 180)
     mn, mx = dims()
     off = Vector(((mn.x + mx.x) / 2, (mn.y + mx.y) / 2, (mn.z + mx.z) / 2))

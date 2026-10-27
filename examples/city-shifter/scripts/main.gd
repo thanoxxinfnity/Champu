@@ -46,6 +46,12 @@ var lobby3d: Node3D
 var lobby_env: WorldEnvironment            # taken out of the tree during a run: only one WorldEnvironment may be active
 var lobby_cam: Camera3D
 var preview: Avatar
+var view_pivot: Node3D                  # the model in the 360 viewer
+var view_cat := "heroes"
+var view_i := 0
+var _view_touch_t := 0.0                # >0 while a finger has just turned the model: it stops spinning by itself
+var _view_zoom := 1.0
+var _view_wheels: Array = []
 var ui: CanvasLayer
 var lobby_root: Control
 var lobby: LobbyUI
@@ -322,7 +328,27 @@ func _build_ui() -> void:
 		lobby.set_save(save))
 	lobby.screen_changed.connect(func(n: String) -> void:
 		if preview != null:
-			preview.visible = n == "home")
+			preview.visible = n == "home"
+		if n == "view":
+			view_cat = "heroes"
+			view_i = sel
+			_view_zoom = 1.0
+			_view_show()
+		else:
+			_view_clear())
+	lobby.view_drag.connect(_on_view_drag)
+	lobby.view_zoom.connect(func(f: float) -> void:
+		_view_zoom = clampf(_view_zoom * f, 0.5, 2.2)
+		if view_pivot != null:
+			view_pivot.scale = Vector3.ONE * _view_zoom * float(view_pivot.get_meta("base", 1.0)))
+	lobby.view_cat.connect(func(c: String) -> void:
+		view_cat = c
+		view_i = sel if c == "heroes" else 0
+		_view_show())
+	lobby.view_step.connect(func(d: int) -> void:
+		view_i = posmod(view_i + d, _view_ids().size())
+		audio.play("ui", -6.0)
+		_view_show())
 	lobby.name_changed.connect(func(n: String) -> void:
 		save.name = n if n != "" else "PLAYER"
 		Data.write_save(save)
@@ -515,8 +541,111 @@ func _enter_lobby() -> void:
 
 func _process(delta: float) -> void:
 	_clock += delta
-	if state == State.LOBBY and preview != null:
+	_view_touch_t = maxf(0.0, _view_touch_t - delta)
+	if state == State.LOBBY and preview != null and _view_touch_t <= 0.0:
 		preview.rotation.y += delta * 0.7
+	if state == State.LOBBY and view_pivot != null:
+		if _view_touch_t <= 0.0:
+			view_pivot.rotation.y += delta * 0.6
+		for w in _view_wheels:
+			(w as Node3D).rotation.x += delta * 4.0
+
+
+# ── the 360 viewer: heroes, weapons and rides on the lobby stage ─────────────
+
+func _view_ids() -> Array:
+	match view_cat:
+		"weapons":
+			return Data.WEAPON_ORDER + Data.MELEE_ORDER
+		"rides":
+			var out: Array = VehicleData.SPECS.keys()
+			out.sort()
+			out.append("horse")
+			return out
+	return Data.CAST_ORDER
+
+
+## A finger or the mouse turns the model: sideways spins it, up and down tips it.
+func _on_view_drag(delta: Vector2) -> void:
+	_view_touch_t = 2.5
+	if lobby.screen == "view" and view_pivot != null:
+		view_pivot.rotation.y += delta.x * 0.012
+		view_pivot.rotation.x = clampf(view_pivot.rotation.x + delta.y * 0.008, -0.7, 0.7)
+	elif lobby.screen == "home" and preview != null:
+		preview.rotation.y += delta.x * 0.012
+
+
+func _view_clear() -> void:
+	if view_pivot != null:
+		view_pivot.queue_free()
+		view_pivot = null
+	_view_wheels.clear()
+
+
+func _view_show() -> void:
+	_view_clear()
+	var ids := _view_ids()
+	view_i = clampi(view_i, 0, ids.size() - 1)
+	var id: String = ids[view_i]
+	view_pivot = Node3D.new()
+	lobby3d.add_child(view_pivot)
+	var title := id.capitalize()
+	var kind := ""
+	var note := ""
+	var base := 1.0
+	match view_cat:
+		"heroes":
+			var a := Avatar.new()
+			view_pivot.add_child(a)
+			a.setup(id)
+			view_pivot.position = Vector3(-0.35, 0.0, 0.0)
+			var info: Dictionary = Data.CAST[id]
+			title = String(info.name)
+			kind = "%s  ·  %s" % [String(info.get("title", "")), Data.rarity_of(id)]
+			note = String(info.get("perk", ""))
+		"weapons":
+			var m := WeaponModels.build(id, 1.0)
+			base = 1.5 / maxf(WeaponModels.held_length(id), 0.3)
+			var inner := Node3D.new()
+			view_pivot.add_child(inner)
+			inner.add_child(m)
+			m.rotation.y = PI * 0.5               # turn the barrel sideways so the first view is the side view
+			view_pivot.position = Vector3(-0.35, 1.0, 0.0)
+			if Data.MELEE.has(id):
+				title = String(Data.MELEE[id].name)
+				kind = "Melee  ·  no ammo"
+				note = String(Data.MELEE[id].note)
+			else:
+				title = String(Data.WEAPONS[id].name)
+				kind = "Gauntlet  ·  %s" % String(Data.WEAPONS[id].kind)
+				note = String(Data.WEAPONS[id].note)
+		"rides":
+			view_pivot.position = Vector3(-0.35, 0.15, 0.0)
+			if id == "horse":
+				var h := Horse.new()
+				view_pivot.add_child(h)
+				h.setup(0)
+				h.set_physics_process(false)
+				base = 0.55
+				title = "WAR HORSE"
+				kind = "Ride  ·  jump and sprint"
+				note = "Fast over rough ground. Horsemanship skill makes it faster."
+			else:
+				var v := Vehicle.new()
+				view_pivot.add_child(v)
+				v.setup(0, id)
+				v.set_physics_process(false)
+				for w in v.wheels:
+					_view_wheels.append(w[1])
+				base = 1.8 / maxf(float(v.spec.len), 1.0)
+				view_pivot.position.x = -0.55
+				title = String(v.title).to_upper()
+				kind = "Vehicle  ·  %d m long" % int(v.spec.len)
+				note = "Hop in with the ride button. Driving skill makes it faster and easier to steer."
+	view_pivot.set_meta("base", base)
+	view_pivot.scale = Vector3.ONE * base * _view_zoom
+	view_pivot.rotation.y = 0.5
+	lobby.set_view_info(view_cat, title.to_upper() if view_cat != "heroes" else title, kind, note)
 
 
 # ── net callbacks ────────────────────────────────────────────────────────────

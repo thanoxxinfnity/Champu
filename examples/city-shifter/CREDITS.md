@@ -39,3 +39,7 @@ All of these were generated for this game, then prepared for phones with Blender
 ## v0.5
 - Battle-card illustrations (`assets/ui/art`) are AI-generated with NVIDIA FLUX.1-dev by `tools/nv_art.py` (one prompt per hero, written from the hero's model).
 - `tools/apose.py` (Blender): smooths the skin weights of the generated heroes and bakes an A-pose rest pose. `tools/prep_private.py` (Blender): game-ready copy of licensed anime models that live only in the owner's gitignored `private/` folder; `Avatar` uses them when present, the generated stand-ins otherwise.
+
+## v0.6
+- `assets/weapons/nova_blaster.glb` and `genesis_cannon.glb` are the owner's own Triverse generations (text-to-3D, shared links), decimated by `tools/prep_sf.py` (Blender). The owner's third generation, a "messy dark hair" head piece, is kept only in the gitignored `raw/`.
+- Weapon animation (`scripts/weapon_anim.gd`, the two-bone arm solver in `scripts/avatar.gd`) and the 360 viewer (lobby screen "3D VIEW") are original code of this repository.

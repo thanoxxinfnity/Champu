@@ -17,6 +17,8 @@ var block_kind := "steel"
 var cd_left := 0.0
 var firing_t := 0.0
 var held: Node3D
+var anim_t := 99.0                               # seconds since the last shot or swing (the weapon animation)
+var equip_t := 1.0                               # 0..1 while a newly drawn weapon swings up into the hand
 var ghost: MeshInstance3D
 var slabs: Array[StaticBody3D] = []             # the pool
 var live: Array[StaticBody3D] = []              # placed, oldest first
@@ -82,10 +84,12 @@ func equip(id: String) -> void:
 	if held != null:
 		held.queue_free()
 	held = WeaponModels.build(id, 1.0)
+	anim_t = 99.0
+	equip_t = 0.0
 	if player != null and player.avatar != null:
 		var h := player.avatar.height
 		held.position = Vector3(0.36, h * 0.6, -0.1)
-		player.avatar.add_child(held)
+		player.avatar.holder().add_child(held)
 
 
 func cooldown_for(id: String) -> float:
@@ -166,6 +170,8 @@ func fire() -> bool:
 	cd_left = cooldown_for(weapon)
 	firing_t = 0.3
 	player.avatar.attack_t = 0.3 if not melee else minf(0.45, cd_left * 0.7)
+	player.avatar.melee_body = melee
+	anim_t = 0.0
 	shots += 1
 	var origin := player.eye()
 	var dir := player.aim_dir()
@@ -562,6 +568,40 @@ func release_all() -> void:
 
 
 # ── per frame ────────────────────────────────────────────────────────────────
+
+## The weapon in the hand every frame: it rests at the side, swings up when drawn, and moves through its shot or swing (WeaponAnim); the hero's arms
+## follow the grip. A hero without a rig keeps the weapon at the fixed spot.
+func _process(delta: float) -> void:
+	if held == null or not is_instance_valid(held) or player == null or player.avatar == null:
+		return
+	anim_t += delta
+	equip_t = minf(1.0, equip_t + delta / 0.35)
+	var av := player.avatar
+	if av.rig == null or not held.visible:
+		av.grip_r = null
+		av.grip_l = null
+		return
+	var f := WeaponAnim.frame(weapon, anim_t, av.height)
+	var pos: Vector3 = f.pos
+	var dir: Vector3 = f.dir
+	var at_rest := anim_t >= WeaponAnim.duration(weapon)
+	if at_rest:                                  # walking: the weapon sways with the stride
+		pos.y += sin(Time.get_ticks_msec() * 0.011) * 0.025 * clampf(av.ground_speed / 5.0, 0.0, 1.0) * av.height / 1.75
+	elif WeaponAnim.style_of(weapon) in ["shoot", "cannon"]:
+		var aim := player.aim_dir()               # a shot points where the hero aims (up and down; sideways the body already faces it)
+		dir = Vector3(dir.x, dir.y + aim.y * 1.1, dir.z).normalized()
+	var e := equip_t
+	var pop := 1.0 - pow(1.0 - e, 3.0)
+	pos.y -= (1.0 - pop) * 0.55 * av.height / 1.75
+	dir = dir.slerp(Vector3(0.0, -1.0, -0.2).normalized(), 1.0 - pop)
+	held.transform = WeaponAnim.weapon_transform(weapon, pos, dir)
+	held.scale = Vector3.ONE * lerpf(0.5, 1.0, minf(1.0, pop * 1.08))
+	av.grip_r = pos
+	if WeaponAnim.two_handed(weapon) and anim_t < WeaponAnim.duration(weapon) + 0.25:
+		av.grip_l = pos + dir * 0.3 + Vector3(-0.05, 0.0, 0.0)
+	else:
+		av.grip_l = null
+
 
 func _physics_process(delta: float) -> void:
 	cd_left = maxf(0.0, cd_left - delta)

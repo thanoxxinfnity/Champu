@@ -7,7 +7,7 @@ extends RefCounted
 ## How long each weapon is in the hand, metres (the real models are all different sizes; they are fitted to this).
 const HELD := {"shift_gauntlet": 0.7, "vortex_blaster": 0.9, "quantum_breaker": 1.2, "gravity_carver": 1.0, "plasma_magnet": 0.45, "sonic_impactor": 1.5, "force_gauntlet": 0.6,
 	"seismic_rebounder": 1.0, "saber_grapple": 1.0, "orbital_crush": 0.95, "tactical_beamer": 1.3, "thermo_vaporizer": 0.9, "chrono_sliders": 0.6, "nexus_tether": 0.4,
-	"meteor_burster": 1.1}
+	"meteor_burster": 1.1, "nova_blaster": 0.8, "genesis_cannon": 1.5}
 
 const STEEL := Color(0.45, 0.5, 0.6)
 const DARK := Color(0.16, 0.18, 0.24)

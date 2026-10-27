@@ -17,6 +17,10 @@ signal sound_toggled(muted: bool)
 signal skill_bought(hero: String, skill: String)
 signal screen_changed(name: String)
 signal hero_tapped
+signal view_drag(delta: Vector2)           # a finger or mouse dragging over the 3D model (the 360 view)
+signal view_zoom(factor: float)            # a pinch or the mouse wheel
+signal view_cat(cat: String)               # "heroes" | "weapons" | "rides"
+signal view_step(d: int)
 
 var save: Dictionary = {}
 var browsing := "outlaw"                 # the hero shown on the stage
@@ -50,6 +54,7 @@ func _ready() -> void:
 	screens["skills"] = _build_skills()
 	screens["online"] = _build_online()
 	screens["settings"] = _build_settings()
+	screens["view"] = _build_view()
 	for k in screens:
 		add_child(screens[k])
 	show_screen("home")
@@ -220,8 +225,25 @@ func _build_home() -> Control:
 	tap.offset_right = 130
 	tap.offset_top = -250
 	tap.offset_bottom = 230
-	tap.pressed.connect(func() -> void: hero_tapped.emit())
+	var dragged := [0.0]
+	tap.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed:
+			dragged[0] = 0.0
+		elif ev is InputEventMouseMotion and (ev.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			dragged[0] += absf(ev.relative.x) + absf(ev.relative.y)
+			view_drag.emit(ev.relative)
+		elif ev is InputEventScreenDrag:
+			dragged[0] += absf(ev.relative.x) + absf(ev.relative.y)
+			view_drag.emit(ev.relative))
+	tap.pressed.connect(func() -> void:
+		if dragged[0] < 14.0:
+			hero_tapped.emit())
 	root.add_child(tap)
+	var vb := UIKit.button("3D VIEW", null, "cube", UIKit.SKY, Vector2(210, 58), 24)
+	vb.position = Vector2(18, 108)
+	vb.size = Vector2(210, 58)
+	vb.pressed.connect(func() -> void: show_screen("view"))
+	root.add_child(vb)
 	# the hero name tag, bottom centre-left
 	var tag := VBoxContainer.new()
 	tag.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -616,6 +638,103 @@ func _build_settings() -> Control:
 	rec.add_theme_constant_override("outline_size", 0)
 	rec.name = "Record"
 	return root
+
+
+## The 360 viewer: the model stands on the stage behind this screen; drag to turn it, pinch or wheel to zoom, the arrows step through the list.
+func _build_view() -> Control:
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var pad := Control.new()
+	pad.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pad.mouse_filter = Control.MOUSE_FILTER_STOP
+	var touches := {}
+	pad.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseMotion and (ev.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			view_drag.emit(ev.relative)
+		elif ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_WHEEL_UP:
+			view_zoom.emit(1.1)
+		elif ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			view_zoom.emit(0.91)
+		elif ev is InputEventMagnifyGesture:
+			view_zoom.emit(ev.factor)
+		elif ev is InputEventScreenTouch:
+			if ev.pressed:
+				touches[ev.index] = ev.position
+			else:
+				touches.erase(ev.index)
+		elif ev is InputEventScreenDrag:
+			if touches.size() >= 2 and touches.has(ev.index):
+				var before := (touches.values()[0] as Vector2).distance_to(touches.values()[1])
+				touches[ev.index] = ev.position
+				var after := (touches.values()[0] as Vector2).distance_to(touches.values()[1])
+				if before > 20.0:
+					view_zoom.emit(clampf(after / before, 0.8, 1.25))
+			else:
+				touches[ev.index] = ev.position
+				view_drag.emit(ev.relative))
+	root.add_child(pad)
+	var cats := HBoxContainer.new()
+	cats.position = Vector2(18, 108)
+	cats.add_theme_constant_override("separation", 10)
+	root.add_child(cats)
+	var cb := {}
+	for c in [["heroes", "HEROES", "user", UIKit.PINK], ["weapons", "WEAPONS", "sword", UIKit.PURPLE], ["rides", "RIDES", "wheel", UIKit.ORANGE]]:
+		var b := UIKit.button(String(c[1]), cats, String(c[2]), c[3], Vector2(190, 56), 22)
+		b.pressed.connect(func() -> void: view_cat.emit(String(c[0])))
+		cb[String(c[0])] = b
+	_info["view"] = {"cats": cb}
+	var p := UIKit.panel(root, Color(0.99, 0.95, 0.88, 0.96), 22)
+	p.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	p.anchor_left = 1.0
+	p.anchor_right = 1.0
+	p.anchor_top = 1.0
+	p.anchor_bottom = 1.0
+	p.offset_left = -560
+	p.offset_right = -18
+	p.offset_top = -190
+	p.offset_bottom = -14
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	p.add_child(v)
+	var hdr := HBoxContainer.new()
+	hdr.add_theme_constant_override("separation", 8)
+	v.add_child(hdr)
+	var prev := UIKit.button("", hdr, "back", UIKit.SKY, Vector2(64, 52))
+	prev.pressed.connect(func() -> void: view_step.emit(-1))
+	var nm := UIKit.label("", hdr, 28, UIKit.PINK, true)
+	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	nm.clip_text = true
+	nm.custom_minimum_size = Vector2(300, 0)
+	var nxt := UIKit.button("", hdr, "next", UIKit.SKY, Vector2(64, 52))
+	nxt.pressed.connect(func() -> void: view_step.emit(1))
+	var kind := UIKit.label("", v, 16, UIKit.PURPLE)
+	kind.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0))
+	kind.add_theme_constant_override("outline_size", 0)
+	var note := UIKit.label("", v, 16, UIKit.INK)
+	note.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0))
+	note.add_theme_constant_override("outline_size", 0)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size = Vector2(500, 66)
+	note.max_lines_visible = 3
+	_info["view"]["name"] = nm
+	_info["view"]["kind"] = kind
+	_info["view"]["note"] = note
+	return root
+
+
+## What the viewer shows now: a name, a line about its kind and a description.
+func set_view_info(cat: String, title: String, kind: String, note: String) -> void:
+	var v: Dictionary = _info.get("view", {})
+	if v.is_empty():
+		return
+	(v.name as Label).text = title
+	(v.kind as Label).text = kind
+	(v.note as Label).text = note
+	for k in v.cats:
+		(v.cats[k] as UIKit.AnimeButton).accent = [UIKit.PINK, UIKit.PURPLE, UIKit.ORANGE][["heroes", "weapons", "rides"].find(k)] if k == cat else Color(0.62, 0.58, 0.78)
+		(v.cats[k] as Control).queue_redraw()
 
 
 # ── state ────────────────────────────────────────────────────────────────────

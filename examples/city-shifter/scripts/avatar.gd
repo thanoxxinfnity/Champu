@@ -20,7 +20,11 @@ var jetting := false
 var thrust := 0.0               # 0..1, the flame
 var attack_t := 0.0             # >0 while the gauntlet arm swings
 var hurt_t := 0.0
+var melee_body := false         # the body twist of a swing (a melee weapon) or the aim stance (a gauntlet)
+var grip_r = null               # Vector3 in holder space: where the right hand holds the weapon (null = the arm hangs as the pose says)
+var grip_l = null               # the same for the left hand (two-handed weapons)
 var _holder: Node3D
+var _arm_len := {}
 var _t := 0.0
 var _clip_t := 0.0
 var _blinking := false
@@ -194,6 +198,10 @@ func _process(delta: float) -> void:
 	_holder.position.y = 0.0
 	if rig != null:
 		var d := _pose()
+		if grip_r != null and not riding:
+			_solve_arm(d, "R", grip_r)
+			if grip_l != null:
+				_solve_arm(d, "L", grip_l)
 		rig.apply(PoseLib.build(d))
 		_last = d
 	else:
@@ -234,6 +242,8 @@ func _pose() -> Dictionary:
 		return CMPoses.hurt(1.0 - hurt_t / 0.4)
 	if attack_t > 0.0:
 		var k := 1.0 - attack_t / 0.3
+		if not melee_body:
+			return CMPoses.aim()
 		var d := CMPoses.swing(1, clampf(k, 0.0, 1.0), 0)
 		return d
 	if airborne or jetting:
@@ -264,6 +274,48 @@ func _pose() -> Dictionary:
 		d2["fR"] = Vector3(0.1, -0.7 + (0.5 if run_gait else 0.0), bend + 0.5 * maxf(0.0, -sw))
 		return d2
 	return CMPoses.idle(_t)
+
+
+## The node the hero's body and the held weapon both live in (the lean of the jet pose carries them together).
+func holder() -> Node3D:
+	return _holder
+
+
+## Two-bone solver: the arm `side` ("L" or "R") reaches the point `target` (holder space) with the elbow out and down. It writes the upper arm and forearm
+## directions into the pose; the shoulder is read from the skeleton as it stood a frame ago.
+func _solve_arm(d: Dictionary, side: String, target: Vector3) -> void:
+	var sk := rig.skeleton
+	var ui: int = rig.idx.get("upperarm" + side, -1)
+	var fi: int = rig.idx.get("forearm" + side, -1)
+	var hi: int = rig.idx.get("hand" + side, -1)
+	if sk == null or ui < 0 or fi < 0 or hi < 0:
+		return
+	var to_rig := rig.global_transform.affine_inverse() * sk.global_transform
+	if not _arm_len.has(side):
+		var r0 := sk.get_bone_global_rest(ui).origin
+		_arm_len[side] = Vector2(r0.distance_to(sk.get_bone_global_rest(fi).origin), sk.get_bone_global_rest(fi).origin.distance_to(sk.get_bone_global_rest(hi).origin))
+		_arm_len[side] = (_arm_len[side] as Vector2) * to_rig.basis.get_scale().x
+	var la: float = (_arm_len[side] as Vector2).x
+	var lb: float = (_arm_len[side] as Vector2).y
+	var shoulder := to_rig * sk.get_bone_global_pose(ui).origin
+	var want := rig.transform.affine_inverse() * target
+	var dv := want - shoulder
+	var reach := clampf(dv.length(), 0.05, la + lb - 0.002)
+	var dn := dv.normalized()
+	var pole := Vector3(-0.8 if side == "R" else 0.8, -0.6, 0.25)
+	pole = (pole - dn * dn.dot(pole)).normalized()
+	var x := (la * la - lb * lb + reach * reach) / (2.0 * reach)
+	var h := sqrt(maxf(la * la - x * x, 0.0))
+	var elbow := shoulder + dn * x + pole * h
+	var hand := shoulder + dn * reach
+	var u := (elbow - shoulder).normalized()
+	var f := (hand - elbow).normalized()
+	if side == "R":                      # the pose tables give the right arm in the left arm's mirrored frame
+		u.x = -u.x
+		f.x = -f.x
+	d["u" + side] = u
+	d["f" + side] = f
+	d["h" + side] = Vector3.ZERO
 
 
 func _stand_in_pose() -> void:

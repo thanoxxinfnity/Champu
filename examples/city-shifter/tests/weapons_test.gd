@@ -3,7 +3,7 @@ extends SceneTree
 ## (breaks, moves or slows at least one), respects its cooldown; unlocking follows level and coins; the bridge slabs are pooled and age out.
 
 func _initialize() -> void:
-	T.check(Data.WEAPONS.size() == 15 and Data.WEAPON_ORDER.size() == 15, "there are 15 weapons")
+	T.check(Data.WEAPONS.size() == 17 and Data.WEAPON_ORDER.size() == 17, "there are 17 weapons")
 	for id in Data.WEAPON_ORDER:
 		var w: Dictionary = Data.WEAPONS[id]
 		var ok := true

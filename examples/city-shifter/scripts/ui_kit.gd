@@ -117,6 +117,10 @@ static func draw_icon(ci: CanvasItem, name: String, c: Vector2, s: float, col: C
 			var pts2 := PackedVector2Array([c + Vector2(h * 0.7, -h * 0.7), c + Vector2(-h * 0.7, 0), c + Vector2(h * 0.7, h * 0.7)])
 			ci.draw_polyline(pts2, INK, lw * 2.4)
 			ci.draw_polyline(pts2, col, lw)
+		"next":
+			var pts4 := PackedVector2Array([c + Vector2(-h * 0.7, -h * 0.7), c + Vector2(h * 0.7, 0), c + Vector2(-h * 0.7, h * 0.7)])
+			ci.draw_polyline(pts4, INK, lw * 2.4)
+			ci.draw_polyline(pts4, col, lw)
 		"lock":
 			var r2 := Rect2(c + Vector2(-h * 0.6, -h * 0.1), Vector2(h * 1.2, h * 0.95))
 			ci.draw_arc(c + Vector2(0, -h * 0.1), h * 0.42, PI, TAU, 12, INK, lw * 1.4)
