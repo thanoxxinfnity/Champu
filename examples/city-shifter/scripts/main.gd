@@ -983,6 +983,8 @@ func _on_match_finished(r: Dictionary) -> void:
 	var mine: Dictionary = r.get("me", {})
 	var won := bool(mine.get("won", false))
 	var coins := 20 + int(mine.get("kills", 0)) * 10 + (80 if won else 0)
+	if player != null:
+		coins = int(round(float(coins) * float(player.info.get("coin_mult", 1.0))))          # the pirate plunders more
 	run_coins += coins
 	save.coins = int(save.coins) + run_coins
 	save.matches = int(save.get("matches", 0)) + 1
