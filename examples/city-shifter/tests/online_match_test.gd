@@ -28,28 +28,31 @@ func _initialize() -> void:
 	game.sel = maxi(0, Data.CAST_ORDER.find("outlaw" if role == "host" else "ninja"))
 	var infos := []
 	game.online.room_info.connect(func(i: Dictionary) -> void: infos.append(i))
-	if role == "host":
+	if OS.get_environment("CS_QUICK") == "1":
+		game._online_request("quick", "solo", "")
+	elif role == "host":
 		game._online_request("create", "solo", "")
-		T.check(await _until(func() -> bool: return not infos.is_empty(), 15.0), "host: room made")
+		T.check(await _until(func() -> bool: return not infos.is_empty(), 15.0), "host: room made (%s)" % (String(infos[0].code) if not infos.is_empty() else "?"))
 		var f := FileAccess.open(code_file, FileAccess.WRITE)
 		f.store_string(String(infos[0].code))
 		f.close()
 		T.check(await _until(func() -> bool: return not infos.is_empty() and (infos[-1].players as Array).size() == 2, 40.0), "host: friend joined the room")
 		game._online_start()
 	else:
-		T.check(await _until(func() -> bool: return FileAccess.file_exists(code_file) and FileAccess.get_file_as_string(code_file).length() == 4, 40.0), "client: got the code")
+		T.check(await _until(func() -> bool: return FileAccess.file_exists(code_file) and FileAccess.get_file_as_string(code_file).length() >= 4, 40.0), "client: got the code")
 		game._online_request("join", "solo", FileAccess.get_file_as_string(code_file))
-	T.check(await _until(func() -> bool: return game.state == Main.State.PLAY and game.mc != null, 60.0), "%s: the match started" % role)
-	T.check(await _until(func() -> bool: return game.remotes.size() == 1, 10.0), "%s: I see the other player" % role)
+	var t_go := Time.get_ticks_msec()
+	game.online.status.connect(func(s: String) -> void: print("[%5.1f s] status: %s" % [float(Time.get_ticks_msec() - t_go) / 1000.0, s]))
+	T.check(await _until(func() -> bool: return game.state == Main.State.PLAY and game.mc != null, 120.0), "%s: the match started (%.1f s)" % [role, float(Time.get_ticks_msec() - t_go) / 1000.0])
+	T.check(await _until(func() -> bool: return game.remotes.size() == 1, 30.0), "%s: I see the other player (%.1f s)" % [role, float(Time.get_ticks_msec() - t_go) / 1000.0])
 	await T.frames(self, 30)
 	var mc: MatchController = game.mc
-	var other_id := 2 if role == "host" else 1
-	var other := mc.actor_by_id(other_id)
+	var other: PlayerController = game.remotes.values()[0] if not game.remotes.is_empty() else null
 	T.check(mc.actors.size() == 2 and other != null, "%s: two players in the match, no bots (%d)" % [role, mc.actors.size()])
 	T.check(other != null and other.display_name == ("ClientBot" if role == "host" else "HostBot"), "%s: the other's name arrived (%s)" % [role, other.display_name if other != null else "?"])
 	T.check(mc.team_score.size() == 2 and game.player.team != other.team, "%s: solo means different teams" % role)
 	T.check(mc.is_authority == (role == "host"), "%s: only the host counts the score" % role)
-	await T.frames(self, 240)
+	await T.frames(self, 600)
 	if role == "host":
 		# hit the client: its phone judges, and its hp drops
 		var before := other.hp
@@ -62,7 +65,7 @@ func _initialize() -> void:
 		T.check(await _until(func() -> bool: return other.hp > 0.0 and other.alive, 60.0), "host: the friend is back after the respawn")
 		FileAccess.open(OS.get_environment("CS_CODE_FILE") + ".done", FileAccess.WRITE).store_string("1")
 	else:
-		T.check(await _until(func() -> bool: return game.player.hp < game.player.max_hp, 30.0), "client: the host's hit lowered my hp (%.0f)" % game.player.hp)
+		T.check(await _until(func() -> bool: return game.player.hp < game.player.max_hp, 45.0), "client: the host's hit lowered my hp (%.0f)" % game.player.hp)
 		game.player.shield = 0.0
 		game.player.take_damage(9999.0, other)
 		T.check(not game.player.alive, "client: I died")

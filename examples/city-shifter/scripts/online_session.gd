@@ -32,7 +32,23 @@ var _linked := false                # a joiner whose direct link to the host is 
 
 func setup(n: MultiplayerController, server_url := "") -> void:
 	net = n
-	mm = Matchmaker.new()
+	_url = server_url if server_url != "" else Data.MATCH_SERVER
+	_make_mm(not _url.begins_with("ws"))
+	net.code_ready.connect(_on_code)
+	net.peer_joined.connect(func(_id: int, _c: String) -> void: _check_all())
+	net.connected.connect(func() -> void:
+		_linked = true
+		status.emit("Connected — waiting for the host to start…"))
+	set_process(false)
+
+
+## The finder: our own matchmaking server (a ws:// address) or, with no server, the phones find each other through a free public relay (P2PMatchmaker).
+func _make_mm(p2p: bool) -> void:
+	if mm != null:
+		if (mm is P2PMatchmaker) == p2p:
+			return
+		mm.queue_free()
+	mm = P2PMatchmaker.new() if p2p else Matchmaker.new()
 	mm.name = "Matchmaker"
 	add_child(mm)
 	mm.failed.connect(_on_failed)
@@ -48,13 +64,6 @@ func setup(n: MultiplayerController, server_url := "") -> void:
 			return                                  # (the host closes its server link once everybody is connected: the players already talk directly)
 		_reset()
 		failed.emit("The room was closed (%s)" % why))
-	net.code_ready.connect(_on_code)
-	net.peer_joined.connect(func(_id: int, _c: String) -> void: _check_all())
-	net.connected.connect(func() -> void:
-		_linked = true
-		status.emit("Connected — waiting for the host to start…"))
-	_url = server_url if server_url != "" else Data.MATCH_SERVER
-	set_process(false)
 
 
 var _url := ""
@@ -69,6 +78,7 @@ func active() -> bool:
 ## kind: "quick" | "create" | "join".
 func begin(kind: String, match_type: String, code: String, pname: String, cid: String) -> void:
 	_reset()
+	_make_mm(not _url.begins_with("ws"))
 	phase = "lobby"
 	mt = match_type
 	user_name = pname

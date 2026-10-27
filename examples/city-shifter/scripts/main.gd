@@ -556,10 +556,10 @@ func _online_request(kind: String, mt: String, code: String) -> void:
 	if not MultiplayerController.available():
 		lobby.set_room({"state": "none", "status": "Online play needs WebRTC, which this build does not have. Solo and team matches with bots work offline."})
 		return
-	if kind == "join" and code.length() != 4:
-		lobby.set_room({"state": "none", "status": "Type the 4-letter room code first"})
+	if kind == "join" and code.length() < 4:
+		lobby.set_room({"state": "none", "status": "Type the room code first"})
 		return
-	lobby.set_room({"state": "none", "status": "Connecting to the server…"})
+	lobby.set_room({"state": "none", "status": "Looking for players over the internet…"})
 	online.begin(kind, mt, code, String(save.get("name", "PLAYER")), Data.CAST_ORDER[sel])
 
 

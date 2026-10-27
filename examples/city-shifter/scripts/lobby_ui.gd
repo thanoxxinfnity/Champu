@@ -570,15 +570,15 @@ func _build_online() -> Control:
 	right.add_theme_constant_override("separation", 8)
 	row.add_child(right)
 	var l2 := UIKit.label("CUSTOM ROOM", right, 26, UIKit.ORANGE, true)
-	var create := UIKit.button("CREATE ROOM", right, "plus", UIKit.ORANGE, Vector2(368, 60), 28, "You get a 4-letter code to share")
+	var create := UIKit.button("CREATE ROOM", right, "plus", UIKit.ORANGE, Vector2(368, 60), 28, "You get a 6-digit code to share")
 	create.pressed.connect(func() -> void: play_online.emit("create", _match_pick, ""))
 	var jr := HBoxContainer.new()
 	jr.add_theme_constant_override("separation", 8)
 	right.add_child(jr)
 	_code_in = LineEdit.new()
 	_code_in.placeholder_text = "CODE"
-	_code_in.max_length = 4
-	_code_in.custom_minimum_size = Vector2(120, 56)
+	_code_in.max_length = 6
+	_code_in.custom_minimum_size = Vector2(140, 56)
 	_code_in.add_theme_font_override("font", UIKit.title_font())
 	_code_in.add_theme_font_size_override("font_size", 32)
 	_code_in.alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -586,7 +586,7 @@ func _build_online() -> Control:
 	_code_in.add_theme_stylebox_override("focus", UIKit.box(Color(1, 0.98, 0.85), UIKit.PINK, 12, 4, 0))
 	_code_in.add_theme_color_override("font_color", UIKit.INK)
 	jr.add_child(_code_in)
-	var join := UIKit.button("JOIN", jr, "key", UIKit.PURPLE, Vector2(240, 56), 26)
+	var join := UIKit.button("JOIN", jr, "key", UIKit.PURPLE, Vector2(220, 56), 26)
 	join.pressed.connect(func() -> void: play_online.emit("join", _match_pick, _code_in.text.strip_edges().to_upper()))
 	# the same Wi-Fi or hotspot: no internet server needed
 	var wifi := VBoxContainer.new()
