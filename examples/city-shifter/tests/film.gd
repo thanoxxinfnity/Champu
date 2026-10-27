@@ -41,6 +41,8 @@ func keep_alive() -> void:
 func _initialize() -> void:
 	game = await T.boot(self, "kafu")
 	game.save.coins = 3200
+	game.save.char = "kafu"
+	game._show_preview()
 	game.bot_mode = true
 	game.lobby.set_save(game.save)
 	# ── the lobby
@@ -77,36 +79,42 @@ func _initialize() -> void:
 	await wait(3.0, func(i: int) -> void:
 		keep_alive()
 		p.yaw += 0.006 * sin(float(i) * 0.05))
-	# ── jetpack flight towards the nearest enemy
-	var foe := nearest_enemy()
+	# ── jetpack flight
 	p.press_jump()
 	p.jet_held = true
-	await wait(7.0, func(i: int) -> void:
+	p.move_input = Vector2(0, 1)
+	await wait(5.0, func(i: int) -> void:
 		keep_alive()
-		foe = nearest_enemy()
-		if foe != null:
-			face(foe)
-			if i > 60 and p.global_position.distance_to(foe.global_position) < 38.0:
-				p.move_input = Vector2.ZERO
-		p.jet_held = p.global_position.y < 14.0 or (i % 40) < 28)
+		p.yaw += 0.01 * sin(float(i) * 0.04)
+		p.jet_held = p.global_position.y < 16.0 or (i % 40) < 28)
 	p.jet_held = false
+	p.move_input = Vector2.ZERO
+	await wait(2.0, func(_i: int) -> void: keep_alive())
+	# the bots are brought close for the camera (they are the real match bots: they fight back)
+	var near := Combat.enemies(p)
+	near.sort_custom(func(a: PlayerController, b: PlayerController) -> bool: return a.global_position.distance_squared_to(p.global_position) < b.global_position.distance_squared_to(p.global_position))
+	var right := p.flat_forward().cross(Vector3.UP)
+	for i in mini(3, near.size()):
+		(near[i] as PlayerController).global_position = p.global_position + p.flat_forward() * (24.0 + 7.0 * i) + right * (float(i) - 1.0) * 7.0 + Vector3(0, 1.0, 0)
 	# ── shots (the crosshair is deliberately off: the lock does the aiming)
 	p.tool.equip("nova_blaster")
 	await wait(1.0, func(_i: int) -> void: keep_alive())
 	var shots := 0
-	await wait(9.0, func(i: int) -> void:
+	var foe: PlayerController
+	await wait(11.0, func(i: int) -> void:
 		keep_alive()
 		foe = nearest_enemy()
 		if foe == null:
 			return
 		var d := p.global_position.distance_to(foe.global_position)
-		p.move_input = Vector2(0, 1) if d > 30.0 else Vector2.ZERO
-		face(foe, 0.12)
-		if d < 45.0 and i % 18 == 0:
+		p.move_input = Vector2(0, 1) if d > 24.0 else Vector2.ZERO
+		face(foe, 0.14)
+		if d < 50.0 and i % 14 == 0:
 			p.tool.cd_left = 0.0
+			p.tool.charge["nova_blaster"] = 1.0
 			if p.tool.fire():
 				shots += 1)
-	print("shots fired: ", shots)
+	print("shots fired: ", shots, "  kills: ", p.kills)
 	# ── melee: a bot brought close, the hammer swings
 	p.tool.equip("hammer_big")
 	foe = nearest_enemy()
