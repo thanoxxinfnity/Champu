@@ -110,6 +110,7 @@ func _ready() -> void:
 	online.name = "Online"
 	add_child(online)
 	online.setup(net, String(save.get("server", Data.MATCH_SERVER)))
+	get_tree().set_auto_accept_quit(false)
 	online.match_ready.connect(func() -> void:
 		mode = "world"
 		match_type = online.mt
@@ -309,7 +310,7 @@ func _build_ui() -> void:
 	ui.layer = 20
 	add_child(ui)
 	# ── the lobby screen (the anime menu: scripts/lobby_ui.gd)
-	social = Social.new()
+	social = FirebaseSocialManager.new()
 	social.name = "Social"
 	add_child(social)
 	if String(save.get("name", "PLAYER")) != "PLAYER":
@@ -593,12 +594,13 @@ func _online_request(kind: String, mt: String, code: String) -> void:
 		lobby.set_room({"state": "none", "status": "Type the room code first"})
 		return
 	lobby.set_room({"state": "none", "status": "Looking for players over the internet…"})
+	online.guest_uid = social.uid
 	online.begin(kind, mt, code, String(save.get("name", "PLAYER")), Data.CAST_ORDER[sel])
 
 
 # ── the squad lobby: up to 4 heroes on pedestals, the host in the middle ───────
 
-var social: Social
+var social: FirebaseSocialManager
 var _squad_nodes: Array = []
 const SQUAD_SLOTS := [Vector3(-0.55, 0, 0.0), Vector3(-1.5, 0, -0.5), Vector3(0.4, 0, -0.5), Vector3(-2.35, 0, -1.0)]
 
@@ -634,6 +636,17 @@ func _clear_squad() -> void:
 	for n in _squad_nodes:
 		(n as Node).queue_free()
 	_squad_nodes.clear()
+
+
+## Closing the game (or the Android back button on the home screen): my squad slot and my presence are wiped before the app goes.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		if online != null and online.mm != null and online.mm.has_method("wipe_me"):
+			online.mm.wipe_me()
+		if social != null:
+			social.goodbye()
+		await get_tree().create_timer(1.2).timeout              # (the DELETE requests leave before the app does)
+		get_tree().quit()
 
 
 func _online_leave() -> void:

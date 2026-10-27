@@ -20,11 +20,11 @@ func _initialize() -> void:
 			role = "b"
 	var f := OS.get_environment("CS_UID_FILE")
 	var game: Main = await T.boot(self, "outlaw" if role == "a" else "ninja")
-	var so: Social = game.social
+	var so: FirebaseSocialManager = game.social
 	so.uid = 10000000 + randi() % 89999999
 	so.friends.clear()
 	so.set_player_name("ALPHA" if role == "a" else "BRAVO")
-	so._resubscribe()
+	game.online.guest_uid = so.uid
 	T.check(so.uid >= 10000000 and so.uid <= 99999999, "%s: an 8-digit guest UID (%d)" % [role, so.uid])
 	if role == "a":
 		FileAccess.open(f, FileAccess.WRITE).store_string(str(so.uid))
@@ -55,10 +55,18 @@ func _initialize() -> void:
 		T.check(await _until(func() -> bool: return game.lobby.screen == "squad" and (game.lobby._room.get("players", []) as Array).size() == 2, 40.0), "b: I am in A's squad")
 		game.lobby.squad_ready.emit(true)
 	T.check(await _until(func() -> bool: return game.state == Main.State.PLAY and game.mc != null, 150.0), "%s: the match started" % role)
-	T.check(await _until(func() -> bool: return game.remotes.size() == 1, 30.0), "%s: I see my friend in the match" % role)
+	T.check(await _until(func() -> bool: return game.remotes.size() == 1, 60.0), "%s: I see my friend in the match" % role)
 	T.check(game.match_type == "team", "%s: a team match" % role)
-	if role == "b":
-		FileAccess.open(f + ".b", FileAccess.WRITE).store_string("1")
-	else:
-		await _until(func() -> bool: return FileAccess.file_exists(f + ".b"), 60.0)     # (stay until my friend has seen me too)
+	FileAccess.open(f + "." + role, FileAccess.WRITE).store_string("1")
+	var other := "b" if role == "a" else "a"
+	await _until(func() -> bool: return FileAccess.file_exists(f + "." + other), 60.0)     # (stay until my friend has seen me too)
+	if role == "a":
+		var code := String(game.lobby._room.get("code", ""))
+		var lob = await game.social.db.get_("/lobbies/%s.json" % code)
+		T.check(lob == null, "a: the squad lobby was wiped from Firebase when the match started (%s)" % code)
+		var box = await game.social.db.get_("/lobby_invites/%d.json" % game.social.uid)
+		T.check(box == null, "a: no invites left behind")
+		await T.frames(self, 120)
+		var sg = await game.social.db.get_("/signal/%s.json" % code)
+		T.check(sg == null, "a: the handshake node was wiped once connected")
 	T.done(self)

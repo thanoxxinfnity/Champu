@@ -38,7 +38,7 @@ var browsing := "outlaw"                 # the hero shown on the stage
 var screen := "home"
 var screens := {}
 var _top_name: Label
-var social: Social                       # set by Main: my UID and friends
+var social: FirebaseSocialManager                       # set by Main: my UID and friends
 var _top_sub: Label
 var _top_coins: Label
 var _level_badge: Control

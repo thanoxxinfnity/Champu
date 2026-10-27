@@ -33,7 +33,7 @@ var _linked := false                # a joiner whose direct link to the host is 
 func setup(n: MultiplayerController, server_url := "") -> void:
 	net = n
 	_url = server_url if server_url != "" else Data.MATCH_SERVER
-	_make_mm(not _url.begins_with("ws"))
+	_make_mm("p2p" if not _url.begins_with("ws") else "server")
 	net.code_ready.connect(_on_code)
 	net.peer_joined.connect(func(_id: int, _c: String) -> void: _check_all())
 	net.connected.connect(func() -> void:
@@ -43,12 +43,22 @@ func setup(n: MultiplayerController, server_url := "") -> void:
 
 
 ## The finder: our own matchmaking server (a ws:// address) or, with no server, the phones find each other through a free public relay (P2PMatchmaker).
-func _make_mm(p2p: bool) -> void:
+## kind: "server" (our own server.py), "p2p" (quick match on the public relay) or "firebase" (squad lobbies on the Firebase database).
+func _make_mm(kind: String) -> void:
 	if mm != null:
-		if (mm is P2PMatchmaker) == p2p:
+		var have := "firebase" if mm is FirebaseMatchmaker else ("p2p" if mm is P2PMatchmaker else "server")
+		if have == kind:
 			return
+		mm.close()
 		mm.queue_free()
-	mm = P2PMatchmaker.new() if p2p else Matchmaker.new()
+	match kind:
+		"firebase":
+			mm = FirebaseMatchmaker.new()
+			(mm as FirebaseMatchmaker).uid = guest_uid
+		"p2p":
+			mm = P2PMatchmaker.new()
+		_:
+			mm = Matchmaker.new()
 	mm.name = "Matchmaker"
 	add_child(mm)
 	mm.failed.connect(_on_failed)
@@ -67,6 +77,7 @@ func _make_mm(p2p: bool) -> void:
 
 
 var _url := ""
+var guest_uid := 0                   # my 8-digit UID (FirebaseSocialManager): the squad lobby knows me by it
 var _kind := ""
 var _arg := ""
 
@@ -78,7 +89,7 @@ func active() -> bool:
 ## kind: "quick" | "create" | "join".
 func begin(kind: String, match_type: String, code: String, pname: String, cid: String) -> void:
 	_reset()
-	_make_mm(not _url.begins_with("ws"))
+	_make_mm("server" if _url.begins_with("ws") else ("p2p" if kind == "quick" else "firebase"))
 	phase = "lobby"
 	mt = match_type
 	user_name = pname
@@ -228,6 +239,8 @@ func _check_all() -> void:
 
 
 func _ready_now() -> void:
+	if mm.has_method("done_connecting"):
+		mm.done_connecting()
 	phase = "playing"
 	mm.close()
 	set_process(false)
