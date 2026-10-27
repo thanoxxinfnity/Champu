@@ -21,6 +21,10 @@ func _initialize() -> void:
 	root.add_child(game)
 	await process_frame
 	game.save.coins = 1500
+	if OS.get_environment("HERO") != "":
+		game.save.char = OS.get_environment("HERO")
+		game.sel = Data.CAST_ORDER.find(OS.get_environment("HERO"))
+		game._show_preview()
 	game.lobby.set_save(game.save)
 	await snap("l0_home", 40)
 	game.lobby.show_screen("chars")
@@ -35,6 +39,16 @@ func _initialize() -> void:
 	game.lobby.char_preview.emit("kunoichi")
 	game.lobby._refresh()
 	await snap("l3b_shop_kunoichi", 25)
+	game.lobby.show_screen("chars")
+	game.lobby.browsing = "outlaw"
+	game.lobby.show_screen("skills")
+	game.save.skills = {"outlaw": {"vitality": 3, "driving": 5, "sprint": 1, "power": 10}}
+	game.lobby.set_save(game.save)
+	await snap("l3c_skills", 20)
+	game.lobby.show_screen("home")
+	game.lobby._open_my_card()
+	await snap("l3d_mycard", 20)
+	game.lobby._card_pop.visible = false
 	game.lobby.show_screen("online")
 	await snap("l4_online", 10)
 	game.lobby.set_room({"state": "room", "code": "KZ7Q", "status": "Waiting for players", "host": true, "max": 15, "players": [{"name": "PLAYER", "team": 0, "host": true, "you": true}, {"name": "Mika", "team": 0}, {"name": "Ren", "team": 0}, {"name": "Aoi", "team": 1}, {"name": "Sora", "team": 1}]})

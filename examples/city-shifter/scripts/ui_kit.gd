@@ -258,11 +258,38 @@ static func draw_icon(ci: CanvasItem, name: String, c: Vector2, s: float, col: C
 			ci.draw_circle(c, h * 0.7, col)
 
 
-## Text with the ink outline (for custom drawing).
+## The biggest font size (<= size) at which `s` is at most `max_w` wide: nothing drawn with draw_text can leave its box.
+static func fit_px(s: String, size: int, max_w: float, title := false, min_px := 9) -> int:
+	if max_w <= 0.0:
+		return size
+	var f := title_font() if title else body_font()
+	var fs := size
+	while fs > min_px and f.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > max_w:
+		fs -= 1
+	return fs
+
+
+## Text with the ink outline (for custom drawing). With a `width` the text shrinks until it fits it.
 static func draw_text(ci: CanvasItem, s: String, pos: Vector2, size: int, col := CREAM, title := false, align := HORIZONTAL_ALIGNMENT_LEFT, width := -1.0) -> void:
 	var f := title_font() if title else body_font()
-	ci.draw_string_outline(f, pos, s, align, width, size, maxi(4, size / 5), INK)
-	ci.draw_string(f, pos, s, align, width, size, col)
+	var fs := fit_px(s, size, width, title)
+	ci.draw_string_outline(f, pos, s, align, width, fs, maxi(4, fs / 5), INK)
+	ci.draw_string(f, pos, s, align, width, fs, col)
+
+
+## Wrapped text inside a box: lines are broken at `width`, at most `max_lines`, the size shrinks until it all fits (`line_h` = line height factor).
+static func draw_wrapped(ci: CanvasItem, s: String, pos: Vector2, size: int, col: Color, width: float, max_lines: int, outline := false, line_h := 1.18) -> void:
+	var f := body_font()
+	var fs := size
+	var lines := 99
+	while fs >= 10:
+		lines = f.get_multiline_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, width, fs, max_lines + 4).y / (f.get_height(fs))
+		if int(round(lines)) <= max_lines:
+			break
+		fs -= 1
+	if outline:
+		ci.draw_multiline_string_outline(f, pos, s, HORIZONTAL_ALIGNMENT_LEFT, width, fs, max_lines, maxi(3, fs / 6), INK)
+	ci.draw_multiline_string(f, pos, s, HORIZONTAL_ALIGNMENT_LEFT, width, fs, max_lines, col)
 
 
 ## A comic button: ink border, hard shadow, a diagonal shine, an icon on the left and the text in the middle. Press = it sinks.

@@ -174,7 +174,7 @@ func fire() -> bool:
 		return true
 	var w: Dictionary = Data.WEAPONS[weapon]
 	if match_on:
-		var left := charge_of(weapon) - float(Data.DAMAGE[weapon].cost)
+		var left := charge_of(weapon) - float(Data.DAMAGE[weapon].cost) * float(player.info.get("cost_mult", 1.0))
 		charge[weapon] = maxf(0.0, left)
 		if left <= 0.001:
 			locked[weapon] = true
@@ -233,6 +233,9 @@ func _swing(origin: Vector3, dir: Vector3) -> void:
 		if player.world != null and player.world.has_method("smash"):
 			if player.world.smash(p, reach * 0.9) > 0:
 				player.game.shake(0.3)
+		if player.world != null and player.world.has_method("damage_at"):
+			if player.world.damage_at(p, reach * 0.8, float(Data.DAMAGE[weapon].dmg) * float(player.info.get("melee_mult", 1.0))) > 0:
+				player.game.shake(0.35)
 		player.game.fx.shards(p, col, 8, 5.0)
 		player.game.fx.ring(Vector3(p.x, player.global_position.y + 0.1, p.z), col, reach * 0.8)
 
@@ -241,6 +244,8 @@ func _swing(origin: Vector3, dir: Vector3) -> void:
 func _hurt(kind: String, origin: Vector3, dir: Vector3, rng_m: float, force: float, point: Vector3) -> void:
 	if not player.lethal:
 		return
+	if player.world != null and player.world.has_method("damage_at"):
+		player.world.damage_at(point, 2.2 + rng_m * 0.04, float(Data.DAMAGE[weapon].dmg) * 0.5 * float(player.info.get("dmg_mult", 1.0)))
 	var dmg: float = Data.DAMAGE[weapon].dmg
 	var foes := Combat.enemies(player)
 	if foes.is_empty():

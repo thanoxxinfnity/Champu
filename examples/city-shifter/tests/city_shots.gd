@@ -46,4 +46,24 @@ func _initialize() -> void:
 	p.yaw = 0.0
 	p.pitch = -0.5
 	await snap("c5_top", 10)
+	# destruction: a tower loses its top, then falls
+	var b: Dictionary = w.district.buildings[0]
+	var bd := 1.0e9
+	for cand in w.district.buildings:
+		var cr: Rect2 = cand.rect
+		var dd := cr.get_center().distance_to(Vector2(c.x, c.y + 62.0)) - float(cand.height) * 0.1
+		if dd < bd and float(cand.height) > 28.0:
+			bd = dd
+			b = cand
+	var br: Rect2 = b.rect
+	p.global_position = Vector3(br.get_center().x, 22.0, br.end.y + 46.0)
+	p.yaw = 0.0
+	p.pitch = -0.1
+	p.set_physics_process(false)
+	await snap("c6_before", 20)
+	w.damage_at(Vector3(br.get_center().x, 3.0, br.get_center().y), 5.0, float(b.max) * 0.4)
+	await snap("c7_top_off", 6)
+	w.damage_at(Vector3(br.get_center().x, 3.0, br.get_center().y), 5.0, float(b.max))
+	await snap("c8_fall", 4)
+	await snap("c9_rubble", 50)
 	quit()

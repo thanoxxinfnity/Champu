@@ -58,6 +58,7 @@ var hp := 100.0
 var max_hp := 100.0
 var speed_mult := 1.0
 var stun := 0.0
+var _since_hit := 99.0
 var coins := 0
 var last_safe := Vector3(0, Data.DECK_Y + 0.2, -6)
 var boost_t := 0.0
@@ -82,6 +83,8 @@ func setup(g: Node, w: Node, sp: OptimizedSkySpawner, id: String, pid := 1, loca
 	peer_id = pid
 	is_local = local
 	info = Data.CAST.get(id, Data.CAST["outlaw"])
+	if local and not is_bot and g != null and g.get("save") is Dictionary:
+		info = Data.effective(id, g.get("save"))                # my own skill levels (other phones only draw me)
 	max_hp = float(info.hp)
 	hp = max_hp
 	max_fuel = float(info.fuel) * float(info.get("fuel_mult", 1.0))
@@ -91,7 +94,7 @@ func setup(g: Node, w: Node, sp: OptimizedSkySpawner, id: String, pid := 1, loca
 	collision_layer = 4 if local else 0
 	add_to_group("actors")
 	if display_name == "":
-		display_name = String(info.name)
+		display_name = String(info.get("short", info.name))
 	collision_mask = 1
 	var cs := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
@@ -158,6 +161,9 @@ func _physics_process(delta: float) -> void:
 		return
 	shield = maxf(0.0, shield - delta)
 	slow_t = maxf(0.0, slow_t - delta)
+	_since_hit += delta
+	if alive and lethal and _since_hit > 5.0 and hp < max_hp and float(info.get("regen", 0.0)) > 0.0:
+		hp = minf(max_hp, hp + float(info.regen) * delta)
 	if nametag != null:
 		nametag.visible = alive
 	avatar.modulate_blink(shield > 0.0)
@@ -277,6 +283,7 @@ func board(m: Mount) -> void:
 	mount = m
 	m.occupant = peer_id
 	m.is_driven = is_local
+	m.skill = float(info.get("ride_mult" if m is Horse else "drive_mult", 1.0)) if is_local else 1.0
 	m.clear_snaps()
 	velocity = Vector3.ZERO
 	avatar.riding = m is Horse
@@ -291,6 +298,7 @@ func leave() -> void:
 	var m := mount
 	m.occupant = 0
 	m.is_driven = false
+	m.skill = 1.0
 	m.throttle = 0.0
 	m.steer = 0.0
 	m.action = false
@@ -358,6 +366,7 @@ func take_damage(amount: float, from: PlayerController = null, knock := Vector3.
 	if from != null and from != self and from.team == team and lethal:
 		return
 	hp -= amount * float(info.get("dmg_taken", 1.0))
+	_since_hit = 0.0
 	last_hit_by = from if from != null else last_hit_by
 	avatar.hurt_t = 0.35
 	velocity += knock

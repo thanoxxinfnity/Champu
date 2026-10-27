@@ -137,6 +137,35 @@ func _initialize() -> void:
 		if dt.rect.grow(10.0).has_point(Vector2((it2.pos as Vector3).x, (it2.pos as Vector3).z)):
 			dl += 1
 	T.check(dl >= 8, "weapons lie in the streets of downtown (%d)" % dl)
+	# destruction: hammer blows bring a tower down in three stages, a sign breaks in one
+	var tb: Dictionary = dt.buildings[0]
+	var tr: Rect2 = tb.rect
+	var spot := Vector3(tr.get_center().x, 2.0, tr.get_center().y)
+	var breaks := []
+	w.destroyed.connect(func(at: Vector3, size: Vector3, color: Color, final: bool) -> void: breaks.append(final))
+	var n_hits := 0
+	while bool(tb.alive) and n_hits < 60:
+		w.damage_at(spot, 4.0, 90.0)
+		n_hits += 1
+	T.check(not bool(tb.alive) and breaks.size() == 2 and breaks[0] == false and breaks[1] == true, "a tower loses its top, then falls (%d hits, %s)" % [n_hits, str(breaks)])
+	T.check(n_hits >= 5 and n_hits <= 25, "…and it takes real effort, not one tap (%d hits of 90)" % n_hits)
+	var wr := PhysicsRayQueryParameters3D.create(Vector3(tr.position.x + 0.5, 3.0, tr.get_center().y), Vector3(tr.end.x - 0.5, 3.0, tr.get_center().y), 1)
+	await T.frames(self, 3)
+	T.check(w.get_world_3d().direct_space_state.intersect_ray(wr).is_empty(), "the fallen tower is no longer solid")
+	T.check(not w.is_blocked(tr.get_center()), "bots and spawns no longer treat it as a building")
+	var sign_n := 0
+	for pr in w._props:
+		if bool(pr.alive) and float(pr.max) <= 60.0:
+			sign_n += 1
+	T.check(sign_n >= 4, "there are %d small things to break (machines, lanterns, signs)" % sign_n)
+	var vend: Dictionary = {}
+	for pr in w._props:
+		if bool(pr.alive) and float(pr.max) == 60.0:
+			vend = pr
+			break
+	var before_alive := bool(vend.alive)
+	w.damage_at(Vector3(vend.pos.x, 1.0, vend.pos.y), 1.5, 70.0)
+	T.check(before_alive and not bool(vend.alive) and not (vend.node as Node3D).visible, "a vending machine breaks with one hammer blow")
 	game.end_run()
 	T.check(game.state == Main.State.LOBBY, "leaving returns to the lobby")
 	T.done(self)

@@ -38,6 +38,39 @@ static func style(n: Node, outline := false, width := 0.018) -> void:
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
+## For people: the toon styling, then every opaque material is swapped for the cel shader of shaders/toon_char.gdshader (the same texture, crisp light steps, violet shadows, rim light).
+static func style_char(n: Node, outline := false, width := 0.018) -> void:
+	style(n, outline, width)
+	if DisplayServer.get_name() == "headless":
+		return
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.mesh == null:
+			continue
+		for sidx in m.mesh.get_surface_count():
+			var src := m.mesh.surface_get_material(sidx)
+			if src is BaseMaterial3D and (src as BaseMaterial3D).transparency == BaseMaterial3D.TRANSPARENCY_DISABLED:
+				m.set_surface_override_material(sidx, _char_of(src as BaseMaterial3D))
+
+
+static var _char := {}
+
+
+static func _char_of(src: BaseMaterial3D) -> ShaderMaterial:
+	if _char.has(src):
+		return _char[src]
+	var sm := ShaderMaterial.new()
+	sm.shader = load("res://shaders/toon_char.gdshader") as Shader
+	sm.set_shader_parameter("albedo", src.albedo_color)
+	if src.albedo_texture != null:
+		sm.set_shader_parameter("albedo_tex", src.albedo_texture)
+		sm.set_shader_parameter("has_tex", true)
+	else:
+		sm.set_shader_parameter("has_tex", false)
+	_char[src] = sm
+	return sm
+
+
 ## The same for a bare mesh (MultiMesh patterns): its surface materials are swapped for toon ones.
 static func style_mesh(mesh: Mesh) -> void:
 	if DisplayServer.get_name() == "headless":

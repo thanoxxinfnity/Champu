@@ -30,3 +30,8 @@ All of these were generated for this game, then prepared for phones with Blender
 ## Fonts
 
 * **Bangers** (Vernon Adams, SIL Open Font License 1.1) for titles; **M PLUS Rounded 1c** Bold (Coji Morishita, SIL OFL 1.1) for text. Both from github.com/google/fonts.
+
+## Heroes, cards and effects (v0.4)
+- Kafu, Rachel and Rina are the generated, auto-rigged stand-in heroes of Crimson Mist (Triverse text/image-to-3D, `tools/autorig_obj.py`); Mococo is generated with NVIDIA TRELLIS and rigged the same way. No licensed character pack is shipped.
+- Battle-card portraits (`assets/ui/cards`, `assets/ui/full`) and the weapon icons (`assets/ui/weapons`) are rendered from the game's own models by `tests/portrait_baker.gd` and `tests/icon_baker.gd`.
+- The cel shader (`shaders/toon_char.gdshader`), the loading screen, the hero cards and the destructible downtown are original code of this repository.

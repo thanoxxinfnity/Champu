@@ -31,6 +31,7 @@ var _pitch := 0.0
 var _last_speed := 0.0
 var _dust: CPUParticles3D
 var _bumped := 0.0
+var _ram_cd := 0.0
 var _r := 0.35
 
 
@@ -124,10 +125,11 @@ func _physics_process(delta: float) -> void:
 
 
 func _drive(delta: float) -> void:
+	_ram_cd = maxf(0.0, _ram_cd - delta)
 	tick_boost(delta)
-	var mx: float = float(spec.max) * (1.4 if boosting else 1.0)
+	var mx: float = float(spec.max) * (1.4 if boosting else 1.0) * skill
 	var thr := throttle if is_driven else 0.0
-	var acc := float(spec.accel) * thr * (1.8 if boosting else 1.0)
+	var acc := float(spec.accel) * skill * thr * (1.8 if boosting else 1.0)
 	if thr * speed < -0.1:
 		acc = float(spec.brake) * thr          # pressing the other way brakes first
 	speed += acc * delta
@@ -139,7 +141,7 @@ func _drive(delta: float) -> void:
 	speed = clampf(speed, -mx * 0.35, mx)
 	var st := steer if is_driven else 0.0
 	_steer_v = move_toward(_steer_v, st, 4.5 * delta)
-	yaw -= _steer_v * float(spec.turn) * clampf(speed / 7.0, -1.0, 1.0) * delta
+	yaw -= _steer_v * float(spec.turn) * skill * clampf(speed / 7.0, -1.0, 1.0) * delta
 	rotation.y = yaw
 	velocity = forward() * speed
 	velocity.y = -4.0
@@ -153,6 +155,9 @@ func _drive(delta: float) -> void:
 	if is_on_wall():
 		var k := get_wall_normal()
 		if absf(forward().dot(k)) > 0.5:
+			if is_driven and absf(speed) > 12.0 and _ram_cd <= 0.0 and get_parent() != null and get_parent().has_method("damage_at"):
+				_ram_cd = 0.5                 # a hard crash hurts what it hits (signs, machines, houses and towers)
+				get_parent().damage_at(global_position + forward() * (float(spec.len) * 0.6 * signf(speed)) + Vector3(0, 1.0, 0), 2.5, absf(speed) * 3.0)
 			speed *= 0.4
 			_bumped = 0.3
 	if absf(before) - absf(speed) > 6.0:

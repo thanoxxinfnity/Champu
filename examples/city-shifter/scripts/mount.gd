@@ -19,6 +19,7 @@ var action := false
 var boost_in := false                    # the BOOST button is held
 var boost := 1.0                         # energy 0..1
 var boosting := false
+var skill := 1.0                         # the rider's DRIVING / HORSEMANSHIP level as a multiplier
 var view: Node3D                         # the visible model, moved by the animation (bob, lean) and not by the physics
 var seat: Marker3D                       # where the rider sits (local to the mount)
 var radius := 1.6                        # how close you must be to get on

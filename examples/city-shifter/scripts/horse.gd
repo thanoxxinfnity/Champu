@@ -77,7 +77,7 @@ func _run(delta: float) -> void:
 	if is_driven:
 		var thr := absf(throttle)
 		if thr > 0.08:
-			want = _gait_speed(thr)
+			want = _gait_speed(thr) * skill
 			want *= signf(throttle)
 			if want < 0.0:
 				want = maxf(want, -WALK * 0.7)

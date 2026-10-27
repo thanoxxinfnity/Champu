@@ -14,6 +14,9 @@ var hud: GameHUD
 var net: MultiplayerController
 var world                              # TrainWorld or OpenWorld (same members)
 var online: OnlineSession
+var loading: LoadingScreen
+var _loading_now := false
+var _start_sent := false
 var mc: MatchController                # the open-world match (score, bots, loot, respawns)
 var match_type := "solo"               # "solo" or "team" (teams of 4)
 var mode := "train"                     # "train" (the roof run) or "world" (the open world with vehicles and horses)
@@ -91,11 +94,11 @@ func _ready() -> void:
 	online.match_ready.connect(func() -> void:
 		mode = "world"
 		match_type = online.mt
-		start_play())
+		begin_match())
 	online.offline_instead.connect(func(mt: String) -> void:
 		mode = "world"
 		match_type = mt
-		start_play()
+		await begin_match()
 		hud.toast("Nobody else was online — bots will fill the match", 3.6))
 	hud = GameHUD.new()
 	add_child(hud)
@@ -294,7 +297,7 @@ func _build_ui() -> void:
 	lobby.play_offline.connect(func(m: String, mt: String) -> void:
 		mode = m
 		match_type = mt
-		start_play())
+		begin_match())
 	lobby.open_armory.connect(func() -> void: _open_armory(true))
 	lobby.char_preview.connect(func(id: String) -> void:
 		sel = maxi(0, Data.CAST_ORDER.find(id))
@@ -307,6 +310,13 @@ func _build_ui() -> void:
 		_show_preview()
 		lobby.set_save(save))
 	lobby.char_bought.connect(_buy_char)
+	lobby.skill_bought.connect(func(_hero: String, _skill: String) -> void:
+		Data.write_save(save)
+		audio.play("coin", -4.0, 1.5)
+		lobby.set_save(save))
+	lobby.screen_changed.connect(func(n: String) -> void:
+		if preview != null:
+			preview.visible = n == "home")
 	lobby.name_changed.connect(func(n: String) -> void:
 		save.name = n if n != "" else "PLAYER"
 		Data.write_save(save)
@@ -440,6 +450,7 @@ func _show_preview() -> void:
 	preview = Avatar.new()
 	lobby3d.add_child(preview)
 	preview.setup(Data.CAST_ORDER[sel])
+	preview.visible = lobby == null or lobby.screen == "home"
 
 
 func _refresh_lobby() -> void:
@@ -564,7 +575,7 @@ func _on_event(kind: String, data: Dictionary) -> void:
 			if state != State.PLAY:
 				mode = String(data.get("mode", "train"))
 				match_type = String(data.get("mt", match_type))
-				start_play()
+				begin_match()
 		"kill":
 			if mc != null and not net.is_host():
 				_count_kill(int(data.get("k", -1)), int(data.get("v", -1)))
@@ -583,6 +594,9 @@ func _on_event(kind: String, data: Dictionary) -> void:
 		"results":
 			if mc != null and not net.is_host():
 				_client_results(data)
+		"dmg":
+			if state == State.PLAY and mode == "world" and int(data.get("by", -1)) != net.local_id:
+				world.damage_at(Vector3(float(data.x), float(data.y), float(data.z)), float(data.r), float(data.a), false)
 		"smash":
 			if state == State.PLAY and mode == "world":
 				world.smash(Vector3(float(data.x), 0.0, float(data.z)), 2.0, false)
@@ -596,21 +610,52 @@ func _on_event(kind: String, data: Dictionary) -> void:
 
 # ── a run ────────────────────────────────────────────────────────────────────
 
+## Start a match behind the loading screen: the world is built a step at a time (the animation keeps running), then the players, the loot and the bots.
+func begin_match() -> void:
+	if state == State.PLAY or _loading_now:
+		return
+	_loading_now = true
+	if net.is_host():
+		net.send_event("start", {"mode": mode, "mt": match_type})
+		_start_sent = true
+	if loading == null:
+		loading = LoadingScreen.new()
+		add_child(loading)
+	loading.open(Data.CAST_ORDER[sel])
+	var t0 := Time.get_ticks_msec()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if mode == "world":
+		var w := OpenWorld.new()
+		w.lazy = true
+		world = w
+		add_child(w)
+		await w.build_async(func(p: float) -> void: loading.set_progress(p * 0.8, "Building the world"))
+	loading.set_progress(0.84, "Placing 200 weapons and 15 players")
+	await get_tree().process_frame
+	start_play()
+	loading.set_progress(1.0, "Ready")
+	var left := 900 - (Time.get_ticks_msec() - t0)
+	if left > 0:
+		await get_tree().create_timer(float(left) / 1000.0).timeout
+	loading.close()
+	_loading_now = false
+
+
 func start_play() -> void:
 	if state == State.PLAY:
 		return
-	if net.is_host():
+	if net.is_host() and not _start_sent:
 		net.send_event("start", {"mode": mode, "mt": match_type})
+	_start_sent = false
 	lobby3d.visible = false
 	if lobby_env.get_parent() != null:
 		lobby3d.remove_child(lobby_env)
 	lobby_root.visible = false
 	armory_root.visible = false
-	if mode == "world":
-		world = OpenWorld.new()
-	else:
-		world = TrainWorld.new()
-	add_child(world)
+	if world == null or not is_instance_valid(world):
+		world = OpenWorld.new() if mode == "world" else TrainWorld.new()
+		add_child(world)
 	fx = Fx.new()
 	add_child(fx)
 	spawner = OptimizedSkySpawner.new()
@@ -663,6 +708,8 @@ func start_play() -> void:
 		audio.set_rumble(false)
 		world.checkpoint.connect(_on_checkpoint)
 		world.smashed.connect(_on_smashed)
+		world.destroyed.connect(_on_destroyed)
+		world.damaged.connect(_on_world_damaged)
 		var others: Array = []
 		for id in remotes:
 			others.append(remotes[id])
@@ -729,6 +776,34 @@ func _ride() -> void:
 		player.board(m)
 		audio.play("ui", -4.0, 0.8)
 		hud.toast("%s — stick: drive, JUMP: %s, BOOST: nitro" % [m.title, "jump" if m is Horse else "handbrake"], 3.0)
+
+
+## A tower, house or machine came apart: shards in its colour, dust, a thud (louder up close).
+func _on_destroyed(at: Vector3, size: Vector3, color: Color, final: bool) -> void:
+	if fx == null:
+		return
+	var big := clampf(size.length() / 10.0, 0.4, 3.0)
+	for k in 3:
+		fx.shards(at + Vector3(randf_range(-0.4, 0.4) * size.x, randf_range(-0.4, 0.4) * size.y, randf_range(-0.4, 0.4) * size.z), color, int(10.0 * big) + 6, 5.0 + 2.0 * big)
+	fx.ring(Vector3(at.x, 0.1, at.z), Color(0.8, 0.75, 0.7), maxf(size.x, size.z) * 0.9)
+	fx.flash(Vector3(at.x, 1.0, at.z), Color(0.75, 0.72, 0.68), 3.0 * big)
+	if audio != null:
+		audio.play("place", -2.0 + (2.0 if final else 0.0), randf_range(0.4, 0.6))
+	if player != null:
+		var d := player.global_position.distance_to(at)
+		if d < 60.0:
+			shake(clampf((1.0 - d / 60.0) * (0.9 if final else 0.45), 0.0, 0.9))
+
+
+## My hit damaged the world: the other phones must see the same tower fall (the host relays).
+func _on_world_damaged(at: Vector3, radius: float, amount: float) -> void:
+	if not net.online():
+		return
+	var d := {"x": at.x, "y": at.y, "z": at.z, "r": radius, "a": amount, "by": net.local_id}
+	if net.is_host():
+		net.send_event("dmg", d)
+	else:
+		net.send_report("dmg", d)
 
 
 func _on_smashed(at: Vector3, count: int) -> void:
@@ -1034,7 +1109,13 @@ func _on_hit(target: int, amount: float, knock: Vector3, slow: float, from: int)
 
 ## The host decides what a client reports: a death (the kill count), taking a weapon (first come), dropping one (it gets a shared number).
 func _on_report(from: int, kind: String, data: Dictionary) -> void:
-	if mc == null or not net.is_host():
+	if not net.is_host():
+		return
+	if kind == "dmg" and world != null and mode == "world":
+		world.damage_at(Vector3(float(data.x), float(data.y), float(data.z)), float(data.r), float(data.a), false)
+		net.send_event("dmg", data)
+		return
+	if mc == null:
 		return
 	match kind:
 		"died":

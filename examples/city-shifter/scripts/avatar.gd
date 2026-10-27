@@ -62,7 +62,7 @@ func setup(id: String) -> void:
 			rig.position.y = -box.position.y * k
 			rig.rotation.y = PI          # the glb faces +Z, the game faces -Z
 			_tint(rig.model, info.get("tint", Color.WHITE))
-			Anime.style(rig.model, outline, 0.012)
+			Anime.style_char(rig.model, outline, 0.012)
 			if not outline:
 				_limit_range(rig.model)
 			_make_pack()

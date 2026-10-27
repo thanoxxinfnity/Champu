@@ -7,6 +7,8 @@ extends Node3D
 ## The same members as TrainWorld (spawn_points, progress, view_dist, update, set_view_distance, set_far_visible), so Main drives both the same way.
 
 signal checkpoint(index: int, total: int, lap: int)
+signal destroyed(at: Vector3, size: Vector3, color: Color, final: bool)
+signal damaged(at: Vector3, radius: float, amount: float)   # (a local hit: Main tells the other phones)
 signal smashed(at: Vector3, count: int)
 
 const ROAD_W := 9.0
@@ -48,24 +50,41 @@ var _gate_t := 0.0
 var _beam: MeshInstance3D
 
 
+var lazy := false                        # true: Main builds the world a step at a time (build_async) behind the loading screen
+
+
 func _ready() -> void:
-	_environment()
-	_ground()
-	_road()
-	_river()
-	_town()
-	_district()
-	_mountains()
-	_jungle()
-	_gates()
-	_petals_fx()
+	if not lazy:
+		for step in _steps():
+			(step[0] as Callable).call()
+
+
+## [[callable, weight], ...]: the build, in order.
+func _steps() -> Array:
+	return [[_environment, 1], [_ground, 1], [_road, 3], [_river, 1], [_town, 2], [_district, 3], [_mountains, 2], [_jungle_prepare, 1], [func() -> void: _jungle_slice(0), 2], [func() -> void: _jungle_slice(1), 2], [func() -> void: _jungle_slice(2), 2], [func() -> void: _jungle_slice(3), 2], [func() -> void: _jungle_slice(4), 2], [func() -> void: _jungle_slice(5), 2], [_gates, 1], [_petals_fx, 1], [_spawn_points, 1], [_spawn_mounts, 4],
+		[func() -> void: set_view_distance(view_dist), 1]]
+
+
+func _spawn_points() -> void:
 	for i in 8:
 		var m := Marker3D.new()
 		m.position = Vector3(-8.0 + float(i % 4) * 2.2, 0.3, 3.0 + float(i / 4) * 2.2)
 		add_child(m)
 		spawn_points.append(m)
-	_spawn_mounts()
-	set_view_distance(view_dist)
+
+
+## The same build as _ready, one step per frame, reporting progress 0..1 (the loading screen keeps animating between the steps).
+func build_async(on_progress: Callable) -> void:
+	var steps := _steps()
+	var total := 0.0
+	for st in steps:
+		total += float(st[1])
+	var done := 0.0
+	for st in steps:
+		(st[0] as Callable).call()
+		done += float(st[1])
+		on_progress.call(done / total)
+		await get_tree().process_frame
 
 
 # ── sky, light, ground ───────────────────────────────────────────────────────
@@ -209,7 +228,7 @@ func _river() -> void:
 
 # ── the town ─────────────────────────────────────────────────────────────────
 
-func _place(path_: String, pos: Vector3, yaw: float, length: float, collide := false) -> Node3D:
+func _place(path_: String, pos: Vector3, yaw: float, length: float, collide := false, hp := 0.0) -> Node3D:
 	var m := ModelKit.fitted(path_, length, "bottom")
 	if m == null:
 		return null
@@ -217,11 +236,14 @@ func _place(path_: String, pos: Vector3, yaw: float, length: float, collide := f
 	m.rotation.y = yaw
 	add_child(m)
 	Anime.style(m)
+	var sz: Vector3 = m.get_meta("size")
+	var body: StaticBody3D = null
+	var rect_i := -1
 	if collide:
-		var sz: Vector3 = m.get_meta("size")
 		var half := maxf(sz.x, sz.z) * 0.5
 		blocked.append(Rect2(pos.x - half, pos.z - half, half * 2.0, half * 2.0))
-		var body := StaticBody3D.new()
+		rect_i = blocked.size() - 1
+		body = StaticBody3D.new()
 		body.collision_layer = 1
 		body.collision_mask = 0
 		body.position = pos + Vector3(0, sz.y * 0.5, 0)
@@ -232,26 +254,59 @@ func _place(path_: String, pos: Vector3, yaw: float, length: float, collide := f
 		cs.shape = bs
 		body.add_child(cs)
 		add_child(body)
+	if hp > 0.0:
+		_props.append({"node": m, "body": body, "hp": hp, "max": hp, "pos": Vector2(pos.x, pos.z), "r": maxf(sz.x, sz.z) * 0.5, "h": sz.y, "size": sz, "rect": rect_i, "alive": true})
 	return m
+
+
+var _props: Array = []                   # the breakable things of the town and the plaza
+
+
+## Something hit the world at `at`: towers, houses, signs and machines within `radius` take `amount` damage (a local hit is told to the other phones).
+## Returns how many things were touched.
+func damage_at(at: Vector3, radius: float, amount: float, local := true) -> int:
+	var n := 0
+	if district != null:
+		n += district.damage_at(at, radius, amount)
+	for p in _props:
+		if not bool(p.alive):
+			continue
+		var pp: Vector2 = p.pos
+		if Vector2(at.x, at.z).distance_to(pp) > radius + float(p.r) or at.y > float(p.h) + 3.0:
+			continue
+		n += 1
+		p.hp = float(p.hp) - amount
+		if float(p.hp) <= 0.0:
+			p.alive = false
+			(p.node as Node3D).visible = false
+			if p.body != null:
+				(p.body as Node3D).queue_free()
+			if int(p.rect) >= 0:
+				blocked[int(p.rect)] = Rect2(-9999, -9999, 1, 1)
+			var sz: Vector3 = p.size
+			destroyed.emit(Vector3(pp.x, sz.y * 0.5, pp.y), sz, Color(0.78, 0.6, 0.45), true)
+	if n > 0 and local:
+		damaged.emit(at, radius, amount)
+	return n
 
 
 func _town() -> void:
 	for i in 6:
 		var x := -44.0 + float(i) * 17.0
 		var north := i % 2 == 0
-		_place("res://assets/world/shop_house.glb", Vector3(x, 0, -13.5 if north else 13.5), 0.0 if north else PI, 11.0, true)
+		_place("res://assets/world/shop_house.glb", Vector3(x, 0, -13.5 if north else 13.5), 0.0 if north else PI, 11.0, true, 280.0)
 	for i in 8:
 		var x := -40.0 + float(i) * 11.5
-		_place("res://assets/world/stone_lantern.glb", Vector3(x, 0, -6.5 if i % 2 == 0 else 6.5), 0.0, 2.2)
-	_place("res://assets/world/torii.glb", Vector3(-56, 0, 0), PI * 0.5, 13.0)
-	_place("res://assets/world/torii.glb", Vector3(58, 0, 0), PI * 0.5, 13.0)
-	_place("res://assets/world/vending.glb", Vector3(-30, 0, -8.5), 0.0, 2.1, true)
-	_place("res://assets/world/vending.glb", Vector3(20, 0, 8.5), PI, 2.1, true)
-	_place("res://assets/world/road_sign.glb", Vector3(66, 0, 6), PI * 0.5, 3.0)
-	_place("res://assets/world/stable.glb", Vector3(60, 0, 31), PI, 12.0, true)
-	_place("res://assets/world/pagoda.glb", Vector3(-70, 0, -24), 0.0, 16.0, true)
-	_place("res://assets/world/windmill.glb", Vector3(40, 0, -30), 0.0, 14.0, true)
-	_place("res://assets/world/tent.glb", Vector3(-72, 0, 20), 0.6, 4.0)
+		_place("res://assets/world/stone_lantern.glb", Vector3(x, 0, -6.5 if i % 2 == 0 else 6.5), 0.0, 2.2, false, 30.0)
+	_place("res://assets/world/torii.glb", Vector3(-56, 0, 0), PI * 0.5, 13.0, false, 320.0)
+	_place("res://assets/world/torii.glb", Vector3(58, 0, 0), PI * 0.5, 13.0, false, 320.0)
+	_place("res://assets/world/vending.glb", Vector3(-30, 0, -8.5), 0.0, 2.1, true, 60.0)
+	_place("res://assets/world/vending.glb", Vector3(20, 0, 8.5), PI, 2.1, true, 60.0)
+	_place("res://assets/world/road_sign.glb", Vector3(66, 0, 6), PI * 0.5, 3.0, false, 40.0)
+	_place("res://assets/world/stable.glb", Vector3(60, 0, 31), PI, 12.0, true, 360.0)
+	_place("res://assets/world/pagoda.glb", Vector3(-70, 0, -24), 0.0, 16.0, true, 700.0)
+	_place("res://assets/world/windmill.glb", Vector3(40, 0, -30), 0.0, 14.0, true, 520.0)
+	_place("res://assets/world/tent.glb", Vector3(-72, 0, 20), 0.6, 4.0, false, 30.0)
 	for i in 5:
 		_place("res://assets/world/cherry_tree.glb", Vector3(-46.0 + float(i) * 24.0, 0, -22.0 if i % 2 == 0 else 22.0), float(i), 8.0)
 
@@ -266,8 +321,11 @@ func _district() -> void:
 	district.name = "Downtown"
 	add_child(district)
 	district.build(DISTRICT_AT)
+	district.destroyed.connect(func(at: Vector3, size: Vector3, color: Color, final: bool) -> void: destroyed.emit(at, size, color, final))
+	var base := blocked.size()
 	for r in district.blocked:
 		blocked.append(r)
+	district.cleared.connect(func(i: int) -> void: blocked[base + i] = Rect2(-9999, -9999, 1, 1))
 	_extra_pois.append([district.plaza, 60.0, 3.0])
 	for c in district.get_children():
 		if c is GeometryInstance3D:
@@ -278,14 +336,14 @@ func _district() -> void:
 		_place("res://assets/world/cherry_tree.glb", Vector3(pz.x + cos(a) * 11.0, 0, pz.y + sin(a) * 11.0), a, 8.0)
 	for i in 6:
 		var a2 := float(i) / 6.0 * TAU + 0.3
-		_place("res://assets/world/stone_lantern.glb", Vector3(pz.x + cos(a2) * 6.5, 0, pz.y + sin(a2) * 6.5), 0.0, 2.2)
-	_place("res://assets/world/torii.glb", Vector3(pz.x, 0, pz.y + 14.5), 0.0, 13.0)
-	_place("res://assets/world/torii.glb", Vector3(pz.x, 0, pz.y - 14.5), 0.0, 13.0)
-	_place("res://assets/world/pagoda.glb", Vector3(pz.x, 0, pz.y), 0.0, 14.0, true)
+		_place("res://assets/world/stone_lantern.glb", Vector3(pz.x + cos(a2) * 6.5, 0, pz.y + sin(a2) * 6.5), 0.0, 2.2, false, 30.0)
+	_place("res://assets/world/torii.glb", Vector3(pz.x, 0, pz.y + 14.5), 0.0, 13.0, false, 320.0)
+	_place("res://assets/world/torii.glb", Vector3(pz.x, 0, pz.y - 14.5), 0.0, 13.0, false, 320.0)
+	_place("res://assets/world/pagoda.glb", Vector3(pz.x, 0, pz.y), 0.0, 14.0, true, 700.0)
 	var ext := CityDistrict.extent()
 	for i in 6:
 		var o := district.rect.position + Vector2(CityDistrict.STREET + 2.0 + float(i) * 24.0, CityDistrict.STREET + 1.0)
-		_place("res://assets/world/vending.glb", Vector3(o.x, 0, o.y), 0.0, 2.1, true)
+		_place("res://assets/world/vending.glb", Vector3(o.x, 0, o.y), 0.0, 2.1, true, 60.0)
 	_place("res://assets/world/road_sign.glb", Vector3(district.rect.position.x + ext + 2.0, 0, DISTRICT_AT.y), -PI * 0.5, 3.0)
 
 
@@ -317,9 +375,19 @@ func _mountains() -> void:
 
 # ── the jungle ───────────────────────────────────────────────────────────────
 
+var _jr := RandomNumberGenerator.new()
+var _jkinds: Array = []
+const JUNGLE_SLICES := 6
+
+
 func _jungle() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 2024
+	_jungle_prepare()
+	for k in JUNGLE_SLICES:
+		_jungle_slice(k)
+
+
+func _jungle_prepare() -> void:
+	_jr.seed = 2024
 	var kinds: Array = []          # [mesh, target height, weight/count, is_tree]
 	for t in TREES:
 		var mesh := ModelKit.first_mesh(String(t[0]))
@@ -331,10 +399,19 @@ func _jungle() -> void:
 		if mesh2 != null:
 			Anime.style_mesh(mesh2)
 			kinds.append([mesh2, float(u[1]), float(u[2]), false, String(u[0])])
+	_jkinds = kinds
+
+
+## One slice of the grid columns (the rng runs on from slice to slice, so every phone grows the same jungle).
+func _jungle_slice(part: int) -> void:
+	var kinds := _jkinds
+	var rng := _jr
 	if kinds.is_empty():
 		return
 	var n := int(ceil(HALF * 2.0 / CELL))
-	for cx in n:
+	var c0 := (n * part) / JUNGLE_SLICES
+	var c1 := (n * (part + 1)) / JUNGLE_SLICES
+	for cx in range(c0, c1):
 		for cz in n:
 			var o := Vector2(-HALF + float(cx) * CELL, -HALF + float(cz) * CELL)
 			var per_kind: Array = []

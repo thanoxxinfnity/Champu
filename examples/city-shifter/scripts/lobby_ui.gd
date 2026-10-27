@@ -14,6 +14,8 @@ signal char_selected(id: String)
 signal char_bought(id: String)
 signal name_changed(new_name: String)
 signal sound_toggled(muted: bool)
+signal skill_bought(hero: String, skill: String)
+signal screen_changed(name: String)
 
 var save: Dictionary = {}
 var browsing := "outlaw"                 # the hero shown on the stage
@@ -44,6 +46,7 @@ func _ready() -> void:
 	screens["home"] = _build_home()
 	screens["chars"] = _build_chars(false)
 	screens["shop"] = _build_chars(true)
+	screens["skills"] = _build_skills()
 	screens["online"] = _build_online()
 	screens["settings"] = _build_settings()
 	for k in screens:
@@ -69,12 +72,18 @@ func _build_top() -> void:
 	h.add_theme_constant_override("separation", 10)
 	prof.add_child(h)
 	_level_badge = Control.new()
-	_level_badge.custom_minimum_size = Vector2(54, 54)
+	_level_badge.custom_minimum_size = Vector2(62, 62)
 	_level_badge.draw.connect(func() -> void:
-		var c := Vector2(27, 27)
-		_level_badge.draw_circle(c, 25.0, UIKit.PURPLE)
-		_level_badge.draw_arc(c, 25.0, 0, TAU, 24, UIKit.INK, 4.0)
-		UIKit.draw_text(_level_badge, str(Data.level_for(float(save.get("best", 0.0)))), Vector2(0, 36), 26, UIKit.CREAM, true, HORIZONTAL_ALIGNMENT_CENTER, 54.0))
+		var hid := String(save.get("char", "outlaw"))
+		var rc: Dictionary = HeroCard.RARITY[Data.rarity_of(hid)]
+		_level_badge.draw_style_box(UIKit.box(rc.bot, UIKit.INK, 14, 3, 0), Rect2(0, 0, 62, 62))
+		var tex := load("res://assets/ui/cards/%s.png" % hid) as Texture2D if ResourceLoader.exists("res://assets/ui/cards/%s.png" % hid) else null
+		if tex != null:
+			var ts := tex.get_size()
+			_level_badge.draw_texture_rect_region(tex, Rect2(5, 5, 52, 52), Rect2(ts.x * 0.18, ts.y * 0.04, ts.x * 0.64, ts.x * 0.64))
+		_level_badge.draw_circle(Vector2(50, 50), 13.0, UIKit.PURPLE)
+		_level_badge.draw_arc(Vector2(50, 50), 13.0, 0, TAU, 20, UIKit.INK, 3.0)
+		UIKit.draw_text(_level_badge, str(Data.level_for(float(save.get("best", 0.0)))), Vector2(37, 57), 17, UIKit.CREAM, true, HORIZONTAL_ALIGNMENT_CENTER, 26.0))
 	h.add_child(_level_badge)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", -2)
@@ -100,9 +109,57 @@ func _build_top() -> void:
 	_top_coins = UIKit.label("0", ch, 32, UIKit.INK, true)
 	_top_coins.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0))
 	_top_coins.add_theme_constant_override("outline_size", 0)
+	# the battle card
+	var mycard := UIKit.button("CARD", bar, "star", UIKit.ORANGE, Vector2(150, 74), 26)
+	mycard.pressed.connect(_open_my_card)
 	# settings
 	var gear := UIKit.button("", bar, "gear", UIKit.SKY, Vector2(74, 74))
 	gear.pressed.connect(func() -> void: show_screen("settings"))
+
+
+var _card_pop: Control
+var _card_view: HeroCard
+
+
+## The player's own battle card, in a pop-up.
+func _open_my_card() -> void:
+	if _card_pop == null:
+		_card_pop = Control.new()
+		_card_pop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_card_pop.mouse_filter = Control.MOUSE_FILTER_STOP
+		var dim := ColorRect.new()
+		dim.color = Color(0.05, 0.03, 0.15, 0.78)
+		dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_card_pop.add_child(dim)
+		_card_view = HeroCard.new()
+		_card_view.mode = "player"
+		_card_view.set_anchors_preset(Control.PRESET_CENTER)
+		_card_view.anchor_left = 0.5
+		_card_view.anchor_right = 0.5
+		_card_view.anchor_top = 0.5
+		_card_view.anchor_bottom = 0.5
+		_card_view.offset_left = -165
+		_card_view.offset_right = 165
+		_card_view.offset_top = -285
+		_card_view.offset_bottom = 255
+		_card_pop.add_child(_card_view)
+		var close := UIKit.button("CLOSE", _card_pop, "back", UIKit.PINK, Vector2(220, 56), 24)
+		close.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		close.anchor_left = 0.5
+		close.anchor_right = 0.5
+		close.anchor_top = 1.0
+		close.anchor_bottom = 1.0
+		close.offset_left = -110
+		close.offset_right = 110
+		close.offset_top = -72
+		close.offset_bottom = -16
+		close.pressed.connect(func() -> void: _card_pop.visible = false)
+		add_child(_card_pop)
+	_card_view.hero_id = String(save.get("char", "outlaw"))
+	_card_view.player = {"name": String(save.get("name", "PLAYER")), "level": Data.level_for(float(save.get("best", 0.0))), "matches": int(save.get("matches", 0)), "wins": int(save.get("wins", 0))}
+	_card_view.queue_redraw()
+	_card_pop.visible = true
 
 
 func _build_tabs() -> void:
@@ -198,12 +255,12 @@ func _build_chars(shop: bool) -> Control:
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# the grid, left
+	# the grid of portraits, left
 	var gp := UIKit.panel(root, Color(0.99, 0.95, 0.88, 0.95), 24)
 	gp.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	gp.offset_left = 18
 	gp.offset_top = 104
-	gp.offset_right = 590
+	gp.offset_right = 486
 	gp.offset_bottom = 628
 	var gv := VBoxContainer.new()
 	gv.add_theme_constant_override("separation", 8)
@@ -215,8 +272,8 @@ func _build_chars(shop: bool) -> Control:
 	gv.add_child(sc)
 	var grid := GridContainer.new()
 	grid.columns = 3
-	grid.add_theme_constant_override("h_separation", 10)
-	grid.add_theme_constant_override("v_separation", 10)
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
 	sc.add_child(grid)
 	_char_cards[key] = {}
 	grid.set_meta("key", key)
@@ -224,12 +281,20 @@ func _build_chars(shop: bool) -> Control:
 		var card := _make_card(id, key)
 		grid.add_child(card)
 		_char_cards[key][id] = card
-	# the info panel, right
+	# the big battle card, middle
+	var hc := HeroCard.new()
+	hc.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	hc.offset_left = 504
+	hc.offset_top = 104
+	hc.offset_right = 504 + 320
+	hc.offset_bottom = 104 + 524
+	root.add_child(hc)
+	# the details, right
 	var ip := UIKit.panel(root, Color(0.99, 0.95, 0.88, 0.95), 24)
 	ip.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	ip.anchor_left = 1.0
 	ip.anchor_right = 1.0
-	ip.offset_left = -430
+	ip.offset_left = -424
 	ip.offset_right = -18
 	ip.offset_top = 104
 	ip.offset_bottom = 628
@@ -238,50 +303,63 @@ func _build_chars(shop: bool) -> Control:
 	iv.set_meta("key", key)
 	ip.add_child(iv)
 	_info[key] = {"bars": []}
-	var nm := UIKit.label("", iv, 44, UIKit.PINK, true)
+	var nm := UIKit.label("", iv, 40, UIKit.PINK, true)
+	nm.custom_minimum_size = Vector2(380, 0)
+	nm.clip_text = true
 	var rl := UIKit.label("", iv, 18, UIKit.INK)
 	rl.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0))
 	rl.add_theme_constant_override("outline_size", 0)
+	rl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	rl.custom_minimum_size = Vector2(380, 0)
 	var pk := UIKit.label("", iv, 16, Color(0.3, 0.2, 0.45))
 	pk.add_theme_constant_override("outline_size", 0)
 	pk.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	pk.custom_minimum_size = Vector2(380, 70)
+	pk.custom_minimum_size = Vector2(380, 62)
 	_stat_bar(iv, "SPEED", 0.5, UIKit.SKY)
 	_stat_bar(iv, "JETPACK", 0.5, UIKit.ORANGE)
 	_stat_bar(iv, "HEALTH", 0.5, UIKit.MINT)
+	var pts := UIKit.label("", iv, 16, UIKit.INK)
+	pts.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0))
+	pts.add_theme_constant_override("outline_size", 0)
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	iv.add_child(spacer)
-	var act := UIKit.button("SELECT", iv, "check", UIKit.MINT, Vector2(380, 74), 34)
+	var sk := UIKit.button("SKILLS", iv, "bolt", UIKit.PURPLE, Vector2(380, 66), 30, "Level up this hero")
+	sk.pressed.connect(func() -> void: show_screen("skills"))
+	var act := UIKit.button("SELECT", iv, "check", UIKit.MINT, Vector2(380, 70), 32)
 	act.pressed.connect(func() -> void: _on_action(key))
-	_info[key].merge({"name": nm, "role": rl, "perk": pk, "button": act}, true)
+	_info[key].merge({"name": nm, "role": rl, "perk": pk, "button": act, "card": hc, "skills": sk, "pts": pts}, true)
 	return root
 
 
 func _make_card(id: String, key: String) -> Control:
 	var info: Dictionary = Data.CAST[id]
 	var b := Button.new()
-	b.custom_minimum_size = Vector2(168, 128)
+	b.custom_minimum_size = Vector2(140, 150)
 	b.flat = true
 	b.focus_mode = Control.FOCUS_NONE
 	for st in ["normal", "hover", "pressed", "disabled", "focus"]:
 		b.add_theme_stylebox_override(st, StyleBoxEmpty.new())
+	var tex: Texture2D = load("res://assets/ui/cards/%s.png" % id) as Texture2D if ResourceLoader.exists("res://assets/ui/cards/%s.png" % id) else null
 	b.draw.connect(func() -> void:
 		var owned := Data.char_owned(id, save)
 		var picked := browsing == id
-		var fill := Color(1.0, 0.97, 0.9) if owned else Color(0.86, 0.82, 0.92)
-		b.draw_style_box(UIKit.box(fill, UIKit.PINK if picked else UIKit.INK, 16, 5 if picked else 3, 4), Rect2(2, 2, 164, 118))
-		var c := Vector2(84, 52)
-		var tint := UIKit.SKY if bool(info.male) else UIKit.PINK
-		b.draw_circle(c, 34.0, tint.lerp(Color.WHITE, 0.2) if owned else tint.darkened(0.4))
-		b.draw_arc(c, 34.0, 0, TAU, 24, UIKit.INK, 4.0)
-		UIKit.draw_text(b, String(info.name).substr(0, 1), c + Vector2(-30, 14), 40, UIKit.CREAM, true, HORIZONTAL_ALIGNMENT_CENTER, 60.0)
-		UIKit.draw_text(b, String(info.name), Vector2(4, 108), 17, UIKit.INK if owned else Color(0.35, 0.3, 0.5), false, HORIZONTAL_ALIGNMENT_CENTER, 160.0)
+		var rc: Dictionary = HeroCard.RARITY[Data.rarity_of(id)]
+		var top: Color = rc.top
+		var bot: Color = rc.bot
+		b.draw_style_box(UIKit.box(bot, UIKit.PINK if picked else UIKit.INK, 14, 5 if picked else 3, 3), Rect2(2, 2, 136, 138))
+		b.draw_polygon(PackedVector2Array([Vector2(8, 8), Vector2(132, 8), Vector2(132, 132), Vector2(8, 132)]), PackedColorArray([top, top, bot, bot]))
+		if tex != null:
+			var ts := tex.get_size()
+			var k := 118.0 / ts.y
+			b.draw_texture_rect(tex, Rect2(Vector2(70.0 - ts.x * k * 0.5, 12.0), ts * k), false, Color.WHITE if owned else Color(0.2, 0.17, 0.32))
+		b.draw_style_box(UIKit.box(Color(UIKit.INK.r, UIKit.INK.g, UIKit.INK.b, 0.88), UIKit.INK, 8, 2, 0), Rect2(8, 112, 124, 24))
+		UIKit.draw_text(b, String(info.get("short", info.name)), Vector2(10, 130), 18, UIKit.CREAM, true, HORIZONTAL_ALIGNMENT_CENTER, 120.0)
 		if not owned:
-			UIKit.draw_icon(b, "lock", Vector2(140, 22), 26.0, UIKit.YELLOW)
-			UIKit.draw_text(b, "$%d" % int(info.price), Vector2(10, 28), 16, UIKit.YELLOW)
+			UIKit.draw_icon(b, "lock", Vector2(118, 26), 28.0, UIKit.YELLOW)
+			UIKit.draw_text(b, "$%d" % int(info.price), Vector2(10, 28), 16, UIKit.YELLOW, true, HORIZONTAL_ALIGNMENT_LEFT, 70.0)
 		elif String(save.get("char", "outlaw")) == id:
-			UIKit.draw_icon(b, "check", Vector2(142, 22), 26.0, UIKit.MINT))
+			UIKit.draw_icon(b, "check", Vector2(118, 26), 28.0, UIKit.MINT))
 	b.pressed.connect(func() -> void:
 		browsing = id
 		char_preview.emit(id)
@@ -300,6 +378,94 @@ func _on_action(key: String) -> void:
 	elif Data.char_buyable(id, save) == "":
 		char_bought.emit(id)
 	_refresh()
+
+
+# ── skills ───────────────────────────────────────────────────────────────────
+
+var _skill_rows := {}                    # skill id -> {row, button}
+var _skill_card: HeroCard
+var _skill_head: Label
+
+
+func _build_skills() -> Control:
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_skill_card = HeroCard.new()
+	_skill_card.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_skill_card.offset_left = 18
+	_skill_card.offset_top = 104
+	_skill_card.offset_right = 18 + 300
+	_skill_card.offset_bottom = 104 + 524
+	root.add_child(_skill_card)
+	var p := UIKit.panel(root, Color(0.99, 0.95, 0.88, 0.96), 24)
+	p.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	p.offset_left = 336
+	p.offset_right = 1262
+	p.offset_top = 104
+	p.offset_bottom = 628
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	p.add_child(v)
+	var hdr := HBoxContainer.new()
+	v.add_child(hdr)
+	_skill_head = UIKit.label("SKILLS", hdr, 40, UIKit.PURPLE, true)
+	_skill_head.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_skill_head.clip_text = true
+	var back := UIKit.button("", hdr, "back", UIKit.PINK, Vector2(70, 52))
+	back.pressed.connect(func() -> void: show_screen("chars"))
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 14)
+	cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	v.add_child(cols)
+	var left := VBoxContainer.new()
+	var right := VBoxContainer.new()
+	for c in [left, right]:
+		c.add_theme_constant_override("separation", 6)
+		c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cols.add_child(c)
+	for i in Data.SKILL_ORDER.size():
+		var sid: String = Data.SKILL_ORDER[i]
+		var row := _skill_row(sid)
+		(left if i < 7 else right).add_child(row)
+	return root
+
+
+func _skill_row(sid: String) -> Control:
+	var row := Control.new()
+	row.custom_minimum_size = Vector2(430, 62)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var btn := UIKit.button("UPGRADE", row, "", UIKit.MINT, Vector2(128, 50), 18)
+	btn.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	btn.anchor_left = 1.0
+	btn.anchor_right = 1.0
+	btn.anchor_top = 0.5
+	btn.anchor_bottom = 0.5
+	btn.offset_left = -132
+	btn.offset_right = -2
+	btn.offset_top = -27
+	btn.offset_bottom = 27
+	btn.pressed.connect(func() -> void:
+		if Data.skill_buy(save, browsing, sid):
+			skill_bought.emit(browsing, sid)
+			_refresh())
+	row.draw.connect(func() -> void:
+		var d: Dictionary = Data.SKILLS[sid]
+		var lv := Data.skill_level(save, browsing, sid)
+		row.draw_style_box(UIKit.box(Color(1, 0.98, 0.93), UIKit.INK, 14, 3, 2), Rect2(0, 0, row.size.x - 2, 58))
+		row.draw_circle(Vector2(32, 29), 21, UIKit.PURPLE.lerp(Color.WHITE, 0.25))
+		row.draw_arc(Vector2(32, 29), 21, 0, TAU, 20, UIKit.INK, 3.0)
+		UIKit.draw_icon(row, String(d.icon), Vector2(32, 29), 26, UIKit.CREAM)
+		var tw := row.size.x - 64.0 - 136.0
+		UIKit.draw_text(row, String(d.name), Vector2(62, 22), 20, UIKit.INK, true, HORIZONTAL_ALIGNMENT_LEFT, tw)
+		for i in Data.SKILL_MAX:
+			var on := i < lv
+			row.draw_style_box(UIKit.box(UIKit.YELLOW if on else Color(0.85, 0.82, 0.9), UIKit.INK, 3, 2, 0), Rect2(62 + i * (tw / float(Data.SKILL_MAX)), 28, tw / float(Data.SKILL_MAX) - 3.0, 9))
+		var now := Data.skill_now(sid, lv)
+		UIKit.draw_text(row, now if lv > 0 else String(d.per).replace("per level", "") + " each level", Vector2(62, 52), 13, Color(0.3, 0.2, 0.45), false, HORIZONTAL_ALIGNMENT_LEFT, tw)
+		pass)
+	_skill_rows[sid] = {"row": row, "button": btn}
+	return row
 
 
 func _build_online() -> Control:
@@ -439,6 +605,7 @@ func _build_settings() -> Control:
 
 func show_screen(name: String) -> void:
 	screen = name
+	screen_changed.emit(name)
 	for k in screens:
 		(screens[k] as Control).visible = (k == name)
 	for k in _tabs:
@@ -455,6 +622,30 @@ func show_screen(name: String) -> void:
 		browsing = String(save.get("char", "outlaw"))
 		char_preview.emit(browsing)
 	_refresh()
+
+
+func _skill_points(id: String) -> int:
+	var n := 0
+	for sid in Data.SKILL_ORDER:
+		n += Data.skill_level(save, id, sid)
+	return n
+
+
+func _refresh_skills() -> void:
+	if _skill_card == null or save.is_empty():
+		return
+	_skill_card.hero_id = browsing
+	_skill_card.skill_total = _skill_points(browsing)
+	_skill_head.text = "%s: SKILLS" % String(Data.CAST[browsing].get("short", Data.CAST[browsing].name))
+	for sid in _skill_rows:
+		var lv := Data.skill_level(save, browsing, sid)
+		var why := Data.skill_buyable(save, browsing, sid)
+		var btn: UIKit.AnimeButton = _skill_rows[sid].button
+		btn.text = "MAX" if lv >= Data.SKILL_MAX else "$%d" % Data.skill_cost(lv, sid)
+		btn.disabled = why != ""
+		btn.accent = UIKit.MINT if why == "" else Color(0.65, 0.62, 0.8)
+		btn.queue_redraw()
+		(_skill_rows[sid].row as Control).queue_redraw()
 
 
 func set_save(s: Dictionary) -> void:
@@ -489,7 +680,13 @@ func _refresh() -> void:
 		var inf: Dictionary = _info[key]
 		var d: Dictionary = Data.CAST[browsing]
 		(inf.name as Label).text = String(d.name)
-		(inf.role as Label).text = String(d.role)
+		(inf.role as Label).text = "%s  ·  %s" % [String(d.get("title", "")), String(d.role)]
+		(inf.card as HeroCard).hero_id = browsing
+		(inf.card as HeroCard).locked = not Data.char_owned(browsing, save)
+		(inf.card as HeroCard).skill_total = _skill_points(browsing)
+		(inf.skills as UIKit.AnimeButton).disabled = not Data.char_owned(browsing, save)
+		(inf.skills as Control).queue_redraw()
+		(inf.pts as Label).text = "Skill levels: %d / %d" % [_skill_points(browsing), Data.SKILL_MAX * Data.SKILL_ORDER.size()]
 		(inf.perk as Label).text = String(d.perk)
 		var vals := [float(d.speed) / 8.0, float(d.fuel) * float(d.get("fuel_mult", 1.0)) / 140.0, float(d.hp) / 160.0]
 		for i in 3:
@@ -512,6 +709,7 @@ func _refresh() -> void:
 	for k in _char_cards:
 		for cid in _char_cards[k]:
 			(_char_cards[k][cid] as Control).queue_redraw()
+	_refresh_skills()
 	var rec := (screens["settings"] as Control).find_child("Record", true, false)
 	if rec != null:
 		(rec as Label).text = "Best run: %d m   ·   %d matches   ·   %d wins" % [int(save.get("best", 0)), int(save.get("matches", 0)), int(save.get("wins", 0))]

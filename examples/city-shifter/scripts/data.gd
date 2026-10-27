@@ -113,38 +113,154 @@ const WEAPON_ORDER := ["shift_gauntlet", "vortex_blaster", "quantum_breaker", "g
 # ── the survivors ────────────────────────────────────────────────────────────
 ## model = file in assets/cast (a rigged glb; a built-in stand-in when it is missing), tint recolours the shared model of the variant.
 const CAST := {
-	"outlaw": {"name": "OUTLAW", "role": "Drifter with a red scarf", "model": "outlaw", "height": 1.78, "speed": 6.4, "fuel": 100.0, "hp": 100.0, "tint": Color.WHITE,
+	"outlaw": {"name": "RYO KAGAMI", "short": "RYO", "title": "Crimson Drifter", "role": "Drifter with a red scarf", "model": "outlaw", "height": 1.78, "speed": 6.4, "fuel": 100.0, "hp": 100.0, "tint": Color.WHITE,
 		"perk": "Quick draw: gauntlet cooldown -15%.", "cd_mult": 0.85, "male": true},
-	"tracker": {"name": "TRACKER", "role": "Scout in orange", "model": "tracker", "height": 1.72, "speed": 6.8, "fuel": 110.0, "hp": 90.0, "tint": Color.WHITE,
+	"tracker": {"name": "AKARI HOSHINO", "short": "AKARI", "title": "Sky Scout", "role": "Scout in orange", "model": "tracker", "height": 1.72, "speed": 6.8, "fuel": 110.0, "hp": 90.0, "tint": Color.WHITE,
 		"perk": "Sky sense: debris is marked before it lands.", "mark": true, "male": false},
-	"viper": {"name": "VIPER", "role": "Purple-haired tracker", "model": "tracker2", "height": 1.72, "speed": 7.0, "fuel": 100.0, "hp": 90.0, "tint": Color.WHITE,
+	"viper": {"name": "YUZU AMAKAWA", "short": "YUZU", "title": "Violet Viper", "role": "Purple-haired tracker", "model": "tracker2", "height": 1.72, "speed": 7.0, "fuel": 100.0, "hp": 90.0, "tint": Color.WHITE,
 		"perk": "Light feet: jetpack fuel lasts 20% longer.", "fuel_mult": 1.2, "male": false, "price": 500},
-	"engineer": {"name": "HEAVY ENGINEER", "role": "Builds bridges, takes hits", "model": "engineer", "height": 1.9, "speed": 5.6, "fuel": 90.0, "hp": 150.0, "tint": Color.WHITE,
+	"engineer": {"name": "GORO IRONHEART", "short": "GORO", "title": "Bridge Titan", "role": "Builds bridges, takes hits", "model": "engineer", "height": 1.9, "speed": 5.6, "fuel": 90.0, "hp": 150.0, "tint": Color.WHITE,
 		"perk": "Steel hands: bridge blocks last twice as long.", "bridge_mult": 2.0, "male": true, "price": 800},
-	"ninja": {"name": "TECH-NINJA", "role": "Fast and quiet", "model": "ninja", "height": 1.75, "speed": 7.4, "fuel": 120.0, "hp": 80.0, "tint": Color.WHITE,
+	"ninja": {"name": "HAYATE KURO", "short": "HAYATE", "title": "Tech Ninja", "role": "Fast and quiet", "model": "ninja", "height": 1.75, "speed": 7.4, "fuel": 120.0, "hp": 80.0, "tint": Color.WHITE,
 		"perk": "Blink: the air dash costs half the fuel.", "dash_mult": 0.5, "male": true, "price": 500},
-	"mechanic": {"name": "MECHANIC", "role": "Fixes what falls", "model": "mechanic", "height": 1.72, "speed": 6.2, "fuel": 100.0, "hp": 110.0, "tint": Color.WHITE,
+	"mechanic": {"name": "MIKU TSUBAKI", "short": "MIKU", "title": "Scrap Sorceress", "role": "Fixes what falls", "model": "mechanic", "height": 1.72, "speed": 6.2, "fuel": 100.0, "hp": 110.0, "tint": Color.WHITE,
 		"perk": "Repair kit: coins from shards +50%.", "coin_mult": 1.5, "male": false},
-	"school": {"name": "SAKURA", "role": "Sailor-suit sprinter", "model": "school", "height": 1.6, "speed": 7.1, "fuel": 100.0, "hp": 85.0, "tint": Color.WHITE,
+	"school": {"name": "SAKURA MIYAKE", "short": "SAKURA", "title": "Petal Sprinter", "role": "Sailor-suit sprinter", "model": "school", "height": 1.6, "speed": 7.1, "fuel": 100.0, "hp": 85.0, "tint": Color.WHITE,
 		"perk": "Light as a petal: runs 10% faster.", "male": false, "price": 500},
-	"kunoichi": {"name": "KAGE", "role": "Purple-scarf kunoichi", "model": "kunoichi", "height": 1.65, "speed": 7.2, "fuel": 110.0, "hp": 85.0, "tint": Color.WHITE,
+	"kunoichi": {"name": "KAGE SHIRANUI", "short": "KAGE", "title": "Shadow Blossom", "role": "Purple-scarf kunoichi", "model": "kunoichi", "height": 1.65, "speed": 7.2, "fuel": 110.0, "hp": 85.0, "tint": Color.WHITE,
 		"perk": "Shadow step: the air dash costs 40% less fuel.", "dash_mult": 0.6, "male": false, "price": 800},
-	"cyber": {"name": "NEON", "role": "Goggles and a green jacket", "model": "cyber", "height": 1.7, "speed": 6.6, "fuel": 100.0, "hp": 95.0, "tint": Color.WHITE,
+	"cyber": {"name": "REN MIDORIKAWA", "short": "REN", "title": "Neon Rider", "role": "Goggles and a green jacket", "model": "cyber", "height": 1.7, "speed": 6.6, "fuel": 100.0, "hp": 95.0, "tint": Color.WHITE,
 		"perk": "Overclock: the jetpack cools 35% faster.", "cool_mult": 1.35, "male": true, "price": 800},
-	"samurai": {"name": "RYUJIN", "role": "Red-armour swordsman", "model": "samurai", "height": 1.8, "speed": 6.3, "fuel": 95.0, "hp": 110.0, "tint": Color.WHITE,
+	"samurai": {"name": "RYUJIN HONDA", "short": "RYUJIN", "title": "Crimson Blade", "role": "Red-armour swordsman", "model": "samurai", "height": 1.8, "speed": 6.3, "fuel": 95.0, "hp": 110.0, "tint": Color.WHITE,
 		"perk": "Bushido: melee weapons hit 25% harder.", "melee_mult": 1.25, "male": true, "price": 1200},
-	"mage": {"name": "YUKINE", "role": "Frost-robe mage", "model": "mage", "height": 1.62, "speed": 6.2, "fuel": 100.0, "hp": 80.0, "tint": Color.WHITE,
+	"mage": {"name": "YUKINE SHIRAYUKI", "short": "YUKINE", "title": "Frost Empress", "role": "Frost-robe mage", "model": "mage", "height": 1.62, "speed": 6.2, "fuel": 100.0, "hp": 80.0, "tint": Color.WHITE,
 		"perk": "Arcane tank: gauntlets recharge 25% faster.", "charge_mult": 1.25, "male": false, "price": 1200},
-	"monk": {"name": "GENSHO", "role": "Orange-robe warrior monk", "model": "monk", "height": 1.75, "speed": 6.0, "fuel": 100.0, "hp": 120.0, "tint": Color.WHITE,
+	"monk": {"name": "GENSHO DAIGO", "short": "GENSHO", "title": "Stone Monk", "role": "Orange-robe warrior monk", "model": "monk", "height": 1.75, "speed": 6.0, "fuel": 100.0, "hp": 120.0, "tint": Color.WHITE,
 		"perk": "Stone skin: takes 15% less damage.", "dmg_taken": 0.85, "male": true, "price": 1200},
-	"pirate": {"name": "CAPTAIN KURO", "role": "Coat and tricorn", "model": "pirate", "height": 1.8, "speed": 6.2, "fuel": 100.0, "hp": 100.0, "tint": Color.WHITE,
+	"pirate": {"name": "CAPTAIN KURO", "short": "KURO", "title": "Plunder King", "role": "Coat and tricorn", "model": "pirate", "height": 1.8, "speed": 6.2, "fuel": 100.0, "hp": 100.0, "tint": Color.WHITE,
 		"perk": "Plunder: +50% coins from every match.", "coin_mult": 1.5, "male": true, "price": 1600},
-	"knight": {"name": "LUMINA", "role": "Silver-armour knight", "model": "knight", "height": 1.7, "speed": 5.8, "fuel": 90.0, "hp": 140.0, "tint": Color.WHITE,
+	"knight": {"name": "LUMINA ARGENT", "short": "LUMINA", "title": "Silver Paladin", "role": "Silver-armour knight", "model": "knight", "height": 1.7, "speed": 5.8, "fuel": 90.0, "hp": 140.0, "tint": Color.WHITE,
 		"perk": "Plate armour: 140 HP.", "male": false, "price": 1600},
+	"kafu": {"name": "KAFU", "short": "KAFU", "title": "Silver Idol", "role": "Moonlit stage idol", "model": "kafu", "height": 1.58, "speed": 6.9, "fuel": 105.0, "hp": 85.0, "tint": Color.WHITE,
+		"perk": "Encore: gauntlets recharge 20% faster.", "charge_mult": 1.2, "male": false, "price": 2000},
+	"rachel": {"name": "RACHEL GARDNER", "short": "RACHEL", "title": "Field Nurse", "role": "Hooded medic with a long braid", "model": "rachel", "height": 1.68, "speed": 6.5, "fuel": 100.0, "hp": 100.0, "tint": Color.WHITE,
+		"perk": "First aid: heals 4 HP a second when not hit for 5 s.", "regen": 4.0, "male": false, "price": 2000},
+	"rina": {"name": "RINA NAKAJIMA", "short": "RINA", "title": "Crimson Cheer", "role": "Red-suit blonde sprinter", "model": "rina", "height": 1.62, "speed": 7.2, "fuel": 100.0, "hp": 85.0, "tint": Color.WHITE,
+		"perk": "Cheer up: the jetpack cools 30% faster.", "cool_mult": 1.3, "male": false, "price": 2000},
+	"mococo": {"name": "MOCOCO ABYSSGARD", "short": "MOCOCO", "title": "Fox of the Abyss", "role": "Pink fox-girl with a fluffy tail", "model": "mococo_full", "height": 1.55, "speed": 7.0, "fuel": 110.0, "hp": 85.0, "tint": Color.WHITE,
+		"perk": "Fox reflexes: the air dash costs 40% less fuel.", "dash_mult": 0.6, "male": false, "price": 2000},
 }
-const CAST_ORDER := ["outlaw", "tracker", "mechanic", "viper", "ninja", "school", "engineer", "kunoichi", "cyber", "samurai", "mage", "monk", "pirate", "knight"]
+const CAST_ORDER := ["outlaw", "tracker", "mechanic", "viper", "ninja", "school", "engineer", "kunoichi", "cyber", "samurai", "mage", "monk", "pirate", "knight", "kafu", "rachel", "rina", "mococo"]
 ## Free at the start; every other survivor is bought in the shop (a character has a small perk, never a weapon: nobody buys an advantage that matters).
 const STARTERS := ["outlaw", "tracker", "mechanic"]
+
+# ── skills ───────────────────────────────────────────────────────────────────
+## Every hero has its own skill levels (0..SKILL_MAX), bought with coins on the SKILLS screen. Each level is a small bonus; none of them touches the 50 m view radius.
+const SKILL_MAX := 10
+const SKILLS := {
+	"vitality": {"name": "VITALITY", "icon": "heart", "per": "+4% max health", "base": 80},
+	"armor": {"name": "TOUGH SKIN", "icon": "shield", "per": "-2.5% damage taken", "base": 120},
+	"sprint": {"name": "SPRINT", "icon": "bolt", "per": "+2.5% run speed", "base": 90},
+	"tank": {"name": "JET TANK", "icon": "jet", "per": "+5% jetpack fuel", "base": 90},
+	"cooling": {"name": "COOLING", "icon": "flame", "per": "+6% jetpack cooling", "base": 90},
+	"dash": {"name": "AIR DASH", "icon": "burst", "per": "-4% dash fuel cost", "base": 100},
+	"driving": {"name": "DRIVING", "icon": "wheel", "per": "+3% vehicle speed, +3% handling", "base": 110},
+	"riding": {"name": "HORSEMANSHIP", "icon": "horse", "per": "+3% horse speed", "base": 100},
+	"power": {"name": "FIREPOWER", "icon": "burst", "per": "+3% gauntlet damage", "base": 140},
+	"efficiency": {"name": "EFFICIENCY", "icon": "cube", "per": "-3% charge used per shot", "base": 130},
+	"melee": {"name": "MELEE MASTERY", "icon": "sword", "per": "+4% hammer, blade and axe damage", "base": 120},
+	"builder": {"name": "BUILDER", "icon": "bridge", "per": "+6% bridge block life", "base": 80},
+	"luck": {"name": "TREASURE HUNTER", "icon": "coin", "per": "+5% coins", "base": 100},
+}
+const SKILL_ORDER := ["vitality", "armor", "sprint", "tank", "cooling", "dash", "driving", "riding", "power", "efficiency", "melee", "builder", "luck"]
+
+
+static func skill_level(save: Dictionary, cid: String, sid: String) -> int:
+	return int(((save.get("skills", {}) as Dictionary).get(cid, {}) as Dictionary).get(sid, 0))
+
+
+## "+12% max health": the skill's text with its percentages multiplied by the level.
+static func skill_now(sid: String, lv: int) -> String:
+	var per: String = SKILLS[sid].per
+	var re := RegEx.new()
+	re.compile("([+-])(\\d+(?:\\.\\d+)?)%")
+	var out := ""
+	var last := 0
+	for m in re.search_all(per):
+		out += per.substr(last, m.get_start() - last)
+		var v := float(m.get_string(2)) * float(lv)
+		out += "%s%s%%" % [m.get_string(1), ("%d" % int(v)) if is_equal_approx(v, round(v)) else ("%.1f" % v)]
+		last = m.get_end()
+	return "now " + out + per.substr(last)
+
+
+## Coins for the next level of a skill, 0 when it is at the top.
+static func skill_cost(level: int, sid: String) -> int:
+	if level >= SKILL_MAX:
+		return 0
+	return int(round(float(SKILLS[sid].base) * pow(1.42, float(level)) / 10.0)) * 10
+
+
+## "" when the next level can be bought now, else why not.
+static func skill_buyable(save: Dictionary, cid: String, sid: String) -> String:
+	var lv := skill_level(save, cid, sid)
+	if lv >= SKILL_MAX:
+		return "MAX"
+	if int(save.get("coins", 0)) < skill_cost(lv, sid):
+		return "needs $%d" % skill_cost(lv, sid)
+	return ""
+
+
+static func skill_buy(save: Dictionary, cid: String, sid: String) -> bool:
+	if skill_buyable(save, cid, sid) != "":
+		return false
+	var lv := skill_level(save, cid, sid)
+	save.coins = int(save.coins) - skill_cost(lv, sid)
+	var all: Dictionary = save.get("skills", {})
+	var mine: Dictionary = all.get(cid, {})
+	mine[sid] = lv + 1
+	all[cid] = mine
+	save["skills"] = all
+	return true
+
+
+## The hero's stats with its skill levels folded in (what a player's own phone simulates).
+static func effective(cid: String, save: Dictionary) -> Dictionary:
+	var d: Dictionary = (CAST.get(cid, CAST["outlaw"]) as Dictionary).duplicate(true)
+	var L := func(sid: String) -> float: return float(skill_level(save, cid, sid))
+	d.hp = float(d.hp) * (1.0 + 0.04 * L.call("vitality"))
+	d.dmg_taken = float(d.get("dmg_taken", 1.0)) * (1.0 - 0.025 * L.call("armor"))
+	d.speed = float(d.speed) * (1.0 + 0.025 * L.call("sprint"))
+	d.fuel_mult = float(d.get("fuel_mult", 1.0)) * (1.0 + 0.05 * L.call("tank"))
+	d.cool_mult = float(d.get("cool_mult", 1.0)) * (1.0 + 0.06 * L.call("cooling"))
+	d.dash_mult = float(d.get("dash_mult", 1.0)) * (1.0 - 0.04 * L.call("dash"))
+	d.drive_mult = 1.0 + 0.03 * L.call("driving")
+	d.ride_mult = 1.0 + 0.03 * L.call("riding")
+	d.dmg_mult = float(d.get("dmg_mult", 1.0)) * (1.0 + 0.03 * L.call("power"))
+	d.cost_mult = 1.0 - 0.03 * L.call("efficiency")
+	d.melee_mult = float(d.get("melee_mult", 1.0)) * (1.0 + 0.04 * L.call("melee"))
+	d.bridge_mult = float(d.get("bridge_mult", 1.0)) * (1.0 + 0.06 * L.call("builder"))
+	d.coin_mult = float(d.get("coin_mult", 1.0)) * (1.0 + 0.05 * L.call("luck"))
+	return d
+
+
+## COMMON / RARE / EPIC / LEGENDARY by price: the colour of the battle card.
+static func rarity_of(cid: String) -> String:
+	var pr := int((CAST[cid] as Dictionary).get("price", 0))
+	if pr == 0:
+		return "COMMON"
+	if pr <= 500:
+		return "RARE"
+	if pr <= 1200:
+		return "EPIC"
+	return "LEGENDARY"
+
+
+## Three 0..1 numbers for the card: speed, health, fuel.
+static func card_stats(cid: String) -> Array:
+	var c: Dictionary = CAST[cid]
+	return [clampf((float(c.speed) - 5.0) / 3.0, 0.1, 1.0), clampf(float(c.hp) / 150.0, 0.1, 1.0), clampf(float(c.fuel) * float(c.get("fuel_mult", 1.0)) / 125.0, 0.1, 1.0)]
+
 
 # ── progression ──────────────────────────────────────────────────────────────
 ## Level from the best distance ever reached: 1 at the start, +1 per 600 m.
@@ -196,7 +312,7 @@ static func weapon_buyable(id: String, save: Dictionary) -> String:
 
 
 static func load_save() -> Dictionary:
-	var d := {"coins": 0, "best": 0.0, "weapons": [], "chars": [], "char": "outlaw", "weapon": "shift_gauntlet", "name": "PLAYER", "matches": 0, "wins": 0}
+	var d := {"coins": 0, "best": 0.0, "weapons": [], "chars": [], "char": "outlaw", "weapon": "shift_gauntlet", "name": "PLAYER", "matches": 0, "wins": 0, "skills": {}}
 	if FileAccess.file_exists(SAVE_PATH):
 		var got = JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH))
 		if got is Dictionary:
