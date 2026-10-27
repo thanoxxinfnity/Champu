@@ -25,6 +25,7 @@ var _last_slab_t := 0.0
 var _axis := 0                                   # 0 = along Z (the train), 1 = along X
 # timed effects
 var _vortex_t := 0.0
+var _vortex_col := Color.WHITE
 var _vortex_at := Vector3.ZERO
 var _vortex_dir := Vector3.FORWARD
 var _magnet_t := 0.0
@@ -329,6 +330,7 @@ func _vortex(origin: Vector3, dir: Vector3, rng_m: float, force: float, col: Col
 	_vortex_at = origin + dir * minf(rng_m * 0.4, 9.0)
 	_vortex_dir = dir
 	_vortex_t = 1.1
+	_vortex_col = col
 	player.game.fx.ring(_vortex_at, col, 5.0)
 
 
@@ -597,7 +599,7 @@ func _physics_process(delta: float) -> void:
 		if _vortex_t <= 0.0:
 			for d in spawner.in_sphere(_vortex_at, 3.0):
 				spawner.push(d, _vortex_dir * 22.0 + Vector3(0, 4.0, 0))
-			player.game.fx.ring(_vortex_at, Data.WEAPONS[weapon].color, 4.0)
+			player.game.fx.ring(_vortex_at, _vortex_col, 4.0)
 	if _magnet_t > 0.0:
 		_magnet_t -= delta
 		var hold := player.eye() + player.aim_dir() * 2.6
