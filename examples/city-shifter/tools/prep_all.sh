@@ -10,8 +10,10 @@ prep() {  # name out kind tris tex [rot]
 }
 declare -A ROT
 mkdir -p assets/weapons assets/train assets/city assets/props
+# the 15 gauntlets come from Triverse (raw/w_<name>_tv.glb, made from the weapon-card art by tools/gen_assets.py); the Sketchfab picks for them are no longer used
 for w in shift_gauntlet vortex_blaster quantum_breaker gravity_carver plasma_magnet sonic_impactor force_gauntlet seismic_rebounder saber_grapple orbital_crush tactical_beamer thermo_vaporizer chrono_sliders nexus_tether meteor_burster; do
-  prep w_$w assets/weapons/$w.glb gun 2500 512 "${ROT[$w]}"
+  [ -f assets/weapons/$w.glb ] && continue
+  $BL -b -P tools/prep_sf.py -- raw/w_${w}_tv.glb assets/weapons/$w.glb gun 2500 512 "${ROT[$w]}" 2>&1 | grep -E "PREP|Error|Traceback" | head -3
 done
 prep loco assets/train/loco.glb vehicle 9000 1024
 prep car_a assets/train/car_a.glb vehicle 7000 1024

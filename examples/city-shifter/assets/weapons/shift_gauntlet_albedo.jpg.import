@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://7buk7o5y3opm"
+path="res://.godot/imported/shift_gauntlet_albedo.jpg-e389440f55aaadd62af7efbdb6282d80.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "2f396a3364173d52975442f355802b6f"
+}
+
+[deps]
+
+source_file="res://assets/weapons/shift_gauntlet_albedo.jpg"
+dest_files=["res://.godot/imported/shift_gauntlet_albedo.jpg-e389440f55aaadd62af7efbdb6282d80.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1
