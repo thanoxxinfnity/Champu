@@ -95,7 +95,7 @@ yh = (legs['HL'].y + legs['HR'].y) * 0.5
 centre = [c for c in vs if yh + 0.1 * L < c.y < yf - 0.1 * L]
 back_z = max((c.z for c in centre), default=0.7 * Hz)
 spine_z = back_z - 0.12 * Hz
-y_butt = max((c.y for c in vs if c.z > 0.45 * Hz), default=yh - 0.15 * L)
+y_butt = min((c.y for c in vs if c.z > spine_z), default=yh - 0.15 * L)      # the rump: the rearmost point at back height (the tail hangs lower)
 y_tail_end = mn.y
 tail_pts = [c for c in vs if c.y < mn.y + 0.05 * L]
 tail_tip = mean(tail_pts) if tail_pts else Vector((0, mn.y, 0.45 * Hz))
@@ -117,7 +117,7 @@ def V(x, y, z):
     return (x, y, z)
 
 
-bone('Pelvis', V(0, y_butt - 0.08 * L, spine_z), V(0, yh + (yf - yh) * 0.25, spine_z))
+bone('Pelvis', V(0, y_butt + 0.08 * L, spine_z), V(0, yh + (yf - yh) * 0.25, spine_z))
 bone('Spine1', V(0, yh + (yf - yh) * 0.25, spine_z), V(0, yh + (yf - yh) * 0.55, spine_z), 'Pelvis')
 bone('Spine2', V(0, yh + (yf - yh) * 0.55, spine_z), V(0, yf - 0.02 * L, spine_z + 0.01 * Hz), 'Spine1')
 bone('Chest', V(0, yf - 0.02 * L, spine_z + 0.01 * Hz), V(0, yf + 0.06 * L, spine_z + 0.05 * Hz), 'Spine2')
@@ -144,7 +144,7 @@ for side in ('L', 'R'):
     bone(f'H{side}_Shin', V(hx, h.y + 0.02 * L, sz * 0.56), V(hx, h.y - 0.07 * L, sz * 0.34), f'H{side}_Thigh')
     bone(f'H{side}_Cannon', V(hx, h.y - 0.07 * L, sz * 0.34), V(hx, h.y - 0.03 * L, z3), f'H{side}_Shin')
     bone(f'H{side}_Hoof', V(hx, h.y - 0.03 * L, z3), V(hx, h.y, z4), f'H{side}_Cannon')
-tail_root = Vector((0, y_butt - 0.04 * L, spine_z + 0.02 * Hz))
+tail_root = Vector((0, y_butt + 0.04 * L, spine_z + 0.02 * Hz))
 for i in range(4):
     a = tail_root.lerp(tail_tip, i / 4.0)
     b = tail_root.lerp(tail_tip, (i + 1) / 4.0)

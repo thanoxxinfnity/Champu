@@ -5,7 +5,8 @@ extends RefCounted
 ## side-to-side axis, driven by sine gaits with the foot phases of a real horse, and written to the Skeleton3D as bone poses (no AnimationPlayer needed, so
 ## the gait follows the real speed exactly and blends smoothly between the gaits).
 ##
-## A bone is turned about the model's X axis (the side axis) *after* its parent: pose = rest⁻¹ · (parent_global⁻¹ · Rx(θ) · parent_global) · rest.
+## A bone is turned about the model's X axis (the side axis) *after* its parent. Godot's bone pose is the full local transform (it starts equal to the rest),
+## so pose = (parent_global⁻¹ · Rx(θ) · parent_global) · rest.
 
 const LEGS := ["FL", "FR", "HL", "HR"]
 const FRONT := {"FL": true, "FR": true, "HL": false, "HR": false}
@@ -94,7 +95,7 @@ func update(delta: float, speed: float, airborne: bool, steer: float, mood := 0.
 			var lift := maxf(0.0, cos(a))            # the leg is up and moving forward while cos > 0
 			up += w * amp * swing * (0.9 if fr else 1.0)
 			# front: the knee folds back under the forearm in the swing; hind: the hock folds
-			lo += w * amp * (1.5 if fr else -1.2) * lift * (-1.0 if fr else 1.0) * (1.0 if g == 2 else 0.8)
+			lo += w * amp * (1.2 if fr else -0.8) * lift * (-1.0 if fr else 1.0) * (1.0 if g == 2 else 0.8)
 			ca += w * amp * 0.45 * lift * (1.0 if fr else -1.0)
 			ho += w * 0.3 * lift
 		# idle: the weight shifts a little onto one hind leg now and then
@@ -170,6 +171,6 @@ func _pose(i: int, ang: float, twist: float) -> void:
 	if twist != 0.0:
 		world_rot = Basis(Vector3.UP, twist) * world_rot
 	var local_rot: Basis = gp.inverse() * world_rot * gp
-	var q := rest_q.inverse() * local_rot.get_rotation_quaternion() * rest_q
+	var q := local_rot.get_rotation_quaternion() * rest_q
 	skel.set_bone_pose_rotation(i, q)
-	_glob[i] = gp * Basis(rest_q) * Basis(q) if p >= 0 else Basis(rest_q) * Basis(q)
+	_glob[i] = gp * Basis(q)

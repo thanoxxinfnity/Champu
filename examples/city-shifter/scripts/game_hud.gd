@@ -266,8 +266,8 @@ func _draw_all() -> void:
 	_text("JET FUEL", Vector2(24, 76), 14, Color(1, 1, 1, 0.8))
 	_bar(Rect2(24, 82, 220, 14), fuel, Color(1.0, 0.65, 0.15) if fuel > 0.25 else Color(1.0, 0.3, 0.2))
 	# top-centre: distance and round
-	_text("%d m" % int(distance), Vector2(w * 0.5, 40), 28, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, 0.0)
-	_text("%s %d   ·   $%d" % [round_label, round_no, coins], Vector2(w * 0.5, 66), 17, Color(1, 0.88, 0.5), HORIZONTAL_ALIGNMENT_CENTER, 0.0)
+	_text("%d m" % int(distance), Vector2(0, 40), 28, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, w)
+	_text("%s %d   ·   $%d" % [round_label, round_no, coins], Vector2(0, 66), 17, Color(1, 0.88, 0.5), HORIZONTAL_ALIGNMENT_CENTER, w)
 	# the train strip: where everyone is on the roof
 	var sx := w * 0.5 - 130.0
 	if strip:
@@ -327,9 +327,9 @@ func _draw_all() -> void:
 		_text(nm.substr(0, 1) + nm.get_slice(" ", 1).substr(0, 1), rr.get_center() + Vector2(-9, 5), 13, Color.BLACK)
 	# toast and banner
 	if toast_t > 0.0:
-		_text(toast_text, Vector2(w * 0.5, h * 0.72), 20, Color(1, 1, 1, clampf(toast_t * 2.0, 0.0, 1.0)), HORIZONTAL_ALIGNMENT_CENTER, 0.0)
+		_text(toast_text, Vector2(0, h * 0.72), 20, Color(1, 1, 1, clampf(toast_t * 2.0, 0.0, 1.0)), HORIZONTAL_ALIGNMENT_CENTER, w)
 	if banner_t > 0.0:
-		_text(banner_text, Vector2(w * 0.5, h * 0.3), 40, Color(1, 0.9, 0.5, clampf(banner_t * 1.5, 0.0, 1.0)), HORIZONTAL_ALIGNMENT_CENTER, 0.0)
+		_text(banner_text, Vector2(0, h * 0.3), 40, Color(1, 0.9, 0.5, clampf(banner_t * 1.5, 0.0, 1.0)), HORIZONTAL_ALIGNMENT_CENTER, w)
 	# crosshair
 	_canvas.draw_circle(Vector2(w * 0.5 + 0.0, h * 0.5 - 20.0), 3.0, Color(1, 1, 1, 0.8))
 	_canvas.draw_arc(Vector2(w * 0.5, h * 0.5 - 20.0), 11.0, 0.0, TAU, 20, Color(1, 1, 1, 0.45), 1.5, true)

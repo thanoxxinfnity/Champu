@@ -20,8 +20,8 @@ void fragment() {
 	vec2 p = wpos.xz;
 	float big = noise(p * 0.035);
 	float mid = noise(p * 0.18 + 7.0);
-	vec3 a = vec3(0.36, 0.72, 0.30);
-	vec3 b = vec3(0.24, 0.58, 0.28);
+	vec3 a = vec3(0.40, 0.68, 0.30);
+	vec3 b = vec3(0.28, 0.54, 0.26);
 	vec3 col = mix(a, b, smoothstep(0.42, 0.58, big));
 	col = mix(col, col * 1.12 + vec3(0.03, 0.05, 0.0), smoothstep(0.62, 0.66, mid) * 0.8);
 	float tuft = step(0.985, hash(floor(p * 2.2)));

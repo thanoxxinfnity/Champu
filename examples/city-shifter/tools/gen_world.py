@@ -14,6 +14,17 @@ TV = [  # name, prompt, polys
     ('car_body', 'sporty anime hatchback car, pink and white, NO WHEELS, empty wheel wells, body only', 14000),
     ('tire', 'a single car tyre with a silver rim, standing upright, side view', 4000),
     ('monster_tire', 'a single huge monster truck tyre with deep tread and a black rim, standing upright, side view', 6000),
+    # the rest of the garage: ten more cars (bodies only, tyres are mounted in the game)
+    ('sports_body', 'low sporty anime supercar, yellow with a black stripe, NO WHEELS, empty wheel wells, body only', 14000),
+    ('pickup_body', 'rugged pickup truck with an open bed, green, NO WHEELS, empty wheel wells, body only', 14000),
+    ('jeep_body', 'boxy off-road jeep with a spare tyre on the back, desert tan, NO WHEELS, empty wheel wells, body only', 14000),
+    ('van_body', 'cute retro delivery van, mint green and white, NO WHEELS, empty wheel wells, body only', 14000),
+    ('taxi_body', 'japanese city taxi sedan, yellow with a roof lamp, NO WHEELS, empty wheel wells, body only', 14000),
+    ('police_body', 'police patrol car, black and white with roof lights, NO WHEELS, empty wheel wells, body only', 14000),
+    ('bus_body', 'long city bus, blue and cream, big windows, NO WHEELS, empty wheel wells, body only', 18000),
+    ('firetruck_body', 'red fire engine truck with a ladder on top, NO WHEELS, empty wheel wells, body only', 18000),
+    ('buggy_body', 'open dune buggy with a roll cage, orange, NO WHEELS, empty wheel wells, body only', 14000),
+    ('ambulance_body', 'white ambulance van with red cross and roof lights, NO WHEELS, empty wheel wells, body only', 14000),
 ]
 NV = [
     ('tree_jungle_a', 'tall jungle tree with a thick trunk, vines and a big green canopy'),
@@ -31,6 +42,21 @@ NV = [
     ('vending', 'japanese drink vending machine'),
     ('bridge_arch', 'small arched wooden bridge'),
     ('stable', 'small wooden horse stable with a tiled roof'),
+    # more trees, each its own species; "no ground" because the generator likes to add a grass slab under them
+    ('tree_acacia', 'isolated single acacia savanna tree with a flat wide canopy, no ground, no grass base, no platform'),
+    ('tree_pine', 'isolated single tall pine tree with layered dark green branches, no ground, no grass base, no platform'),
+    ('tree_maple', 'isolated single red autumn maple tree with a round canopy, no ground, no grass base, no platform'),
+    ('tree_willow', 'isolated single weeping willow tree with long hanging branches, no ground, no grass base, no platform'),
+    ('tree_baobab', 'isolated single baobab tree with a huge thick trunk and a small crown, no ground, no grass base, no platform'),
+    ('tree_jungle_c', 'isolated single giant rainforest tree with hanging vines and orchids, no ground, no grass base, no platform'),
+    ('tree_jungle_d', 'isolated single broad leaf tropical tree with big dark green leaves, no ground, no grass base, no platform'),
+    ('bamboo', 'isolated bamboo clump with five tall green stalks, no ground, no grass base, no platform'),
+    ('banana', 'isolated single banana plant with big leaves and a fruit bunch, no ground, no grass base, no platform'),
+    ('flower_patch', 'isolated cluster of colourful anime flowers on stems, no ground, no grass base, no platform'),
+    ('log', 'isolated mossy fallen log, no ground, no grass base, no platform'),
+    ('tent', 'small colourful camping tent, no ground, no grass base'),
+    ('windmill', 'small japanese wooden water mill with a wheel, no ground'),
+    ('pagoda', 'small red japanese pagoda tower with curved roofs, no ground'),
 ]
 which = sys.argv[1] if len(sys.argv) > 1 else ''
 ok = True
@@ -43,6 +69,7 @@ if which == 'tv':
         ok &= bool(tv.gen_text(name, f'{prompt}, {ANIME}'))
 elif which == 'nv':
     import nv_gen
-    for name, prompt in NV:
+    lo, hi = (int(sys.argv[2]), int(sys.argv[3])) if len(sys.argv) > 3 else (0, len(NV))
+    for name, prompt in NV[lo:hi]:
         ok &= nv_gen.gen(name, f'anime style, cel shaded, vibrant colors, {prompt}, game asset')
 sys.exit(0 if ok else 1)

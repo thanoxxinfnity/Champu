@@ -1,17 +1,27 @@
 class_name Vehicle
 extends Mount
-## A drivable truck, monster truck or hatchback. The body is a real model made without wheels; four real tyre models are mounted on it, so the tyres really
-## roll with the speed, the front pair steers, the body squats when you accelerate, leans in the bends and bounces on the road (the bigger the truck, the more).
+## A drivable car, truck, bus or monster truck. The body is a real model (its own wheels cut away by tools/prep_vehicle.py, which also measured where they were:
+## scripts/vehicle_data.gd) and four real tyre models are mounted there, so the tyres really roll with the speed, the front pair steers, the body squats when you
+## accelerate, leans in the bends and bounces on the road (the bigger the vehicle, the more).
 ## The driving is arcade (speed and yaw, no wheel simulation): stable on a phone, the same on every machine, and cheap to send over the network.
 
+# kind -> body model, tyre model, length (m), top speed (m/s), acceleration, turn rate, brake, body bounce, body lean
 const SPEC := {
-	"truck": {"title": "CARGO TRUCK", "body": "res://assets/vehicles/truck_body.glb", "tire": "res://assets/vehicles/tire.glb", "len": 7.2, "wid": 2.6, "tire_r": 0.55,
-		"axle": [0.34, -0.3], "ride": 0.55, "max": 24.0, "accel": 8.0, "turn": 0.8, "brake": 20.0, "bob": 0.03, "lean": 0.07, "seat": Vector3(-0.6, 1.9, -1.6), "cam": 9.5},
-	"monster": {"title": "MONSTER TRUCK", "body": "res://assets/vehicles/monster_body.glb", "tire": "res://assets/vehicles/monster_tire.glb", "len": 5.6, "wid": 3.1, "tire_r": 1.05,
-		"axle": [0.31, -0.31], "ride": 1.15, "max": 26.0, "accel": 10.0, "turn": 0.95, "brake": 18.0, "bob": 0.08, "lean": 0.14, "seat": Vector3(0, 2.7, -0.6), "cam": 10.5},
-	"car": {"title": "ANIME HATCHBACK", "body": "res://assets/vehicles/car_body.glb", "tire": "res://assets/vehicles/tire.glb", "len": 4.1, "wid": 1.9, "tire_r": 0.34, "axle": [0.3, -0.3],
-		"ride": 0.32, "max": 38.0, "accel": 13.0, "turn": 1.25, "brake": 26.0, "bob": 0.012, "lean": 0.1, "seat": Vector3(-0.4, 1.0, -0.2), "cam": 7.5},
+	"car": {"title": "ANIME HATCHBACK", "len": 4.1, "max": 38.0, "accel": 13.0, "turn": 1.25, "brake": 26.0, "bob": 0.012, "lean": 0.10},
+	"sports": {"title": "SUPERCAR", "len": 4.4, "max": 50.0, "accel": 17.0, "turn": 1.35, "brake": 30.0, "bob": 0.008, "lean": 0.12},
+	"pickup": {"title": "PICKUP", "len": 5.0, "max": 33.0, "accel": 11.0, "turn": 1.1, "brake": 24.0, "bob": 0.02, "lean": 0.09},
+	"jeep": {"title": "OFF-ROAD JEEP", "len": 4.0, "max": 31.0, "accel": 12.0, "turn": 1.2, "brake": 24.0, "bob": 0.03, "lean": 0.12},
+	"van": {"title": "DELIVERY VAN", "len": 4.8, "max": 30.0, "accel": 9.0, "turn": 1.0, "brake": 22.0, "bob": 0.02, "lean": 0.1},
+	"taxi": {"title": "CITY TAXI", "len": 4.5, "max": 34.0, "accel": 12.0, "turn": 1.15, "brake": 25.0, "bob": 0.012, "lean": 0.1},
+	"police": {"title": "PATROL CAR", "len": 4.6, "max": 43.0, "accel": 15.0, "turn": 1.3, "brake": 28.0, "bob": 0.01, "lean": 0.11},
+	"bus": {"title": "CITY BUS", "len": 10.0, "max": 22.0, "accel": 6.0, "turn": 0.7, "brake": 18.0, "bob": 0.03, "lean": 0.07},
+	"truck": {"title": "CARGO TRUCK", "len": 7.2, "max": 24.0, "accel": 8.0, "turn": 0.8, "brake": 20.0, "bob": 0.03, "lean": 0.07},
+	"firetruck": {"title": "FIRE ENGINE", "len": 8.5, "max": 26.0, "accel": 7.0, "turn": 0.75, "brake": 20.0, "bob": 0.03, "lean": 0.07},
+	"buggy": {"title": "DUNE BUGGY", "len": 3.4, "max": 37.0, "accel": 15.0, "turn": 1.5, "brake": 26.0, "bob": 0.05, "lean": 0.16},
+	"monster": {"title": "MONSTER TRUCK", "len": 5.6, "max": 27.0, "accel": 10.0, "turn": 0.95, "brake": 18.0, "bob": 0.08, "lean": 0.14, "tire": "monster_tire"},
+	"ambulance": {"title": "AMBULANCE", "len": 5.2, "max": 38.0, "accel": 13.0, "turn": 1.1, "brake": 26.0, "bob": 0.015, "lean": 0.1},
 }
+const DIR := "res://assets/vehicles/"
 
 var spec: Dictionary
 var wheels: Array = []                   # [pivot, spin, is_front]
@@ -21,10 +31,11 @@ var _pitch := 0.0
 var _last_speed := 0.0
 var _dust: CPUParticles3D
 var _bumped := 0.0
+var _r := 0.35
 
 
 static func available(k: String) -> bool:
-	return ResourceLoader.exists(String(SPEC[k].body)) and ResourceLoader.exists(String(SPEC[k].tire))
+	return ResourceLoader.exists("%s%s_body.glb" % [DIR, k]) and VehicleData.SPECS.has(k)
 
 
 func setup(id: int, k: String) -> void:
@@ -32,49 +43,52 @@ func setup(id: int, k: String) -> void:
 	kind = k
 	spec = SPEC[k]
 	title = String(spec.title)
-	cam_dist = float(spec.cam)
 	name = "Vehicle%d" % id
 	collision_layer = 8
 	collision_mask = 1
 	var L: float = spec.len
-	var W: float = spec.wid
-	var r: float = spec.tire_r
+	var data: Dictionary = VehicleData.SPECS.get(k, {})
+	var W: float = float(data.get("w", 0.4)) * L
+	var H: float = float(data.get("h", 0.3)) * L
+	_r = float(data.get("r", 0.08)) * L
+	cam_dist = 4.5 + L * 0.55
 	radius = maxf(L * 0.5, 2.4)
 	var cs := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(W * 0.9, 1.6, L * 0.9)
+	box.size = Vector3(W * 0.9, H * 0.8, L * 0.92)
 	cs.shape = box
-	cs.position.y = 0.2 + float(spec.ride) + 0.8
+	cs.position.y = H * 0.5 + 0.1
 	add_child(cs)
 	view = Node3D.new()
 	add_child(view)
-	var body := ModelKit.fitted(String(spec.body), L, "bottom")
+	var body := ModelKit.fitted("%s%s_body.glb" % [DIR, k], L, "bottom")
 	if body != null:
-		body.position.y = float(spec.ride) * 0.8
 		view.add_child(body)
-		Anime.style(body, true, 0.03)
+		Anime.style(body, true, 0.012)
 	else:
-		Mat.box(view, Vector3(0, float(spec.ride) + 0.7, 0), Vector3(W, 1.4, L), Mat.flat(Color(0.8, 0.3, 0.4)))
-	var ax: Array = spec.axle
-	for i in 4:
-		var front := i < 2
-		var sx := -1.0 if i % 2 == 0 else 1.0
+		Mat.box(view, Vector3(0, H * 0.5, 0), Vector3(W, H, L), Mat.flat(Color(0.8, 0.3, 0.4)))
+	var tire_path := "%s%s.glb" % [DIR, String(spec.get("tire", "tire"))]
+	var pts: Array = data.get("wheels", [[-0.17, 0.08, -0.3], [0.17, 0.08, -0.3], [-0.17, 0.08, 0.3], [0.17, 0.08, 0.3]])
+	for i in pts.size():
+		var p: Array = pts[i]
+		var front := float(p[2]) < 0.0
 		var pivot := Node3D.new()
-		pivot.position = Vector3(sx * (W * 0.5 - r * 0.45), r, -L * float(ax[0] if front else ax[1]))
+		pivot.position = Vector3(float(p[0]) * L, _r, float(p[2]) * L)
 		view.add_child(pivot)
 		var spin := Node3D.new()
 		pivot.add_child(spin)
-		var tire := ModelKit.fitted(String(spec.tire), r * 2.0, "center")
+		var tire := ModelKit.fitted(tire_path, _r * 2.0, "center")
 		if tire != null:
+			# the tyre model's axle is along X once fitted by its longest side (a tyre is as tall as it is long)
 			spin.add_child(tire)
-			if sx > 0.0:
-				tire.rotation.y = PI
-			Anime.style(tire, true, 0.02)
+			tire.rotation.y = PI * 0.5                  # the tyre model lies with its axle along Z: turn it to X
+			Anime.style(tire, true, 0.01)
 		else:
-			Mat.cyl(spin, Vector3.ZERO, r, 0.4, Mat.flat(Color(0.1, 0.1, 0.12))).rotation_degrees = Vector3(0, 0, 90)
+			var cyl := Mat.cyl(spin, Vector3.ZERO, _r, _r * 0.8, Mat.flat(Color(0.1, 0.1, 0.12)))
+			cyl.rotation_degrees = Vector3(0, 0, 90)
 		wheels.append([pivot, spin, front])
 	seat = Marker3D.new()
-	seat.position = spec.seat
+	seat.position = Vector3(-W * 0.22, H * 0.75, -L * 0.1)
 	add_child(seat)
 	_dust = CPUParticles3D.new()
 	_dust.amount = 24
@@ -117,7 +131,7 @@ func _drive(delta: float) -> void:
 		acc = float(spec.brake) * thr          # pressing the other way brakes first
 	speed += acc * delta
 	if absf(thr) < 0.05:
-		speed = move_toward(speed, 0.0, (3.0 if is_driven else 5.0) * delta)
+		speed = move_toward(speed, 0.0, ((4.0 if is_driven else 6.0) + absf(speed) * 0.25) * delta)
 	speed -= speed * 0.04 * delta * (speed / mx) * 4.0
 	if action and is_driven:
 		speed = move_toward(speed, 0.0, float(spec.brake) * delta)
@@ -140,11 +154,10 @@ func _drive(delta: float) -> void:
 
 
 func _animate(delta: float) -> void:
-	var r: float = spec.tire_r
 	var mx: float = spec.max
 	var f := clampf(absf(speed) / mx, 0.0, 1.0)
 	for w in wheels:
-		(w[1] as Node3D).rotation.x -= speed * delta / r
+		(w[1] as Node3D).rotation.x -= speed * delta / _r
 		if bool(w[2]):
 			(w[0] as Node3D).rotation.y = -_steer_v * 0.5
 	var accel := (speed - _last_speed) / maxf(delta, 0.0001)

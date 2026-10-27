@@ -14,10 +14,13 @@ const LOOP := [Vector2(-60, 0), Vector2(60, 0), Vector2(130, -50), Vector2(160, 
 const HALF := 330.0                       # the world is HALF*2 square
 const CELL := 80.0
 const TREES := [
-	["res://assets/world/tree_jungle_a.glb", 11.0, 0.34], ["res://assets/world/tree_jungle_b.glb", 10.0, 0.28],
-	["res://assets/world/palm.glb", 9.0, 0.2], ["res://assets/world/cherry_tree.glb", 7.0, 0.08]]
-const UNDER := [["res://assets/world/bush.glb", 1.3, 12], ["res://assets/world/fern.glb", 1.1, 12], ["res://assets/world/rock_small.glb", 1.2, 4],
-	["res://assets/world/rock_big.glb", 3.2, 1]]
+	["res://assets/world/tree_jungle_b.glb", 10.0, 0.1], ["res://assets/world/tree_jungle_c.glb", 13.0, 0.09],
+	["res://assets/world/tree_jungle_d.glb", 9.0, 0.09], ["res://assets/world/palm.glb", 9.0, 0.08], ["res://assets/world/banana.glb", 4.0, 0.06],
+	["res://assets/world/bamboo.glb", 8.0, 0.07], ["res://assets/world/tree_pine.glb", 12.0, 0.08], ["res://assets/world/tree_maple.glb", 9.0, 0.05],
+	["res://assets/world/tree_willow.glb", 9.0, 0.04], ["res://assets/world/tree_acacia.glb", 8.0, 0.04], ["res://assets/world/tree_baobab.glb", 10.0, 0.03],
+	["res://assets/world/cherry_tree.glb", 7.0, 0.06]]
+const UNDER := [["res://assets/world/bush.glb", 1.3, 12], ["res://assets/world/fern.glb", 1.1, 12], ["res://assets/world/flower_patch.glb", 0.8, 8],
+	["res://assets/world/rock_small.glb", 1.2, 4], ["res://assets/world/log.glb", 1.6, 2], ["res://assets/world/rock_big.glb", 3.2, 1]]
 
 var spawn_points: Array[Marker3D] = []
 var progress := 0.0
@@ -67,8 +70,8 @@ func _environment() -> void:
 	_env.ambient_light_energy = 0.9
 	_env.fog_enabled = true
 	_env.fog_light_color = Color(0.8, 0.88, 1.0)
-	_env.fog_density = 0.006
-	_env.fog_sky_affect = 0.25
+	_env.fog_density = 0.003
+	_env.fog_sky_affect = 0.1
 	_env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	var we := WorldEnvironment.new()
 	we.environment = _env
@@ -179,19 +182,19 @@ func _river() -> void:
 	var at := Vector2(100, -28)
 	var mi := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
-	pm.size = Vector2(16.0, 420.0)
+	pm.size = Vector2(16.0, 260.0)
 	mi.mesh = pm
 	var sm := ShaderMaterial.new()
 	sm.shader = load("res://shaders/water.gdshader") as Shader
 	mi.material_override = sm
 	mi.position = Vector3(at.x, 0.03, at.y)
-	mi.rotation.y = deg_to_rad(-52.0)
+	mi.rotation.y = deg_to_rad(35.6)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	var br := ModelKit.fitted("res://assets/world/bridge_arch.glb", 15.0, "bottom")
 	if br != null:
 		br.position = Vector3(at.x, 0.0, at.y)
-		br.rotation.y = deg_to_rad(-52.0 + 90.0 + 0.0)
+		br.rotation.y = deg_to_rad(125.6)
 		add_child(br)
 		Anime.style(br)
 
@@ -235,7 +238,10 @@ func _town() -> void:
 	_place("res://assets/world/vending.glb", Vector3(-30, 0, -8.5), 0.0, 2.1, true)
 	_place("res://assets/world/vending.glb", Vector3(20, 0, 8.5), PI, 2.1, true)
 	_place("res://assets/world/road_sign.glb", Vector3(66, 0, 6), PI * 0.5, 3.0)
-	_place("res://assets/world/stable.glb", Vector3(30, 0, 27), PI, 12.0, true)
+	_place("res://assets/world/stable.glb", Vector3(60, 0, 31), PI, 12.0, true)
+	_place("res://assets/world/pagoda.glb", Vector3(-70, 0, -24), 0.0, 16.0, true)
+	_place("res://assets/world/windmill.glb", Vector3(40, 0, -30), 0.0, 14.0, true)
+	_place("res://assets/world/tent.glb", Vector3(-72, 0, 20), 0.6, 4.0)
 	for i in 5:
 		_place("res://assets/world/cherry_tree.glb", Vector3(-46.0 + float(i) * 24.0, 0, -22.0 if i % 2 == 0 else 22.0), float(i), 8.0)
 
@@ -287,7 +293,7 @@ func _jungle() -> void:
 			for j in count:
 				var p := o + Vector2(rng.randf(), rng.randf()) * CELL
 				var near_road := road_distance(p) < ROAD_W * 0.5 + 4.0
-				var in_town := absf(p.x) < 70.0 and p.y > -30.0 and p.y < 46.0
+				var in_town := absf(p.x) < 82.0 and p.y > -34.0 and p.y < 56.0
 				if near_road or in_town:
 					continue
 				# trees: weighted pick; undergrowth fills the rest
@@ -392,28 +398,33 @@ func gate_position() -> Vector3:
 # ── mounts ───────────────────────────────────────────────────────────────────
 
 func _spawn_mounts() -> void:
-	var specs := [["truck", Vector3(-32, 0, 9.5), -PI * 0.5], ["monster", Vector3(-14, 0, 10.0), -PI * 0.5], ["car", Vector3(4, 0, 9.0), -PI * 0.5],
-		["car", Vector3(36, 0, -9.0), PI * 0.5]]
+	# the car park south of the town: two rows, every kind of vehicle that has a model; the horses by the stable
 	var id := 0
-	for s in specs:
-		var k: String = s[0]
+	var slot := 0
+	for k in Vehicle.SPEC:
+		if not Vehicle.available(k):
+			continue
+		var row := slot % 2
+		var col := slot / 2
 		var v := Vehicle.new()
 		add_child(v)
 		v.setup(id, k)
-		v.position = s[1]
-		v.yaw = s[2]
+		v.position = Vector3(-60.0 + float(col) * 13.0, 0, 38.0 + float(row) * 11.0)
+		v.yaw = PI * 0.5 if row == 0 else -PI * 0.5
 		v.rotation.y = v.yaw
 		mounts.append(v)
 		id += 1
-	for i in 3:
-		var h := Horse.new()
-		add_child(h)
-		h.setup(id)
-		h.position = Vector3(24.0 + float(i) * 5.0, 0, 20.0 - float(i % 2) * 2.0)
-		h.yaw = PI * 0.5 + float(i) * 0.3
-		h.rotation.y = h.yaw
-		mounts.append(h)
-		id += 1
+		slot += 1
+	if Horse.available():
+		for i in 4:
+			var h := Horse.new()
+			add_child(h)
+			h.setup(id)
+			h.position = Vector3(48.0 + float(i) * 4.0, 0, 22.0 + float(i % 2) * 3.0)
+			h.yaw = PI * 0.5 + float(i) * 0.4
+			h.rotation.y = h.yaw
+			mounts.append(h)
+			id += 1
 
 
 func get_mount(id: int) -> Mount:
@@ -487,7 +498,7 @@ func set_view_distance(d: float) -> void:
 		g.visibility_range_end_margin = 12.0
 		g.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 	if _env != null:
-		_env.fog_density = 2.2 / (view_dist + 60.0) * 0.5
+		_env.fog_density = 1.3 / (view_dist + 80.0) * 0.5
 
 
 func set_far_visible(on: bool) -> void:

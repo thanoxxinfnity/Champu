@@ -36,6 +36,7 @@ var _slot := 0
 var _clock := 0.0
 # the lobby
 var lobby3d: Node3D
+var lobby_env: WorldEnvironment            # taken out of the tree during a run: only one WorldEnvironment may be active
 var lobby_cam: Camera3D
 var preview: Avatar
 var ui: CanvasLayer
@@ -143,9 +144,9 @@ func _build_lobby() -> void:
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.7, 0.75, 0.95)
 	env.ambient_light_energy = 0.8
-	var we := WorldEnvironment.new()
-	we.environment = env
-	lobby3d.add_child(we)
+	lobby_env = WorldEnvironment.new()
+	lobby_env.environment = env
+	lobby3d.add_child(lobby_env)
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-40, 30, 0)
 	sun.light_color = Color(1.0, 0.85, 0.7)
@@ -435,6 +436,8 @@ func _refresh_lobby() -> void:
 func _enter_lobby() -> void:
 	state = State.LOBBY
 	lobby3d.visible = true
+	if lobby_env.get_parent() == null:
+		lobby3d.add_child(lobby_env)
 	lobby_cam.make_current()
 	lobby_root.visible = true
 	armory_root.visible = false
@@ -527,6 +530,8 @@ func start_play() -> void:
 	if net.is_host():
 		net.send_event("start", {"mode": mode})
 	lobby3d.visible = false
+	if lobby_env.get_parent() != null:
+		lobby3d.remove_child(lobby_env)
 	lobby_root.visible = false
 	armory_root.visible = false
 	if mode == "world":

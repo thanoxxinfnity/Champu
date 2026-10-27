@@ -74,7 +74,7 @@ func _run(delta: float) -> void:
 	if is_driven:
 		var thr := absf(throttle)
 		if thr > 0.08:
-			want = (lerpf(WALK * 0.6, WALK, clampf(thr / 0.35, 0.0, 1.0)) if thr < 0.35 else (lerpf(WALK, TROT, (thr - 0.35) / 0.35) if thr < 0.7 else lerpf(TROT, GALLOP, (thr - 0.7) / 0.3)))
+			want = _gait_speed(thr)
 			want *= signf(throttle)
 			if want < 0.0:
 				want = maxf(want, -WALK * 0.7)
@@ -97,6 +97,17 @@ func _run(delta: float) -> void:
 	if is_on_wall() and absf(forward().dot(get_wall_normal())) > 0.5:
 		speed *= 0.5
 	_speed_v = speed
+
+
+## Stick push (0..1) -> metres per second: a light push walks, the middle trots, the far end gallops.
+static func _gait_speed(thr: float) -> float:
+	if thr < 0.3:
+		return lerpf(WALK * 0.6, WALK, thr / 0.3)
+	if thr < 0.55:
+		return lerpf(WALK, TROT, (thr - 0.3) / 0.25)
+	if thr < 0.75:
+		return TROT + (thr - 0.55) * 4.0
+	return lerpf(TROT + 0.8, GALLOP, (thr - 0.75) / 0.25)
 
 
 func _animate(delta: float) -> void:

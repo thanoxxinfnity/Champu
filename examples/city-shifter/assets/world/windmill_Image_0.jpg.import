@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://b4u6vpj5ktgi3"
+path="res://.godot/imported/windmill_Image_0.jpg-e1065786d0b188f420bf3509912a80f7.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "cfa3d699090b4804c095a259c3b7f277"
+}
+
+[deps]
+
+source_file="res://assets/world/windmill_Image_0.jpg"
+dest_files=["res://.godot/imported/windmill_Image_0.jpg-e1065786d0b188f420bf3509912a80f7.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1

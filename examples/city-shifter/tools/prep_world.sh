@@ -25,10 +25,22 @@ prep road_sign_nv.glb $W/road_sign.glb 500 512
 prep vending_nv.glb $W/vending.glb 900 512
 prep bridge_arch_nv.glb $W/bridge_arch.glb 2500 512
 prep stable_nv.glb $W/stable.glb 3000 1024
+prep tree_acacia_nv.glb $W/tree_acacia.glb 900 512
+prep tree_pine_nv.glb $W/tree_pine.glb 900 512
+prep tree_maple_nv.glb $W/tree_maple.glb 900 512
+prep tree_willow_nv.glb $W/tree_willow.glb 900 512
+prep tree_baobab_nv.glb $W/tree_baobab.glb 900 512
+prep tree_jungle_c_nv.glb $W/tree_jungle_c.glb 900 512
+prep tree_jungle_d_nv.glb $W/tree_jungle_d.glb 900 512
+prep bamboo_nv.glb $W/bamboo.glb 700 512
+prep banana_nv.glb $W/banana.glb 600 512
+prep flower_patch_nv.glb $W/flower_patch.glb 400 512
+prep log_nv.glb $W/log.glb 500 512
+prep tent_nv.glb $W/tent.glb 1500 512
+prep windmill_nv.glb $W/windmill.glb 3500 1024
+prep pagoda_nv.glb $W/pagoda.glb 3500 1024
 V=assets/vehicles
-prep truck_body_tv.glb $V/truck_body.glb 7000 1024 180
-prep monster_body_tv.glb $V/monster_body.glb 7000 1024 180
-prep car_body_tv.glb $V/car_body.glb 6000 1024 180
+# (the car bodies go through tools/prep_vehicles.sh: their wheels are cut off and measured)
 prep tire_tv.glb $V/tire.glb 1500 512
 prep monster_tire_tv.glb $V/monster_tire.glb 2500 512
 prep jetpack_tv.glb assets/cast/jetpack.glb 3500 1024
