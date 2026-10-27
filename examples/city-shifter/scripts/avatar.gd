@@ -150,7 +150,7 @@ func _make_pack() -> void:
 	if real != null:
 		_pack.add_child(real)
 		_pack_size = real.get_meta("size")
-		_pack.position = Vector3(0, height * 0.66, height * 0.12 + _pack_size.z * 0.5)
+		_pack.position = Vector3(0, height * 0.66, _back_of_body() + _pack_size.z * 0.5 - 0.06 * height)
 		Anime.style(real, true, 0.012)
 	else:
 		var body := Mat.flat(Color(0.35, 0.38, 0.46))
@@ -171,6 +171,51 @@ func _make_pack() -> void:
 		fl.visible = false
 		_pack.add_child(fl)
 		_flames.append(fl)
+
+
+static var _back_cache := {}
+
+
+## How far behind the origin the hero's back is (holder space, +Z = behind): measured once per model from the chest-high vertices, so the pack sits on
+## the body whatever the model's build, coat or hair. A stand-in without a rig uses the fixed guess.
+func _back_of_body() -> float:
+	var key := "%s|%d" % [char_id, int(height * 100.0)]
+	if _back_cache.has(key):
+		return _back_cache[key]
+	var zs: Array[float] = []
+	if rig != null and rig.model != null:
+		var lo := height * 0.50
+		var hi := height * 0.82
+		for mi in rig.model.find_children("*", "MeshInstance3D", true, false):
+			var m := mi as MeshInstance3D
+			if m.mesh == null:
+				continue
+			var xf := rig.transform
+			var cur: Node = m
+			var chain := Transform3D.IDENTITY
+			while cur != null and cur != rig.model.get_parent():
+				if cur is Node3D:
+					chain = (cur as Node3D).transform * chain
+				cur = cur.get_parent()
+			xf = xf * chain
+			for si in m.mesh.get_surface_count():
+				var arr := m.mesh.surface_get_arrays(si)
+				if arr.is_empty() or arr[Mesh.ARRAY_VERTEX] == null:
+					continue
+				var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+				var step := maxi(1, verts.size() / 4000)
+				var i := 0
+				while i < verts.size():
+					var v := xf * verts[i]
+					if v.y >= lo and v.y <= hi and absf(v.x) < height * 0.2:
+						zs.append(v.z)
+					i += step
+	var z := height * 0.12
+	if zs.size() > 20:
+		zs.sort()
+		z = clampf(zs[int(zs.size() * 0.85)], height * 0.05, height * 0.3)
+	_back_cache[key] = z
+	return z
 
 
 ## Spawn protection: the whole figure blinks.
