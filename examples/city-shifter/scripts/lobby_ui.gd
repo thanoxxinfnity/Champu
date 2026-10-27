@@ -929,8 +929,8 @@ func ask(text: String, yes: String, no: String, on_answer: Callable) -> void:
 	p.anchor_bottom = 0.5
 	p.offset_left = -330
 	p.offset_right = 330
-	p.offset_top = -120
-	p.offset_bottom = 120
+	p.offset_top = -95
+	p.offset_bottom = 95
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 16)
 	p.add_child(v)

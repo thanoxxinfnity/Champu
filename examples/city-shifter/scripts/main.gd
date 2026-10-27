@@ -618,13 +618,13 @@ func _show_squad(players: Array) -> void:
 		slot.add_child(a)
 		a.setup(String(pl.get("char", "outlaw")))
 		a.scale = Vector3.ONE * 0.86
-		a.rotation.y = 0.25
+		a.rotation.y = PI + 0.2 * (1.0 if i % 2 == 0 else -1.0)      # facing the camera
 		var tag := Label3D.new()
 		tag.text = "%s%s" % [String(pl.get("name", "PLAYER")), "  ★" if bool(pl.get("host", false)) else ("  ✔" if bool(pl.get("ready", false)) else "")]
-		tag.position = Vector3(0, 1.75, 0)
+		tag.position = Vector3(0, 1.62, 0)
 		tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		tag.font_size = 40
-		tag.pixel_size = 0.004
+		tag.font_size = 32
+		tag.pixel_size = 0.0028
 		tag.outline_size = 12
 		tag.modulate = Color(1, 0.95, 0.6) if bool(pl.get("you", false)) else Color.WHITE
 		slot.add_child(tag)

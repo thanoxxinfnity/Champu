@@ -57,4 +57,8 @@ func _initialize() -> void:
 	T.check(await _until(func() -> bool: return game.state == Main.State.PLAY and game.mc != null, 150.0), "%s: the match started" % role)
 	T.check(await _until(func() -> bool: return game.remotes.size() == 1, 30.0), "%s: I see my friend in the match" % role)
 	T.check(game.match_type == "team", "%s: a team match" % role)
+	if role == "b":
+		FileAccess.open(f + ".b", FileAccess.WRITE).store_string("1")
+	else:
+		await _until(func() -> bool: return FileAccess.file_exists(f + ".b"), 60.0)     # (stay until my friend has seen me too)
 	T.done(self)
