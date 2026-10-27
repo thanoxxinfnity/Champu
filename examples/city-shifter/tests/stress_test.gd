@@ -31,8 +31,9 @@ func _initialize() -> void:
 	var last := p.global_position
 	for target in route:
 		var tgt: Vector2 = target
+		print("waypoint ", tgt, "  frames so far ", frames)
 		var guard := 0
-		while Vector2(p.global_position.x, p.global_position.z).distance_to(tgt) > 6.0 and guard < 900:
+		while Vector2(p.global_position.x, p.global_position.z).distance_to(tgt) > 6.0 and guard < 500:
 			var to := Vector3(tgt.x - p.global_position.x, 0, tgt.y - p.global_position.z).normalized()
 			p.yaw = atan2(-to.x, -to.z)
 			p.move_input = Vector2(0, 1)
