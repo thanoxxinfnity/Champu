@@ -262,7 +262,8 @@ func _sync() -> void:
 	_busy = false
 
 
-## Making a room cleans the house: every lobby whose host stopped updating it more than 10 minutes ago goes, and old handshake nodes too.
+## Making a room cleans the house: every lobby whose host stopped updating it more than 10 minutes ago goes, and old handshake nodes, invites and
+## presence beats too.
 func _sweep_old() -> void:
 	var keys = await db.get_("/lobbies.json?shallow=true")
 	var now := FirebaseRest.now()
@@ -277,6 +278,11 @@ func _sweep_old() -> void:
 			var g = await db.get_("/signal/%s/go/ts.json" % k)
 			if g == null or (g is float or g is int) and now - int(g) > ROOM_TTL:
 				db.delete("/signal/%s.json" % k)
+	var pres = await db.get_("/presence.json")
+	if pres is Dictionary:
+		for k in (pres as Dictionary).keys().slice(0, 200):
+			if not (pres[k] is Dictionary) or now - int(pres[k].get("ts", 0)) > ROOM_TTL:
+				db.delete("/presence/%s.json" % k)                  # a phone that stopped without saying goodbye
 	var inv = await db.get_("/lobby_invites.json?shallow=true")
 	if inv is Dictionary:
 		for k in (inv as Dictionary).keys().slice(0, 40):
