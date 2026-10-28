@@ -114,7 +114,7 @@ func _environment() -> void:
 func _ground() -> void:
 	var mi := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
-	pm.size = Vector2(HALF * 2.0 + 400.0, HALF * 2.0 + 400.0)
+	pm.size = Vector2(HALF * 2.0 + 2400.0, HALF * 2.0 + 2400.0)     # far past the hills: from the skydive no edge of the world shows
 	mi.mesh = pm
 	var sm := ShaderMaterial.new()
 	sm.shader = load("res://shaders/ground.gdshader") as Shader
@@ -356,18 +356,19 @@ func is_blocked(p: Vector2) -> bool:
 
 
 func _mountains() -> void:
-	# a ring of huge boulders as the mountains on the horizon (the same real rock model, scaled up and fogged)
+	# a ring of low, wide boulders as the hills on the horizon (the same real rock model, squashed and fogged). They stay low and far out: tall ones
+	# overhung the edge of the map and hung in the sky like floating islands during the skydive.
 	if not ModelKit.exists("res://assets/world/rock_big.glb"):
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
 	for i in 26:
 		var a := float(i) / 26.0 * TAU
-		var r := HALF + 70.0 + rng.randf() * 40.0
-		var m := ModelKit.fitted("res://assets/world/rock_big.glb", 90.0 + rng.randf() * 80.0, "bottom")
-		m.position = Vector3(cos(a) * r, -6.0, sin(a) * r)
+		var r := HALF + 120.0 + rng.randf() * 40.0
+		var m := ModelKit.fitted("res://assets/world/rock_big.glb", 70.0 + rng.randf() * 30.0, "bottom")
+		m.position = Vector3(cos(a) * r, -10.0, sin(a) * r)
 		m.rotation.y = rng.randf() * TAU
-		m.scale = Vector3(1.0, 1.4 + rng.randf() * 0.8, 1.0)
+		m.scale = Vector3(1.3, 0.55 + rng.randf() * 0.2, 1.3)
 		add_child(m)
 		Anime.style(m)
 		_far.append(m)
@@ -416,6 +417,7 @@ func _strip_plate(mesh: Mesh) -> Mesh:
 	var out := ArrayMesh.new()
 	var dropped := 0
 	var base := 1.0e9
+	var gap_y := _bottom_gap(mesh, bb)
 	for si in mesh.get_surface_count():
 		var arr := mesh.surface_get_arrays(si)
 		var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
@@ -432,7 +434,11 @@ func _strip_plate(mesh: Mesh) -> Mesh:
 			var flat := n.length() > 0.0 and absf(n.normalized().y) > 0.6
 			var short := maxf(a.y, maxf(b.y, d.y)) - minf(a.y, minf(b.y, d.y)) < bb.size.y * 0.06     # the rim of the plate: a low sliver
 			var m := (a + b + d) / 3.0
-			if (flat or short) and m.y < y_cut and Vector2(m.x, m.z).distance_to(c) > trunk:
+			var floor_tri := flat and m.y < bb.position.y + bb.size.y * 0.05          # a square base plate under the trunk itself
+			var top_y := maxf(a.y, maxf(b.y, d.y))
+			var wide := Vector2(maxf(a.x, maxf(b.x, d.x)) - minf(a.x, minf(b.x, d.x)), maxf(a.z, maxf(b.z, d.z)) - minf(a.z, minf(b.z, d.z))).length()
+			var line := wide > maxf(bb.size.x, bb.size.z) * 0.6 and top_y - minf(a.y, minf(b.y, d.y)) < bb.size.y * 0.03   # a long thin sliver
+			if top_y < gap_y or line or floor_tri or (flat or short) and m.y < y_cut and Vector2(m.x, m.z).distance_to(c) > trunk:
 				dropped += 1
 				continue
 			keep.append_array([idx[t], idx[t + 1], idx[t + 2]])
@@ -443,6 +449,34 @@ func _strip_plate(mesh: Mesh) -> Mesh:
 	var res: Mesh = out if dropped > 0 else mesh
 	res.set_meta("base_y", base if base < 1.0e8 else bb.position.y)
 	return res
+
+
+## A loose lump under a model (a stone below a palm, with air between it and the trunk): everything below the lowest gap in the bottom quarter.
+## The trunk then stands on the ground instead of hanging over the lump.
+func _bottom_gap(mesh: Mesh, bb: AABB) -> float:
+	var spans: Array = []
+	for si in mesh.get_surface_count():
+		var arr := mesh.surface_get_arrays(si)
+		var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX] if arr[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		var n := idx.size() if not idx.is_empty() else verts.size()
+		for t in range(0, n - 2, 3):
+			var a := verts[idx[t] if not idx.is_empty() else t]
+			var b := verts[idx[t + 1] if not idx.is_empty() else t + 1]
+			var d := verts[idx[t + 2] if not idx.is_empty() else t + 2]
+			spans.append(Vector2(minf(a.y, minf(b.y, d.y)), maxf(a.y, maxf(b.y, d.y))))
+	spans.sort_custom(func(p: Vector2, q: Vector2) -> bool: return p.y > q.y)
+	# from the top down: the covered band grows while the next triangle reaches it; a hole wider than 2 % of the height near the bottom is the gap
+	var low := bb.end.y
+	var cut := -1.0e9
+	for sp in spans:
+		var v: Vector2 = sp
+		if v.y < low - bb.size.y * 0.02:
+			if low < bb.position.y + bb.size.y * 0.25:
+				cut = low - 0.0001
+				break
+		low = minf(low, v.x)
+	return cut
 
 
 ## One slice of the grid columns (the rng runs on from slice to slice, so every phone grows the same jungle).

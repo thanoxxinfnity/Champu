@@ -86,8 +86,8 @@ static func style_mesh(mesh: Mesh, near_fade := false) -> void:
 			if near_fade:
 				t = t.duplicate() as BaseMaterial3D
 				t.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER
-				t.distance_fade_min_distance = 1.2
-				t.distance_fade_max_distance = 3.5
+				t.distance_fade_min_distance = 2.0
+				t.distance_fade_max_distance = 5.5
 			mesh.surface_set_material(s, t)
 
 

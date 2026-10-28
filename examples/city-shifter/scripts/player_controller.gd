@@ -137,14 +137,14 @@ func setup(g: Node, w: Node, sp: OptimizedSkySpawner, id: String, pid := 1, loca
 	if not (local and not is_bot):
 		nametag = Label3D.new()
 		nametag.text = display_name
-		nametag.font_size = 40
-		nametag.pixel_size = 0.0065
+		nametag.font_size = 48
+		nametag.pixel_size = 0.0075
 		nametag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		nametag.no_depth_test = true
 		nametag.render_priority = 5
 		nametag.outline_size = 12
 		nametag.position = Vector3(0, info.height + 0.55, 0)
-		nametag.visibility_range_end = 45.0
+		nametag.visibility_range_end = 60.0
 		add_child(nametag)
 	set_physics_process(true)
 
@@ -159,7 +159,18 @@ func respawn_at(pos: Vector3, reason := "") -> void:
 
 # ── per frame ────────────────────────────────────────────────────────────────
 
+## Enemies are easy to pick out: their name is red with a dark outline, team mates' blue.
+func _tint_tag() -> void:
+	if nametag == null or game == null:
+		return
+	var me = game.get("player")
+	var foe: bool = me != null and me != self and me.team != team
+	nametag.modulate = Color(1.0, 0.32, 0.3) if foe else Color(0.45, 0.8, 1.0)
+	nametag.outline_modulate = Color(0.15, 0.0, 0.0) if foe else Color(0.0, 0.08, 0.2)
+
+
 func _physics_process(delta: float) -> void:
+	_tint_tag()
 	if not is_local:
 		_follow_snapshots(delta)
 		return

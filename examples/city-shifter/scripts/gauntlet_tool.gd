@@ -116,9 +116,22 @@ func give(id: String) -> bool:
 		dropped.emit(out)
 	inventory.append(id)
 	charge[id] = 1.0
-	equip(id)
+	if weapon == "" or weapon == "nova_blaster" or not inventory.has(weapon) or is_locked(weapon):
+		equip(id)                  # a pick-up only takes the hand from the starter gun or an empty one; otherwise it waits in its slot
 	inventory_changed.emit()
 	return true
+
+
+## The local human's own gun (toasts are for them, not for every bot on the map).
+func _mine() -> bool:
+	return player != null and player.is_local and not player.is_bot
+
+
+func _charged_other() -> String:
+	for id in inventory:
+		if id != weapon and (Data.MELEE.has(id) or not is_locked(id)):
+			return String(id)
+	return ""
 
 
 ## Everything but the free starting pair falls where I die.
@@ -167,7 +180,12 @@ func fire() -> bool:
 	var melee := Data.MELEE.has(weapon)
 	var match_on: bool = player.lethal
 	if match_on and not melee and is_locked(weapon):
-		player.game.toast("%s is recharging: %d s" % [String(Data.WEAPONS[weapon].name), int(ceil((1.0 - charge_of(weapon)) * Data.CHARGE_SECONDS))], 1.2)
+		var other := _charged_other()
+		if other != "":
+			equip(other)                                   # an empty gun: the next one with charge comes up by itself
+			inventory_changed.emit()
+		elif _mine():
+			player.game.toast("%s is recharging: %d s" % [String(Data.WEAPONS[weapon].name), int(ceil((1.0 - charge_of(weapon)) * Data.CHARGE_SECONDS))], 1.2)
 		return false
 	cd_left = cooldown_for(weapon)
 	firing_t = 0.3
@@ -189,7 +207,8 @@ func fire() -> bool:
 		charge[weapon] = maxf(0.0, left)
 		if left <= 0.001:
 			locked[weapon] = true
-			player.game.toast("%s is empty: 60 s to refill" % String(w.name), 1.6)
+			if _mine():
+				player.game.toast("%s is empty: 60 s to refill" % String(w.name), 1.6)
 		inventory_changed.emit()
 	var rng_m: float = lerpf(7.0, 42.0, float(w.range))
 	var force: float = lerpf(6.0, 30.0, float(w.force))
