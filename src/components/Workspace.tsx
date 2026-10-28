@@ -29,6 +29,7 @@ import { LibraryView } from './suites/media/LibraryView';
 import { Model3D } from './suites/media/Model3D';
 import { VideoFlow } from './suites/media/VideoFlow';
 import { CanvasBoard } from './suites/CanvasBoard';
+import { ScreenshotToCode } from './suites/ScreenshotToCode';
 import { MotionStudio } from './suites/MotionStudio';
 import { Workdrive } from './suites/Workdrive';
 import { SkillsManager } from './suites/SkillsManager';
@@ -89,6 +90,7 @@ function FullSuite({ id }: { id: string }) {
   switch (id) {
     case 'library': return <LibraryView />;
     case 'canvas': return <CanvasBoard />;
+    case 'shot2code': return <ScreenshotToCode />;
     case 'motion': return <MotionStudio />;
     case 'video': return <VideoFlow />;
     case 'audio': return <AudioStudio />;
@@ -97,7 +99,7 @@ function FullSuite({ id }: { id: string }) {
     default: return null;
   }
 }
-const FULL_SCREEN = new Set(['library', 'canvas', 'motion', 'video', 'audio', 'model3d', 'skills']);
+const FULL_SCREEN = new Set(['library', 'canvas', 'shot2code', 'motion', 'video', 'audio', 'model3d', 'skills']);
 
 const HAS_TOOL = new Set(['android', 'minecraft', 'studio', 'game', 'image', 'workdrive', 'assets']);
 

@@ -34,10 +34,11 @@ const CAPABILITY_SUITE_META: Record<string, { label: string; icon: string; hint:
 };
 
 /** Opens a viewer or editor of its own, so it has no list of chat sessions. */
-const STANDALONE = new Set(['library', 'canvas', 'motion', 'video', 'audio', 'model3d', 'skills']);
+const STANDALONE = new Set(['library', 'canvas', 'motion', 'shot2code', 'video', 'audio', 'model3d', 'skills']);
 
 const CANVAS_ENTRY: SuiteEntry = { id: 'canvas', label: 'Canvas', icon: '◰', hint: 'Design app or website screens on a board and export them' };
 const MOTION_ENTRY: SuiteEntry = { id: 'motion', label: 'Motion Studio', icon: '◧', hint: 'Layers, keyframes and a timeline — export CSS, GSAP or HTML' };
+const SHOT2CODE_ENTRY: SuiteEntry = { id: 'shot2code', label: 'Screenshot → Code', icon: '⧉', hint: 'Turn a screenshot or mock-up into HTML, Tailwind, React or Vue' };
 const LIBRARY_ENTRY: SuiteEntry = { id: 'library', label: 'Library', icon: '▦', hint: 'Everything you generated — open and zoom up to 50×' };
 
 function BridgeStatusCard({ onOpenSettings }: { onOpenSettings: () => void }) {
@@ -152,6 +153,7 @@ export function Sidebar({ onOpenSettings, onNavigate }: { onOpenSettings: () => 
   const suites: SuiteEntry[] = [
     LIBRARY_ENTRY,
     CANVAS_ENTRY,
+    SHOT2CODE_ENTRY,
     MOTION_ENTRY,
     ...CORE_SUITES,
     ...capabilityTabs
