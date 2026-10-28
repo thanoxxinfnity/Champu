@@ -1,9 +1,11 @@
 class_name Audio
 extends Node
-## Every sound is synthesised at start-up on a thread (no audio files): the train's rumble and rail clack (loop), the jetpack roar (loop), gauntlet zaps,
-## booms, shatter, coin, block placing, hurt. A sound asked for before the build has finished is skipped.
+## Recorded sounds (assets/sfx/*.ogg, CC0: real gunshots from the Free Firearm Sound Library, Kenney's UI and sci-fi packs; tools/prep_sfx.py)
+## where there is one; the rest is synthesised at start-up on a thread: the train's rumble and rail clack (loop), the jetpack roar (loop), the engine,
+## hooves, the whoosh. A sound asked for before the build has finished is skipped.
 
 const RATE := 16000
+const FILES := ["zap", "zap_alt", "zap_low", "shotgun", "boom", "shatter", "hurt", "place", "coin", "ui", "ping", "pickup", "error"]
 var ready_ok := false
 var _streams := {}
 var _thread: Thread
@@ -44,6 +46,10 @@ func _process(_d: float) -> void:
 		_thread.wait_to_finish()
 		_thread = null
 		ready_ok = true
+		for n in FILES:
+			var path := "res://assets/sfx/%s.ogg" % n
+			if ResourceLoader.exists(path):
+				_streams[n] = load(path)
 		_rumble.stream = _streams["rumble"]
 		_rumble.volume_db = -14.0
 		_jet.stream = _streams["jet"]
@@ -59,6 +65,8 @@ func _process(_d: float) -> void:
 func play(name: String, db := 0.0, pitch := 1.0) -> void:
 	if not ready_ok or muted or not _streams.has(name):
 		return
+	if name == "zap" and _streams.has("zap_alt") and _rng.randf() < 0.5:
+		name = "zap_alt"                  # two pistols, so a burst does not repeat the same crack
 	_i = (_i + 1) % _flat.size()
 	var p := _flat[_i]
 	p.stream = _streams[name]

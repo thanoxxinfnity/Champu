@@ -38,7 +38,7 @@ static func style(n: Node, outline := false, width := 0.018) -> void:
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
-## For people: the toon styling, then every opaque material is swapped for the cel shader of shaders/toon_char.gdshader (the same texture, crisp light steps, violet shadows, rim light).
+## For people: the toon styling (both faces drawn, see `_toon_of`), then every opaque material is swapped for the cel shader of shaders/toon_char.gdshader (the same texture, crisp light steps, violet shadows, rim light).
 static func style_char(n: Node, outline := false, width := 0.018, bright := 1.0) -> void:
 	style(n, outline, width)
 	if DisplayServer.get_name() == "headless":
@@ -100,6 +100,7 @@ static func _toon_of(mat: BaseMaterial3D) -> BaseMaterial3D:
 	c.roughness = 0.7
 	c.metallic = minf(c.metallic, 0.25)
 	c.metallic_specular = 0.3
+	c.cull_mode = BaseMaterial3D.CULL_DISABLED      # generated meshes have flipped triangles: one-sided, those showed as holes
 	_toon[mat] = c
 	return c
 

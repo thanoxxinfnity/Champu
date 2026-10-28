@@ -40,7 +40,7 @@ var _parts: Dictionary = {}     # stand-in limbs
 var _last: Dictionary = {}
 
 
-var outline := true             # the ink outline doubles the triangles: only my own avatar has it in a match
+var outline := false            # the inverted-hull ink: off for heroes (it broke into shards on the generated meshes); toon_char.gdshader darkens the edge instead
 
 
 ## Farther than the view radius nothing of this avatar is drawn.
@@ -251,6 +251,10 @@ func _process(delta: float) -> void:
 	_holder.position.y = 0.0
 	if rig != null:
 		var d := _pose()
+		# poses ease into each other: a switch of clip (idle -> walk -> run, a hit, the end of a swing) no longer snaps the body in one frame
+		# (a swing is left crisp: the weapon is animated on its own clock and the arms must keep up with it)
+		if not _last.is_empty():
+			d = PoseLib.mix(_last, d, 1.0 - exp(-delta * (40.0 if attack_t > 0.0 else 16.0)))
 		if grip_r != null and not riding:
 			_solve_arm(d, "R", grip_r)
 			if grip_l != null:
@@ -263,6 +267,7 @@ func _process(delta: float) -> void:
 
 ## Heroes whose legs live inside a long coat (data "gait": "mdm") keep the gentler generated walk and run: the captured jog's high knees fold the coat.
 var _gait_mdm := false
+var _running := false
 var _blob: MeshInstance3D            # the soft shadow on the ground; it stays on the ground while the hero jumps or falls
 
 
@@ -347,7 +352,8 @@ func _pose() -> Dictionary:
 		return {"lean": 2.0, "uL": Vector3(0.75, 0.35 + flail, 0.15), "fL": Vector3(0.6, 0.75, 0.2), "uR": Vector3(0.75, 0.35 - flail, 0.15), "fR": Vector3(0.6, 0.75, 0.2),
 			"tL": Vector3(0.35, -0.93, 0.1), "sL": Vector3(0.3, -0.95, -0.1), "tR": Vector3(0.35, -0.93, -0.1), "sR": Vector3(0.3, -0.95, 0.1)}
 	if ground_speed > 0.35:
-		var run_gait := ground_speed > 3.2
+		_running = ground_speed > (2.7 if _running else 3.5)     # hysteresis: a speed near the switch no longer flips walk <-> run every frame
+		var run_gait := _running
 		var w := _clip("walk")
 		var r := _clip("run")
 		var gait := r if run_gait else w

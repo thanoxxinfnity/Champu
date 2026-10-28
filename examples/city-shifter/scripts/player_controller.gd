@@ -108,7 +108,7 @@ func setup(g: Node, w: Node, sp: OptimizedSkySpawner, id: String, pid := 1, loca
 	cs.position.y = 0.88
 	add_child(cs)
 	avatar = Avatar.new()
-	avatar.outline = local and not is_bot
+	avatar.outline = false        # the inverted-hull ink broke into dark shards around the generated heroes; the cel shader draws an edge line instead
 	add_child(avatar)
 	avatar.setup(id)
 	floor_snap_length = 0.3

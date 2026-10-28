@@ -156,9 +156,10 @@ const CAST := {
 	"mococo": {"name": "MOCOCO ABYSSGARD", "short": "MOCOCO", "title": "Fox of the Abyss", "role": "Fox-girl with a big fluffy tail", "model": "mococo_full", "height": 1.55, "speed": 7.0, "fuel": 110.0, "hp": 85.0, "tint": Color.WHITE,
 		"perk": "Fox reflexes: the air dash costs 40% less fuel.", "dash_mult": 0.6, "male": false, "price": 2000},
 }
-const CAST_ORDER := ["outlaw", "tracker", "mechanic", "viper", "ninja", "school", "engineer", "kunoichi", "cyber", "samurai", "mage", "monk", "pirate", "knight", "kafu", "rachel", "rina", "mococo"]
+# tracker, mechanic and mage stay in CAST (old saves still load them) but are off the roster: their generated meshes were too broken
+const CAST_ORDER := ["outlaw", "viper", "ninja", "school", "engineer", "kunoichi", "cyber", "samurai", "monk", "pirate", "knight", "kafu", "rachel", "rina", "mococo"]
 ## Free at the start; every other survivor is bought in the shop (a character has a small perk, never a weapon: nobody buys an advantage that matters).
-const STARTERS := ["outlaw", "tracker", "mechanic"]
+const STARTERS := ["outlaw", "viper", "school"]
 
 # ── skills ───────────────────────────────────────────────────────────────────
 ## Every hero has its own skill levels (0..SKILL_MAX), bought with coins on the SKILLS screen. Each level is a small bonus; none of them touches the 50 m view radius.

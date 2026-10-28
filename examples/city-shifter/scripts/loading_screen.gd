@@ -93,7 +93,7 @@ func open(hero: String) -> void:
 	if _avatar != null:
 		_avatar.queue_free()
 	_avatar = Avatar.new()
-	_avatar.outline = true
+	_avatar.outline = false
 	_vp.add_child(_avatar)
 	_avatar.setup(hero)
 	_avatar.jetting = true
