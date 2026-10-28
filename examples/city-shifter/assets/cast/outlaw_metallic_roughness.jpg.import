@@ -2,13 +2,10 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dcdscsue3m4b3"
+uid="uid://b3c5wbvgukm7h"
 path="res://.godot/imported/outlaw_metallic_roughness.jpg-61945c1bc0684cefccf546a375fbba70.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "8d10a26acedbd4c5871aea264ac91dc2"
 }
 
 [deps]
@@ -24,7 +21,7 @@ compress/lossy_quality=0.7
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

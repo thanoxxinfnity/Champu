@@ -29,6 +29,7 @@ body = bpy.context.view_layer.objects.active
 body.name = os.path.splitext(os.path.basename(dst))[0]
 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 ADAPTIVE_SPEC = None
+APOSE_RIG = False
 if adaptive:
     import statistics
     vs0 = body.data.vertices
@@ -38,12 +39,15 @@ if adaptive:
         v.co.x -= cx
     zmin0, zmax0 = min(v.co.z for v in vs0), max(v.co.z for v in vs0)
     H0 = zmax0 - zmin0
-    side = sorted(vs0, key=lambda v: -abs(v.co.x))[:max(8, len(vs0) // 60)]
+    upper = [v for v in vs0 if v.co.z > zmin0 + 0.3 * H0]            # (a wide stance made the feet the outermost points)
+    side = sorted(upper, key=lambda v: -abs(v.co.x))[:max(8, len(upper) // 60)]
     A = statistics.median(abs(v.co.x) for v in side) * 1.15           # arm span (half)
     arm_z = statistics.median(v.co.z for v in side)
     legs = [v for v in vs0 if zmin0 + 0.12 * H0 < v.co.z < zmin0 + 0.32 * H0]
     lx = statistics.median(abs(v.co.x) for v in legs if abs(v.co.x) > 0.01) if legs else 0.06 * H0
     lx = min(max(lx, 0.04 * H0), 0.14 * H0)
+    hipx = [abs(v.co.x) for v in vs0 if zmin0 + 0.48 * H0 < v.co.z < zmin0 + 0.52 * H0]
+    lx_top = min(lx, (max(hipx) * 0.5) if hipx else lx)                # the hip joint sits inside the pelvis even when the feet are apart
     z = lambda f: zmin0 + f * H0
     neck_z = arm_z + 0.015 * H0
     B = {}
@@ -56,12 +60,40 @@ if adaptive:
     bone('Chest', [0, 0, z(0.66)], [0, 0, neck_z], 'Spine')
     bone('Neck', [0, 0, neck_z], [0, 0, neck_z + 0.04 * H0], 'Chest')
     bone('Head', [0, 0, neck_z + 0.04 * H0], [0, 0, zmax0], 'Neck')
+    # A-pose (arms hanging away from the body, what image-to-3D usually gives): the side-most points are the hands, low on the body.
+    # The arm then runs from the shoulder to the hand tip along that slant; RigAnimator works from rest directions, so any rest pose works.
+    apose = arm_z < z(0.7)
+    APOSE_RIG = apose
+    tips = {}
+    if apose:
+        shoulder_z = z(0.8)
+        neck_z = shoulder_z + 0.015 * H0
+        for sd, sg in (('L', 1), ('R', -1)):
+            cand = [v for v in vs0 if sg * v.co.x > 0 and z(0.3) < v.co.z < z(0.78)]
+            cand.sort(key=lambda v: -sg * v.co.x)
+            top = cand[:max(6, len(cand) // 150)]
+            tips[sd] = [statistics.median(v.co.x for v in top), statistics.median(v.co.y for v in top), statistics.median(v.co.z for v in top)]
+        sw = 0.11 * H0
+        print('APOSE hand tips', {k: [round(c, 2) for c in t] for k, t in tips.items()})
+        B['Chest']['tail'] = [0, 0, neck_z]
+        B['Neck']['head'] = [0, 0, neck_z]
+        B['Neck']['tail'] = [0, 0, neck_z + 0.04 * H0]
+        B['Head']['head'] = [0, 0, neck_z + 0.04 * H0]
     for sd, sg in (('L', 1), ('R', -1)):
-        bone(f'Shoulder.{sd}', [0.0, 0, arm_z], [sg * 0.2 * A, 0, arm_z], 'Chest')
-        bone(f'UpperArm.{sd}', [sg * 0.2 * A, 0, arm_z], [sg * 0.52 * A, 0, arm_z], f'Shoulder.{sd}')
-        bone(f'LowerArm.{sd}', [sg * 0.52 * A, 0, arm_z], [sg * 0.8 * A, 0, arm_z], f'UpperArm.{sd}')
-        bone(f'Hand.{sd}', [sg * 0.8 * A, 0, arm_z], [sg * A, 0, arm_z], f'LowerArm.{sd}')
-        bone(f'UpperLeg.{sd}', [sg * lx, 0, z(0.52)], [sg * lx * 1.05, 0, z(0.29)], 'Hips')
+        if apose:
+            sh = [sg * sw, 0.0, shoulder_z]
+            t = tips[sd]
+            at = lambda u: [sh[i] + (t[i] - sh[i]) * u for i in range(3)]
+            bone(f'Shoulder.{sd}', [0.0, 0, shoulder_z], sh, 'Chest')
+            bone(f'UpperArm.{sd}', sh, at(0.42), f'Shoulder.{sd}')
+            bone(f'LowerArm.{sd}', at(0.42), at(0.78), f'UpperArm.{sd}')
+            bone(f'Hand.{sd}', at(0.78), at(1.0), f'LowerArm.{sd}')
+        else:
+            bone(f'Shoulder.{sd}', [0.0, 0, arm_z], [sg * 0.2 * A, 0, arm_z], 'Chest')
+            bone(f'UpperArm.{sd}', [sg * 0.2 * A, 0, arm_z], [sg * 0.52 * A, 0, arm_z], f'Shoulder.{sd}')
+            bone(f'LowerArm.{sd}', [sg * 0.52 * A, 0, arm_z], [sg * 0.8 * A, 0, arm_z], f'UpperArm.{sd}')
+            bone(f'Hand.{sd}', [sg * 0.8 * A, 0, arm_z], [sg * A, 0, arm_z], f'LowerArm.{sd}')
+        bone(f'UpperLeg.{sd}', [sg * lx_top, 0, z(0.52)], [sg * lx * 1.05, 0, z(0.29)], 'Hips')
         bone(f'LowerLeg.{sd}', [sg * lx * 1.05, 0, z(0.29)], [sg * lx * 1.05, 0, z(0.06)], f'UpperLeg.{sd}')
         bone(f'Foot.{sd}', [sg * lx * 1.05, 0, z(0.06)], [sg * lx * 1.05, -0.09 * H0, z(0.02)], f'LowerLeg.{sd}')
         bone(f'Toes.{sd}', [sg * lx * 1.05, -0.09 * H0, z(0.02)], [sg * lx * 1.05, -0.15 * H0, z(0.01)], f'Foot.{sd}')
@@ -204,6 +236,14 @@ for v in vs:
             pool = [n for n in body_names if not (n.endswith('.L') and c.x < -.02 * H) and not (n.endswith('.R') and c.x > .02 * H)]
             if abs(c.x) > .09 * H and .68 * H < c.z < .87 * H:   # sleeves follow the arm only
                 pool = [n for n in pool if n.split('.')[0] in ('Shoulder', 'UpperArm', 'LowerArm', 'Hand')]
+    if APOSE_RIG and (joints_file or adaptive):
+        # arms hang beside the body: a point belongs either to an arm or to the body/legs, never both (no thigh stretched by the hand)
+        arm_set = [n for n in pool if n.split('.')[0] in ('UpperArm', 'LowerArm', 'Hand')]
+        rest = [n for n in pool if n not in arm_set]
+        da = min((seg_dist(c, *J[n]) for n in arm_set), default=1e9)
+        dr = min((seg_dist(c, *J[n]) for n in rest), default=1e9)
+        if c.z < J['UpperArm.L'][0].z - 0.04 * H:
+            pool = arm_set if da < dr else rest
     ds = sorted(((seg_dist(c, *J[n]), n) for n in pool))[:3]
     ws = [1 / (max(d, 1e-4) ** 3) for d, _ in ds]
     s = sum(ws)

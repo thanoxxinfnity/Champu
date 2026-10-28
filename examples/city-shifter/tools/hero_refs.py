@@ -36,9 +36,11 @@ def ref(hid, seed=21):
 def ref_pollinations(hid, seed=21):
     """Fallback when the NVIDIA endpoint is down: Pollinations (keyless). Its corner watermark is cut off."""
     import urllib.parse
-    prompt = f'{HEROES[hid]}, anime style 3D game character, full body from head to shoes, standing straight in an A-pose with both arms held out ' \
-             f'away from the body, front view, symmetrical, plain white background, soft studio light'
-    url = 'https://image.pollinations.ai/prompt/' + urllib.parse.quote(prompt) + f'?width=768&height=1152&nologo=true&model=flux&seed={seed}'
+    # a T-pose (arms straight out to the sides) is what tools/autorig_obj.py --adaptive measures; an A-pose rigged into a tangle
+    prompt = f'{HEROES[hid]}, anime style 3D game character in a strict T-pose, both arms stretched straight out horizontally to the sides at ' \
+             f'shoulder height, palms down, legs straight and slightly apart, full body from head to shoes, front view, symmetrical, ' \
+             f'plain white background, soft studio light, character turnaround reference'
+    url = 'https://image.pollinations.ai/prompt/' + urllib.parse.quote(prompt) + f'?width=1024&height=1024&nologo=true&model=flux&seed={seed}'
     for attempt in range(3):
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'curl/8.5.0'})
@@ -46,6 +48,8 @@ def ref_pollinations(hid, seed=21):
                 im = Image.open(io.BytesIO(r.read())).convert('RGB')
         except Exception as e:
             print(hid, 'failed', str(e)[:120])
+            import time
+            time.sleep(20)
             continue
         w, h = im.size
         im = im.crop((0, 0, w, int(h * 0.93)))
@@ -59,5 +63,5 @@ if __name__ == '__main__':
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     ids = args or [h for h in HEROES if h not in ('kafu', 'rachel', 'rina', 'mococo')]
     fn = ref_pollinations if '--pollinations' in sys.argv else ref
-    with cf.ThreadPoolExecutor(3) as ex:
+    with cf.ThreadPoolExecutor(1 if fn is ref_pollinations else 3) as ex:      # (Pollinations answers 402 to parallel calls)
         list(ex.map(fn, ids))

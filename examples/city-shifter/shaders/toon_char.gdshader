@@ -11,7 +11,7 @@ uniform vec3 rim_col : source_color = vec3(1.0, 0.82, 0.93);
 uniform float rim_amt = 0.3;
 uniform float sat = 1.14;
 uniform float edge_dark = 0.45;
-uniform float edge_from = 0.8;
+uniform float edge_from = 0.9;
 uniform float bright = 1.0;            // already-bright textures (the MMD models) are dimmed
 
 void fragment() {
@@ -29,8 +29,9 @@ void fragment() {
 
 void light() {
 	float ndl = dot(NORMAL, LIGHT);
-	float soft = smoothstep(-0.05, 0.1, ndl);
-	float full = smoothstep(0.36, 0.5, ndl);
+	// (soft band edges: the detailed generated heroes have busy normals, and razor steps turned every bump into a speckle)
+	float soft = smoothstep(-0.2, 0.2, ndl);
+	float full = smoothstep(0.3, 0.6, ndl);
 	vec3 shade = mix(shade_tint * 0.45, vec3(0.8), soft);
 	shade = mix(shade, vec3(1.15), full);
 	DIFFUSE_LIGHT += shade * LIGHT_COLOR * ATTENUATION / PI;

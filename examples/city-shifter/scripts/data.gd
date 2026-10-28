@@ -119,11 +119,11 @@ const WEAPON_ORDER := ["shift_gauntlet", "vortex_blaster", "quantum_breaker", "g
 # ── the survivors ────────────────────────────────────────────────────────────
 ## model = file in assets/cast (a rigged glb; a built-in stand-in when it is missing), tint recolours the shared model of the variant.
 const CAST := {
-	"outlaw": {"name": "RYO KAGAMI", "short": "RYO", "title": "Crimson Drifter", "role": "Drifter with a red scarf", "model": "outlaw", "height": 1.78, "speed": 6.4, "fuel": 100.0, "hp": 100.0, "tint": Color.WHITE,
+	"outlaw": {"name": "RYO KAGAMI", "short": "RYO", "title": "Crimson Drifter", "role": "Drifter with a red scarf", "model": "outlaw", "height": 1.78, "bright": 1.15, "speed": 6.4, "fuel": 100.0, "hp": 100.0, "tint": Color.WHITE,
 		"perk": "Quick draw: gauntlet cooldown -15%.", "cd_mult": 0.85, "male": true},
 	"tracker": {"name": "AKARI HOSHINO", "short": "AKARI", "title": "Sky Scout", "role": "Scout in orange", "model": "tracker", "height": 1.72, "speed": 6.8, "fuel": 110.0, "hp": 90.0, "tint": Color.WHITE,
 		"perk": "Sky sense: debris is marked before it lands.", "mark": true, "male": false},
-	"viper": {"name": "YUZU AMAKAWA", "short": "YUZU", "title": "Violet Viper", "role": "Purple-haired tracker", "model": "tracker2", "height": 1.72, "speed": 7.0, "fuel": 100.0, "hp": 90.0, "tint": Color.WHITE,
+	"viper": {"name": "YUZU AMAKAWA", "short": "YUZU", "title": "Violet Viper", "role": "Purple-haired tracker", "model": "viper", "height": 1.68, "speed": 7.0, "fuel": 100.0, "hp": 90.0, "tint": Color.WHITE,
 		"perk": "Light feet: jetpack fuel lasts 20% longer.", "fuel_mult": 1.2, "male": false, "price": 500},
 	"engineer": {"name": "GORO IRONHEART", "short": "GORO", "title": "Bridge Titan", "role": "Builds bridges, takes hits", "model": "engineer", "height": 1.9, "speed": 5.6, "fuel": 90.0, "hp": 150.0, "tint": Color.WHITE,
 		"perk": "Steel hands: bridge blocks last twice as long.", "bridge_mult": 2.0, "male": true, "price": 800},
