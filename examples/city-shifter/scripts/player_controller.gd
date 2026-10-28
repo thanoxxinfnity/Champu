@@ -407,9 +407,15 @@ func die(killer: PlayerController) -> void:
 	if mount != null:
 		leave()
 	velocity = Vector3.ZERO
-	avatar.visible = false
 	if tool != null and tool.held != null:
 		tool.held.visible = false
+	# the hero falls first (a captured death), then bursts into petals
+	avatar.play_clip("death", 1.1)
+	get_tree().create_timer(1.0).timeout.connect(func() -> void:
+		if is_instance_valid(self) and not alive:
+			avatar.visible = false
+			if game != null and game.get("fx") != null:
+				game.fx.shards(global_position + Vector3(0, 0.4, 0), Color(1.0, 0.8, 0.9), 10, 4.0))
 	if game != null and game.get("fx") != null:
 		game.fx.shards(global_position + Vector3(0, 1.0, 0), Color(1.0, 0.8, 0.9), 16, 6.0)
 		game.fx.ring(global_position + Vector3(0, 0.2, 0), Color(1.0, 0.5, 0.7), 3.0)
@@ -426,6 +432,7 @@ func revive(pos: Vector3) -> void:
 	global_position = pos
 	last_safe = pos
 	velocity = Vector3.ZERO
+	avatar.clip_left = 0.0
 	avatar.visible = true
 	if tool != null and tool.held != null:
 		tool.held.visible = true

@@ -43,3 +43,7 @@ All of these were generated for this game, then prepared for phones with Blender
 ## v0.6
 - `assets/weapons/nova_blaster.glb` and `genesis_cannon.glb` are the owner's own Triverse generations (text-to-3D, shared links), decimated by `tools/prep_sf.py` (Blender). The owner's third generation, a "messy dark hair" head piece, is kept only in the gitignored `raw/`.
 - Weapon animation (`scripts/weapon_anim.gd`, the two-bone arm solver in `scripts/avatar.gd`) and the 360 viewer (lobby screen "3D VIEW") are original code of this repository.
+
+## v1.0
+- Body animations (`assets/anim/ual/*.json`: idle, walk, run, sprint, jump, roll, hit, death, sword, pistol, punch, dance and ~40 more) are converted from **Universal Animation Library 1 and 2 (Standard) by Quaternius**, CC0 1.0 (licence texts in `assets/anim/ual/`; https://quaternius.com, mirrored on opengameart.org). `tools/ual_to_clips.py` (Blender) samples every action and stores limb directions, so the same clip drives every hero.
+- `tools/install_mixamo_rig.sh` installs Adobe's **Mixamo Rig** Blender add-on (GPL-3.0) for working with Mixamo characters; Mixamo animations themselves need the owner's Adobe sign-in at mixamo.com and are not shipped.

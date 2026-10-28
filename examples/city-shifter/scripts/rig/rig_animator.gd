@@ -102,4 +102,21 @@ func apply(pose: Dictionary) -> void:
 		skeleton.set_bone_pose_rotation(i, (parent_b.inverse() * nb).get_rotation_quaternion())
 	if pose.has("hips_pos") and idx.has("hips"):
 		var h: int = idx["hips"]
-		skeleton.set_bone_pose_position(h, skeleton.get_bone_rest(h).origin + pose["hips_pos"])
+		skeleton.set_bone_pose_position(h, skeleton.get_bone_rest(h).origin + pose["hips_pos"] * leg_scale())
+
+
+var _leg_scale := -1.0
+
+
+## Pose offsets are metres on a hero whose leg is 0.8 m long; a skeleton in other units (or a shorter hero) scales them by its own leg.
+func leg_scale() -> float:
+	if _leg_scale < 0.0:
+		_leg_scale = 1.0
+		if idx.has("thighL") and idx.has("shinL") and idx.has("footL"):
+			var a := _rest_g[idx["thighL"]].origin
+			var b := _rest_g[idx["shinL"]].origin
+			var c := _rest_g[idx["footL"]].origin
+			var leg := a.distance_to(b) + b.distance_to(c)
+			if leg > 0.0001:
+				_leg_scale = leg / 0.8
+	return _leg_scale

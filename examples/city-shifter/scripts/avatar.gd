@@ -7,7 +7,10 @@ extends Node3D
 
 const MODEL_DIR := "res://assets/cast/"
 const PRIVATE_DIR := "res://private/cast/"
-const CLIPS := {"walk": "walk", "run": "run"}
+# motion-captured game clips (Quaternius Universal Animation Library, CC0; tools/ual_to_clips.py); the older MDM ones stay as a fallback
+const CLIPS := {"walk": "ual/walk", "run": "ual/run", "sprint": "ual/sprint", "idle": "ual/idle", "air": "ual/jump_air", "hit": "ual/hit_chest",
+	"sword": "ual/sword_attack", "death": "ual/death"}
+const LOBBY_CLIPS := ["ual/dance", "ual/yes", "ual/fold_arms", "ual/punch_cross", "ual/sword_combo", "ual/pistol_reload"]
 const PACK := "res://assets/cast/jetpack.glb"
 
 var char_id := ""
@@ -53,6 +56,7 @@ func setup(id: String) -> void:
 	char_id = id
 	var info: Dictionary = Data.CAST.get(id, Data.CAST["outlaw"])
 	height = float(info.get("height", 1.75))
+	_gait_mdm = String(info.get("gait", "")) == "mdm"
 	_holder = Node3D.new()
 	add_child(_holder)
 	var path := "%s%s.glb" % [MODEL_DIR, String(info.get("model", id))]
@@ -253,7 +257,13 @@ func _process(delta: float) -> void:
 		_stand_in_pose()
 
 
+## Heroes whose legs live inside a long coat (data "gait": "mdm") keep the gentler generated walk and run: the captured jog's high knees fold the coat.
+var _gait_mdm := false
+
+
 func _clip(name: String) -> AnimClip:
+	if _gait_mdm and name in ["walk", "run", "sprint"]:
+		return AnimClip.load_clip("run" if name == "sprint" else name)
 	return AnimClip.load_clip(String(CLIPS.get(name, name)))
 
 
@@ -269,7 +279,29 @@ var _emote_t := 0.0
 var _emote_left := 0.0
 
 
+## A whole-body clip played over everything else (lobby emotes, a death, a dance): `play_clip("ual/dance")`.
+var clip_name := ""
+var clip_t := 0.0
+var clip_left := 0.0
+
+
+func play_clip(name: String, secs := -1.0) -> void:
+	var c := _clip(name)
+	if c == null:
+		return
+	clip_name = name
+	clip_t = 0.0
+	clip_left = secs if secs > 0.0 else (1.0e9 if c.loop else c.duration())
+
+
 func _pose() -> Dictionary:
+	if clip_name != "" and clip_left > 0.0:
+		var c := _clip(clip_name)
+		var dt0 := get_process_delta_time()
+		clip_t += dt0
+		clip_left -= dt0
+		if c != null:
+			return c.sample(clip_t)
 	if _emote_left > 0.0:
 		var dt := get_process_delta_time()
 		_emote_t += dt
@@ -284,11 +316,15 @@ func _pose() -> Dictionary:
 			"tL": Vector3(0.55, -0.55, 0.62), "sL": Vector3(0.22, -1.0, -0.2), "ftL": Vector3(0.0, -0.45, 1.0),
 			"tR": Vector3(0.55, -0.55, 0.62), "sR": Vector3(0.22, -1.0, -0.2), "ftR": Vector3(0.0, -0.45, 1.0), "head": -6.0 * lean}
 	if hurt_t > 0.0:
-		return CMPoses.hurt(1.0 - hurt_t / 0.4)
+		var hc := _clip("hit")
+		return hc.at(1.0 - hurt_t / 0.4) if hc != null else CMPoses.hurt(1.0 - hurt_t / 0.4)
 	if attack_t > 0.0:
 		var k := 1.0 - attack_t / 0.3
 		if not melee_body:
 			return CMPoses.aim()
+		var sc := _clip("sword")
+		if sc != null and grip_r == null:
+			return sc.at(0.25 + 0.55 * clampf(k, 0.0, 1.0))      # the swing itself, without the wind-up and the recovery
 		var d := CMPoses.swing(1, clampf(k, 0.0, 1.0), 0)
 		return d
 	if airborne or jetting:
@@ -297,19 +333,27 @@ func _pose() -> Dictionary:
 			return {"lean": 18.0, "uL": Vector3(0.35, -0.35, 0.85), "fL": Vector3(0.2, -0.1, 0.95), "uR": Vector3(0.35, -0.35, 0.85), "fR": Vector3(0.2, -0.1, 0.95),
 				"tL": Vector3(0.1, -0.95, -0.3), "sL": Vector3(0.1, -0.85, -0.55), "ftL": Vector3(0.0, -0.6, 0.8),
 				"tR": Vector3(0.1, -0.97, -0.15), "sR": Vector3(0.1, -0.9, -0.4), "ftR": Vector3(0.0, -0.6, 0.8), "head": -10.0}
+		var ac := _clip("air")
+		if ac != null:
+			_clip_t += get_process_delta_time()
+			return ac.sample(_clip_t)
 		# falling: arms up and out, legs apart
 		var flail := sin(_t * 9.0) * 0.12
 		return {"lean": 2.0, "uL": Vector3(0.75, 0.35 + flail, 0.15), "fL": Vector3(0.6, 0.75, 0.2), "uR": Vector3(0.75, 0.35 - flail, 0.15), "fR": Vector3(0.6, 0.75, 0.2),
 			"tL": Vector3(0.35, -0.93, 0.1), "sL": Vector3(0.3, -0.95, -0.1), "tR": Vector3(0.35, -0.93, -0.1), "sR": Vector3(0.3, -0.95, 0.1)}
 	if ground_speed > 0.35:
-		var run_gait := ground_speed > 3.8
+		var run_gait := ground_speed > 3.2
 		var w := _clip("walk")
 		var r := _clip("run")
 		var gait := r if run_gait else w
+		if ground_speed > 7.5 and _clip("sprint") != null:
+			gait = _clip("sprint")
 		if gait == null:
 			return CMPoses.walk(_t * 8.0, clampf(ground_speed / 4.0, 0.0, 1.4)) if not run_gait else CMPoses.run(_t * 11.0)
 		_clip_t += get_process_delta_time() * clampf(ground_speed / maxf(gait.speed, 0.4), 0.45, 1.8)
 		var d2 := gait.sample(_clip_t)
+		if not _gait_mdm:
+			return d2                                   # captured clips swing their own arms
 		# the generated arms hang still: swing them against the legs
 		var sw := clampf(((d2["tL"] as Vector3).z - (d2["tR"] as Vector3).z) * 0.6, -1.0, 1.0)
 		var bend := 0.8 if run_gait else 0.35
@@ -318,6 +362,9 @@ func _pose() -> Dictionary:
 		d2["fL"] = Vector3(0.1, -0.7 + (0.5 if run_gait else 0.0), bend + 0.5 * maxf(0.0, sw))
 		d2["fR"] = Vector3(0.1, -0.7 + (0.5 if run_gait else 0.0), bend + 0.5 * maxf(0.0, -sw))
 		return d2
+	var ic := _clip("idle")
+	if ic != null:
+		return ic.sample(_t)
 	return CMPoses.idle(_t)
 
 

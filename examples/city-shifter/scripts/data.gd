@@ -147,7 +147,7 @@ const CAST := {
 		"perk": "Plunder: +50% coins from every match.", "coin_mult": 1.5, "male": true, "price": 1600},
 	"knight": {"name": "LUMINA ARGENT", "short": "LUMINA", "title": "Silver Paladin", "role": "Silver-armour knight", "model": "knight", "height": 1.7, "speed": 5.8, "fuel": 90.0, "hp": 140.0, "tint": Color.WHITE,
 		"perk": "Plate armour: 140 HP.", "male": false, "price": 1600},
-	"kafu": {"name": "KAFU", "short": "KAFU", "title": "Silver Idol", "role": "Silver-haired idol in a lavender coat", "model": "kafu", "height": 1.58, "speed": 6.9, "fuel": 105.0, "hp": 85.0, "tint": Color.WHITE,
+	"kafu": {"name": "KAFU", "short": "KAFU", "title": "Silver Idol", "role": "Silver-haired idol in a lavender coat", "model": "kafu", "height": 1.58, "gait": "mdm", "speed": 6.9, "fuel": 105.0, "hp": 85.0, "tint": Color.WHITE,
 		"perk": "Encore: gauntlets recharge 20% faster.", "charge_mult": 1.2, "male": false, "price": 2000},
 	"rachel": {"name": "RACHEL GARDNER", "short": "RACHEL", "title": "Field Nurse", "role": "Gentle medic with endless blonde hair", "model": "rachel", "height": 1.68, "speed": 6.5, "fuel": 100.0, "hp": 100.0, "tint": Color.WHITE,
 		"perk": "First aid: heals 4 HP a second when not hit for 5 s.", "regen": 4.0, "male": false, "price": 2000},

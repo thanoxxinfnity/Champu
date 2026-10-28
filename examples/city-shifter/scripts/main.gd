@@ -339,8 +339,11 @@ func _build_ui() -> void:
 	lobby.char_bought.connect(_buy_char)
 	lobby.hero_tapped.connect(func() -> void:
 		if preview != null:
-			_emote_i = (_emote_i + 1) % CMPoses.EMOTES.size()
-			preview.play_emote(CMPoses.EMOTES[_emote_i])
+			_emote_i = (_emote_i + 1) % (CMPoses.EMOTES.size() + Avatar.LOBBY_CLIPS.size())
+			if _emote_i < CMPoses.EMOTES.size():
+				preview.play_emote(CMPoses.EMOTES[_emote_i])
+			else:
+				preview.play_clip(Avatar.LOBBY_CLIPS[_emote_i - CMPoses.EMOTES.size()], 3.0)
 			audio.play("ui", -6.0, 1.0 + 0.1 * float(_emote_i)))
 	lobby.skill_bought.connect(func(_hero: String, _skill: String) -> void:
 		Data.write_save(save)
