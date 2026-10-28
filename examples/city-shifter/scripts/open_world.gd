@@ -22,8 +22,8 @@ const TREES := [
 	["res://assets/world/tree_jungle_b.glb", 10.0, 0.1], ["res://assets/world/tree_jungle_c.glb", 13.0, 0.09],
 	["res://assets/world/tree_jungle_d.glb", 9.0, 0.09], ["res://assets/world/palm.glb", 9.0, 0.08], ["res://assets/world/banana.glb", 4.0, 0.06],
 	["res://assets/world/bamboo.glb", 8.0, 0.07], ["res://assets/world/tree_pine.glb", 12.0, 0.08], ["res://assets/world/tree_maple.glb", 9.0, 0.05],
-	["res://assets/world/tree_willow.glb", 9.0, 0.04], ["res://assets/world/tree_acacia.glb", 8.0, 0.04], ["res://assets/world/tree_baobab.glb", 10.0, 0.03],
-	["res://assets/world/cherry_tree.glb", 7.0, 0.06]]
+	["res://assets/world/tree_willow.glb", 9.0, 0.04], ["res://assets/world/tree_acacia.glb", 8.0, 0.04], ["res://assets/world/tree_baobab.glb", 10.0, 0.03]]
+# (cherry trees left the scattered jungle: their mesh was loose triangles; the temple's own cherry trees are built by Props)
 const UNDER := [["res://assets/world/bush.glb", 1.3, 12], ["res://assets/world/fern.glb", 1.1, 12], ["res://assets/world/flower_patch.glb", 0.8, 8],
 	["res://assets/world/rock_small.glb", 1.2, 4], ["res://assets/world/log.glb", 1.6, 2], ["res://assets/world/rock_big.glb", 3.2, 1]]
 
@@ -230,13 +230,22 @@ func _river() -> void:
 # ── the town ─────────────────────────────────────────────────────────────────
 
 func _place(path_: String, pos: Vector3, yaw: float, length: float, collide := false, hp := 0.0) -> Node3D:
-	var m := ModelKit.fitted(path_, length, "bottom")
+	var m: Node3D
+	if path_.ends_with("cherry_tree.glb"):
+		m = Props.cherry_tree(length, int(pos.x * 7.0 + pos.z))      # (the generated cherry tree was a cloud of loose triangles)
+	elif path_.ends_with("torii.glb"):
+		m = Props.torii(length)
+	elif path_.ends_with("stone_lantern.glb"):
+		m = Props.stone_lantern(length)
+	else:
+		m = ModelKit.fitted(path_, length, "bottom")
+		if m != null:
+			Anime.style(m)
 	if m == null:
 		return null
 	m.position = pos
 	m.rotation.y = yaw
 	add_child(m)
-	Anime.style(m)
 	var sz: Vector3 = m.get_meta("size")
 	var body: StaticBody3D = null
 	var rect_i := -1

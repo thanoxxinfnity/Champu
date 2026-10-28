@@ -256,10 +256,7 @@ func _build_home() -> Control:
 			dragged[0] = 0.0
 		elif ev is InputEventMouseMotion and (ev.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
 			dragged[0] += absf(ev.relative.x) + absf(ev.relative.y)
-			view_drag.emit(ev.relative)
-		elif ev is InputEventScreenDrag:
-			dragged[0] += absf(ev.relative.x) + absf(ev.relative.y)
-			view_drag.emit(ev.relative))
+			view_drag.emit(ev.relative))           # (a finger arrives here as an emulated mouse drag too: no separate ScreenDrag branch, or it turned twice)
 	tap.pressed.connect(func() -> void:
 		if dragged[0] < 14.0:
 			hero_tapped.emit())
@@ -994,7 +991,7 @@ func _build_weapons() -> Control:
 	gp.offset_left = 18
 	gp.offset_top = 104
 	gp.offset_right = 700
-	gp.offset_bottom = 628
+	gp.offset_bottom = 704                  # (the bottom tabs are hidden on this screen)
 	var gv := VBoxContainer.new()
 	gv.add_theme_constant_override("separation", 8)
 	gp.add_child(gv)
@@ -1230,6 +1227,9 @@ func show_screen(name: String) -> void:
 	screen_changed.emit(name)
 	for k in screens:
 		(screens[k] as Control).visible = (k == name)
+	if not _tabs.is_empty():
+		# the bottom tabs belong to the three main screens; the others have their own back button and the tabs covered their lists
+		(_tabs.values()[0] as Control).get_parent().visible = name in ["home", "chars", "shop"]
 	for k in _tabs:
 		(_tabs[k] as UIKit.AnimeButton).accent = [UIKit.PINK, UIKit.SKY, UIKit.YELLOW][["home", "chars", "shop"].find(k)] if k == name else Color(0.62, 0.58, 0.78)
 		(_tabs[k] as Control).queue_redraw()

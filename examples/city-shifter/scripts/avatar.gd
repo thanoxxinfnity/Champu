@@ -225,19 +225,40 @@ func _back_of_body() -> float:
 
 
 ## Spawn protection: the whole figure blinks.
+## The spawn shield: a soft see-through bubble round the hero (the body used to blink on and off, which read as a glitch).
 func modulate_blink(on: bool) -> void:
-	if on:
-		visible = int(Time.get_ticks_msec() / 120) % 2 == 0
-		_blinking = true
-	elif _blinking:
-		visible = true
+	if on and _bubble == null:
+		_bubble = MeshInstance3D.new()
+		var sm := SphereMesh.new()
+		sm.radius = height * 0.55
+		sm.height = height * 1.1
+		sm.radial_segments = 20
+		sm.rings = 10
+		_bubble.mesh = sm
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.albedo_color = Color(0.55, 0.85, 1.0, 0.16)
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		m.no_depth_test = false
+		_bubble.material_override = m
+		_bubble.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_bubble.position.y = height * 0.52
+		add_child(_bubble)
+	if _bubble != null:
+		_bubble.visible = on
+	if _blinking:
+		visible = true                  # (an avatar left hidden by the old blink comes back)
 		_blinking = false
+
+
+var _bubble: MeshInstance3D
 
 
 func _process(delta: float) -> void:
 	_t += delta
 	if _blob != null:
-		_blob.visible = not airborne and not jetting and not riding
+		_blob.visible = show_blob and not airborne and not jetting and not riding
 	attack_t = maxf(0.0, attack_t - delta)
 	hurt_t = maxf(0.0, hurt_t - delta)
 	for f in _flames:
@@ -268,6 +289,7 @@ func _process(delta: float) -> void:
 ## Heroes whose legs live inside a long coat (data "gait": "mdm") keep the gentler generated walk and run: the captured jog's high knees fold the coat.
 var _gait_mdm := false
 var _running := false
+var show_blob := true                # off where there is no ground under the hero (the loading screen)
 var _blob: MeshInstance3D            # the soft shadow on the ground; it stays on the ground while the hero jumps or falls
 
 

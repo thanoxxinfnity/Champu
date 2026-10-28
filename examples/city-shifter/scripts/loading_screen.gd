@@ -46,7 +46,7 @@ func _ready() -> void:
 	add_child(_root)
 	_rng.seed = 5
 	for i in 16:
-		_blocks.append([_rng.randf(), _rng.randf(), _rng.randf_range(0.08, 0.22), _rng.randf_range(0.5, 1.0), _rng.randf() * TAU, _rng.randi() % BLOCK_COLORS.size(), _rng.randf()])
+		_blocks.append([_rng.randf_range(0.02, 0.86), _rng.randf(), _rng.randf_range(0.12, 0.3), _rng.randf_range(0.5, 1.0), _rng.randf() * TAU, _rng.randi() % BLOCK_COLORS.size(), _rng.randf()])
 	_build_stage()
 	visible = false
 	set_process(false)
@@ -96,10 +96,12 @@ func open(hero: String) -> void:
 	_avatar.outline = false
 	_vp.add_child(_avatar)
 	_avatar.setup(hero)
-	_avatar.jetting = true
-	_avatar.airborne = true
+	# upright, hovering on the jetpack's flame (the flat "superman" flight pose stretched the generated heroes' meshes)
+	_avatar.jetting = false
+	_avatar.airborne = false
 	_avatar.thrust = 1.0
-	_avatar.ground_speed = 9.0
+	_avatar.ground_speed = 0.0
+	_avatar.show_blob = false
 	progress = 0.0
 	shown = 0.0
 	_tip = randi() % TIPS.size()
@@ -139,6 +141,7 @@ func _process(delta: float) -> void:
 		_tip_t = 0.0
 		_tip = (_tip + 1) % TIPS.size()
 	shown = move_toward(shown, progress, delta * 0.7)
+	_fall(delta)
 	if _avatar != null:
 		_avatar.position.y = sin(_t * 2.1) * 0.1
 		_avatar.rotation.z = sin(_t * 1.3) * 0.06
@@ -146,10 +149,26 @@ func _process(delta: float) -> void:
 
 
 func _block_pos(b: Array, w: float, h: float) -> Vector2:
-	# a block falls on a slanted line and comes back at the top
-	var y := fmod(float(b[1]) + _t * float(b[2]), 1.0)
-	var x := fmod(float(b[0]) + y * 0.18 + 1.0, 1.0)
-	return Vector2(x * w, -40.0 + y * (h * 0.86 + 80.0))
+	# b[1] is how far down the block is (0 = just above the top, 1 = gone at the bottom); it drifts a little sideways as it falls.
+	# (It used to be a looping function of time: blocks jumped from one edge to the other and a shot block reappeared mid-air.)
+	var y := float(b[1])
+	var x := float(b[0]) + y * 0.12
+	return Vector2(x * w, -60.0 + y * (h * 0.86 + 120.0))
+
+
+## Blocks fall (a little faster as they go, like real weight) and come back from above the screen at a new place.
+func _fall(delta: float) -> void:
+	for b in _blocks:
+		b[2] = minf(float(b[2]) + delta * 0.12, 0.75)
+		b[1] = float(b[1]) + float(b[2]) * delta
+		if float(b[1]) > 1.05:
+			_respawn_block(b)
+
+
+func _respawn_block(b: Array) -> void:
+	b[0] = _rng.randf_range(0.02, 0.86)
+	b[1] = -_rng.randf_range(0.0, 0.35)
+	b[2] = _rng.randf_range(0.12, 0.3)
 
 
 func _draw_cube(c: CanvasItem, p: Vector2, s: float, rot: float, col: Color) -> void:
@@ -250,7 +269,7 @@ func _draw_all() -> void:
 			var colb2: Color = BLOCK_COLORS[int(_blocks[best][5])]
 			for k in 14:
 				_sparks.append([_beam_to, Vector2.from_angle(_rng.randf() * TAU) * _rng.randf_range(60.0, 260.0) * s, 0.7, colb2])
-			_blocks[best][1] = 0.0                  # it comes back at the top
+			_respawn_block(_blocks[best])            # it comes back from above the screen
 	if _beam_t > 0.0:
 		_beam_t -= get_process_delta_time()
 		var from := hc + Vector2(hr.size.x * 0.17, -hr.size.y * 0.02)

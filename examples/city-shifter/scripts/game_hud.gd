@@ -163,6 +163,8 @@ func _input(e: InputEvent) -> void:
 		_touch(e.index, e.position, e.pressed)
 	elif e is InputEventScreenDrag:
 		_drag(e.index, e.position, e.relative)
+	elif e.device == InputEvent.DEVICE_ID_EMULATION:
+		return                                     # the mouse events a phone makes up from a finger (menus need them): the finger was handled above
 	elif e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
 		_touch(99, e.position, e.pressed)         # mouse stands in for one finger (desktop tests)
 	elif e is InputEventMouseMotion and (e.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:

@@ -65,7 +65,7 @@ def gen_text(name, prompt):
     if os.path.exists(dest):
         return True
     for i, key in enumerate(KEYS):
-        r = call('POST', '/tasks/text-to-model', key, {'prompt': prompt, 'polygon_limit': int(os.environ.get('TV_POLY', 60000)), 'texture_size': int(os.environ.get('TV_TEX', 2048)), 'turbo': False,
+        r = call('POST', '/tasks/text-to-model', key, {'prompt': prompt, 'polygon_limit': int(os.environ.get('TV_POLY', 60000)), 'texture_size': int(os.environ.get('TV_TEX', 2048)), 'turbo': os.environ.get('TV_TURBO', '') == '1',
                                                        'client_order_id': f'cm_{name}_{int(time.time())}', 'allow_duplicate': True})
         if r.get('code') != 0:
             print(f'[{name}] key {i + 1} submit failed: {str(r)[:200]}')
@@ -102,7 +102,7 @@ def gen(name):
             print(f'[{name}] key {i + 1} upload failed: {str(up)[:200]}')
             continue
         r = call('POST', '/tasks/image-to-model', key, {
-            'image_file': fk, 'polygon_limit': int(os.environ.get('TV_POLY', 100000)), 'texture_size': int(os.environ.get('TV_TEX', 2048)), 'turbo': False,
+            'image_file': fk, 'polygon_limit': int(os.environ.get('TV_POLY', 100000)), 'texture_size': int(os.environ.get('TV_TEX', 2048)), 'turbo': os.environ.get('TV_TURBO', '') == '1',
             'client_order_id': f'cm_{name}_{int(time.time())}', 'allow_duplicate': True})
         if r.get('code') != 0:
             print(f'[{name}] key {i + 1} submit failed: {str(r)[:240]}')

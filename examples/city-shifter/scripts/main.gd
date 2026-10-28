@@ -235,26 +235,34 @@ func _build_lobby() -> void:
 			m.rotation.y = yaw
 			lobby3d.add_child(m)
 			Anime.style(m)
-	put.call("res://assets/world/torii.glb", Vector3(0, 0, -7.5), 6.0, 0.0)
-	put.call("res://assets/world/stone_lantern.glb", Vector3(-3.0, 0, -3.5), 1.6, 0.3)
-	put.call("res://assets/world/stone_lantern.glb", Vector3(3.0, 0, -3.5), 1.6, -0.3)
+	var gate := Props.torii(6.0)
+	gate.position = Vector3(0, 0, -7.5)
+	lobby3d.add_child(gate)
+	# lanterns and cherry trees are built in code (Props): the generated ones were a lump and a cloud of loose triangles
+	for sx in [-1.0, 1.0]:
+		var ln := Props.stone_lantern(1.6)
+		ln.position = Vector3(3.0 * sx, 0, -3.5)
+		ln.rotation.y = -0.3 * sx
+		lobby3d.add_child(ln)
 	for i in 7:
 		var a := lerpf(-1.2, 1.2, float(i) / 6.0) + 0.0
-		put.call("res://assets/world/cherry_tree.glb", Vector3(sin(a) * 9.0 + (-3.0 if i % 2 == 0 else 3.0), 0, -cos(a) * 9.0 - 1.0 - float(i % 3) * 2.0), 5.0 + float(i % 3), float(i))
+		var ct := Props.cherry_tree(5.0 + float(i % 3), i)
+		ct.position = Vector3(sin(a) * 9.0 + (-3.0 if i % 2 == 0 else 3.0), 0, -cos(a) * 9.0 - 1.0 - float(i % 3) * 2.0)
+		ct.rotation.y = float(i)
+		lobby3d.add_child(ct)
 	put.call("res://assets/world/pagoda.glb", Vector3(-9.0, 0, -14.0), 9.0, 0.5)
-	put.call("res://assets/world/windmill.glb", Vector3(10.0, 0, -13.0), 8.0, -0.4)
 	var petals := CPUParticles3D.new()
 	petals.amount = 70
 	petals.lifetime = 8.0
 	petals.preprocess = 8.0
 	petals.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	petals.emission_box_extents = Vector3(8, 0.5, 5)
-	petals.position = Vector3(0, 6.0, -2.0)
-	petals.direction = Vector3(0.5, -1, 0.2)
+	petals.emission_box_extents = Vector3(8, 0.5, 3)
+	petals.position = Vector3(0, 6.0, -4.0)             # behind the hero: a petal drifting right past the camera showed as a big pink square
+	petals.direction = Vector3(0.5, -1, 0.0)
 	petals.spread = 30.0
 	petals.initial_velocity_min = 0.5
 	petals.initial_velocity_max = 1.2
-	petals.gravity = Vector3(0.3, -0.5, 0.1)
+	petals.gravity = Vector3(0.3, -0.5, 0.0)
 	petals.angular_velocity_min = -150.0
 	petals.angular_velocity_max = 150.0
 	var qm := QuadMesh.new()
