@@ -26,6 +26,7 @@ signal lan_find
 signal lan_join(ip: String)
 signal weapon_action(id: String)           # unlock or equip (the train-run gauntlet)
 signal weapon_view(id: String)             # open the 360 viewer on it
+signal gfx_changed(level: int)                        # Gfx.NAMES: 0 smooth, 1 standard, 2 ultra
 signal debug_toggled(on: bool)
 signal settings_changed(sens: float, assist: int)      # look sensitivity 0.5..2.0, aim assist 0 off / 1 low / 2 full lock
 signal view_drag(delta: Vector2)           # a finger or mouse dragging over the 3D model (the 360 view)
@@ -55,6 +56,8 @@ var _sens_in: HSlider
 var _sens_val: Label
 var _assist_btn: UIKit.AnimeButton
 var _assist := 2
+var _gfx_btn: UIKit.AnimeButton
+var _gfx := 1
 var _room := {}
 var _petal_t := 0.0
 
@@ -675,12 +678,22 @@ func _build_settings() -> Control:
 		_assist = (_assist + 1) % 3
 		_assist_btn.text = _assist_text()
 		settings_changed.emit(_sens_in.value, _assist))
+	var row := HBoxContainer.new()               # graphics and sound side by side: the panel has no room for another full row
+	row.add_theme_constant_override("separation", 10)
+	v.add_child(row)
+	_gfx_btn = UIKit.button("GRAPHICS: STANDARD", row, "bolt", UIKit.PINK, Vector2(0, 56), 22)
+	_gfx_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_gfx_btn.pressed.connect(func() -> void:
+		_gfx = (_gfx + 1) % 3
+		_gfx_btn.text = "GRAPHICS: " + Gfx.NAMES[_gfx]
+		gfx_changed.emit(_gfx))
 	var dbg := UIKit.button("DEBUG INFO: OFF", v, "bolt", UIKit.PURPLE, Vector2(0, 50), 22)
 	dbg.pressed.connect(func() -> void:
 		var on := dbg.text.ends_with("OFF")
 		dbg.text = "DEBUG INFO: ON" if on else "DEBUG INFO: OFF"
 		debug_toggled.emit(on))
-	var snd := UIKit.button("SOUND: ON", v, "bolt", UIKit.MINT, Vector2(0, 56), 26)
+	var snd := UIKit.button("SOUND: ON", row, "bolt", UIKit.MINT, Vector2(0, 56), 22)
+	snd.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	snd.pressed.connect(func() -> void:
 		var off := snd.text == "SOUND: ON"
 		snd.text = "SOUND: OFF" if off else "SOUND: ON"
@@ -1287,6 +1300,8 @@ func _refresh() -> void:
 		var st: Dictionary = save.get("settings", {})
 		_assist = clampi(int(st.get("assist", 2)), 0, 2)
 		_assist_btn.text = _assist_text()
+		_gfx = clampi(int(st.get("gfx", 1)), 0, 2)
+		_gfx_btn.text = "GRAPHICS: " + Gfx.NAMES[_gfx]
 		_sens_in.set_value_no_signal(float(st.get("sens", 1.0)))
 		_sens_val.text = "LOOK SPEED  x%.2f" % _sens_in.value
 	var sel: Dictionary = Data.CAST[String(save.get("char", "outlaw"))]

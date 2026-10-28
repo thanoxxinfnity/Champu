@@ -45,6 +45,7 @@ var _plants := {}                         # Vector2i cell -> Array of [MultiMesh
 var _gone := {}                           # "cell:index:kind" of the plants already smashed
 var _far: Array = []
 var _env: Environment
+var sun: DirectionalLight3D
 var _petals: CPUParticles3D
 var _gate_t := 0.0
 var _beam: MeshInstance3D
@@ -103,7 +104,7 @@ func _environment() -> void:
 	var we := WorldEnvironment.new()
 	we.environment = _env
 	add_child(we)
-	var sun := DirectionalLight3D.new()
+	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-38, -22, 0)
 	sun.light_color = Color(1.0, 0.95, 0.85)
 	sun.light_energy = 1.25

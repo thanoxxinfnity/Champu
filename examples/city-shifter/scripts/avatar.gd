@@ -59,6 +59,8 @@ func setup(id: String) -> void:
 	_gait_mdm = String(info.get("gait", "")) == "mdm"
 	_holder = Node3D.new()
 	add_child(_holder)
+	_blob = Gfx.blob(0.42 * height / 1.75)
+	add_child(_blob)
 	var path := "%s%s.glb" % [MODEL_DIR, String(info.get("model", id))]
 	if ResourceLoader.exists("%s%s.glb" % [PRIVATE_DIR, id]):
 		path = "%s%s.glb" % [PRIVATE_DIR, id]          # the owner's own licensed model (never in the repository), when it is on this machine
@@ -234,6 +236,8 @@ func modulate_blink(on: bool) -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	if _blob != null:
+		_blob.visible = not airborne and not jetting and not riding
 	attack_t = maxf(0.0, attack_t - delta)
 	hurt_t = maxf(0.0, hurt_t - delta)
 	for f in _flames:
@@ -259,6 +263,7 @@ func _process(delta: float) -> void:
 
 ## Heroes whose legs live inside a long coat (data "gait": "mdm") keep the gentler generated walk and run: the captured jog's high knees fold the coat.
 var _gait_mdm := false
+var _blob: MeshInstance3D            # the soft shadow on the ground; it stays on the ground while the hero jumps or falls
 
 
 func _clip(name: String) -> AnimClip:

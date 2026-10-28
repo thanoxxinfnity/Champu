@@ -408,7 +408,14 @@ func _build_ui() -> void:
 				lobby.show_screen("online")
 				_online_request("join", mt, code)))
 	lobby.settings_changed.connect(func(sens: float, assist: int) -> void:
-		save.settings = {"sens": sens, "assist": assist}
+		var st0: Dictionary = save.get("settings", {})
+		save.settings = {"sens": sens, "assist": assist, "gfx": int(st0.get("gfx", 1))}
+		Data.write_save(save)
+		_apply_settings())
+	lobby.gfx_changed.connect(func(level: int) -> void:
+		var st1: Dictionary = save.get("settings", {}).duplicate()
+		st1["gfx"] = level
+		save.settings = st1
 		Data.write_save(save)
 		_apply_settings())
 	lobby.debug_toggled.connect(func(on: bool) -> void: hud.debug_overlay = on)
@@ -567,6 +574,7 @@ func _apply_settings() -> void:
 		hud.look_sens = 0.0042 * clampf(float(st.get("sens", 1.0)), 0.5, 2.0)
 	if player != null and is_instance_valid(player):
 		player.assist_level = clampi(int(st.get("assist", 2)), 0, 2)
+	Gfx.apply(get_viewport(), world if world != null and is_instance_valid(world) else null, int(st.get("gfx", 1)))
 
 
 func _refresh_lobby() -> void:

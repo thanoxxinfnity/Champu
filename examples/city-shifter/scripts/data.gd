@@ -318,7 +318,7 @@ static func weapon_buyable(id: String, save: Dictionary) -> String:
 
 
 static func load_save() -> Dictionary:
-	var d := {"coins": 0, "best": 0.0, "weapons": [], "chars": [], "char": "outlaw", "weapon": "shift_gauntlet", "name": "PLAYER", "matches": 0, "wins": 0, "skills": {}, "settings": {"sens": 1.0, "assist": 2}}
+	var d := {"coins": 0, "best": 0.0, "weapons": [], "chars": [], "char": "outlaw", "weapon": "shift_gauntlet", "name": "PLAYER", "matches": 0, "wins": 0, "skills": {}, "settings": {"sens": 1.0, "assist": 2, "gfx": 1}}
 	if FileAccess.file_exists(SAVE_PATH):
 		var got = JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH))
 		if got is Dictionary:
