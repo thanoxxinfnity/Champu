@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://bd7pf6ame267s"
+path="res://.godot/imported/tree_pine_albedo.jpg-28df0f37ac873e9ebe5d9a38ddf50753.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "d2781d6d2b6d6e61de7ebf8506cf6052"
+}
+
+[deps]
+
+source_file="res://assets/world/tree_pine_albedo.jpg"
+dest_files=["res://.godot/imported/tree_pine_albedo.jpg-28df0f37ac873e9ebe5d9a38ddf50753.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1

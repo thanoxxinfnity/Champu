@@ -157,7 +157,7 @@ const CAST := {
 		"perk": "Fox reflexes: the air dash costs 40% less fuel.", "dash_mult": 0.6, "male": false, "price": 2000},
 }
 # tracker, mechanic and mage stay in CAST (old saves still load them) but are off the roster: their generated meshes were too broken
-const CAST_ORDER := ["outlaw", "viper", "ninja", "school", "engineer", "kunoichi", "cyber", "samurai", "monk", "pirate", "knight", "kafu", "rachel", "rina", "mococo"]
+const CAST_ORDER := ["outlaw", "viper", "ninja", "school", "engineer", "kunoichi", "cyber", "samurai", "pirate", "knight", "kafu", "rachel", "rina", "mococo"]
 ## Free at the start; every other survivor is bought in the shop (a character has a small perk, never a weapon: nobody buys an advantage that matters).
 const STARTERS := ["outlaw", "viper", "school"]
 

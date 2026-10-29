@@ -328,6 +328,8 @@ const VILLAGES := [Vector2(140, 120), Vector2(-120, -170), Vector2(220, -60), Ve
 
 ## An enterable house at `pos` facing `yaw` (its door looks along +Z turned by yaw). Its footprint keeps the jungle out.
 func _house(pos: Vector3, yaw: float, w: float, d: float, n_floors: int, style: int) -> House:
+	if OS.get_environment("CS_NO_HOUSES") != "":      # (profiling only)
+		return null
 	var h := House.new().build(w, d, n_floors, style)
 	h.position = pos
 	h.rotation.y = yaw
@@ -387,6 +389,22 @@ func _district() -> void:
 		var o := district.rect.position + Vector2(CityDistrict.STREET + 2.0 + float(i) * 24.0, CityDistrict.STREET + 1.0)
 		_place("res://assets/world/vending.glb", Vector3(o.x, 0, o.y), 0.0, 2.1, true, 60.0)
 	_place("res://assets/world/road_sign.glb", Vector3(district.rect.position.x + ext + 2.0, 0, DISTRICT_AT.y), -PI * 0.5, 3.0)
+	_district_shops()
+
+
+## A ring of enterable shops and flats (two or three floors) round the downtown, their doors to the towers: the city can be entered, not only looked at.
+func _district_shops() -> void:
+	var c := district.rect.get_center()
+	var half := district.rect.size.x * 0.5 + 16.0
+	var k := 0
+	for side in 4:
+		for off in [-34.0, 34.0]:
+			var local := [Vector2(off, -half), Vector2(half, off), Vector2(off, half), Vector2(-half, off)][side] as Vector2
+			var p := c + local
+			if road_distance(p) < ROAD_W * 0.5 + 8.0 or is_blocked(p):
+				continue
+			_house(Vector3(p.x, 0, p.y), atan2(c.x - p.x, c.y - p.y), 12.0, 9.0, 3 if (side + k) % 2 == 0 else 2, 10 + k)
+			k += 1
 
 
 ## True when a (x, z) point lies inside a building, a shop or another solid prop.

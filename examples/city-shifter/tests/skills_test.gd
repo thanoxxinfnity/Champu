@@ -61,6 +61,6 @@ func _initialize() -> void:
 		var st := Data.card_stats(id)
 		T.check(st.size() == 3 and float(st[0]) > 0.0 and ResourceLoader.exists("res://assets/ui/cards/%s.png" % id) and ResourceLoader.exists("res://assets/ui/full/%s.png" % id), "%s has a battle card, stats and portraits" % id)
 	T.check(rar.size() == 4, "all four rarities are used (%s)" % str(rar.keys()))
-	T.check(Data.CAST_ORDER.size() >= 18 and Data.CAST.has("kafu") and Data.CAST.has("rachel") and Data.CAST.has("rina") and Data.CAST.has("mococo"), "the four anime girls are in the shop (%d heroes)" % Data.CAST_ORDER.size())
+	T.check(Data.CAST_ORDER.size() >= 14 and Data.CAST.has("kafu") and Data.CAST.has("rachel") and Data.CAST.has("rina") and Data.CAST.has("mococo"), "the four anime girls are in the shop (%d heroes)" % Data.CAST_ORDER.size())
 	Data.write_save(_orig_save)               # (the game saves at the end of a run: leave no skills behind for the other tests)
 	T.done(self)

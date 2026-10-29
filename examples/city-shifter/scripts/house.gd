@@ -355,6 +355,8 @@ func _flush() -> void:
 		var mi := MeshInstance3D.new()
 		mi.mesh = mesh
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.visibility_range_end = 150.0              # far houses are not drawn (the fog hides them anyway): cheaper on a phone
+		mi.visibility_range_end_margin = 10.0
 		add_child(mi)
 	_surf.clear()
 
