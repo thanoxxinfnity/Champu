@@ -1,7 +1,7 @@
 /** public/skills/index.json, written by scripts/vendor-skill-library.mjs. */
 export interface LibSkill {
   id: string;
-  source: 'superpowers' | 'anthropic' | 'agentic';
+  source: 'superpowers' | 'anthropic' | 'agentic' | 'chomu';
   description: string;
   /** Distinctive words from the name and description; what the selector matches a request against. */
   kw: string[];

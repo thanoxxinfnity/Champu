@@ -11,7 +11,7 @@ function clip(text: string, max: number): string {
   return `${cut.slice(0, Math.max(cut.lastIndexOf('\n'), max * 0.8))}\n…(trimmed)`;
 }
 
-const SOURCE_NAME = { superpowers: 'obra/superpowers', anthropic: 'anthropics/skills', agentic: 'sickn33/agentic-awesome-skills' } as const;
+const SOURCE_NAME = { superpowers: 'obra/superpowers', anthropic: 'anthropics/skills', agentic: 'sickn33/agentic-awesome-skills', chomu: 'Chomugiri' } as const;
 
 export interface LibContext { text: string; summary: string; ids: string[] }
 
@@ -82,6 +82,7 @@ export function renderSkillsOverview(index: LibIndex, odCounts: { skills: number
     `- obra/superpowers (${by('superpowers')}) — how to work: brainstorm, plan, test first, debug, verify, review`,
     `- anthropics/skills (${by('anthropic')}) — Claude API, web-app testing, internal comms, writing skills`,
     `- sickn33/agentic-awesome-skills (${by('agentic')}) — ${top}`,
+    `- Chomugiri's own (${by('chomu')}) — free no-key tools (search, crawl, scrape, yt-dlp, whisper, browser-use, Agent Reach), screenshot-to-code, finding new skills yourself, Open Design control, lessons, mobile-first`,
     '',
     '**It picks the skill itself.** When a request needs one — a bug to fix, tests to write, an API to design, a database, a deploy pipeline, an SEO audit — that skill is put in front of the AI and the chat says which. Design work goes to Open Design.',
     '',

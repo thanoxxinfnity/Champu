@@ -16,7 +16,7 @@ import { SkillIcon } from '@/components/SkillIcon';
 import { makeMemory, type Memory } from '@/lib/memory/memory';
 import { forget, loadMemories, memoryEnabled, remember, saveMemories, setMemoryEnabled } from '@/lib/memory/store';
 
-const SOURCE_LABEL = { superpowers: 'superpowers', anthropic: 'anthropic', agentic: 'agentic-awesome-skills' } as const;
+const SOURCE_LABEL = { superpowers: 'superpowers', anthropic: 'anthropic', agentic: 'agentic-awesome-skills', chomu: 'Chomugiri' } as const;
 
 /** The built-in skills library: what it holds, whether it is used automatically, and a search that hands a /use line to the dock. */
 function SkillLibrary() {

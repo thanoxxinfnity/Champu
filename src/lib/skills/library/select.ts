@@ -29,6 +29,9 @@ const SITUATIONS: Array<[RegExp, string]> = [
   [/\b(playwright|e2e|end[- ]to[- ]end test|browser test|test (the|my) (web ?app|site|page)|ui test)\b/i, 'webapp-testing'],
   [/\b(status update|newsletter|company update|internal (comms|communication)|3p update|leadership update)\b/i, 'internal-comms'],
   [/\b(write|create|make|author) (a |new )?skill\b/i, 'skill-creator'],
+  [/\b(find|search|hunt|dhund(o|na|ta)?|best|better) (a |an |the |me )?(new )?skills?\b|\bskills? (dhund|dhoondh|find|search)/i, 'find-skills'],
+  [/\b(galti|galat|wrong|mistake|phir se wahi|again the same|dobara (wahi|galat))\b|\blesson\b/i, 'lessons-protocol'],
+  [/\b(screenshot|mock-?up|mockup|sketch|figma|design image) (to|se|into|ko) (code|html|react|vue|tailwind|app|page)|\b(copy|clone|recreate) (this|the) (ui|screen|page|design)\b/i, 'screenshot-to-code'],
 ];
 
 export interface LibPick { id: string; why: string; score: number }

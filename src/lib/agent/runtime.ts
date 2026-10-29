@@ -24,7 +24,7 @@ import { motionContext, wantsMotion } from '@/lib/suites/web/motion';
 import { designAuditContext, wantsDesignAudit } from '@/lib/suites/web/design-audit';
 import { parseSkillsCommand, renderSkillsOverview, renderSkillsSearch, skillLibraryContext, type SkillsCommand } from '@/lib/skills/library/context';
 import type { LibIndex } from '@/lib/skills/library/types';
-import { CAPTURE_SYSTEM, MEMORY_HELP, captureInput, findToForget, formatMemory, looksSecret, makeMemory, memoryNote, parseMemory, parseObservations, recall, renderList, worthCapturing, type MemoryCommand } from '@/lib/memory/memory';
+import { CAPTURE_SYSTEM, LESSON_SYSTEM, MEMORY_HELP, captureInput, findToForget, formatLessons, formatMemory, isCorrection, lessonInput, looksSecret, makeMemory, memoryNote, parseMemory, parseObservations, recall, renderList, worthCapturing, type MemoryCommand } from '@/lib/memory/memory';
 import { forget, loadMemories, markUsed, memoryEnabled, remember, saveMemories, setMemoryEnabled } from '@/lib/memory/store';
 import { OD_HELP, openDesignContext, parseOd, type OdCommand } from '@/lib/skills/opendesign/context';
 import { renderCatalog, renderPromptSearch } from '@/lib/skills/opendesign/catalog';
@@ -1059,7 +1059,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
           reply = `Forgot ${hits.length === 1 ? 'it' : `${hits.length} things`}:\n${hits.map((h) => `- ${h.text}`).join('\n')}`;
         }
       } else {
-        const mem = looksSecret(memCmd.text) ? null : makeMemory({ text: memCmd.text, kind: /\b(hinglish|hindi|english|style|tone|prefer|pasand|chahiye|hamesha|always|never|mat )\b/i.test(memCmd.text) ? 'preference' : 'fact' }, { pinned: true });
+        const mem = looksSecret(memCmd.text) ? null : makeMemory({ text: memCmd.text, kind: memCmd.lesson ? 'lesson' : /\b(hinglish|hindi|english|style|tone|prefer|pasand|chahiye|hamesha|always|never|mat )\b/i.test(memCmd.text) ? 'preference' : 'fact' }, { pinned: true });
         if (!mem) reply = looksSecret(memCmd.text) ? 'That looks like a password or a key, so I did not save it. Memory is for things like preferences and decisions, never secrets.' : 'That is too short to be worth remembering. Say a little more.';
         else {
           const r = await remember([mem]);
@@ -1277,9 +1277,13 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
     }
     let memoryText: string | undefined;
     if (await memoryEnabled().catch(() => false)) {
-      const picked = recall(await loadMemories().catch(() => []), modelInput);
+      const everything = await loadMemories().catch(() => []);
+      const picked = recall(everything, modelInput).filter((m) => m.kind !== 'lesson');
+      // Lessons are not recalled by resemblance: all of them are in front of the model every time, so a mistake is never repeated.
+      const lessonText = formatLessons(everything);
+      if (lessonText) memoryText = lessonText;
       if (picked.length) {
-        memoryText = formatMemory(picked);
+        memoryText = [memoryText, formatMemory(picked)].filter(Boolean).join('\n\n');
         void markUsed(picked.map((m) => m.id));
         // Said out loud only when something beyond the standing preferences was needed, so it is never a hidden influence
         // and never chatter on every message.
@@ -2919,7 +2923,28 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
           const state = useWorkspace.getState();
           const last = [...state.messages].reverse().find((m) => m.id === assistantId || (m.role === 'assistant' && m.createdAt >= startedAt && !m.error));
           const outcome = (last?.content ?? '').replace(/```[\s\S]*?```/g, ' ').trim();
-          if (!worthCapturing(modelInput ?? input, outcome)) return;
+          const said = modelInput ?? input;
+          if (isCorrection(said) && outcome.length >= 20) {
+            // The user is correcting a mistake: write it down as a rule that is shown in every later session.
+            const before = [...state.messages].reverse().find((m) => m.role === 'assistant' && m.createdAt < startedAt && m.content.trim().length > 0);
+            const learned = await complete({
+              provider: selection.provider,
+              model: selection.model,
+              json: true,
+              maxTokens: 400,
+              custom,
+              messages: [{ role: 'system', content: LESSON_SYSTEM }, { role: 'user', content: lessonInput({ before: (before?.content ?? '').replace(/```[\s\S]*?```/g, ' code '), correction: said, after: outcome }) }],
+            }, undefined, 30_000);
+            const rules = parseObservations(learned ?? '').map((m) => ({ ...m, kind: 'lesson' as const, pinned: true }));
+            if (rules.length) {
+              await remember(rules);
+              if (pipe.memfile) await saveMemoryFile(useWorkspace.getState().bridge, [...useWorkspace.getState().files.keys()]);
+              const note = { id: uid('msg'), role: 'system' as const, content: `::brain:: Lesson kept — ${rules[0].text}`, createdAt: Date.now() };
+              if (isCurrent()) useWorkspace.getState().insertMessageBefore(assistantId, note);
+              void appendMessage({ ...note, sessionId, suite });
+            }
+          }
+          if (!worthCapturing(said, outcome)) return;
           const captured = await complete({
             provider: selection.provider,
             model: selection.model,

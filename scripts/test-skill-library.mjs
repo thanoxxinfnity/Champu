@@ -16,7 +16,7 @@ const ids = (q, o) => pickSkills(q, index, o).map((p) => p.id);
 test('the library is complete and every skill file exists', () => {
   assert.ok(index.skills.length > 500);
   for (const s of index.skills) assert.ok(existsSync(new URL(`files/${s.id}.md`, root)), s.id);
-  assert.deepEqual(Object.keys(index.sources).sort(), ['agentic', 'anthropic', 'superpowers']);
+  assert.deepEqual(Object.keys(index.sources).sort(), ['agentic', 'anthropic', 'chomu', 'superpowers']);
 });
 
 test('nothing offensive or design-duplicated came in', () => {
@@ -77,4 +77,16 @@ test('a method skill and a topic skill come together, one does not push the othe
   assert.equal(got[0], 'systematic-debugging');
   assert.ok(got.includes('redis'), got.join(','));
   assert.equal(got.length, 2);
+});
+
+test('Chomugiri\'s own skills are in the library and are picked for the jobs they are for', () => {
+  const own = index.skills.filter((s) => s.source === 'chomu').map((s) => s.id);
+  for (const id of ['free-web-search', 'crawl4ai-markdown', 'scrapling-fetch', 'yt-dlp-media', 'browser-use-agent', 'whisper-cpp-transcribe', 'agent-reach-channels', 'screenshot-to-code', 'find-skills', 'open-design-control', 'lessons-protocol', 'mobile-first-delivery']) assert.ok(own.includes(id), id);
+  const pick = (q) => pickSkills(q, index, { max: 3 }).map((p) => p.id);
+  assert.ok(pick('youtube video ka subtitle nikalo yt-dlp se').includes('yt-dlp-media'));
+  assert.ok(pick('transcribe this audio recording with whisper offline').includes('whisper-cpp-transcribe'));
+  assert.ok(pick('is screenshot se code bana do, screenshot to code html').includes('screenshot-to-code'));
+  assert.ok(pick('mere liye ek achha skill dhundo jo rigging sikhaye').includes('find-skills'));
+  assert.ok(pick('ye galat hai phir se wahi galti ki tumne').includes('lessons-protocol'));
+  assert.ok(pick('crawl this docs website into clean markdown with crawl4ai').includes('crawl4ai-markdown'));
 });

@@ -135,6 +135,22 @@ Things the user told you to remember, and what earlier work decided or learned. 
 ${list.map((m) => `- (${m.kind}) ${m.text}`).join('\n')}`;
 }
 
+/** The standing lessons: every one of them goes into every prompt (not only when the request resembles it) — a mistake that was made once is never made again. */
+export function formatLessons(list: Memory[], max = 14): string {
+  const lessons = list.filter((m) => m.kind === 'lesson').sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt).slice(0, max);
+  if (!lessons.length) return '';
+  return `## LESSONS — mistakes already made with this user. Never repeat them.
+Each line is a rule learned the hard way in an earlier session. Check your plan against every one before you act, and do not mention this list unless it is asked for.
+${lessons.map((m) => `- ${m.text}`).join('\n')}`;
+}
+
+/** Whether the user is correcting the assistant ("galat hai", "phir wahi galti", "not working", "you broke it"): that is a lesson waiting to be written down. */
+export function isCorrection(text: string): boolean {
+  const t = text.toLowerCase();
+  if (t.length < 8 || t.length > 1500) return false;
+  return /\b(galat|galti|ghalat|wrong|mistake|you (broke|forgot|ignored|missed|messed)|still (not|broken|wrong)|not working|nahi (chal|ho|kar)|kaam nahi|kam nahi|phir se wahi|wahi galti|again the same|same (mistake|problem|bug|error) again|fir se|dobara (se )?(wahi|galat)|maine (kaha|bola) tha|i (told|said|asked) you|didn'?t (i|I) say|broken|toot|tuta|bekaar|bakwas|why (did|are) you)\b/i.test(t);
+}
+
 export const memoryNote = (list: Memory[]): string => `::brain:: Remembered from before — ${list.length} thing${list.length === 1 ? '' : 's'} used.`;
 
 // ── Commands ("/memory …" and plain words) ──────────────────────────────────
@@ -142,7 +158,7 @@ export const memoryNote = (list: Memory[]): string => `::brain:: Remembered from
 export type MemoryCommand =
   | { kind: 'help' }
   | { kind: 'list'; query: string }
-  | { kind: 'add'; text: string; natural: boolean }
+  | { kind: 'add'; text: string; natural: boolean; lesson?: boolean }
   | { kind: 'forget'; query: string; natural: boolean }
   | { kind: 'clear' }
   | { kind: 'toggle'; on?: boolean };
@@ -160,6 +176,11 @@ export const MEMORY_HELP = `**Memory** keeps what matters so you do not have to 
 
 export function parseMemory(input: string): MemoryCommand | null {
   const t = input.trim();
+  // A lesson: "/lesson never delete the user's saves", "galti yaad rakho: ...", "lesson: ...". Pinned, and shown to the AI in EVERY later session.
+  const lesson = /^\/lesson(?:s)?(?:\s+([\s\S]*))?$/i.exec(t);
+  if (lesson) return lesson[1]?.trim() ? { kind: 'add', text: lesson[1].trim(), natural: false, lesson: true } : { kind: 'list', query: 'lesson' };
+  const natLesson = /^(?:please\s+)?(?:galti\s+yaad\s+rakh(?:o|na)|ye\s+galti\s+(?:dobara|phir|firse)\s+mat\s+karna|lesson)\s*[:,;-]\s*(.{6,})$/is.exec(t);
+  if (natLesson && t.length <= 500) return { kind: 'add', text: natLesson[1].trim(), natural: true, lesson: true };
   const slash = /^\/(?:memory|mem|remember)(?:\s+([\s\S]*))?$/i.exec(t);
   if (slash) {
     const rest = (slash[1] ?? '').trim();
@@ -219,6 +240,19 @@ Rules:
 - Never include passwords, tokens, keys, OTPs or personal contact details.
 - Do not record what was merely asked or built in this one exchange unless it is a decision the next session needs.
 - Reply with JSON only: [{"kind":"preference|fact|decision|project|lesson","text":"…","tags":["a","b"]}]`;
+
+/** After a correction: turn what went wrong into one or two rules the next session can follow. */
+export const LESSON_SYSTEM = `You write LESSONS for a coding assistant that made a mistake and was corrected by the user. You get the assistant's earlier answer, the user's correction and what happened next.
+Write 1 or 2 rules that would have prevented the mistake in ANY later session. Rules:
+- Each is one short imperative sentence under 200 characters, starting with "Never" or "Always" or a clear verb, general enough to apply again but specific enough to act on (name the tool, file type, setting or habit involved).
+- Say what to do instead when it is clear.
+- No passwords, tokens or keys. No blame, no apology, no story.
+- Reply with JSON only: [{"kind":"lesson","text":"…","tags":["a","b"]}]. Return [] if the user was only asking for a change and nothing was done wrong.`;
+
+export function lessonInput(parts: { before: string; correction: string; after: string }): string {
+  const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
+  return [`ASSISTANT'S EARLIER ANSWER:\n${clip(parts.before, 1200)}`, `USER'S CORRECTION:\n${clip(parts.correction, 700)}`, `WHAT HAPPENED NEXT:\n${clip(parts.after, 900)}`].join('\n\n');
+}
 
 export function captureInput(parts: { request: string; outcome: string; files?: string[]; commands?: string[] }): string {
   const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);

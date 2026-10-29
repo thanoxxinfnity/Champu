@@ -1,7 +1,7 @@
 /** node --experimental-strip-types --test scripts/test-memory.mjs */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { addMemories, captureInput, findToForget, formatMemory, looksSecret, makeMemory, parseMemory, parseObservations, prune, recall, renderList, worthCapturing } from '../src/lib/memory/memory.ts';
+import { LESSON_SYSTEM, addMemories, captureInput, findToForget, formatLessons, formatMemory, isCorrection, lessonInput, looksSecret, makeMemory, parseMemory, parseObservations, prune, recall, renderList, worthCapturing } from '../src/lib/memory/memory.ts';
 
 const mem = (text, o = {}) => makeMemory({ text, kind: o.kind ?? 'fact', tags: o.tags ?? [] }, { now: o.now ?? 1_000, pinned: o.pinned });
 
@@ -82,4 +82,22 @@ test('only real work is worth a second model call', () => {
   assert.equal(worthCapturing('hi', 'hello there'), false);
   assert.equal(worthCapturing('/memory list', 'x'.repeat(200)), false);
   assert.equal(worthCapturing('build me a chai ordering app in kotlin', 'Built the project with 12 files and an APK. '.repeat(3)), true);
+});
+
+test('a mistake becomes a lesson that is in EVERY later prompt, not only when the request resembles it', () => {
+  assert.deepEqual(parseMemory('/lesson never overwrite the saved game files'), { kind: 'add', text: 'never overwrite the saved game files', natural: false, lesson: true });
+  assert.deepEqual(parseMemory('galti yaad rakho: models ko bina dekhe publish mat karna'), { kind: 'add', text: 'models ko bina dekhe publish mat karna', natural: true, lesson: true });
+  assert.deepEqual(parseMemory('/lessons'), { kind: 'list', query: 'lesson' });
+  const list = [mem('Never publish a 3D model without rendering it first', { kind: 'lesson', now: 9, pinned: true }), mem('Pizza site uses red', { now: 8 }), mem('Always run the tests before saying done', { kind: 'lesson', now: 7 })];
+  const block = formatLessons(list);
+  assert.match(block, /Never repeat them/);
+  assert.match(block, /rendering it first/); assert.match(block, /run the tests/); assert.ok(!/Pizza/.test(block));
+  assert.equal(formatLessons([mem('Pizza site uses red')]), '');
+  assert.ok(formatLessons(Array.from({ length: 40 }, (_, i) => mem(`Never repeat mistake number ${i}`, { kind: 'lesson', now: i }))).split('\n').length <= 18);
+});
+
+test('a complaint is recognised as a correction, an ordinary request is not', () => {
+  for (const t of ['ye galat hai, phir se wahi galti ki', 'buttons still not working bro', 'you broke the loading screen again', 'maine kaha tha holes nahi chahiye', 'kaam nahi kar raha yaar']) assert.equal(isCorrection(t), true, t);
+  for (const t of ['build me a chai ordering app', 'add a dark mode toggle to settings', 'thanks, looks great', 'hi']) assert.equal(isCorrection(t), false, t);
+  assert.match(LESSON_SYSTEM, /Never/); assert.match(lessonInput({ before: 'a', correction: 'b', after: 'c' }), /CORRECTION/);
 });
