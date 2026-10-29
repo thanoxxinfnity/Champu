@@ -20,7 +20,7 @@ var _view := Data.VIEW_RADIUS + 8.0
 
 
 ## Place everything. `half` = half the map size, `pois` = [[Vector2 centre, radius, weight], ...] (towns, camps), `blocked` = Rects (x, z) where nothing may lie.
-func build(half: float, pois: Array, blocked: Array, river_a: Vector2, river_b: Vector2) -> void:
+func build(half: float, pois: Array, blocked: Array, river_a: Vector2, river_b: Vector2, indoor: Array = []) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = SEED
 	var wanted: Array = []
@@ -40,6 +40,15 @@ func build(half: float, pois: Array, blocked: Array, river_a: Vector2, river_b: 
 	for p in pois:
 		total_w += float(p[2])
 	var placed: Array[Vector2] = []
+	# the houses get theirs first (inside, on the floors), the rest is scattered as before
+	var start := 0
+	for sp in indoor:
+		if start >= wanted.size():
+			break
+		_add(String(wanted[start]), sp)
+		placed.append(Vector2(sp.x, sp.z))
+		start += 1
+	wanted = wanted.slice(start)
 	for id in wanted:
 		var pos := Vector2.ZERO
 		for attempt in 40:

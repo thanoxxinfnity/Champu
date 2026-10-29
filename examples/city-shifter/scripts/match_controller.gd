@@ -48,7 +48,7 @@ func setup(g: Node, w: OpenWorld, sp: OptimizedSkySpawner, m: String) -> void:
 	loot = LootField.new()
 	loot.name = "Loot"
 	w.add_child(loot)
-	loot.build(OpenWorld.HALF, w.pois(), w.blocked, OpenWorld.RIVER_AT - OpenWorld.RIVER_DIR * 130.0, OpenWorld.RIVER_AT + OpenWorld.RIVER_DIR * 130.0)
+	loot.build(OpenWorld.HALF, w.pois(), w.blocked, OpenWorld.RIVER_AT - OpenWorld.RIVER_DIR * 130.0, OpenWorld.RIVER_AT + OpenWorld.RIVER_DIR * 130.0, w.house_spots)
 
 
 func _make_spawns() -> void:

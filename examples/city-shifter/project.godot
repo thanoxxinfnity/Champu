@@ -47,3 +47,10 @@ enabled=PackedStringArray()
 
 [gdextension]
 
+
+[shader_globals]
+
+cel={
+"type": "float",
+"value": 1.0
+}

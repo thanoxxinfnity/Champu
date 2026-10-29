@@ -64,6 +64,7 @@ var weapon_cards := {}
 
 func _ready() -> void:
 	Engine.max_fps = 30                 # the menu runs at 30 fps (a match at 60)
+	RenderingServer.global_shader_parameter_set("cel", 1.0 if not UIKit.realistic else 0.35)    # heroes: cel shading (anime look) or soft natural light
 	for a in OS.get_cmdline_user_args():
 		if a == "--autostart":
 			autostart = true
@@ -426,6 +427,10 @@ func _build_ui() -> void:
 		save.settings = st1
 		Data.write_save(save)
 		_apply_settings())
+	lobby.look_changed.connect(func(realistic: bool) -> void:
+		RenderingServer.global_shader_parameter_set("cel", 0.35 if realistic else 1.0)
+		await get_tree().create_timer(0.25).timeout          # the menus are built once: a fresh start paints them in the new look
+		get_tree().reload_current_scene())
 	lobby.debug_toggled.connect(func(on: bool) -> void: hud.debug_overlay = on)
 	lobby.sound_toggled.connect(func(muted: bool) -> void: audio.set_muted(muted))
 	lobby.play_online.connect(_online_request)

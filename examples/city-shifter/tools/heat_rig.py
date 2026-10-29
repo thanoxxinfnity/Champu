@@ -169,6 +169,63 @@ while body.modifiers[0].name != 'xfer':
     bpy.ops.object.modifier_move_up(modifier='xfer')
 bpy.ops.object.modifier_apply(modifier='xfer')
 
+# 3b. capsules: on a fused proxy a coat tail or a sash touching the hand takes arm weight and is pulled into a sheet when the arm swings.
+# An arm bone may only move what lies inside a capsule round its arm; cloth hanging away from the legs follows the hips more than the leg.
+from mathutils.geometry import intersect_point_line
+
+
+def seg_dist(p, a, b):
+    q, t = intersect_point_line(p, a, b)
+    t = min(1.0, max(0.0, t))
+    return (p - (a + (b - a) * t)).length
+
+
+segw = {b.name: (rig.matrix_world @ b.head_local, rig.matrix_world @ b.tail_local) for b in rig.data.bones}
+gidx = {g.index: g.name for g in body.vertex_groups}
+gname = {g.name: g for g in body.vertex_groups}
+z0 = min(zs)
+ARM = {'UpperArm': 0.085, 'LowerArm': 0.07, 'Hand': 0.075}
+moved = 0
+for v in body.data.vertices:
+    p = body.matrix_world @ v.co
+    w = {gidx[g.group]: g.weight for g in v.groups if g.weight > 0.0}
+    if not w:
+        continue
+    new = dict(w)
+    for sd in ('L', 'R'):
+        arm = [f'{k}.{sd}' for k in ARM if f'{k}.{sd}' in segw]
+        if not any(n in new for n in arm):
+            continue
+        inside = any(seg_dist(p, *segw[n]) < ARM[n.split('.')[0]] * H for n in arm)
+        if not inside:
+            for n in arm:
+                new.pop(n, None)
+        leg = [n for n in (f'UpperLeg.{sd}', f'LowerLeg.{sd}') if n in segw]
+        lw = sum(new.get(n, 0.0) for n in leg)
+        if lw > 0.0 and 0.12 * H < p.z - z0 < 0.56 * H:
+            d = min(seg_dist(p, *segw[n]) for n in leg)
+            r = 0.09 * H
+            if d > r:
+                keep = max(0.35, 1.0 - (d - r) / r)        # 1 at the leg's skin, 0.35 a leg's width further out
+                for n in leg:
+                    if n in new:
+                        new[n] *= keep
+                new['Hips'] = new.get('Hips', 0.0) + lw * (1.0 - keep)
+    if new != w:
+        moved += 1
+        if not new:      # it only had arm weight: the nearest body bone takes it
+            near = min((n for n in bones if n in segw and not n.split('.')[0] in ARM), key=lambda n: seg_dist(p, *segw[n]))
+            new = {near: 1.0}
+        tot = sum(new.values())
+        for n in w:
+            if n not in new:
+                gname[n].remove([v.index])
+        for n, x in new.items():
+            if n not in gname:
+                gname[n] = body.vertex_groups.new(name=n)
+            gname[n].add([v.index], x / tot, 'REPLACE')
+print('CAPSULE verts changed', moved)
+
 # 4. clean: 4 influences, drop slivers, normalise
 bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
 bpy.ops.object.vertex_group_limit_total(group_select_mode='ALL', limit=4)

@@ -3,14 +3,66 @@ extends RefCounted
 ## The anime look of the menus: thick ink outlines, hard offset shadows, bright pastel fills, a comic title font, round bold text, and icons drawn in code (no image
 ## files): play, team, globe, shop, user, gear, coin, sword, back, lock, check, plus, star, crown, bolt, key, map, home, train, heart, skull, flag.
 
-const INK := Color(0.13, 0.09, 0.24)
-const CREAM := Color(1.0, 0.97, 0.9)
-const PINK := Color(1.0, 0.42, 0.62)
-const SKY := Color(0.36, 0.74, 1.0)
-const YELLOW := Color(1.0, 0.82, 0.28)
-const MINT := Color(0.42, 0.92, 0.7)
-const PURPLE := Color(0.62, 0.45, 1.0)
-const ORANGE := Color(1.0, 0.58, 0.25)
+## v1.3: the "realistic" theme (Free Fire-like): dark glass panels with a thin light edge, a gold / orange accent, square-ish corners and
+## the Rajdhani typeface. The colour names are kept from the anime theme, so every screen restyles without changes.
+const THEME_FILE := "user://ui_theme.cfg"
+const INK := Color(0.05, 0.06, 0.08)
+const CREAM := Color(0.95, 0.96, 0.98)
+const PINK := Color(0.9, 0.27, 0.3)
+const SKY := Color(0.2, 0.52, 0.92)
+const YELLOW := Color(1.0, 0.72, 0.14)
+const MINT := Color(0.16, 0.7, 0.44)
+const PURPLE := Color(0.46, 0.34, 0.86)
+const ORANGE := Color(1.0, 0.5, 0.1)
+const GLASS := Color(0.06, 0.08, 0.11, 0.84)
+const EDGE := Color(1, 1, 1, 0.14)
+
+
+## Which look the menus have: true = realistic dark glass, false = the anime comic look. Saved on the device, chosen in SETTINGS.
+static var realistic := _load_realistic()
+## The anime palette: the realistic colours above map to these when the anime theme is on (see `tone`).
+const ANIME := {
+	"ink": Color(0.13, 0.09, 0.24), "cream": Color(1.0, 0.97, 0.9), "pink": Color(1.0, 0.42, 0.62), "sky": Color(0.36, 0.74, 1.0),
+	"yellow": Color(1.0, 0.82, 0.28), "mint": Color(0.42, 0.92, 0.7), "purple": Color(0.62, 0.45, 1.0), "orange": Color(1.0, 0.58, 0.25),
+}
+
+
+static func _load_realistic() -> bool:
+	var forced := OS.get_environment("CS_THEME")        # tests: CS_THEME=anime / realistic
+	if forced != "":
+		return forced != "anime"
+	var cf := ConfigFile.new()
+	if cf.load(THEME_FILE) == OK:
+		return bool(cf.get_value("ui", "realistic", true))
+	return true
+
+
+static func set_realistic(on: bool) -> void:
+	realistic = on
+	_title = null
+	_body = null
+	var cf := ConfigFile.new()
+	cf.set_value("ui", "realistic", on)
+	cf.save(THEME_FILE)
+
+
+## A palette colour as the current theme wants it: the pastel anime colour when the anime theme is on, the colour itself otherwise.
+static func tone(c: Color) -> Color:
+	if realistic:
+		return c
+	for k in ["ink", "cream", "pink", "sky", "yellow", "mint", "purple", "orange"]:
+		var base: Color = {"ink": INK, "cream": CREAM, "pink": PINK, "sky": SKY, "yellow": YELLOW, "mint": MINT, "purple": PURPLE, "orange": ORANGE}[k]
+		if absf(c.r - base.r) + absf(c.g - base.g) + absf(c.b - base.b) < 0.02:
+			return Color(ANIME[k].r, ANIME[k].g, ANIME[k].b, c.a)
+	return c
+
+
+## Light text for anything asked in a dark colour (the anime theme drew dark ink on cream panels; the panels are dark glass now).
+static func readable(c: Color) -> Color:
+	if realistic and c.get_luminance() < 0.35 and c.a > 0.5:
+		return Color(0.9, 0.92, 0.95, c.a)
+	return c
+
 
 static var _title: Font
 static var _body: Font
@@ -18,21 +70,34 @@ static var _body: Font
 
 static func title_font() -> Font:
 	if _title == null:
-		_title = load("res://assets/ui/fonts/Bangers-Regular.ttf") as Font if ResourceLoader.exists("res://assets/ui/fonts/Bangers-Regular.ttf") else ThemeDB.fallback_font
+		var tp := "res://assets/ui/fonts/Rajdhani-Bold.ttf" if realistic else "res://assets/ui/fonts/Bangers-Regular.ttf"
+		_title = load(tp) as Font if ResourceLoader.exists(tp) else ThemeDB.fallback_font
 	return _title
 
 
 static func body_font() -> Font:
 	if _body == null:
-		_body = load("res://assets/ui/fonts/MPLUSRounded1c-Bold.ttf") as Font if ResourceLoader.exists("res://assets/ui/fonts/MPLUSRounded1c-Bold.ttf") else ThemeDB.fallback_font
+		var bp := "res://assets/ui/fonts/Rajdhani-SemiBold.ttf" if realistic else "res://assets/ui/fonts/MPLUSRounded1c-Bold.ttf"
+		_body = load(bp) as Font if ResourceLoader.exists(bp) else ThemeDB.fallback_font
 	return _body
 
 
 ## A rounded box with an ink border and a hard shadow (the comic-panel look).
 static func box(fill: Color, border := INK, radius := 18, bw := 4, shadow := 6) -> StyleBoxFlat:
+	if realistic:
+		var g := StyleBoxFlat.new()
+		g.bg_color = GLASS if fill.get_luminance() > 0.7 else Color(fill.r, fill.g, fill.b, minf(fill.a, 0.94))
+		g.border_color = EDGE if border.get_luminance() < 0.3 else border
+		g.set_border_width_all(mini(bw, 2))
+		g.set_corner_radius_all(mini(radius, 6))
+		g.shadow_color = Color(0, 0, 0, 0.35)
+		g.shadow_size = 6
+		g.set_content_margin_all(12)
+		g.anti_aliasing = true
+		return g
 	var s := StyleBoxFlat.new()
-	s.bg_color = fill
-	s.border_color = border
+	s.bg_color = tone(fill)
+	s.border_color = tone(border)
 	s.set_border_width_all(bw)
 	s.set_corner_radius_all(radius)
 	s.shadow_color = Color(INK.r, INK.g, INK.b, 0.55)
@@ -48,9 +113,9 @@ static func label(text: String, parent: Node, size := 20, color := CREAM, title 
 	l.text = text
 	l.add_theme_font_override("font", title_font() if title else body_font())
 	l.add_theme_font_size_override("font_size", size)
-	l.add_theme_color_override("font_color", color)
-	l.add_theme_color_override("font_outline_color", INK)
-	l.add_theme_constant_override("outline_size", maxi(4, size / 5))
+	l.add_theme_color_override("font_color", readable(tone(color)))
+	l.add_theme_color_override("font_outline_color", tone(INK) if not realistic else Color(0, 0, 0, 0.75))
+	l.add_theme_constant_override("outline_size", maxi(4, size / 5) if not realistic else maxi(2, size / 10))
 	if parent != null:
 		parent.add_child(l)
 	return l
@@ -290,8 +355,11 @@ static func fit_px(s: String, size: int, max_w: float, title := false, min_px :=
 static func draw_text(ci: CanvasItem, s: String, pos: Vector2, size: int, col := CREAM, title := false, align := HORIZONTAL_ALIGNMENT_LEFT, width := -1.0) -> void:
 	var f := title_font() if title else body_font()
 	var fs := fit_px(s, size, width, title)
-	ci.draw_string_outline(f, pos, s, align, width, fs, maxi(4, fs / 5), INK)
-	ci.draw_string(f, pos, s, align, width, fs, col)
+	if realistic:
+		ci.draw_string_outline(f, pos, s, align, width, fs, maxi(2, fs / 10), Color(0, 0, 0, 0.7))
+	else:
+		ci.draw_string_outline(f, pos, s, align, width, fs, maxi(4, fs / 5), tone(INK))
+	ci.draw_string(f, pos, s, align, width, fs, readable(tone(col)))
 
 
 ## Wrapped text inside a box: lines are broken at `width`, at most `max_lines`, the size shrinks until it all fits (`line_h` = line height factor).
@@ -305,8 +373,8 @@ static func draw_wrapped(ci: CanvasItem, s: String, pos: Vector2, size: int, col
 			break
 		fs -= 1
 	if outline:
-		ci.draw_multiline_string_outline(f, pos, s, HORIZONTAL_ALIGNMENT_LEFT, width, fs, max_lines, maxi(3, fs / 6), INK)
-	ci.draw_multiline_string(f, pos, s, HORIZONTAL_ALIGNMENT_LEFT, width, fs, max_lines, col)
+		ci.draw_multiline_string_outline(f, pos, s, HORIZONTAL_ALIGNMENT_LEFT, width, fs, max_lines, maxi(3, fs / 6) if not realistic else 2, tone(INK) if not realistic else Color(0, 0, 0, 0.7))
+	ci.draw_multiline_string(f, pos, s, HORIZONTAL_ALIGNMENT_LEFT, width, fs, max_lines, readable(tone(col)))
 
 
 ## A comic button: ink border, hard shadow, a diagonal shine, an icon on the left and the text in the middle. Press = it sinks.
@@ -342,9 +410,14 @@ class AnimeButton:
 			fill = fill.lightened(0.12)
 		var sb := UIKit.box(fill, UIKit.INK, 18, 4, 0 if down else 6)
 		draw_style_box(sb, r)
-		# the shine: a lighter diagonal band along the top-left
-		var sh := PackedVector2Array([r.position + Vector2(10, 8), r.position + Vector2(r.size.x * 0.55, 8), r.position + Vector2(r.size.x * 0.4, r.size.y * 0.45), r.position + Vector2(10, r.size.y * 0.45)])
-		draw_colored_polygon(sh, Color(1, 1, 1, 0.16))
+		if UIKit.realistic:
+			# flat, angular: a lit top edge and a dark base line instead of the comic shine
+			draw_rect(Rect2(r.position + Vector2(3, 1), Vector2(r.size.x - 6, 2)), Color(1, 1, 1, 0.35))
+			draw_rect(Rect2(r.position + Vector2(0, r.size.y - 4), Vector2(r.size.x, 4)), Color(0, 0, 0, 0.28))
+		else:
+			# the shine: a lighter diagonal band along the top-left
+			var sh := PackedVector2Array([r.position + Vector2(10, 8), r.position + Vector2(r.size.x * 0.55, 8), r.position + Vector2(r.size.x * 0.4, r.size.y * 0.45), r.position + Vector2(10, r.size.y * 0.45)])
+			draw_colored_polygon(sh, Color(1, 1, 1, 0.16))
 		var has_icon := icon_name != ""
 		var ix := r.position.x + (r.size.y * 0.55 if has_icon else 0.0)
 		if has_icon:

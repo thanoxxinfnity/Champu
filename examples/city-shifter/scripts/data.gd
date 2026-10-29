@@ -119,7 +119,7 @@ const WEAPON_ORDER := ["shift_gauntlet", "vortex_blaster", "quantum_breaker", "g
 # ── the survivors ────────────────────────────────────────────────────────────
 ## model = file in assets/cast (a rigged glb; a built-in stand-in when it is missing), tint recolours the shared model of the variant.
 const CAST := {
-	"outlaw": {"name": "RYO KAGAMI", "short": "RYO", "title": "Crimson Drifter", "role": "Drifter with a red scarf", "model": "outlaw", "height": 1.78, "bright": 1.15, "speed": 6.4, "fuel": 100.0, "hp": 100.0, "tint": Color.WHITE,
+	"outlaw": {"name": "RYO KAGAMI", "short": "RYO", "title": "Crimson Drifter", "role": "Drifter with a red scarf", "model": "outlaw", "height": 1.78, "bright": 1.0, "speed": 6.4, "fuel": 100.0, "hp": 100.0, "tint": Color.WHITE,
 		"perk": "Quick draw: gauntlet cooldown -15%.", "cd_mult": 0.85, "male": true},
 	"tracker": {"name": "AKARI HOSHINO", "short": "AKARI", "title": "Sky Scout", "role": "Scout in orange", "model": "tracker", "height": 1.72, "speed": 6.8, "fuel": 110.0, "hp": 90.0, "tint": Color.WHITE,
 		"perk": "Sky sense: debris is marked before it lands.", "mark": true, "male": false},
@@ -135,7 +135,7 @@ const CAST := {
 		"perk": "Light as a petal: runs 10% faster.", "male": false, "price": 500},
 	"kunoichi": {"name": "KAGE SHIRANUI", "short": "KAGE", "title": "Shadow Blossom", "role": "Purple-scarf kunoichi", "model": "kunoichi", "height": 1.65, "speed": 7.2, "fuel": 110.0, "hp": 85.0, "tint": Color.WHITE,
 		"perk": "Shadow step: the air dash costs 40% less fuel.", "dash_mult": 0.6, "male": false, "price": 800},
-	"cyber": {"name": "REN MIDORIKAWA", "short": "REN", "title": "Neon Rider", "role": "Goggles and a green jacket", "model": "cyber", "height": 1.7, "speed": 6.6, "fuel": 100.0, "hp": 95.0, "tint": Color.WHITE,
+	"cyber": {"name": "REN MIDORIKAWA", "short": "REN", "title": "Neon Rider", "role": "Pink-haired netrunner in black leather", "model": "cyber", "height": 1.7, "speed": 6.6, "fuel": 100.0, "hp": 95.0, "tint": Color.WHITE,
 		"perk": "Overclock: the jetpack cools 35% faster.", "cool_mult": 1.35, "male": true, "price": 800},
 	"samurai": {"name": "RYUJIN HONDA", "short": "RYUJIN", "title": "Crimson Blade", "role": "Red-armour swordsman", "model": "samurai", "height": 1.8, "speed": 6.3, "fuel": 95.0, "hp": 110.0, "tint": Color.WHITE,
 		"perk": "Bushido: melee weapons hit 25% harder.", "melee_mult": 1.25, "male": true, "price": 1200},

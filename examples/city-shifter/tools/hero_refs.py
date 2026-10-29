@@ -33,14 +33,30 @@ def ref(hid, seed=21):
     return False
 
 
-def ref_pollinations(hid, seed=21):
+PROPS = {
+    'kunoichi': 'female ninja with long blonde hair in a ponytail, fully covered in a dark magenta long-sleeve ninja jacket and long black trousers, '
+                'magenta scarf, orange sash belt, arm guards, tabi boots, single anime style 3D game character, full body from head to shoes, '
+                'A-pose with arms away from the body and empty hands, front view, plain white background',
+    'knight': 'female knight with long blonde hair, wearing full silver plate armour covering the whole body: breastplate, pauldrons, gauntlets, '
+              'armoured skirt over chainmail leggings, armoured boots, single anime style 3D game character, full body from head to shoes, '
+              'A-pose with arms away from the body and empty hands, front view, plain white background',
+    'jetpack': 'product render of an empty futuristic sci-fi jetpack backpack, no person, no character, just the object alone, two round thrusters at the bottom, '
+               'orange and grey metal panels, shoulder straps hanging, seen from behind at three-quarter angle, plain white background',
+    'jetpack_old': 'futuristic sci-fi jetpack backpack with two round thrusters at the bottom, orange and grey metal panels, shoulder straps, '
+               'single game asset object, three-quarter front view, plain white background, soft studio light',
+}
+
+
+def ref_pollinations(hid, seed=int(os.environ.get('REF_SEED', 21))):
     """Fallback when the NVIDIA endpoint is down: Pollinations (keyless). Its corner watermark is cut off."""
     import urllib.parse
     # a T-pose (arms straight out to the sides) is what tools/autorig_obj.py --adaptive measures; an A-pose rigged into a tangle
-    prompt = f'{HEROES[hid]}, anime style 3D game character in a strict T-pose, both arms stretched straight out horizontally to the sides at ' \
-             f'shoulder height, palms down, legs straight and slightly apart, full body from head to shoes, front view, symmetrical, ' \
-             f'plain white background, soft studio light, character turnaround reference'
-    url = 'https://image.pollinations.ai/prompt/' + urllib.parse.quote(prompt) + f'?width=1024&height=1024&nologo=true&model=flux&seed={seed}'
+    # An A-pose with air between arms and body rigs cleanly (tools/autorig_obj.py measures the hand tips); a "T-pose" prompt is ignored
+    # by the generator anyway. One person, fully clothed, nothing in the hands.
+    prompt = PROPS.get(hid) or (f'{HEROES[hid]}, single anime style 3D game character, fully clothed modest outfit, full body from head to shoes, '
+              f'standing straight in an A-pose with both arms held out away from the body and empty open hands, legs slightly apart, front view, '
+              f'symmetrical, plain white background, soft studio light')
+    url = 'https://image.pollinations.ai/prompt/' + urllib.parse.quote(prompt) + f'?width=768&height=1152&nologo=true&model=flux&seed={seed}'
     for attempt in range(3):
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'curl/8.5.0'})

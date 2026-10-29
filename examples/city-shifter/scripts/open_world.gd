@@ -62,7 +62,7 @@ func _ready() -> void:
 
 ## [[callable, weight], ...]: the build, in order.
 func _steps() -> Array:
-	return [[_environment, 1], [_ground, 1], [_road, 3], [_river, 1], [_town, 2], [_district, 3], [_mountains, 2], [_jungle_prepare, 1], [func() -> void: _jungle_slice(0), 2], [func() -> void: _jungle_slice(1), 2], [func() -> void: _jungle_slice(2), 2], [func() -> void: _jungle_slice(3), 2], [func() -> void: _jungle_slice(4), 2], [func() -> void: _jungle_slice(5), 2], [_gates, 1], [_petals_fx, 1], [_spawn_points, 1], [_spawn_mounts, 4],
+	return [[_environment, 1], [_ground, 1], [_road, 3], [_river, 1], [_town, 2], [_district, 3], [_villages, 1], [_mountains, 2], [_jungle_prepare, 1], [func() -> void: _jungle_slice(0), 2], [func() -> void: _jungle_slice(1), 2], [func() -> void: _jungle_slice(2), 2], [func() -> void: _jungle_slice(3), 2], [func() -> void: _jungle_slice(4), 2], [func() -> void: _jungle_slice(5), 2], [_gates, 1], [_petals_fx, 1], [_spawn_points, 1], [_spawn_mounts, 4],
 		[func() -> void: set_view_distance(view_dist), 1]]
 
 
@@ -301,10 +301,11 @@ func damage_at(at: Vector3, radius: float, amount: float, local := true) -> int:
 
 
 func _town() -> void:
+	# the street's houses can be walked into: door to the street, a stair, two floors, a roof (House)
 	for i in 6:
 		var x := -44.0 + float(i) * 17.0
 		var north := i % 2 == 0
-		_place("res://assets/world/shop_house.glb", Vector3(x, 0, -13.5 if north else 13.5), 0.0 if north else PI, 11.0, true, 280.0)
+		_house(Vector3(x, 0, -14.5 if north else 14.5), 0.0 if north else PI, 11.0, 8.0, 2, i)
 	for i in 8:
 		var x := -40.0 + float(i) * 11.5
 		_place("res://assets/world/stone_lantern.glb", Vector3(x, 0, -6.5 if i % 2 == 0 else 6.5), 0.0, 2.2, false, 30.0)
@@ -319,6 +320,37 @@ func _town() -> void:
 	_place("res://assets/world/tent.glb", Vector3(-72, 0, 20), 0.6, 4.0, false, 30.0)
 	for i in 5:
 		_place("res://assets/world/cherry_tree.glb", Vector3(-46.0 + float(i) * 24.0, 0, -22.0 if i % 2 == 0 else 22.0), float(i), 8.0)
+
+
+var house_spots: Array[Vector3] = []      # loot places inside the houses (world space)
+const VILLAGES := [Vector2(140, 120), Vector2(-120, -170), Vector2(220, -60), Vector2(-250, 40), Vector2(60, -250)]
+
+
+## An enterable house at `pos` facing `yaw` (its door looks along +Z turned by yaw). Its footprint keeps the jungle out.
+func _house(pos: Vector3, yaw: float, w: float, d: float, n_floors: int, style: int) -> House:
+	var h := House.new().build(w, d, n_floors, style)
+	h.position = pos
+	h.rotation.y = yaw
+	add_child(h)
+	var r := maxf(w, d) * 0.5 + 1.5
+	blocked.append(Rect2(pos.x - r, pos.z - r, r * 2.0, r * 2.0))
+	for sp in h.loot_spots:
+		house_spots.append(h.transform * sp)
+	return h
+
+
+## Small villages of houses in the jungle, each round a little square.
+func _villages() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	for vi in VILLAGES.size():
+		var c: Vector2 = VILLAGES[vi]
+		for k in 4:
+			var a := float(k) / 4.0 * TAU + 0.4
+			var p := c + Vector2(cos(a), sin(a)) * 13.0
+			if road_distance(p) < ROAD_W * 0.5 + 7.0:
+				continue
+			_house(Vector3(p.x, 0, p.y), atan2(c.x - p.x, c.y - p.y), rng.randf_range(8.0, 11.0), rng.randf_range(7.0, 9.0), 1 + (k + vi) % 2, k + vi)
 
 
 const DISTRICT_AT := Vector2(-170, 165)
@@ -509,7 +541,7 @@ func _jungle_slice(part: int) -> void:
 				var p := o + Vector2(rng.randf(), rng.randf()) * CELL
 				var near_road := road_distance(p) < ROAD_W * 0.5 + 4.0
 				var in_town := absf(p.x) < 82.0 and p.y > -34.0 and p.y < 56.0
-				if near_road or in_town or (district != null and district.rect.grow(10.0).has_point(p)):
+				if near_road or in_town or (district != null and district.rect.grow(10.0).has_point(p)) or is_blocked(p):
 					continue
 				# trees: weighted pick; undergrowth fills the rest
 				var roll := rng.randf()

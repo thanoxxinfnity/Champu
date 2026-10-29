@@ -24,7 +24,7 @@ func _initialize() -> void:
 	var lobby = game.lobby
 	var win := Vector2(DisplayServer.window_get_size())
 	var k := win.x / root.get_visible_rect().size.x
-	var skip := ["CARD", "BUY", "UPGRADE", "START MATCH", "LEAVE", "SOLO", "TEAM", "TRAIN RUN", "FIND PLAYERS", "CREATE ROOM", "JOIN", "HOST ON WI-FI", "FIND ON WI-FI", "SELECT", "SKILLS"]
+	var skip := ["LOOK: REALISTIC", "LOOK: ANIME", "CARD", "BUY", "UPGRADE", "START MATCH", "LEAVE", "SOLO", "TEAM", "TRAIN RUN", "FIND PLAYERS", "CREATE ROOM", "JOIN", "HOST ON WI-FI", "FIND ON WI-FI", "SELECT", "SKILLS"]
 	for scr in ["home", "chars", "shop", "settings", "weapons", "friends"]:
 		lobby.show_screen(scr)
 		await T.frames(self, 6)

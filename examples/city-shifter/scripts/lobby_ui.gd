@@ -26,6 +26,7 @@ signal lan_find
 signal lan_join(ip: String)
 signal weapon_action(id: String)           # unlock or equip (the train-run gauntlet)
 signal weapon_view(id: String)             # open the 360 viewer on it
+signal look_changed(realistic: bool)                # the menus switch between the anime and the realistic look (UIKit.set_realistic has saved it)
 signal gfx_changed(level: int)                        # Gfx.NAMES: 0 smooth, 1 standard, 2 ultra
 signal debug_toggled(on: bool)
 signal settings_changed(sens: float, assist: int)      # look sensitivity 0.5..2.0, aim assist 0 off / 1 low / 2 full lock
@@ -684,7 +685,17 @@ func _build_settings() -> Control:
 		_gfx = (_gfx + 1) % 3
 		_gfx_btn.text = "GRAPHICS: " + Gfx.NAMES[_gfx]
 		gfx_changed.emit(_gfx))
-	var dbg := UIKit.button("DEBUG INFO: OFF", v, "bolt", UIKit.PURPLE, Vector2(0, 50), 22)
+	var row2 := HBoxContainer.new()              # debug info and the look of the menus side by side
+	row2.add_theme_constant_override("separation", 10)
+	v.add_child(row2)
+	var dbg := UIKit.button("DEBUG INFO: OFF", row2, "bolt", UIKit.PURPLE, Vector2(0, 50), 22)
+	dbg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var theme_btn := UIKit.button("LOOK: " + ("REALISTIC" if UIKit.realistic else "ANIME"), row2, "star", UIKit.SKY, Vector2(0, 50), 22)
+	theme_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	theme_btn.pressed.connect(func() -> void:
+		UIKit.set_realistic(not UIKit.realistic)
+		theme_btn.text = "LOOK: " + ("REALISTIC" if UIKit.realistic else "ANIME")
+		look_changed.emit(UIKit.realistic))
 	dbg.pressed.connect(func() -> void:
 		var on := dbg.text.ends_with("OFF")
 		dbg.text = "DEBUG INFO: ON" if on else "DEBUG INFO: OFF"

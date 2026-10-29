@@ -64,23 +64,131 @@ if adaptive:
     # The arm then runs from the shoulder to the hand tip along that slant; RigAnimator works from rest directions, so any rest pose works.
     apose = arm_z < z(0.7)
     APOSE_RIG = apose
+
+    def clusters(sg, lo, hi):
+        """x-clusters (split where the gap is wider than 2.5 % of the height) of the points on one side in the slice lo..hi."""
+        pts = sorted((sg * v.co.x, v.co.y) for v in vs0 if lo < v.co.z < hi and sg * v.co.x > 0.03 * H0)
+        out, cur = [], []
+        for p in pts:
+            if cur and p[0] - cur[-1][0] > 0.025 * H0:
+                out.append(cur)
+                cur = []
+            cur.append(p)
+        if cur:
+            out.append(cur)
+        return [(statistics.median(q[0] for q in c), statistics.median(q[1] for q in c), c[-1][0] - c[0][0]) for c in out if len(c) > 3]
+
+    def trace_arm(sg):
+        dz = 0.02 * H0
+        cs = clusters(sg, z(0.61), z(0.63))
+        if len(cs) < 2:
+            return None                    # the arm touches the body at that height: no air to tell it apart
+        x, y, wdt = cs[-1]
+        zz = z(0.62)
+        while zz > z(0.3):
+            nxt = [c for c in clusters(sg, zz - dz * 1.5, zz - dz * 0.5) if abs(c[0] - x) < 0.05 * H0 and c[2] < wdt + 0.06 * H0]
+            if not nxt:
+                break
+            x, y, wdt = min(nxt, key=lambda c: abs(c[0] - x))
+            zz -= dz
+        return [sg * x, y, zz]
+    def pose_landmarks():
+        """Front render -> MediaPipe pose (tools/pose_joints.py, system python) -> joints in mesh space {name: [x, y, z]}; {} when it fails.
+        The outline of a figure lies (a coat hem, a sash, a held sword stick out further than the hand); a pose model trained on people
+        looks at the whole figure and finds the real shoulder, elbow and wrist."""
+        import json, subprocess, tempfile
+        xs_, zs_ = [v.co.x for v in vs0], [v.co.z for v in vs0]
+        cx_, cz_ = (min(xs_) + max(xs_)) / 2, (min(zs_) + max(zs_)) / 2
+        s = max(max(xs_) - min(xs_), max(zs_) - min(zs_)) * 1.08
+        scn = bpy.context.scene
+        scn.render.engine = 'BLENDER_WORKBENCH'
+        scn.display.shading.color_type = 'TEXTURE'
+        scn.display.shading.light = 'STUDIO'
+        scn.render.resolution_x = scn.render.resolution_y = 768
+        cam = bpy.data.objects.new('posecam', bpy.data.cameras.new('posecam'))
+        scn.collection.objects.link(cam)
+        scn.camera = cam
+        cam.data.type = 'ORTHO'
+        cam.data.ortho_scale = s
+        cam.location = (cx_, min(v.co.y for v in vs0) - 3 * s, cz_)
+        cam.rotation_euler = (math.pi / 2, 0, 0)
+        png = os.path.join(tempfile.mkdtemp(), 'front.png')
+        scn.render.filepath = png
+        bpy.ops.render.render(write_still=True)
+        bpy.data.objects.remove(cam)
+        try:
+            out = subprocess.run(['/usr/bin/python3', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pose_joints.py'), png],
+                                 capture_output=True, text=True, timeout=120).stdout.strip().splitlines()
+            got = json.loads(out[-1]) if out else {}
+        except Exception as e:
+            print('POSE failed', e)
+            return {}
+        res = {}
+        for n, (u, w, vis) in got.items():
+            if vis < 0.5:
+                continue
+            px, pz = cx_ + (u - 0.5) * s, cz_ - (w - 0.5) * s
+            near = [v.co.y for v in vs0 if abs(v.co.x - px) < 0.03 * H0 and abs(v.co.z - pz) < 0.03 * H0]
+            res[n] = [px, statistics.median(near) if near else 0.0, pz]
+        print('POSE', {k: [round(c / H0, 2) for c in p] for k, p in res.items() if k.split('.')[0] in ('shoulder', 'elbow', 'wrist')})
+        return res
+
     tips = {}
+    arms = {}
     if apose:
+        pose = pose_landmarks()
+        for sd in ('L', 'R'):
+            if all(f'{j}.{sd}' in pose for j in ('shoulder', 'elbow', 'wrist')):
+                sh_, el_, wr_ = (pose[f'{j}.{sd}'] for j in ('shoulder', 'elbow', 'wrist'))
+                # the hand: from the wrist on along the forearm (or towards the index finger), ~9 % of the height long
+                ix = pose.get(f'index.{sd}')
+                d = [wr_[i] - (ix[i] if False else el_[i]) for i in range(3)] if not ix else [ix[i] - wr_[i] for i in range(3)]
+                dl = max(math.sqrt(sum(c * c for c in d)), 1e-6)
+                arms[sd] = (sh_, el_, wr_, [wr_[i] + d[i] / dl * 0.09 * H0 for i in range(3)])
         shoulder_z = z(0.8)
         neck_z = shoulder_z + 0.015 * H0
+        sw = 0.11 * H0
+        # fingertips hang no lower than ~40 % of the height: below that the side-most points are a coat hem or a skirt, not a hand
         for sd, sg in (('L', 1), ('R', -1)):
-            cand = [v for v in vs0 if sg * v.co.x > 0 and z(0.3) < v.co.z < z(0.78)]
+            cand = [v for v in vs0 if sg * v.co.x > 0 and z(0.4) < v.co.z < z(0.78)]
             cand.sort(key=lambda v: -sg * v.co.x)
             top = cand[:max(6, len(cand) // 150)]
             tips[sd] = [statistics.median(v.co.x for v in top), statistics.median(v.co.y for v in top), statistics.median(v.co.z for v in top)]
-        sw = 0.11 * H0
+            # better, when there is air between arm and body: find the arm as its own cluster of points in a slice at 62 % of the height
+            # and follow it down, slice by slice, to where it ends (a coat hem or a sword lower down is never reached)
+            traced = trace_arm(sg)
+            if traced:
+                tips[sd] = traced
+        # an arm is ~0.36-0.48 of the height from shoulder to fingertip, and both arms are as long: the shorter, plausible side wins and
+        # is mirrored when the other one caught a flaring sleeve, a sash or a held weapon
+        def arm_len(sd, sg):
+            t = tips[sd]
+            return math.dist(t, [sg * sw, 0.0, shoulder_z])
+        ln = {'L': arm_len('L', 1), 'R': arm_len('R', -1)}
+        for sd, sg in (('L', 1), ('R', -1)):
+            t, sh = tips[sd], [sg * sw, 0.0, shoulder_z]
+            want = min(max(ln[sd], 0.36 * H0), 0.48 * H0)
+            tips[sd] = [sh[i] + (t[i] - sh[i]) * want / max(ln[sd], 1e-6) for i in range(3)]
+        good = 'L' if abs(ln['L'] - 0.43 * H0) <= abs(ln['R'] - 0.43 * H0) else 'R'
+        bad = 'R' if good == 'L' else 'L'
+        if abs(ln['L'] - ln['R']) > 0.12 * max(ln.values()):
+            g = tips[good]
+            tips[bad] = [-g[0], g[1], g[2]]
+            print('APOSE mirrored arm', good, '->', bad, {k: round(x / H0, 2) for k, x in ln.items()})
         print('APOSE hand tips', {k: [round(c, 2) for c in t] for k, t in tips.items()})
         B['Chest']['tail'] = [0, 0, neck_z]
         B['Neck']['head'] = [0, 0, neck_z]
         B['Neck']['tail'] = [0, 0, neck_z + 0.04 * H0]
         B['Head']['head'] = [0, 0, neck_z + 0.04 * H0]
     for sd, sg in (('L', 1), ('R', -1)):
-        if apose:
+        if apose and sd in arms:
+            sh_, el_, wr_, tp_ = arms[sd]
+            sh = [sh_[0], 0.0, shoulder_z]
+            bone(f'Shoulder.{sd}', [0.0, 0, shoulder_z], sh, 'Chest')
+            bone(f'UpperArm.{sd}', sh, el_, f'Shoulder.{sd}')
+            bone(f'LowerArm.{sd}', el_, wr_, f'UpperArm.{sd}')
+            bone(f'Hand.{sd}', wr_, tp_, f'LowerArm.{sd}')
+        elif apose:
             sh = [sg * sw, 0.0, shoulder_z]
             t = tips[sd]
             at = lambda u: [sh[i] + (t[i] - sh[i]) * u for i in range(3)]

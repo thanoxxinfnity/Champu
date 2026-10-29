@@ -7,6 +7,9 @@ cd "$(dirname "$0")/.."
 BL=${BLENDER:-/opt/blender-4.2.3/blender}
 id=$1; model=$2; h=$3; shift 3
 tmp=$(mktemp -d)
-$BL -b -P tools/autorig_obj.py -- raw/hero_${id}_tv.glb $tmp/rig.glb --adaptive --height $h --max-tris 14000 "$@" 2>&1 | grep -E "APOSE|BONES|SAVED|Error|Traceback"
-$BL -b -P tools/heat_rig.py -- $tmp/rig.glb assets/cast/$model.glb 2>&1 | grep -E "PROXY|HEAT|UNWEIGHTED|SAVED|Error|Traceback|failed"
+$BL -b -P tools/autorig_obj.py -- raw/hero_${id}_tv.glb $tmp/rig.glb --adaptive --height $h --max-tris 14000 "$@" 2>&1 | grep -E "POSE|BONES|SAVED|Error|Traceback"
+$BL -b -P tools/heat_rig.py -- $tmp/rig.glb assets/cast/$model.glb 2>&1 | grep -E "PROXY|HEAT|CAPSULE|UNWEIGHTED|SAVED|Error|Traceback|failed"
+# the decimated mesh no longer matches the atlas of the generated model (blotches): bake its colour onto clean UVs from the original
+$BL -b -P tools/rebake.py -- raw/hero_${id}_tv.glb assets/cast/$model.glb $tmp/baked.glb 2>&1 | grep -E "REBAK|Error|Traceback"
+[ -s $tmp/baked.glb ] && cp $tmp/baked.glb assets/cast/$model.glb
 rm -rf $tmp
