@@ -336,6 +336,12 @@ static func draw_icon(ci: CanvasItem, name: String, c: Vector2, s: float, col: C
 		"flag":
 			ci.draw_line(c + Vector2(-h * 0.6, h * 0.9), c + Vector2(-h * 0.6, -h * 0.9), INK, lw * 1.6)
 			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-h * 0.6, -h * 0.85), c + Vector2(h * 0.8, -h * 0.4), c + Vector2(-h * 0.6, 0.0)]), col)
+		"chat":
+			var bub := PackedVector2Array([c + Vector2(-h * 0.8, -h * 0.55), c + Vector2(h * 0.8, -h * 0.55), c + Vector2(h * 0.8, h * 0.3), c + Vector2(-h * 0.05, h * 0.3), c + Vector2(-h * 0.45, h * 0.8), c + Vector2(-h * 0.4, h * 0.3), c + Vector2(-h * 0.8, h * 0.3)])
+			ci.draw_colored_polygon(bub, col)
+			ci.draw_polyline(PackedVector2Array([bub[0], bub[1], bub[2], bub[3], bub[4], bub[5], bub[6], bub[0]]), INK, lw)
+			for k in [-1, 0, 1]:
+				ci.draw_circle(c + Vector2(k * h * 0.38, -h * 0.12), h * 0.09, INK)
 		_:
 			ci.draw_circle(c, h * 0.7, col)
 

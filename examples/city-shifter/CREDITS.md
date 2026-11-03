@@ -54,3 +54,6 @@ All of these were generated for this game, then prepared for phones with Blender
 - Map props (trees, palm, bamboo, banana, bush, fern, flowers, log, rocks) are **Triverse** text-to-3D generations, prepared by `tools/prep_sf.py`.
 - The houses (`scripts/house.gd`) and all their furniture are built in code: no model files.
 - **Rajdhani** (Indian Type Foundry, SIL Open Font License 1.1) is the font of the realistic look (`assets/ui/fonts/OFL_Rajdhani.txt`).
+
+## v1.4
+- "CHAT" (lobby): talk to the hero you picked. The replies come from the free, key-less OpenAI-compatible **Kilo Gateway** (https://api.kilo.ai/api/gateway, model `kilo-auto/free`, 200 requests per hour per IP); the game keeps to 60 an hour. The free models may keep prompts, so the screen says so and the player agrees once; no key is in the game. Code: `scripts/ai_chat.gd`.

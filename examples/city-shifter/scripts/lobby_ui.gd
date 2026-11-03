@@ -78,6 +78,7 @@ func _ready() -> void:
 	screens["weapons"] = _build_weapons()
 	screens["friends"] = _build_friends()
 	screens["squad"] = _build_squad()
+	screens["chat"] = _build_chat()
 	for k in screens:
 		add_child(screens[k])
 	show_screen("home")
@@ -138,6 +139,8 @@ func _build_top() -> void:
 	# friends
 	var fr := UIKit.button("FRIENDS", bar, "people", UIKit.MINT, Vector2(176, 74), 24)
 	fr.pressed.connect(func() -> void: show_screen("friends"))
+	var chat := UIKit.button("CHAT", bar, "chat", UIKit.PURPLE, Vector2(130, 74), 24)
+	chat.pressed.connect(func() -> void: show_screen("chat"))
 	# the battle card
 	var mycard := UIKit.button("CARD", bar, "star", UIKit.ORANGE, Vector2(150, 74), 26)
 	mycard.pressed.connect(_open_my_card)
@@ -1259,6 +1262,8 @@ func show_screen(name: String) -> void:
 		_refresh_weapons()
 	if name == "friends" or name == "squad":
 		refresh_friends()
+	if name == "chat":
+		_refresh_chat()
 
 
 func _skill_points(id: String) -> int:
@@ -1415,3 +1420,157 @@ func set_room(info: Dictionary) -> void:
 
 func _process(delta: float) -> void:
 	_petal_t += delta
+
+
+# ── chat with your hero (AiChat: a free AI plays the hero) ───────────────────
+
+var _ai: AiChat
+var _chat_hero := ""
+var _chat_log: Dictionary = {}              # hero id -> [{"role", "content"}]
+var _chat_list: VBoxContainer
+var _chat_scroll: ScrollContainer
+var _chat_in: LineEdit
+var _chat_send: UIKit.AnimeButton
+var _chat_title: Label
+var _chat_gate: Control
+var _chat_row: Control
+var _chat_busy := false
+
+
+func _build_chat() -> Control:
+	_ai = AiChat.new()
+	add_child(_ai)
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var p := UIKit.panel(root, Color(0.99, 0.95, 0.88, 0.96), 26)
+	p.set_anchors_preset(Control.PRESET_CENTER)
+	p.anchor_left = 0.5
+	p.anchor_right = 0.5
+	p.anchor_top = 0.5
+	p.anchor_bottom = 0.5
+	p.offset_left = -400
+	p.offset_right = 400
+	p.offset_top = -268
+	p.offset_bottom = 290
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	p.add_child(v)
+	var hdr := HBoxContainer.new()
+	v.add_child(hdr)
+	_chat_title = UIKit.label("CHAT", hdr, 34, UIKit.PURPLE, true)
+	_chat_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_chat_title.clip_text = true
+	var back := UIKit.button("", hdr, "back", UIKit.PINK, Vector2(70, 56))
+	back.pressed.connect(func() -> void: show_screen("home"))
+	var note := UIKit.label("Your messages go to a free AI service (Kilo) that may keep them. Never type your real name, phone, address, school or passwords.", v, 15, Color(0.35, 0.28, 0.5))
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size = Vector2(0, 40)
+	note.add_theme_constant_override("outline_size", 0)
+	_chat_scroll = ScrollContainer.new()
+	_chat_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_chat_scroll.custom_minimum_size = Vector2(0, 300)
+	_chat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(_chat_scroll)
+	_chat_list = VBoxContainer.new()
+	_chat_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_chat_list.add_theme_constant_override("separation", 8)
+	_chat_scroll.add_child(_chat_list)
+	# before the player has agreed: one button instead of the input
+	_chat_gate = VBoxContainer.new()
+	v.add_child(_chat_gate)
+	var agree := UIKit.button("I UNDERSTAND - LET'S CHAT", _chat_gate, "check", UIKit.MINT, Vector2(0, 60), 24)
+	agree.pressed.connect(func() -> void:
+		AiChat.set_agreed(true)
+		_refresh_chat())
+	_chat_row = HBoxContainer.new()
+	(_chat_row as HBoxContainer).add_theme_constant_override("separation", 10)
+	v.add_child(_chat_row)
+	_chat_in = LineEdit.new()
+	_chat_in.placeholder_text = "Say something to your hero..."
+	_chat_in.max_length = 160
+	_chat_in.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_chat_in.custom_minimum_size = Vector2(0, 56)
+	_chat_in.add_theme_font_override("font", UIKit.body_font())
+	_chat_in.add_theme_font_size_override("font_size", 22)
+	_chat_in.add_theme_stylebox_override("normal", UIKit.box(Color.WHITE, UIKit.INK, 12, 3, 0))
+	_chat_in.add_theme_stylebox_override("focus", UIKit.box(Color(1, 0.98, 0.85), UIKit.PURPLE, 12, 4, 0))
+	_chat_in.add_theme_color_override("font_color", UIKit.INK if not UIKit.realistic else Color(0.92, 0.94, 0.97))
+	_chat_in.text_submitted.connect(func(_t: String) -> void: _chat_say())
+	_chat_row.add_child(_chat_in)
+	_chat_send = UIKit.button("SEND", _chat_row, "bolt", UIKit.PURPLE, Vector2(170, 56), 24)
+	_chat_send.pressed.connect(_chat_say)
+	return root
+
+
+func _chat_bubble(who: String, text: String, mine: bool) -> void:
+	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if mine:
+		var sp := Control.new()
+		sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(sp)
+	var b := PanelContainer.new()
+	b.custom_minimum_size = Vector2(0, 0)
+	b.add_theme_stylebox_override("panel", UIKit.box(UIKit.SKY if mine else Color(0.99, 0.95, 0.88), UIKit.INK, 16, 3, 0))
+	row.add_child(b)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", -2)
+	b.add_child(vb)
+	var wl := UIKit.label(who, vb, 14, UIKit.CREAM if mine else UIKit.PURPLE, true)
+	wl.add_theme_constant_override("outline_size", 0)
+	var tl := UIKit.label(text, vb, 20, UIKit.CREAM if mine else UIKit.INK)
+	tl.add_theme_constant_override("outline_size", 0)
+	tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tl.custom_minimum_size = Vector2(minf(520.0, 40.0 + 11.0 * float(text.length())), 0)
+	if not mine:
+		var sp2 := Control.new()
+		sp2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(sp2)
+	_chat_list.add_child(row)
+	await get_tree().process_frame
+	_chat_scroll.scroll_vertical = int(_chat_scroll.get_v_scroll_bar().max_value)
+
+
+func _refresh_chat() -> void:
+	var hid := String(save.get("char", "outlaw"))
+	var hero: Dictionary = Data.CAST.get(hid, Data.CAST["outlaw"])
+	_chat_title.text = "CHAT WITH %s" % String(hero.get("short", "HERO"))
+	var ok := AiChat.agreed()
+	_chat_gate.visible = not ok
+	_chat_row.visible = ok
+	if hid != _chat_hero:
+		_chat_hero = hid
+		for c in _chat_list.get_children():
+			c.queue_free()
+		for m in _chat_log.get(hid, []):
+			_chat_bubble(String(hero.get("short", "HERO")) if m.role == "assistant" else "YOU", String(m.content), m.role == "user")
+		if (_chat_log.get(hid, []) as Array).is_empty():
+			_chat_bubble(String(hero.get("short", "HERO")), "Hey! %s here. Ask me anything about the sky, the jungle or the town." % String(hero.get("short", "I")).capitalize(), false)
+
+
+func _chat_say() -> void:
+	var text := _chat_in.text.strip_edges()
+	if text == "" or _chat_busy or not AiChat.agreed():
+		return
+	var hid := _chat_hero
+	var hero: Dictionary = Data.CAST.get(hid, Data.CAST["outlaw"])
+	var who := String(hero.get("short", "HERO"))
+	var gate := _ai.can_send()
+	if not gate.ok:
+		_chat_bubble(who, String(gate.why), false)
+		return
+	_chat_in.text = ""
+	_chat_busy = true
+	_chat_send.disabled = true
+	if not _chat_log.has(hid):
+		_chat_log[hid] = []
+	(_chat_log[hid] as Array).append({"role": "user", "content": text})
+	_chat_bubble("YOU", text, true)
+	var r: Dictionary = await _ai.ask(hid, _chat_log[hid])
+	if r.ok:
+		(_chat_log[hid] as Array).append({"role": "assistant", "content": String(r.text)})
+	_chat_busy = false
+	if is_instance_valid(_chat_send):
+		_chat_send.disabled = false
+	_chat_bubble(who, String(r.text), false)
