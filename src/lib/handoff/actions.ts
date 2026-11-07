@@ -140,7 +140,7 @@ export function riskOf(action: Action, opts: { risky?: boolean; why?: string } =
   switch (action.type) {
     case 'open_url': {
       let u: URL;
-      try { u = new URL(/^[a-z][a-z0-9+.-]*:/i.test(action.url) ? action.url : `https://${action.url}`); } catch { return { level: 'block', reason: 'That is not a valid address.' }; }
+      try { u = new URL(HAS_SCHEME.test(action.url) ? action.url : `https://${action.url}`); } catch { return { level: 'block', reason: 'That is not a valid address.' }; }
       if (!/^https?:$/.test(u.protocol)) return { level: 'block', reason: `Pages like ${u.protocol} are never opened (only http and https).` };
       if (PRIVATE_HOST.test(u.hostname)) return { level: 'confirm', reason: `This opens an address on a private network (${u.hostname}).` };
       return model ?? { level: 'ok' };
@@ -179,6 +179,9 @@ export type BridgeCall =
   | { via: 'shell'; cmd: string }
   | { via: 'none' };
 
+/** "javascript:x", "https://x" have a scheme; "localhost:3000" and "example.com" do not. */
+const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:(?!\d)/i;
+
 export const SEARCH_URL = 'https://duckduckgo.com/html/?q=';
 
 /** The bridge call that carries an action out. */
@@ -187,7 +190,7 @@ export function toBridge(a: Action, mode: Mode): BridgeCall {
   if (a.type === 'ask' || a.type === 'done') return { via: 'none' };
   if (mode === 'browser') {
     switch (a.type) {
-      case 'open_url': return { via: 'browser', tool: 'browser_navigate', args: { url: /^[a-z][a-z0-9+.-]*:/i.test(a.url) ? a.url : `https://${a.url}` } };
+      case 'open_url': return { via: 'browser', tool: 'browser_navigate', args: { url: HAS_SCHEME.test(a.url) ? a.url : `https://${a.url}` } };
       case 'search': return { via: 'browser', tool: 'browser_navigate', args: { url: SEARCH_URL + encodeURIComponent(a.query) } };
       case 'snapshot': return { via: 'browser', tool: 'browser_snapshot', args: {} };
       case 'click': return { via: 'browser', tool: 'browser_click', args: { target: a.ref ?? '', element: a.target || a.ref || '' } };
