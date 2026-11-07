@@ -32,12 +32,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createZip } from './zip.mjs';
 import { browseCli, createBrowser, explainBrowserError } from './browser.mjs';
+import { createDesktop, desktopCli } from './desktop.mjs';
 import { blenderCli, createBlender, explainBlenderError } from './blender.mjs';
 import { deleteKeystore, describeKeystore, keysCli, readKeystore, writeKeystore } from './keystore.mjs';
 import { createJobs } from './jobs.mjs';
 
 // `node chomugiri-agent.mjs browse …` is the model's way to use the bridge's browser from a terminal block: a client, not a server.
 if (process.argv[2] === 'browse') process.exit(await browseCli(process.argv.slice(3)));
+if (process.argv[2] === 'desktop') process.exit(await desktopCli(process.argv.slice(3)));
 // `node chomugiri-agent.mjs blender …` drives a live Blender on this machine the same way.
 if (process.argv[2] === 'blender') process.exit(await blenderCli(process.argv.slice(3)));
 // `node chomugiri-agent.mjs keys list|delete` looks at (or empties) the API keys this terminal holds.
@@ -64,9 +66,10 @@ const TOKEN = arg('token', process.env.CHOMUGIRI_TOKEN ?? randomBytes(24).toStri
 const ALLOW_CMD = (arg('allow-cmd', process.env.CHOMUGIRI_ALLOW_CMD ?? '') || '')
   .split(',').map((s) => s.trim()).filter(Boolean);
 const MAX_EXEC_MS = Number(arg('max-exec-ms', 45 * 60_000));
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const browser = createBrowser({ outDir: ARTIFACTS });
 const blender = createBlender({ outDir: ARTIFACTS });
+const desktop = createDesktop({ outDir: ARTIFACTS });
 
 // ── Execution registry ──────────────────────────────────────────────────────
 
@@ -317,7 +320,7 @@ const routes = {
     agent: 'chomugiri-bridge',
     version: VERSION,
     /** What this bridge can do beyond the basics, so the app knows without trying. */
-    features: ['keys', 'jobs'],
+    features: ['keys', 'jobs', 'desktop'],
     platform: process.platform,
     arch: process.arch,
     node: process.version,
@@ -455,6 +458,17 @@ routes['POST /v1/browser'] = async (req) => {
   } catch (err) {
     if (err.statusCode) throw err;
     return { ok: false, text: explainBrowserError(err.message) };
+  }
+};
+
+/** Computer use: look at a Linux screen and drive its mouse and keyboard (xdotool), on a private virtual display or a real one. */
+routes['POST /v1/desktop'] = async (req) => {
+  const body = await readJson(req);
+  try {
+    await mkdir(ARTIFACTS, { recursive: true });
+    return await desktop.call(String(body.action ?? ''), body);
+  } catch (err) {
+    return { ok: false, text: String(err.message ?? err).slice(0, 400) };
   }
 };
 
@@ -611,6 +625,7 @@ ${line('godot', tools.godot)}
 const shutdown = () => {
   browser.close();
   blender.close();
+  desktop.close();
   for (const run of runs.values()) if (!run.endedAt) run.child.kill('SIGTERM');
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000).unref();

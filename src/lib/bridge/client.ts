@@ -288,6 +288,40 @@ export class BridgeClient {
     );
   }
 
+  /** One step of the bridge's browser (Playwright MCP). `text` is the page with element refs, or the tool's answer. */
+  browser(tool: string, args: Record<string, unknown> = {}) {
+    return this.request<{ ok: boolean; text: string }>('/v1/browser', { method: 'POST', body: JSON.stringify({ tool, args }) }, 200_000);
+  }
+
+  /** One action on the bridge's Linux screen (xdotool): `image` names a screenshot saved as an artifact (bridge 1.4.0+). */
+  desktop(body: Record<string, unknown>) {
+    return this.request<{ ok: boolean; text: string; image?: string; width?: number; height?: number }>('/v1/desktop', { method: 'POST', body: JSON.stringify(body) }, 90_000);
+  }
+
+  /** Runs one command and returns what it printed (for agents that need the answer, not a stream). */
+  async runShell(cmd: string, opts: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<{ output: string; exitCode: number | null }> {
+    const { execId } = await this.exec(cmd, { timeoutMs: opts.timeoutMs ?? 60_000 });
+    let output = '';
+    const r = await this.stream(execId, (f) => { if ((f.type === 'stdout' || f.type === 'stderr') && f.data) output += f.data; }, opts.signal);
+    return { output, exitCode: r.exitCode };
+  }
+
+  /** A saved artifact (a screenshot) as a data: URL, ready to show or to send to a model that sees images. */
+  async artifactDataUrl(name: string): Promise<string> {
+    const res = await fetch(this.endpoint(`/v1/artifact/${encodeURIComponent(name)}`), {
+      headers: this.config.via === 'proxy' ? { 'X-Bridge-Url': this.config.url, 'X-Bridge-Token': this.config.token } : this.headers(),
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error(`Could not fetch ${name} (${res.status}).`);
+    const blob = await res.blob();
+    return await new Promise<string>((ok, fail) => {
+      const r = new FileReader();
+      r.onload = () => ok(String(r.result));
+      r.onerror = () => fail(new Error('Could not read the screenshot.'));
+      r.readAsDataURL(blob);
+    });
+  }
+
   artifactUrl(name: string): string {
     return `${this.config.url}/v1/artifact/${encodeURIComponent(name)}`;
   }

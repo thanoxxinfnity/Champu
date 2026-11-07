@@ -12,6 +12,15 @@ export const KEYS_MIN_VERSION = '1.2.0';
 /** The first bridge version that runs background jobs (model calls that go on with the app closed). */
 export const JOBS_MIN_VERSION = '1.3.0';
 
+/** The first bridge version with desktop control (/v1/desktop). */
+export const DESKTOP_MIN_VERSION = '1.4.0';
+
+export function hasDesktop(health: { version?: string; features?: string[] } | null | undefined): boolean {
+  if (!health) return false;
+  if (health.features?.includes('desktop')) return true;
+  return !!health.version && compareVersions(health.version, DESKTOP_MIN_VERSION) >= 0;
+}
+
 export function compareVersions(a: string, b: string): number {
   const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
   const pb = b.split('.').map((n) => parseInt(n, 10) || 0);

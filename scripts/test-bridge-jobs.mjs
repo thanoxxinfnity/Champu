@@ -147,7 +147,7 @@ test('over HTTP: the bridge reports the jobs feature and runs a job end to end',
     for (let i = 0; i < 40; i++) { try { if ((await fetch(`http://127.0.0.1:${PORT}/v1/ping`)).ok) break; } catch { /* starting */ } await wait(150); }
     const health = await call('/v1/health');
     assert.ok(health.features.includes('jobs'));
-    assert.equal(health.version, '1.3.0');
+    assert.equal(health.version, '1.4.0');
     await call('/v1/jobs', { id: 'http-job-1', meta: { sessionId: 's' }, recipes: [{ url: m.url, body: { m: 1 } }] });
     await until(() => false, 0).catch(() => {});
     let got;
