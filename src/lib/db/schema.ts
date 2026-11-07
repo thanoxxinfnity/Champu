@@ -40,7 +40,9 @@ export type SuiteId =
   // A screenshot or mock-up rebuilt as code by a vision model (after abi/screenshot-to-code).
   | 'shot2code'
   // 190+ small tested utilities (calculators, converters, generators, developer helpers), all on-device.
-  | 'tools';
+  | 'tools'
+  // Handoff: a computer-use agent (browser / Linux screen on the bridge), Action Buttons and Panels.
+  | 'handoff';
 
 export interface SessionRecord {
   id: string;
@@ -288,6 +290,7 @@ export const SUITE_LABELS: Record<SuiteId, string> = {
   motion: 'Motion Studio',
   shot2code: 'Screenshot to Code',
   tools: 'Tools',
+  handoff: 'Handoff',
   android: 'Android & Cross-Platform',
   minecraft: 'Minecraft Engineering',
   godot: 'Godot Game Studio',

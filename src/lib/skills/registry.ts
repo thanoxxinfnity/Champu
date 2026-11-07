@@ -193,6 +193,18 @@ If Blender is not installed on the bridge machine, say so and stop.`,
     template: `/use find-skills {{input}}`,
   },
   {
+    command: 'handoff',
+    name: 'Handoff (computer use)',
+    description: 'Hand a job to an agent that uses its own browser or Linux screen on the Terminal Bridge: research, compare prices, fill forms, test your site. Watch it live, approve risky steps, take over with a tap. Opens from the sidebar → Handoff; Panels and Action Buttons live there too.',
+    lane: 'A',
+    icon: 'search',
+    argHint: '<the job, e.g. compare AirPods prices on Amazon and Flipkart>',
+    bare: true,
+    template: `The user wants a job done on a computer: {{input}}
+
+Chomugiri has a Handoff area (sidebar → Handoff) where an agent does exactly this on its own browser or Linux screen through the Terminal Bridge, live, asking before anything risky. Tell the user in one line that they can paste this job there to watch it run. If the bridge is ONLINE, you may also do it here yourself with \`browse\` terminal commands (one per block), following the BROWSER rules; never buy, pay, send, post, delete or sign in without the user's explicit yes in this chat.`,
+  },
+  {
     command: 'tools',
     name: 'Tools hub',
     description: 'The Tools tab in the sidebar: 190+ on-device utilities — calculators (EMI, SIP, GST, BMI), converters, QR / password / colour generators, JSON / regex / JWT helpers, hashes, dates and more. Ask for one by name.',
