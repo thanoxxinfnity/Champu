@@ -37,6 +37,23 @@ export function panelPrompt(description: string, current?: string): string {
     : `Build this panel: ${description}`;
 }
 
+/** "Reply" on a panel: redesign it, or ask about its data — the model answers in words or returns a new file. */
+export function panelReplyPrompt(text: string, html: string, state: Record<string, unknown>): string {
+  const data = JSON.stringify(state ?? {}).slice(0, 12_000);
+  return `The user replied to their panel: "${text}"
+
+If they ask a QUESTION about it or its data (totals, trends, what to do next), answer in a few plain sentences using the saved data below — no HTML.
+If they want it CHANGED, return the whole new file in one \`\`\`html block, keeping the saved-data keys compatible.
+
+Saved data (JSON):
+${data}
+
+Current file:
+\`\`\`html
+${html}
+\`\`\``;
+}
+
 /** The HTML file in a model reply. */
 export function extractHtml(reply: string): string | null {
   const fenced = /```(?:html)?\s*\n([\s\S]*?)```/i.exec(reply);

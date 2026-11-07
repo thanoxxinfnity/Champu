@@ -8,6 +8,7 @@ import { BG_SETTING, sendInBackground } from '@/lib/agent/background';
 import { hasJobs } from '@/lib/bridge/update';
 import { getSetting, setSetting } from '@/lib/db/history';
 import { BUILTIN_SKILLS, expandSkill, parseSlash, searchSkills, type SkillDefinition } from '@/lib/skills/registry';
+import { parseHandoffCommand, queueHandoff } from '@/lib/handoff/specialties';
 import { classifyLocal, resolveSuite } from '@/lib/agent/router';
 import { SkillIcon } from './SkillIcon';
 import { formatBytes } from '@/lib/zip';
@@ -704,6 +705,16 @@ export function CommandDock() {
     if (hasBlockingSecret(scanForSecrets(value))) return;
     const raw = value.trim();
     if (!raw && !attachments.length) return;
+
+    // "/handoff <job>" goes straight to the Handoff area and starts there (like asking a computer-use agent from the chat).
+    const handoff = parseHandoffCommand(raw);
+    if (handoff) {
+      queueHandoff(handoff.task);
+      setValue('');
+      setAttachments([]);
+      useWorkspace.getState().setSuite('handoff');
+      return;
+    }
 
     let input = raw;
     let lane = laneOverride ?? undefined;

@@ -382,3 +382,49 @@ test('request_secret opens the secure form; the code is filled without the model
   assert.match(parseStep('{"action":"fill_secret","ref":"e1","secret":"a","field":"b"}', 'desktop').error, /not an action in desktop/);
   assert.match(systemPrompt('desktop'), /Take over and type it themselves/);
 });
+
+// ── specialties, schedules, remembered approvals, chat handover ─────────────
+import { describeSchedule, guideOf, isAllowed, isDue, lastSlot, nextRun, parseHandoffCommand, queueHandoff, specialtyFromRun, takeQueued } from '../src/lib/handoff/specialties.ts';
+
+test('a finished run becomes a Specialty that guides the next run', async () => {
+  const sp = specialtyFromRun({ task: 'Check my electricity bill on the MSEB site', mode: 'browser', steps: [{ label: 'Open mahadiscom.in', ok: true }, { label: 'Read the page', ok: true }, { label: 'Click Pay bill', ok: false }, { label: 'Click View bill', ok: true }, { label: 'Wait 2s', ok: true }, { label: 'Finished', ok: true }] }, '', 1);
+  assert.deepEqual(sp.steps, ['Open mahadiscom.in', 'Click View bill']);
+  assert.equal(sp.name, 'Check my electricity bill on');
+  assert.equal(guideOf(sp), '1. Open mahadiscom.in\n2. Click View bill');
+  const h = harness(['{"action":"done","summary":"ok"}']);
+  await runHandoff({ task: sp.task, mode: 'browser', vision: false, guide: guideOf(sp) }, h.deps);
+  assert.match(h.calls[0].llm[0].content, /A way that worked for this job before[\s\S]*Click View bill/);
+});
+
+test('schedules run once per slot, on the right days, and not when missed long ago', () => {
+  const base = { id: 's', task: 'news', mode: 'browser', on: true, createdAt: new Date('2026-11-01T00:00:00').getTime() };
+  const daily = { ...base, every: 'day', time: '08:30' };
+  assert.equal(isDue(daily, new Date('2026-11-07T08:29:00')), false);
+  assert.equal(isDue(daily, new Date('2026-11-07T08:31:00')), true);
+  assert.equal(isDue({ ...daily, lastRun: new Date('2026-11-07T08:31:00').getTime() }, new Date('2026-11-07T09:00:00')), false, 'not twice');
+  assert.equal(isDue(daily, new Date('2026-11-07T20:00:00')), false, 'missed by hours: skipped');
+  assert.equal(isDue({ ...daily, on: false }, new Date('2026-11-07T08:31:00')), false);
+  const wk = { ...base, every: 'weekday', time: '09:00' };
+  assert.equal(isDue(wk, new Date('2026-11-07T09:05:00')), false, '7 Nov 2026 is a Saturday');
+  assert.equal(isDue(wk, new Date('2026-11-09T09:05:00')), true);
+  const weekly = { ...base, every: 'week', weekday: 0, time: '10:00' };
+  assert.equal(nextRun(weekly, new Date('2026-11-07T12:00:00')).toDateString(), new Date('2026-11-08T10:00:00').toDateString());
+  assert.equal(lastSlot({ ...daily, time: '25:00' }, new Date()), null);
+  assert.equal(describeSchedule(wk), 'Mon–Fri at 09:00');
+});
+
+test('allowed steps stay on their site; a job from the chat is handed over once', () => {
+  const rules = [{ host: 'github.com', kind: 'click', createdAt: 0 }];
+  assert.ok(isAllowed(rules, 'github.com', 'click'));
+  assert.ok(isAllowed(rules, 'gist.github.com', 'click'));
+  assert.ok(!isAllowed(rules, 'github.com.evil.io', 'click'));
+  assert.ok(!isAllowed(rules, 'github.com', 'type'));
+  assert.ok(!isAllowed(rules, undefined, 'click'));
+  assert.deepEqual(parseHandoffCommand('/handoff compare prices of AirPods'), { task: 'compare prices of AirPods' });
+  assert.deepEqual(parseHandoffCommand('/handoff'), { task: '' });
+  assert.equal(parseHandoffCommand('/handoffs x'), null);
+  assert.equal(parseHandoffCommand('please handoff'), null);
+  queueHandoff('book nothing, just look', 'browser');
+  assert.deepEqual(takeQueued(), { task: 'book nothing, just look', mode: 'browser' });
+  assert.equal(takeQueued(), null);
+});

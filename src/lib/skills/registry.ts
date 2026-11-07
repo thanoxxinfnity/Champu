@@ -195,7 +195,7 @@ If Blender is not installed on the bridge machine, say so and stop.`,
   {
     command: 'handoff',
     name: 'Handoff (computer use)',
-    description: 'Hand a job to an agent that uses its own browser or Linux screen on the Terminal Bridge: research, compare prices, fill forms, test your site. Watch it live, approve risky steps, take over with a tap. Opens from the sidebar → Handoff; Panels and Action Buttons live there too.',
+    description: '“/handoff <job>” opens Handoff and starts the job at once: an agent on its own browser or Linux screen (Terminal Bridge) — watch live, approve risky steps, take over with a tap; logins and cards come from your locked vault and the AI never sees them.',
     lane: 'A',
     icon: 'search',
     argHint: '<the job, e.g. compare AirPods prices on Amazon and Flipkart>',

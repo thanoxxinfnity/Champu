@@ -17,9 +17,12 @@ import { hasDesktop } from '@/lib/bridge/update';
 import { loadMemories } from '@/lib/memory/store';
 import { recall } from '@/lib/memory/memory';
 import type { Action, Mode } from '@/lib/handoff/actions';
-import { runHandoff, screenshotName, type HandoffEvent, type Screen } from '@/lib/handoff/loop';
+import { runHandoff, screenshotName, type ApprovalRequest, type HandoffEvent, type Screen, type VaultAccess } from '@/lib/handoff/loop';
+import { guideOf, isAllowed, siteOf, specialtyFromRun, takeQueued, type AllowRule, type Schedule, type Specialty } from '@/lib/handoff/specialties';
+import { newItemId } from '@/lib/handoff/vault';
+import { ALLOW_KEY, SCHEDULES_KEY, SchedulesCard, SecureForm, VaultPanel, skyFor, useVault, vaultAccess, type SecureRequest, type VaultState } from './handoff/Secured';
 import { firstSlot, needsInput, suggestActions, type ActionButton } from '@/lib/handoff/suggest';
-import { BUILT_IN_PANELS, PANEL_SYSTEM, acceptState, extractHtml, nameFrom, newPanelId, panelDocument, panelPrompt, type Panel } from '@/lib/handoff/panels';
+import { BUILT_IN_PANELS, PANEL_SYSTEM, acceptState, extractHtml, nameFrom, newPanelId, panelDocument, panelPrompt, panelReplyPrompt, type Panel } from '@/lib/handoff/panels';
 
 /* ── types & storage ─────────────────────────────────────────────────────── */
 interface StepView { index: number; label: string; thought: string; verdict: string; ok?: boolean; result?: string; approved?: boolean }
@@ -30,6 +33,7 @@ const RUNS_KEY = 'handoff.runs.v1';
 const PANELS_KEY = 'handoff.panels.v1';
 const BUILTIN_STATE_KEY = 'handoff.panelState.v1';
 const PREFS_KEY = 'handoff.prefs.v1';
+const SPECIALTIES_KEY = 'handoff.specialties.v1';
 const AUTO_VISION: ModelPick = { provider: 'custom', model: `${GATEWAY_PREFIX}vision`, endpointId: GATEWAY_ENDPOINT_ID };
 
 const newId = () => `run_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
@@ -231,14 +235,23 @@ function PanelsTab({ model }: { model: ModelPick }) {
       const n = [p, ...mine]; setMine(n); void setSetting(PANELS_KEY, n); setDesc(''); setOpenId(p.id);
     } catch (e) { setErr((e as Error).message); } finally { setBusy(''); }
   };
+  const [said, setSaid] = useState('');
   const revise = async () => {
-    if (!open || open.builtIn || !change.trim() || busy) return;
-    setBusy('Changing the panel…'); setErr('');
+    if (!open || !change.trim() || busy) return;
+    setBusy('Thinking…'); setErr(''); setSaid('');
     try {
-      const reply = await callModel(model.model.endsWith('vision') ? { provider: 'custom', model: `${GATEWAY_PREFIX}auto`, endpointId: GATEWAY_ENDPOINT_ID } : model, [{ role: 'system', content: PANEL_SYSTEM }, { role: 'user', content: panelPrompt(change.trim(), open.html) }], undefined, 9000);
-      const html = extractHtml(reply);
-      if (!html) throw new Error('The model did not return a page.');
-      const n = mine.map((p) => (p.id === open.id ? { ...p, html, updatedAt: Date.now() } : p)); setMine(n); void setSetting(PANELS_KEY, n); setChange('');
+      const reply = await callModel(model.model.endsWith('vision') ? { provider: 'custom', model: `${GATEWAY_PREFIX}auto`, endpointId: GATEWAY_ENDPOINT_ID } : model, [{ role: 'system', content: PANEL_SYSTEM }, { role: 'user', content: panelReplyPrompt(change.trim(), open.html, open.state) }], undefined, 9000);
+      const html = /```html/i.test(reply) ? extractHtml(reply) : null;
+      if (html) {
+        if (open.builtIn) {
+          // A built-in panel is copied into "yours" the first time it is redesigned, with its data.
+          const copy: Panel = { ...open, id: newPanelId(), html, builtIn: false, name: `${open.name} (mine)`, createdAt: Date.now(), updatedAt: Date.now() };
+          const n = [copy, ...mine]; setMine(n); void setSetting(PANELS_KEY, n); setOpenId(copy.id);
+        } else {
+          const n = mine.map((p) => (p.id === open.id ? { ...p, html, updatedAt: Date.now() } : p)); setMine(n); void setSetting(PANELS_KEY, n);
+        }
+      } else setSaid(reply.trim());
+      setChange('');
     } catch (e) { setErr((e as Error).message); } finally { setBusy(''); }
   };
   const remove = (id: string) => { const n = mine.filter((p) => p.id !== id); setMine(n); void setSetting(PANELS_KEY, n); setOpenId(null); };
@@ -253,12 +266,11 @@ function PanelsTab({ model }: { model: ModelPick }) {
           {!open.builtIn && <Btn danger onClick={() => { if (confirm(`Delete “${open.name}” and its data?`)) remove(open.id); }}>Delete</Btn>}
         </div>
         <iframe ref={frame} key={open.id + open.html.length} title={open.name} sandbox="allow-scripts allow-modals" srcDoc={doc} className="min-h-0 w-full flex-1 border-0" style={{ background: 'var(--bg)' }} />
-        {!open.builtIn && (
-          <div className="flex gap-2 border-t p-2.5" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
-            <input value={change} onChange={(e) => setChange(e.target.value)} placeholder="Change it: add a chart, dark green theme…" className="min-w-0 flex-1 rounded-xl border bg-transparent px-3 text-[14px] outline-none" style={{ borderColor: 'var(--line)', color: 'var(--ink)', minHeight: 44 }} />
-            <Btn primary onClick={() => void revise()} disabled={!!busy || !change.trim()}>{busy ? '…' : 'Change'}</Btn>
-          </div>
-        )}
+        {said && <div className="max-h-40 overflow-y-auto whitespace-pre-wrap border-t px-3 py-2.5 text-[13.5px] leading-relaxed" style={{ borderColor: 'var(--line)', color: 'var(--ink)', background: 'var(--panel)' }}>{said}</div>}
+        <div className="flex gap-2 border-t p-2.5" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
+          <input value={change} onChange={(e) => setChange(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void revise(); }} placeholder="Reply — redesign it, or ask about its data" className="min-w-0 flex-1 rounded-xl border bg-transparent px-3 text-[14px] outline-none" style={{ borderColor: 'var(--line)', color: 'var(--ink)', minHeight: 44 }} />
+          <Btn primary onClick={() => void revise()} disabled={!!busy || !change.trim()}>{busy ? '…' : 'Reply'}</Btn>
+        </div>
         {err && <p className="px-3 pb-2 text-[12px]" style={{ color: 'hsl(4 75% 56%)' }}>{err}</p>}
       </div>
     );
@@ -301,7 +313,25 @@ export function Handoff() {
   const online = heartbeat.status === 'online' || heartbeat.status === 'degraded';
   const desktopOk = online && hasDesktop(heartbeat.health as never);
 
-  const [tab, setTab] = useState<'do' | 'panels'>('do');
+  const [tab, setTab] = useState<'do' | 'panels' | 'secured'>('do');
+  const vault = useVault();
+  const vaultRef = useRef<VaultState>(vault);
+  vaultRef.current = vault;
+  const oneTime = useRef(new Map<string, string>());
+  const [secureReq, setSecureReq] = useState<SecureRequest | null>(null);
+  const secureRes = useRef<((refs: string[] | null) => void) | null>(null);
+  const [rules, setRulesState] = useState<AllowRule[]>([]);
+  const rulesRef = useRef<AllowRule[]>([]);
+  const setRules = (r: AllowRule[]) => { rulesRef.current = r; setRulesState(r); void setSetting(ALLOW_KEY, r); };
+  const [specialties, setSpecialtiesState] = useState<Specialty[]>([]);
+  const setSpecialties = (l: Specialty[]) => { setSpecialtiesState(l); void setSetting(SPECIALTIES_KEY, l); };
+  const [schedules, setSchedulesState] = useState<Schedule[]>([]);
+  const setSchedules = (l: Schedule[]) => { setSchedulesState(l); void setSetting(SCHEDULES_KEY, l); };
+  const [remember, setRemember] = useState(false);
+  const [pendingJob, setPendingJob] = useState<{ task: string; mode?: Mode } | null>(null);
+  const [savedSpecialty, setSavedSpecialty] = useState(false);
+  const hour = new Date().getHours();
+  const sky = skyFor(hour);
   const [task, setTask] = useState('');
   const [mode, setMode] = useState<Mode>('browser');
   const [model, setModel] = useState<ModelPick>(AUTO_VISION);
@@ -309,7 +339,7 @@ export function Handoff() {
   const [current, setCurrent] = useState<RunRecord | null>(null);
   const [status, setStatus] = useState('');
   const [screen, setScreen] = useState<Screen | null>(null);
-  const [approval, setApproval] = useState<{ label: string; reason: string; action: Action } | null>(null);
+  const [approval, setApproval] = useState<{ label: string; reason: string; action: Action; host?: string; rememberable: boolean; kind: string; secret?: { kind: string; label: string } } | null>(null);
   const [question, setQuestion] = useState<string | null>(null);
   const [reply, setReply] = useState('');
   const [memTexts, setMemTexts] = useState<string[]>([]);
@@ -330,6 +360,11 @@ export function Handoff() {
       if (p?.maxSteps) setMaxSteps(p.maxSteps);
     });
     void loadMemories().then((l) => setMemTexts(l.map((m) => m.text))).catch(() => {});
+    void getSetting<AllowRule[]>(ALLOW_KEY, []).then((r) => { const l = Array.isArray(r) ? r : []; rulesRef.current = l; setRulesState(l); });
+    void getSetting<Specialty[]>(SPECIALTIES_KEY, []).then((l) => setSpecialtiesState(Array.isArray(l) ? l : []));
+    void getSetting<Schedule[]>(SCHEDULES_KEY, []).then((l) => setSchedulesState(Array.isArray(l) ? l : []));
+    const q = takeQueued();
+    if (q) { setPendingJob(q); setTab('do'); }
   }, []);
   useEffect(() => { void setSetting(PREFS_KEY, { mode, model, maxSteps }); }, [mode, model, maxSteps]);
   useEffect(() => { if (mode === 'desktop' && !desktopOk && online) setMode('browser'); }, [mode, desktopOk, online]);
@@ -377,7 +412,7 @@ export function Handoff() {
     key: (k: string) => void bridge.desktop({ action: 'key', key: k }).then(() => void refresh()),
   };
 
-  const start = async (jobText?: string, jobMode?: Mode) => {
+  const start = async (jobText?: string, jobMode?: Mode, guide?: string) => {
     const job = (jobText ?? task).trim();
     const m = jobMode ?? mode;
     if (!job || running || !online) return;
@@ -387,7 +422,8 @@ export function Handoff() {
     const rec: RunRecord = { id: newId(), task: job, mode: m, status: 'running', summary: '', steps: [], startedAt: Date.now() };
     let state = rec;
     const set = (fn: (r: RunRecord) => RunRecord) => { state = fn(state); setCurrent(state); };
-    setCurrent(rec); setScreen(null); setApproval(null); setQuestion(null); setStatus('Starting…'); setTask('');
+    setCurrent(rec); setScreen(null); setApproval(null); setQuestion(null); setSecureReq(null); setSavedSpecialty(false); setStatus('Starting…'); setTask('');
+    oneTime.current = new Map();
     let memory = '';
     try { memory = recall(await loadMemories(), job, { limit: 6 }).map((x) => `- ${x.text}`).join('\n'); } catch { /* no memory */ }
 
@@ -401,17 +437,28 @@ export function Handoff() {
         default: break;
       }
     };
-    const result = await runHandoff({ task: job, mode: m, vision: sees, liveView: true, maxSteps, memory, signal: ctl.signal }, {
+    const ask: VaultAccess['ask'] = (req) => new Promise<string[] | null>((res) => { setSecureReq(req); secureRes.current = res; });
+    const live: VaultState = { get exists() { return vaultRef.current.exists; }, get open() { return vaultRef.current.open; }, get items() { return vaultRef.current.items; }, create: (p) => vaultRef.current.create(p), unlock: (p) => vaultRef.current.unlock(p), lock: () => vaultRef.current.lock(), save: (i) => vaultRef.current.save(i), reset: () => vaultRef.current.reset(), touch: () => vaultRef.current.touch() };
+    const approve = (req: ApprovalRequest) => new Promise<boolean>((res) => {
+      const kind = req.secret?.kind === 'login' ? 'login' : req.action.type;
+      if (req.rememberable && isAllowed(rulesRef.current, req.host, kind)) { res(true); return; }
+      setRemember(false);
+      setApproval({ label: req.label, reason: req.reason, action: req.action, host: req.host, rememberable: req.rememberable, kind, secret: req.secret });
+      approveRes.current = res;
+    });
+    const result = await runHandoff({ task: job, mode: m, vision: sees, liveView: true, maxSteps, memory, guide, signal: ctl.signal }, {
       llm: (msgs, signal) => callModel(model, msgs, signal),
       browser: (tool, args) => bridge.browser(tool, args),
       desktop: (body) => bridge.desktop(body),
       shell: (cmd) => bridge.runShell(cmd, { signal: ctl.signal }),
       image: (name) => bridge.artifactDataUrl(name),
-      approve: (req) => new Promise<boolean>((res) => { setApproval({ label: req.label, reason: req.reason, action: req.action }); approveRes.current = res; }),
+      approve,
+      vault: vaultAccess(live, oneTime.current, ask),
       answer: (q) => new Promise<string | null>((res) => { setQuestion(q); answerRes.current = res; }),
       onEvent,
     }).catch((e: Error) => ({ status: 'failed' as const, summary: e.message, steps: [] }));
-    setApproval(null); setQuestion(null); setStatus('');
+    setApproval(null); setQuestion(null); setSecureReq(null); setStatus('');
+    oneTime.current = new Map();
     set((r) => ({ ...r, status: result.status, summary: result.summary, endedAt: Date.now() }));
     saveRun(state);
     abort.current = null;
@@ -421,8 +468,26 @@ export function Handoff() {
     abort.current?.abort();
     approveRes.current?.(false); approveRes.current = null;
     answerRes.current?.(null); answerRes.current = null;
+    secureRes.current?.(null); secureRes.current = null;
   };
-  const decide = (yes: boolean) => { approveRes.current?.(yes); approveRes.current = null; setApproval(null); };
+  const decide = (yes: boolean) => {
+    if (yes && remember && approval?.rememberable && approval.host && !isAllowed(rulesRef.current, approval.host, approval.kind)) setRules([...rulesRef.current, { host: siteOf(approval.host), kind: approval.kind, createdAt: Date.now() }]);
+    approveRes.current?.(yes); approveRes.current = null; setApproval(null);
+  };
+  const submitSecure = (vals: Record<string, string>, save: boolean) => {
+    const req = secureReq;
+    if (!req) return;
+    for (const f of req.fields) oneTime.current.set(f, vals[f] ?? '');
+    if (save && req.site && vault.open && vals.password) void vault.save([...vault.items, { id: newItemId(), kind: 'login', label: '', site: siteOf(req.site), username: vals.username ?? vals.email ?? '', password: vals.password }]).catch(() => {});
+    secureRes.current?.(req.fields.map((f) => `once:${f}`)); secureRes.current = null; setSecureReq(null);
+  };
+  /* a job handed over from the chat or a schedule starts as soon as the bridge answers */
+  useEffect(() => {
+    if (!pendingJob) return;
+    if (online && !running) { const j = pendingJob; setPendingJob(null); void start(j.task, j.mode); return; }
+    setTask(pendingJob.task);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingJob, online]);
   const sendAnswer = () => { if (!reply.trim()) return; answerRes.current?.(reply.trim()); answerRes.current = null; setQuestion(null); setReply(''); };
   const pickButton = (b: ActionButton) => {
     if (b.mode === 'desktop') setMode('desktop');
@@ -467,6 +532,10 @@ export function Handoff() {
           <p className="text-[13px]" style={{ color: 'var(--ink-dim)' }}>{approval.reason}</p>
           {approval.action.type === 'shell' && <pre className="mono overflow-x-auto rounded-xl p-2.5 text-[12px]" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>{approval.action.cmd}</pre>}
           {approval.action.type === 'type' && <pre className="mono overflow-x-auto rounded-xl p-2.5 text-[12px]" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>{approval.action.text}</pre>}
+          {approval.secret && <p className="text-[12px]" style={{ color: 'hsl(152 60% 34%)' }}>🔒 Filled straight from your vault — the AI only knows it as {approval.action.type === 'fill_secret' ? approval.action.secret : 'a name'}.</p>}
+          {approval.rememberable && approval.host && (
+            <label className="flex items-center gap-2 text-[12.5px]" style={{ color: 'var(--ink-dim)' }}><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Always allow {approval.kind === 'login' ? 'filling my login' : approval.kind === 'click' ? 'clicks like this' : 'this'} on {siteOf(approval.host)}</label>
+          )}
           <div className="flex gap-2"><Btn grow onClick={() => decide(false)}>✕ No</Btn><Btn primary grow onClick={() => decide(true)}>✓ Approve</Btn></div>
         </section>
       )}
@@ -482,10 +551,15 @@ export function Handoff() {
         </section>
       )}
 
+      {secureReq && <SecureForm req={secureReq} canSave={vault.open} onSubmit={submitSecure} onCancel={() => { secureRes.current?.(null); secureRes.current = null; setSecureReq(null); }} />}
+
       {!running && current.summary && (
         <section className="space-y-2 rounded-3xl border p-4" style={card}>
           <div className="flex items-center justify-between"><h3 className="mono text-[10.5px] uppercase tracking-wider" style={{ color: 'var(--ink-faint)' }}>Result</h3><button type="button" onClick={() => void navigator.clipboard?.writeText(current.summary).catch(() => {})} className="press mono rounded-lg border px-2.5 text-[11px]" style={{ minHeight: 32, borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>Copy</button></div>
           <p className="whitespace-pre-wrap text-[14px] leading-relaxed" style={{ color: 'var(--ink)' }}>{current.summary}</p>
+          {current.status === 'done' && current.steps.length > 1 && (
+            <button type="button" disabled={savedSpecialty} onClick={() => { setSpecialties([specialtyFromRun(current), ...specialties.filter((x) => x.task !== current.task)].slice(0, 30)); setSavedSpecialty(true); }} className="press mono mt-1 rounded-xl border px-3 text-[12px] font-semibold disabled:opacity-60" style={{ minHeight: 40, borderColor: 'var(--line)', color: 'hsl(18 88% 50%)' }}>{savedSpecialty ? '★ Saved as a Specialty' : '★ Save as Specialty — repeat it in one tap'}</button>
+          )}
         </section>
       )}
 
@@ -516,10 +590,13 @@ export function Handoff() {
   ) : (
     /* ── home ── */
     <div className="space-y-6 p-3 pb-28">
-      <section className="space-y-3 rounded-3xl border p-4" style={{ ...card, background: 'radial-gradient(120% 90% at 0% 0%, hsl(18 88% 58% / .16), transparent 60%), radial-gradient(90% 80% at 100% 0%, hsl(338 78% 52% / .12), transparent 60%), var(--panel)' }}>
-        <div>
-          <h2 className="text-[22px] font-semibold tracking-tight" style={{ color: 'var(--ink)' }}>What should I get done?</h2>
-          <p className="text-[12.5px]" style={{ color: 'var(--ink-dim)' }}>I work on my own browser{desktopOk ? ' or Linux screen' : ''} through your terminal bridge. You can watch live, and I ask before anything you cannot undo.</p>
+      <section className="relative space-y-3 overflow-hidden rounded-3xl border p-4" style={{ ...card, background: `${sky.bg}, var(--panel)` }}>
+        {sky.night && <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70" style={{ backgroundImage: 'radial-gradient(1px 1px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 32% 8%, #fff, transparent), radial-gradient(1.5px 1.5px at 58% 22%, #fff, transparent), radial-gradient(1px 1px at 78% 12%, #fff, transparent), radial-gradient(1px 1px at 90% 30%, #fff, transparent), radial-gradient(1px 1px at 44% 34%, #fff, transparent)' }} />}
+        <span aria-hidden className="absolute right-4 top-3 text-[26px]">{sky.glyph}</span>
+        <div className="relative">
+          <p className="mono text-[10.5px] uppercase tracking-wider" style={{ color: sky.night ? 'hsl(230 40% 85%)' : 'var(--ink-faint)' }}>{hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'}</p>
+          <h2 className="text-[22px] font-semibold tracking-tight" style={{ color: sky.night ? '#fff' : 'var(--ink)' }}>What should I get done?</h2>
+          <p className="text-[12.5px]" style={{ color: sky.night ? 'hsl(230 30% 85%)' : 'var(--ink-dim)' }}>I work on my own browser{desktopOk ? ' or Linux screen' : ''} through your terminal bridge. Watch live, approve anything you cannot undo; logins and cards stay in your locked vault.</p>
         </div>
         <textarea ref={taskBox} value={task} onChange={(e) => setTask(e.target.value)} rows={3} placeholder="e.g. Compare the price of AirPods Pro on Amazon and Flipkart and tell me the cheapest" className="w-full rounded-2xl border bg-transparent px-3.5 py-3 text-[15px] leading-relaxed outline-none" style={{ borderColor: 'var(--line)', color: 'var(--ink)', background: 'var(--surface)' }}
           onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void start(); }} />
@@ -544,6 +621,7 @@ export function Handoff() {
           <Pill tone={online ? 'ok' : 'bad'}>bridge {online ? 'online' : heartbeat.status}</Pill>
           <Pill tone={desktopOk ? 'ok' : 'dim'}>desktop {desktopOk ? 'ready' : 'needs bridge 1.4'}</Pill>
           <Pill tone={sees ? 'ok' : 'dim'}>{sees ? 'model sees images' : 'text-only model'}</Pill>
+          <button type="button" onClick={() => setTab('secured')}><Pill tone={vault.open ? 'ok' : 'dim'}>🔒 vault {vault.open ? 'open' : vault.exists ? 'locked' : 'not set up'}</Pill></button>
         </div>
       </section>
 
@@ -558,6 +636,23 @@ export function Handoff() {
           ))}
         </div>
       </Section>
+
+      {specialties.length > 0 && (
+        <Section title={`Specialties · ${specialties.length}`}>
+          <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1">
+            {specialties.map((sp) => (
+              <div key={sp.id} className="flex shrink-0 items-center gap-1 rounded-2xl border pl-3" style={{ ...card, minHeight: 48 }}>
+                <button type="button" disabled={!online || running} onClick={() => { setSpecialties(specialties.map((x) => (x.id === sp.id ? { ...x, uses: x.uses + 1 } : x))); void start(sp.task, sp.mode, guideOf(sp)); }} className="press flex items-center gap-2 py-2 text-left disabled:opacity-50">
+                  <span>★</span><span className="max-w-[160px] truncate text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>{sp.name}</span><span className="mono text-[10px]" style={{ color: 'var(--ink-faint)' }}>{sp.steps.length} steps</span>
+                </button>
+                <button type="button" aria-label={`Delete ${sp.name}`} onClick={() => setSpecialties(specialties.filter((x) => x.id !== sp.id))} className="grid h-10 w-9 place-items-center text-[12px]" style={{ color: 'var(--ink-faint)' }}>✕</button>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      <SchedulesCard schedules={schedules} setSchedules={setSchedules} defaultTask={task} defaultMode={mode} />
 
       <ShareMyScreen model={sees ? model : AUTO_VISION} />
 
@@ -593,16 +688,16 @@ export function Handoff() {
         <span className="grid h-9 w-9 place-items-center rounded-2xl text-[17px] text-white" style={{ background: GRAD, boxShadow: '0 8px 18px -10px hsl(340 80% 45%)' }}>✋</span>
         <div className="min-w-0 flex-1">
           <h1 className="text-[16px] font-semibold leading-tight" style={{ color: 'var(--ink)' }}>Handoff</h1>
-          <p className="mono truncate text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>computer use · action buttons · panels</p>
+          <p className="mono truncate text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>computer use · secured vault · panels</p>
         </div>
         <div className="flex gap-1 rounded-xl border p-1" style={{ borderColor: 'var(--line)' }} role="tablist">
-          {([['do', 'Do'], ['panels', 'Panels']] as const).map(([id, l]) => (
+          {([['do', 'Do'], ['panels', 'Panels'], ['secured', '🔒']] as const).map(([id, l]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className="press rounded-lg px-3 text-[12.5px] font-semibold" style={{ minHeight: 34, background: tab === id ? 'var(--surface)' : 'transparent', color: tab === id ? 'var(--ink)' : 'var(--ink-faint)' }}>{l}</button>
           ))}
         </div>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className={tab === 'panels' ? 'h-full' : 'mx-auto max-w-2xl'}>{tab === 'do' ? view : <PanelsTab model={model} />}</div>
+        <div className={tab === 'panels' ? 'h-full' : 'mx-auto max-w-2xl'}>{tab === 'do' ? view : tab === 'secured' ? <VaultPanel v={vault} rules={rules} setRules={setRules} /> : <PanelsTab model={model} />}</div>
       </div>
     </div>
   );

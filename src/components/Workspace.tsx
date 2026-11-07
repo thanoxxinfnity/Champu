@@ -32,6 +32,7 @@ import { CanvasBoard } from './suites/CanvasBoard';
 import { ScreenshotToCode } from './suites/ScreenshotToCode';
 import { ToolsHub } from './suites/ToolsHub';
 import { Handoff } from './suites/Handoff';
+import { HandoffScheduler } from './suites/handoff/Secured';
 import { MotionStudio } from './suites/MotionStudio';
 import { Workdrive } from './suites/Workdrive';
 import { SkillsManager } from './suites/SkillsManager';
@@ -543,6 +544,7 @@ export function Workspace() {
       )}
 
       <RunNotices />
+      <HandoffScheduler />
 
       <Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
