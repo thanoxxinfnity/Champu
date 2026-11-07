@@ -261,3 +261,124 @@ test('desktop control drives a real private screen (Xvfb + xdotool + ImageMagick
     await d.close();
   }
 });
+
+// ── secure vault ────────────────────────────────────────────────────────────
+import { createVault, describeForAgent, findByRef, fieldValue, hostMatches, openVault, redact, refOf, sealWith, urlIn, validateItem } from '../src/lib/handoff/vault.ts';
+import { canRemember } from '../src/lib/handoff/actions.ts';
+
+const ITEMS = [
+  { id: 'a', kind: 'login', label: '', site: 'amazon.in', username: 'me@mail.com', password: 'S3cret!pass' },
+  { id: 'b', kind: 'card', label: 'HDFC Visa', name: 'Tejas', number: '4111 1111 1111 1111', expiry: '08/29', cvv: '123' },
+  { id: 'c', kind: 'identity', label: 'Home', fullName: 'Tejas Singh', email: 't@x.in', phone: '9876543210', address: '12 MG Road', city: 'Pune', pincode: '411001' },
+];
+
+test('the vault is encrypted with the PIN and a wrong PIN cannot open it', async () => {
+  const { sealed, key, salt } = await createVault('246810', { items: ITEMS }, 2000);
+  const raw = JSON.stringify(sealed);
+  for (const secret of ['S3cret!pass', '4111', 'me@mail.com', '9876543210']) assert.ok(!raw.includes(secret), `${secret} is not stored in the clear`);
+  assert.equal((await openVault(sealed, '246810')).data.items.length, 3);
+  await assert.rejects(openVault(sealed, '246811'), /Wrong PIN/);
+  const again = await sealWith(key, salt, { items: ITEMS.slice(0, 1) }, 2000);
+  assert.notEqual(again.iv, sealed.iv, 'a fresh IV every save');
+  assert.equal((await openVault(again, '246810')).data.items.length, 1);
+  await assert.rejects(createVault('123', undefined, 2000), /at least 6/);
+});
+
+test('the agent sees names and fields, never a value; the phishing guard matches real sites only', () => {
+  const d = describeForAgent(ITEMS, ['otp']);
+  assert.match(d, /login:amazon — login for amazon\.in/);
+  assert.match(d, /card:hdfc-visa — card “HDFC Visa” ending 1111/);
+  assert.match(d, /identity:home/);
+  assert.match(d, /once:otp/);
+  for (const v of ['S3cret!pass', 'me@mail.com', '4111 1111', '123', '9876543210', '12 MG Road']) assert.ok(!d.includes(v), v);
+  assert.equal(refOf(ITEMS[0], ITEMS), 'login:amazon');
+  assert.equal(findByRef('LOGIN:amazon', ITEMS)?.id, 'a');
+  assert.equal(fieldValue(ITEMS[0], 'password'), 'S3cret!pass');
+  assert.equal(fieldValue(ITEMS[0], 'cvv'), null);
+  assert.ok(hostMatches('www.amazon.in', 'amazon.in'));
+  assert.ok(hostMatches('pay.amazon.in', 'https://www.amazon.in/'));
+  assert.ok(!hostMatches('amazon.in.evil.com', 'amazon.in'));
+  assert.ok(!hostMatches('notamazon.in', 'amazon.in'));
+  assert.equal(urlIn('### Result\n"https://www.amazon.in/ap/signin?x=1"'), 'https://www.amazon.in/ap/signin?x=1');
+  assert.equal(redact('card 4111-1111-1111-1111 and 4111111111111111 and pw S3cret!pass', ['4111 1111 1111 1111', 'S3cret!pass']), 'card •••• and •••• and pw ••••');
+  assert.equal(validateItem({ ...ITEMS[1], number: '12' }), 'The card number looks wrong.');
+  assert.equal(validateItem(ITEMS[0]), null);
+  assert.equal(canRemember({ type: 'click', ref: 'e1', target: 'Sign in' }), true);
+  assert.equal(canRemember({ type: 'click', ref: 'e1', target: 'Place order' }), false);
+  assert.equal(canRemember({ type: 'shell', cmd: 'ls' }), false);
+});
+
+function vaultHarness(replies, { host = 'https://www.amazon.in/ap/signin', approve = async () => true, ask = async () => ['once:otp'] } = {}) {
+  const typed = [];
+  const asked = [];
+  const access = {
+    info: () => describeForAgent(ITEMS, ['otp']),
+    get: (ref, field) => {
+      if (ref === 'once:otp' && field === 'value') return { value: '482913', kind: 'once', label: 'otp' };
+      const it = findByRef(ref, ITEMS); const v = it && fieldValue(it, field);
+      return v ? { value: v, kind: it.kind, site: it.kind === 'login' ? it.site : undefined, label: it.label || it.site } : null;
+    },
+    ask: async (req) => { asked.push(req); return ask(req); },
+  };
+  const h = harness(replies, {
+    browser: async (tool, args) => {
+      if (tool === 'browser_evaluate') return { ok: true, text: `### Result\n"${host}"` };
+      if (tool === 'browser_type') { typed.push(args.text); return { ok: true, text: `- textbox "Password": ${args.text}\n- button "Sign in" [ref=e9]` }; }
+      return { ok: true, text: '- page' };
+    },
+    approve,
+    vault: access,
+  });
+  return { ...h, typed, asked };
+}
+
+test('fill_secret types the real value on the right site and the model never sees it', async () => {
+  const approvals = [];
+  const v = vaultHarness([
+    '{"action":"fill_secret","ref":"e5","secret":"login:amazon","field":"password","target":"Password"}',
+    '{"action":"snapshot"}',
+    '{"action":"done","summary":"Signed in"}',
+  ], { approve: async (r) => { approvals.push(r); return true; } });
+  const r = await runHandoff({ task: 'sign in to amazon', mode: 'browser', vision: true }, v.deps);
+  assert.equal(r.status, 'done');
+  assert.deepEqual(v.typed, ['S3cret!pass'], 'the page got the password');
+  assert.equal(approvals.length, 1);
+  assert.equal(approvals[0].host, 'www.amazon.in');
+  assert.equal(approvals[0].rememberable, true);
+  const everything = JSON.stringify(v.calls.filter((c) => c.llm)) + JSON.stringify(v.events) + JSON.stringify(r.steps);
+  assert.ok(!everything.includes('S3cret!pass'), 'the password never reached the model, the events or the history');
+  assert.match(JSON.stringify(v.calls.filter((c) => c.llm)[0].llm[0]), /login:amazon/, 'the model was told the vault names');
+});
+
+test('the phishing guard refuses a login on the wrong site, and http pages get nothing', async () => {
+  const v = vaultHarness(['{"action":"fill_secret","ref":"e5","secret":"login:amazon","field":"password"}', '{"action":"done","summary":"x"}'], { host: 'https://amazon.in.evil.com/login' });
+  const r = await runHandoff({ task: 't', mode: 'browser', vision: false }, v.deps);
+  assert.deepEqual(v.typed, []);
+  assert.match(r.steps[0].result, /evil\.com/);
+  const v2 = vaultHarness(['{"action":"fill_secret","ref":"e5","secret":"card:hdfc-visa","field":"number"}', '{"action":"done","summary":"x"}'], { host: 'http://shop.example.com/pay' });
+  const r2 = await runHandoff({ task: 't', mode: 'browser', vision: false }, v2.deps);
+  assert.deepEqual(v2.typed, []);
+  assert.match(r2.steps[0].result, /not https/);
+  const v3 = vaultHarness(['{"action":"fill_secret","ref":"e5","secret":"card:hdfc-visa","field":"number"}', '{"action":"done","summary":"x"}'], { host: 'https://shop.example.com/pay', approve: async () => false });
+  await runHandoff({ task: 't', mode: 'browser', vision: false }, v3.deps);
+  assert.deepEqual(v3.typed, [], 'a card is never filled without a yes');
+});
+
+test('request_secret opens the secure form; the code is filled without the model seeing it', async () => {
+  const v = vaultHarness([
+    '{"action":"request_secret","fields":["otp"],"why":"Amazon sent a code","site":"amazon.in"}',
+    '{"action":"fill_secret","ref":"e7","secret":"once:otp","field":"value","target":"Code"}',
+    '{"action":"done","summary":"Verified"}',
+  ]);
+  const r = await runHandoff({ task: 't', mode: 'browser', vision: false }, v.deps);
+  assert.equal(r.status, 'done');
+  assert.equal(v.asked[0].why, 'Amazon sent a code');
+  assert.deepEqual(v.typed, ['482913']);
+  assert.ok(!JSON.stringify(v.calls.filter((c) => c.llm)).includes('482913'));
+  const closed = vaultHarness(['{"action":"request_secret","fields":["otp"],"why":"x"}', '{"action":"done","summary":"ok"}'], { ask: async () => null });
+  const r2 = await runHandoff({ task: 't', mode: 'browser', vision: false }, closed.deps);
+  assert.match(r2.steps[0].result, /closed/);
+  assert.match(parseStep('{"action":"fill_secret","ref":"e1","secret":"login:x"}', 'browser').error, /field/);
+  assert.match(parseStep('{"action":"fill_secret","ref":"e1","secret":"a","field":"b"}', 'desktop').error, /not an action in desktop/);
+  assert.match(systemPrompt('desktop'), /Take over and type it themselves/);
+});
