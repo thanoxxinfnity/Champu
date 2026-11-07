@@ -193,6 +193,18 @@ If Blender is not installed on the bridge machine, say so and stop.`,
     template: `/use find-skills {{input}}`,
   },
   {
+    command: 'tools',
+    name: 'Tools hub',
+    description: 'The Tools tab in the sidebar: 190+ on-device utilities — calculators (EMI, SIP, GST, BMI), converters, QR / password / colour generators, JSON / regex / JWT helpers, hashes, dates and more. Ask for one by name.',
+    lane: 'A',
+    icon: 'search',
+    argHint: '<what you want to calculate, convert or generate>',
+    bare: true,
+    template: `The user wants a small utility job done: {{input}}
+
+The app has a Tools tab (sidebar → Tools, 190+ tools that run on the device, no network): calculators (EMI, SIP, GST, BMI, interest), unit and number converters, generators (QR, Wi-Fi/UPI QR, passwords, gradients, shadows), developer helpers (JSON, CSV, regex, JWT, cron, Base64), colour tools, date tools, hashes/HMAC/TOTP and small games. If a tool fits, name it and tell them to open it (they can search for it by name in the Tools tab). Still do the job right here when it is quick — show the working and the result, and say which Tools entry does the same.`,
+  },
+  {
     command: 'shot2code',
     name: 'Screenshot → code',
     description: 'Turn a screenshot or mock-up into HTML / Tailwind / React / Vue, mobile-first, and compare it with the picture (abi/screenshot-to-code method).',

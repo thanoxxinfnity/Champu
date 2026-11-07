@@ -38,7 +38,9 @@ export type SuiteId =
   // A layers + keyframes timeline for motion graphics, exported as CSS/GSAP/HTML.
   | 'motion'
   // A screenshot or mock-up rebuilt as code by a vision model (after abi/screenshot-to-code).
-  | 'shot2code';
+  | 'shot2code'
+  // 190+ small tested utilities (calculators, converters, generators, developer helpers), all on-device.
+  | 'tools';
 
 export interface SessionRecord {
   id: string;
@@ -285,6 +287,7 @@ export const SUITE_LABELS: Record<SuiteId, string> = {
   canvas: 'Design Canvas',
   motion: 'Motion Studio',
   shot2code: 'Screenshot to Code',
+  tools: 'Tools',
   android: 'Android & Cross-Platform',
   minecraft: 'Minecraft Engineering',
   godot: 'Godot Game Studio',

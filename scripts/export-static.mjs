@@ -23,7 +23,8 @@ const ROOT = process.cwd();
 const STAGE = path.join(os.tmpdir(), 'chomugiri-android-export');
 const OUT = process.argv[2] ?? path.join(ROOT, 'android/app/src/main/assets/web');
 
-const SKIP = new Set(['node_modules', '.next', '.git', 'android', 'dist', 'out', 'agent']);
+// examples (game projects, hundreds of MB of build output), releases (APKs) and private (licensed models) are not part of the web build.
+const SKIP = new Set(['node_modules', '.next', '.git', 'android', 'dist', 'out', 'agent', 'examples', 'releases', 'private']);
 
 async function stage() {
   // The bridge files the app can hand to an old bridge (see sync-agent-assets.mjs) go into public/ before it is copied.
