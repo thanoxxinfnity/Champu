@@ -708,8 +708,11 @@ Common commands (run \`npx -y rea-agents@latest <command> --help\` for a command
 - \`inspect-android-package\` / \`inspect-android-class\` / \`inspect-android-method\` — APK declarations and decompiled methods.
 - \`decompile\` / \`function\` — read one part of an app as code, with the evidence behind the reading.
 - \`capture-browser-scenario\` / \`analyze-web-bundle\` — a website's shipped bundle, captured and analysed statically.
+- \`inspect-artifact\` (ZIP/IPA/PyInstaller/Bun, Godot PCK…), \`inspect-apk-signature\`, \`compare-application-versions\`, \`trace-application-feature\` (follow one feature from a known string/route), \`guided-workflows\` (REA's own recipes).
+- Big results: save with \`--json > ev.json\`, then read a projection — \`echo '{"source":{"kind":"evidence-file","path":"ev.json"},"view":{"kind":"summary"}}' | npx -y rea-agents@latest inspect-analysis-view -\` — never paste a whole Evidence file.
 
 How to work:
+0. REA needs Node.js 22.x ≥ 22.23.4, 24.x ≥ 24.22.1 or 26.12.1+ on the bridge; on an older Node say so and stop. Run it from a folder outside the target, with absolute target paths. The skill \`reverse-engineer-anything\` has the full routing table.
 1. Start with \`doctor\`, once, if this is the first REA use this session — it says what is missing before a real command fails confusingly.
 2. State findings with their evidence (the function, the string, the file offset REA reported) — never assert what an app does without citing what was actually found.
 3. If a target needs a tool that is not installed (Ghidra, Ida, apktool), say which one and that it needs installing on the bridge machine, rather than inventing a result.

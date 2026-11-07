@@ -81,7 +81,7 @@ test('a method skill and a topic skill come together, one does not push the othe
 
 test('Chomugiri\'s own skills are in the library and are picked for the jobs they are for', () => {
   const own = index.skills.filter((s) => s.source === 'chomu').map((s) => s.id);
-  for (const id of ['free-web-search', 'crawl4ai-markdown', 'scrapling-fetch', 'yt-dlp-media', 'browser-use-agent', 'whisper-cpp-transcribe', 'agent-reach-channels', 'screenshot-to-code', 'find-skills', 'open-design-control', 'lessons-protocol', 'mobile-first-delivery', 'notrack-api', 'api-anything']) assert.ok(own.includes(id), id);
+  for (const id of ['free-web-search', 'crawl4ai-markdown', 'scrapling-fetch', 'yt-dlp-media', 'browser-use-agent', 'whisper-cpp-transcribe', 'agent-reach-channels', 'screenshot-to-code', 'find-skills', 'open-design-control', 'lessons-protocol', 'mobile-first-delivery', 'notrack-api', 'api-anything', 'reverse-engineer-anything']) assert.ok(own.includes(id), id);
   const pick = (q) => pickSkills(q, index, { max: 3 }).map((p) => p.id);
   assert.ok(pick('youtube video ka subtitle nikalo yt-dlp se').includes('yt-dlp-media'));
   assert.ok(pick('transcribe this audio recording with whisper offline').includes('whisper-cpp-transcribe'));
@@ -91,4 +91,6 @@ test('Chomugiri\'s own skills are in the library and are picked for the jobs the
   assert.ok(pick('notrack.ai chat ko api mein convert karo, notrack api key').includes('notrack-api'));
   assert.ok(pick('is website ko api-anything se api banao, site has no api').includes('api-anything'));
   assert.ok(pick('crawl this docs website into clean markdown with crawl4ai').includes('crawl4ai-markdown'));
+  assert.ok(pick('reverse engineer my own apk and decompile it with rea').includes('reverse-engineer-anything'));
+  assert.ok(pick('mera electron app kaise kaam karta hai, rea se reverse engineer karo').includes('reverse-engineer-anything'));
 });
