@@ -5,6 +5,7 @@ import { db, isBrowser, type VaultRecord } from '@/lib/db/schema';
 import { secretsToEnvObject } from '@/lib/security/secrets';
 import { useWorkspace, visibleFiles } from '@/lib/store';
 import { deployMode, hasEntryPoint, liveSite, preflight, recordAfter, targetProject } from '@/lib/deploy/state';
+import { Icon } from '@/components/Icon';
 
 /**
  * Ship the generated site to Vercel.
@@ -80,7 +81,7 @@ export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void }
     setBusy(true);
     setRightPaneTab('terminal');
     const verb = mode === 'update' ? 'updating' : 'launching';
-    appendTerminal({ stream: 'system', text: `▲ ${verb} "${target}" — ${list.length} files to Vercel…` });
+    appendTerminal({ stream: 'system', text: `${verb} "${target}" — ${list.length} files to Vercel…` });
 
     try {
       // No timeout at all meant a genuinely stuck deploy (not a slow-but-
@@ -112,7 +113,7 @@ export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void }
       };
 
       if (!res.ok) {
-        appendTerminal({ stream: 'stderr', text: `✘ ${data.error ?? `Vercel returned ${res.status}`}` });
+        appendTerminal({ stream: 'stderr', text: `Deploy failed: ${data.error ?? `Vercel returned ${res.status}`}` });
         // A failed update must not erase the site that is still live.
         setLastDeploy(
           recordAfter(lastDeploy, {
@@ -126,7 +127,7 @@ export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void }
         return;
       }
 
-      appendTerminal({ stream: 'system', text: `✔ ${data.readyState} · ${data.url ?? 'no url returned'}` });
+      appendTerminal({ stream: 'system', text: `Deploy ${String(data.readyState).toLowerCase()} · ${data.url ?? 'no url returned'}` });
       if (data.note) appendTerminal({ stream: 'system', text: `  ${data.note}` });
 
       setLastDeploy(
@@ -141,7 +142,7 @@ export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void }
       setRenaming(false);
       setOpen(false);
     } catch (err) {
-      appendTerminal({ stream: 'stderr', text: `✘ ${(err as Error).message}` });
+      appendTerminal({ stream: 'stderr', text: `Deploy failed: ${(err as Error).message}` });
     } finally {
       setBusy(false);
     }
@@ -173,9 +174,9 @@ export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void }
             </span>
           </>
         ) : live ? (
-          '↻ update'
+          <span className="inline-flex items-center gap-1"><Icon name="refresh" size={13} />update</span>
         ) : (
-          '▲ launch'
+          <span className="inline-flex items-center gap-1"><Icon name="deploy" size={12} />launch</span>
         )}
       </button>
 
@@ -260,7 +261,7 @@ export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void }
                           className="press mono shrink-0 rounded px-1.5 py-1 text-[10px]"
                           style={{ color: 'var(--accent)' }}
                         >
-                          ↗
+                          <Icon name="external" size={14} />
                         </a>
                       )}
                       <button
@@ -325,7 +326,7 @@ export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void }
             className="press mono mt-2 w-full rounded-lg px-3 py-2 text-[11px] font-semibold disabled:opacity-35"
             style={{ background: 'var(--accent)', color: 'var(--panel)' }}
           >
-            {busy ? (mode === 'update' ? 'updating…' : 'deploying…') : mode === 'update' ? '↻ update site' : '▲ launch site'}
+            {busy ? (mode === 'update' ? 'updating…' : 'deploying…') : mode === 'update' ? <span className="inline-flex items-center gap-1.5"><Icon name="refresh" size={14} />update site</span> : <span className="inline-flex items-center gap-1.5"><Icon name="deploy" size={13} />launch site</span>}
           </button>
 
           {busy && (
@@ -344,7 +345,7 @@ export function DeployButton({ onOpenSettings }: { onOpenSettings?: () => void }
                 className="press mono flex-1 truncate rounded-lg border px-2 py-1.5 text-center text-[10.5px]"
                 style={{ borderColor: 'color-mix(in oklab, var(--accent) 40%, var(--line))', color: 'var(--accent)' }}
               >
-                ↗ open site
+                <span className="inline-flex items-center gap-1.5"><Icon name="external" size={14} />open site</span>
               </a>
               {live.inspectorUrl && (
                 <a

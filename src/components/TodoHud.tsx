@@ -2,14 +2,15 @@
 
 import { useWorkspace, visiblePlan } from '@/lib/store';
 import { planProgress, requiresBridge, type Task, type TaskStatus } from '@/lib/agent/planner';
+import { Icon } from '@/components/Icon';
 
 const STATUS_STYLE: Record<TaskStatus, { glyph: string; color: string; label: string }> = {
-  pending: { glyph: '○', color: 'var(--ink-faint)', label: 'Pending' },
-  in_progress: { glyph: '◐', color: 'var(--accent)', label: 'In progress' },
-  completed: { glyph: '●', color: 'var(--accent)', label: 'Completed' },
-  failed: { glyph: '✕', color: 'var(--color-rose)', label: 'Failed' },
-  blocked: { glyph: '⏸', color: 'var(--color-amber)', label: 'Blocked' },
-  skipped: { glyph: '–', color: 'var(--ink-faint)', label: 'Skipped' },
+  pending: { glyph: 'circle', color: 'var(--ink-faint)', label: 'Pending' },
+  in_progress: { glyph: 'circleHalf', color: 'var(--accent)', label: 'In progress' },
+  completed: { glyph: 'circleCheck', color: 'var(--accent)', label: 'Completed' },
+  failed: { glyph: 'circleX', color: 'var(--color-rose)', label: 'Failed' },
+  blocked: { glyph: 'pause', color: 'var(--color-amber)', label: 'Blocked' },
+  skipped: { glyph: 'dot', color: 'var(--ink-faint)', label: 'Skipped' },
 };
 
 const KIND_LABEL: Record<Task['kind'], string> = {
@@ -47,7 +48,7 @@ function TaskRow({ task, index }: { task: Task; index: number }) {
         title={style.label}
         aria-label={style.label}
       >
-        {style.glyph}
+        <Icon name={style.glyph} size={14} />
       </span>
 
       <div className="min-w-0 flex-1">

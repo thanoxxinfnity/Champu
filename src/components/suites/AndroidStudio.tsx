@@ -7,6 +7,7 @@ import { useWorkspace } from '@/lib/store';
 import { executeCommand } from '@/lib/agent/runtime';
 import { downloadZip, formatBytes } from '@/lib/zip';
 import { unzipSync, strFromU8 } from 'fflate';
+import { Icon } from '@/components/Icon';
 
 const TEXT_EXT = /\.(js|jsx|ts|tsx|py|cs|java|kt|cpp|c|h|hpp|html|css|xaml|json|xml|txt|md|toml|yml|yaml|ui|qml|pro|gradle)$/i;
 
@@ -96,7 +97,7 @@ export function AndroidStudio() {
 
     try {
       await bridge.writeFiles(files.map((f) => ({ path: `${projectDir}/${f.path}`, content: f.content })));
-      appendTerminal({ stream: 'system', text: `⇪ wrote ${files.length} files to ${projectDir}/` });
+      appendTerminal({ stream: 'system', text: `Wrote ${files.length} files to ${projectDir}/` });
 
       for (const command of buildCommands({ projectDir })) {
         const outcome = await executeCommand(command, { sessionId: sessionId ?? undefined, suite: 'android' });
@@ -107,16 +108,16 @@ export function AndroidStudio() {
       if (collected.count) {
         appendTerminal({
           stream: 'system',
-          text: `📦 ${collected.collected.map((c) => `${c.name} (${formatBytes(c.bytes)})`).join(', ')}`,
+          text: `Packaged ${collected.collected.map((c) => `${c.name} (${formatBytes(c.bytes)})`).join(', ')}`,
         });
         for (const artifact of collected.collected) {
           appendTerminal({ stream: 'system', text: `   ${bridge.artifactUrl(artifact.name)}` });
         }
       } else {
-        appendTerminal({ stream: 'system', text: '⚠  no APK found. Read the Gradle output above for the first error.' });
+        appendTerminal({ stream: 'system', text: 'No APK found. Read the Gradle output above for the first error.' });
       }
     } catch (err) {
-      appendTerminal({ stream: 'system', text: `✘ ${(err as Error).message}` });
+      appendTerminal({ stream: 'system', text: `Build failed: ${(err as Error).message}` });
     } finally {
       setBusy(null);
     }
@@ -222,7 +223,7 @@ export function AndroidStudio() {
                   {analysis.blockers.map((blocker, i) => (
                     <li key={i}>
                       <p className="text-[11.5px] font-medium" style={{ color: blocker.severity === 'blocker' ? 'var(--color-rose)' : 'var(--color-amber)' }}>
-                        {blocker.severity === 'blocker' ? '🔴' : '🟡'} {blocker.issue}
+                        <span className="inline-flex items-start gap-1.5"><Icon name={blocker.severity === 'blocker' ? 'circleX' : 'alert'} size={14} style={{ marginTop: 2, color: blocker.severity === 'blocker' ? 'var(--color-rose)' : 'var(--color-amber)' }} />{blocker.issue}</span>
                       </p>
                       <p className="mt-0.5 text-[10.5px] leading-[1.45]" style={{ color: 'var(--ink-dim)' }}>
                         {blocker.remedy}
@@ -242,7 +243,7 @@ export function AndroidStudio() {
                 <ul className="mb-2 space-y-1.5">
                   {preflight.problems.map((problem, i) => (
                     <li key={i} className="text-[10.5px] leading-[1.45]">
-                      <span style={{ color: 'var(--color-amber)' }}>⚠ {problem.issue}</span>
+                      <span className="inline-flex items-start gap-1.5" style={{ color: 'var(--color-amber)' }}><Icon name="alert" size={14} style={{ marginTop: 2 }} />{problem.issue}</span>
                       <br />
                       <span style={{ color: 'var(--ink-faint)' }}>{problem.fix}</span>
                     </li>
@@ -284,7 +285,7 @@ export function AndroidStudio() {
 
               {generatedCount > 0 && (
                 <p className="mono mt-1.5 text-[10px]" style={{ color: 'var(--accent)' }}>
-                  ✔ {generatedCount} files in the file manager
+                  <span className="inline-flex items-center gap-1.5"><Icon name="check" size={14} stroke={2.2} />{generatedCount} files in the file manager</span>
                 </p>
               )}
             </section>

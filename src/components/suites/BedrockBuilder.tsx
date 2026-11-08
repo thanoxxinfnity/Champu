@@ -13,6 +13,7 @@ import {
 import { mapJavaMod, parseJarManifest, specFromJarResources, type JavaModSpec, type MappingResult } from '@/lib/suites/minecraft/java-map';
 import { downloadZip, formatBytes } from '@/lib/zip';
 import { unzipSync, strFromU8 } from 'fflate';
+import { Icon } from '@/components/Icon';
 
 const input = 'mono w-full rounded border bg-transparent px-2 py-1.5 text-[11px] outline-none';
 const inputStyle = { borderColor: 'var(--line)', color: 'var(--ink)' } as const;
@@ -223,7 +224,7 @@ export function BedrockBuilder() {
                     className="mono pb-1.5 text-[10px]"
                     style={{ color: 'var(--color-rose)' }}
                   >
-                    ✕
+                    <Icon name="close" size={14} />
                   </button>
                 </Row>
               </div>
@@ -265,7 +266,7 @@ export function BedrockBuilder() {
                     style={inputStyle}
                   />
                   <button type="button" onClick={() => setItems(items.filter((_, j) => j !== i))} className="mono text-[10px]" style={{ color: 'var(--color-rose)' }}>
-                    ✕
+                    <Icon name="close" size={14} />
                   </button>
                 </Row>
               ))}
@@ -305,7 +306,7 @@ export function BedrockBuilder() {
                     style={inputStyle}
                   />
                   <button type="button" onClick={() => setBlocks(blocks.filter((_, j) => j !== i))} className="mono text-[10px]" style={{ color: 'var(--color-rose)' }}>
-                    ✕
+                    <Icon name="close" size={14} />
                   </button>
                 </Row>
               ))}
@@ -376,13 +377,13 @@ export function BedrockBuilder() {
 
           {issues.length === 0 ? (
             <p className="mono text-[10.5px]" style={{ color: 'var(--accent)' }}>
-              ✔ no issues
+              <span className="inline-flex items-center gap-1.5"><Icon name="check" size={13} stroke={2.2} />no issues</span>
             </p>
           ) : (
             <ul className="max-h-40 space-y-1 overflow-y-auto">
               {issues.map((issue, i) => (
                 <li key={i} className="text-[10.5px] leading-[1.45]" style={{ color: issue.severity === 'error' ? 'var(--color-rose)' : 'var(--color-amber)' }}>
-                  {issue.severity === 'error' ? '🔴' : '🟡'} <span className="mono">{issue.file}</span> — {issue.message}
+                  <Icon name={issue.severity === 'error' ? 'circleX' : 'alert'} size={13} style={{ display: 'inline', verticalAlign: '-2px', marginRight: 4, color: issue.severity === 'error' ? 'var(--color-rose)' : 'var(--color-amber)' }} /><span className="mono">{issue.file}</span> — {issue.message}
                 </li>
               ))}
             </ul>

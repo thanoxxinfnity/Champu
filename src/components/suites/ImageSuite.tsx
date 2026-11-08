@@ -7,6 +7,7 @@ import { listAssets, saveAsset, deleteAsset } from '@/lib/db/history';
 import type { AssetRecord } from '@/lib/db/schema';
 import { dataUrlToBytes, downloadBlob } from '@/lib/zip';
 import { ZoomViewer } from './media/ZoomViewer';
+import { Icon } from '@/components/Icon';
 
 type Provider = 'pollinations' | 'nim' | 'custom';
 
@@ -292,7 +293,7 @@ export function ImageSuite() {
                       className="mono ml-auto text-[9.5px]"
                       style={{ color: '#f43f5e' }}
                     >
-                      ✕
+                      <Icon name="close" size={14} />
                     </button>
                   </div>
                 </figcaption>

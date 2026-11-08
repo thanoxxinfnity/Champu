@@ -44,12 +44,12 @@ export const securityTools: ToolDef[] = [
     run: async (v) => { const k = await subtle().importKey('raw', enc.encode(S(v, 'k')), { name: 'HMAC', hash: S(v, 'a') }, false, ['sign']); const sig = new Uint8Array(await subtle().sign('HMAC', k, enc.encode(S(v, 'm')))); return table(['Encoding', 'Signature'], [['Hex', hex(sig)], ['Base64', b64(sig)]]); },
   },
   {
-    id: 'password-strength', name: 'Password strength', cat: 'security', glyph: '🛡', blurb: 'Entropy and time to crack: checked on your device only.',
+    id: 'password-strength', name: 'Password strength', cat: 'security', glyph: 'icon:shield', blurb: 'Entropy and time to crack: checked on your device only.',
     fields: [txt('p', 'Password', { default: 'Chai#Biscuit2026' })], example: { p: 'Chai#Biscuit2026' },
     run: (v) => { const p = S(v, 'p'); if (!p) return err('Type a password to test.'); let pool = 0; if (/[a-z]/.test(p)) pool += 26; if (/[A-Z]/.test(p)) pool += 26; if (/\d/.test(p)) pool += 10; if (/[^A-Za-z0-9]/.test(p)) pool += 32; const bits = p.length * Math.log2(pool || 1); const common = /^(password|123456|qwerty|admin|letmein|iloveyou|welcome)/i.test(p) || /(.)\1{3,}/.test(p) || /(0123|1234|abcd|qwer)/i.test(p); const secs = 2 ** Math.max(0, bits - 1) / 1e10; const fmtT = (s: number) => (s < 1 ? 'instantly' : s < 60 ? `${Math.round(s)} seconds` : s < 3600 ? `${Math.round(s / 60)} minutes` : s < 86400 ? `${Math.round(s / 3600)} hours` : s < 31536000 ? `${Math.round(s / 86400)} days` : s < 3.15e9 ? `${Math.round(s / 31536000)} years` : 'centuries'); return stats([['Rating', common ? 'Weak (common pattern)' : bits < 40 ? 'Weak' : bits < 60 ? 'Fair' : bits < 80 ? 'Strong' : 'Very strong'], ['Entropy', `${Math.round(bits)} bits`], ['Length', p.length], ['Offline cracking (10B guesses/s)', fmtT(secs)]]); },
   },
   {
-    id: 'text-encrypt', name: 'Encrypt / decrypt text', cat: 'security', glyph: '🔒', blurb: 'AES-256-GCM with a password (PBKDF2). Only you hold the key.',
+    id: 'text-encrypt', name: 'Encrypt / decrypt text', cat: 'security', glyph: 'icon:lock', blurb: 'AES-256-GCM with a password (PBKDF2). Only you hold the key.',
     fields: [area('t', 'Text or encrypted blob', { rows: 5, default: 'secret note' }), txt('pw', 'Password', { default: 'chai1234' }), sel('mode', 'Mode', [{ value: 'enc', label: 'Encrypt' }, { value: 'dec', label: 'Decrypt' }], 'enc')], example: { t: 'secret note', pw: 'chai1234', mode: 'enc' }, manual: true,
     run: async (v) => {
       try {
@@ -61,12 +61,12 @@ export const securityTools: ToolDef[] = [
     },
   },
   {
-    id: 'card-validator', name: 'Card number check', cat: 'security', glyph: '💳', blurb: 'Luhn check and card network (no number leaves your device).',
+    id: 'card-validator', name: 'Card number check', cat: 'security', glyph: 'icon:card', blurb: 'Luhn check and card network (no number leaves your device).',
     fields: [txt('n', 'Card number', { default: '4111 1111 1111 1111', mono: true })], example: { n: '4111 1111 1111 1111' },
     run: (v) => { const d = S(v, 'n').replace(/[\s-]/g, ''); if (!/^\d{12,19}$/.test(d)) return err('Use 12 to 19 digits.'); const net = /^4/.test(d) ? 'Visa' : /^(5[1-5]|2[2-7])/.test(d) ? 'Mastercard' : /^3[47]/.test(d) ? 'American Express' : /^(60|65|81|82|508)/.test(d) ? 'RuPay / Discover' : /^35/.test(d) ? 'JCB' : 'Unknown'; return stats([['Luhn check', luhn(d) ? 'Valid ✓' : 'Invalid ✗'], ['Network', net], ['Digits', d.length]]); },
   },
   {
-    id: 'totp-generator', name: 'TOTP code', cat: 'security', glyph: '🔢', blurb: 'The 6-digit code for a 2FA secret (test your authenticator setup).',
+    id: 'totp-generator', name: 'TOTP code', cat: 'security', glyph: 'icon:hash', blurb: 'The 6-digit code for a 2FA secret (test your authenticator setup).',
     fields: [txt('s', 'Base32 secret', { default: 'JBSWY3DPEHPK3PXP', mono: true }), num('at', 'Unix time (0 = now)', { default: 0 })], example: { s: 'JBSWY3DPEHPK3PXP', at: 59 },
     run: async (v) => { try { const key = base32Decode(S(v, 's')); const t = N(v, 'at') > 0 ? N(v, 'at') : Math.floor(Date.now() / 1000), ctr = Math.floor(t / 30); const msg = new DataView(new ArrayBuffer(8)); msg.setUint32(0, Math.floor(ctr / 2 ** 32)); msg.setUint32(4, ctr >>> 0); const k = await subtle().importKey('raw', key as BufferSource, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']); const h = new Uint8Array(await subtle().sign('HMAC', k, msg.buffer)); const o = h[19]! & 15; const code = (((h[o]! & 0x7f) << 24) | (h[o + 1]! << 16) | (h[o + 2]! << 8) | h[o + 3]!) % 1e6; return stats([['Code', String(code).padStart(6, '0')], ['Valid for', `${30 - (t % 30)} s`]]); } catch { return err('The secret must be Base32 (A–Z, 2–7).'); } },
   },
@@ -81,7 +81,7 @@ export const securityTools: ToolDef[] = [
     run: (v) => { const n = (s: string) => s.toLowerCase().replace(/[^0-9a-f]/g, ''); return n(S(v, 'a')) && n(S(v, 'a')) === n(S(v, 'b')) ? stats([['Result', 'Match ✓']]) : stats([['Result', 'Different ✗']]); },
   },
   {
-    id: 'secret-key-generator', name: 'API key / secret', cat: 'security', glyph: '🗝', blurb: 'Random keys in hex, Base64 or with a prefix like sk_live_.',
+    id: 'secret-key-generator', name: 'API key / secret', cat: 'security', glyph: 'icon:key', blurb: 'Random keys in hex, Base64 or with a prefix like sk_live_.',
     fields: [sel('bytes', 'Strength', [{ value: '16', label: '128-bit' }, { value: '24', label: '192-bit' }, { value: '32', label: '256-bit' }, { value: '64', label: '512-bit' }], '32'), sel('fmt', 'Format', ['hex', 'base64url', 'base32'], 'hex'), txt('pre', 'Prefix', { default: 'sk_' })], example: { bytes: '32', fmt: 'hex', pre: 'sk_' }, manual: true,
     run: (v) => { const b = crypto.getRandomValues(new Uint8Array(Number(S(v, 'bytes')))); const f = S(v, 'fmt'); return text(S(v, 'pre') + (f === 'hex' ? hex(b) : f === 'base32' ? base32Encode(b).toLowerCase() : b64(b).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''))); },
   },

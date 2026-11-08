@@ -12,6 +12,7 @@ import {
 import { compactTokens, endpointKeys, parseTokenCount, summarize, type RestingItem } from '@/lib/providers/gateway';
 import { useWorkspace } from '@/lib/store';
 import { TerminalKeys } from './TerminalKeys';
+import { Icon } from '@/components/Icon';
 
 const inputStyle: React.CSSProperties = { borderColor: 'var(--line)', background: 'var(--surface)', color: 'var(--ink)' };
 const inputClass = 'mono w-full rounded-lg border px-2.5 py-2 text-[11.5px] outline-none placeholder:opacity-40';
@@ -391,24 +392,24 @@ export function FreeProviders({ goTo }: { goTo: (tab: 'keys') => void }) {
           const status = p.access === 'builtin'
             ? 'built in'
             : e
-              ? e.probeOk ? 'connected ✓' : 'connected'
+              ? e.probeOk ? 'connected' : 'connected'
               : p.access === 'keyless' ? 'no key needed' : 'needs a key';
           return (
             <div key={p.id} className="rounded-xl border" style={{ borderColor: e ? 'color-mix(in oklab, var(--accent) 45%, var(--line))' : 'var(--line)' }}>
               <button type="button" onClick={() => setOpen(isOpen ? null : p.id)} className="flex w-full items-center gap-2 px-3 py-2.5 text-left">
-                <span className="text-[14px]" aria-hidden>{p.flag}</span>
+                <span className="mono rounded border px-1 text-[9px] leading-[14px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-faint)' }} aria-hidden>{p.flag}</span>
                 <span className="mono min-w-0 flex-1 truncate text-[12px]" style={{ color: 'var(--ink)' }}>{p.name}</span>
                 <span className="mono shrink-0 text-[10px]" style={{ color: e ? 'var(--accent)' : 'var(--ink-faint)' }}>
                   {status}{e ? ` · ${e.models.filter((m) => m.enabled !== false).length} models${keyCount > 1 ? ` · ${keyCount} keys` : ''}` : ` · ${usableModels(p).length} models`}
                 </span>
-                <span aria-hidden style={faint}>{isOpen ? '▴' : '▾'}</span>
+                <span aria-hidden style={faint}><Icon name={isOpen ? 'chevronUp' : 'chevronDown'} size={14} /></span>
               </button>
               {isOpen && (
                 <div className="space-y-2 border-t px-3 py-3" style={{ borderColor: 'var(--line)' }}>
                   <p className="text-[11px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>{p.description}</p>
                   <p className="text-[10.5px] leading-[1.45]" style={faint}>
                     {p.keyHint}{' '}
-                    <a href={p.signupUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>get a key ↗</a>
+                    <a href={p.signupUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}><span className="inline-flex items-center gap-1">get a key<Icon name="external" size={12} /></span></a>
                   </p>
 
                   {p.access === 'builtin' ? (

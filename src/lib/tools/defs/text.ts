@@ -32,7 +32,7 @@ export const textTools: ToolDef[] = [
     run: (v) => text(S(v, 't').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, S(v, 'sep') || '-').replace(new RegExp(`^\\${S(v, 'sep') || '-'}+|\\${S(v, 'sep') || '-'}+$`, 'g'), '')),
   },
   {
-    id: 'reverse-text', name: 'Reverse text', cat: 'text', glyph: '⇄', blurb: 'Reverse letters, words or lines.',
+    id: 'reverse-text', name: 'Reverse text', cat: 'text', glyph: 'icon:swap', blurb: 'Reverse letters, words or lines.',
     fields: [area('t', 'Text', { rows: 4 }), sel('mode', 'Reverse', [{ value: 'chars', label: 'Letters' }, { value: 'words', label: 'Words' }, { value: 'lines', label: 'Lines' }], 'chars')], example: { t: 'one two three', mode: 'words' },
     run: (v) => {
       const t = S(v, 't'), m = S(v, 'mode');
@@ -40,7 +40,7 @@ export const textTools: ToolDef[] = [
     },
   },
   {
-    id: 'sort-lines', name: 'Sort lines', cat: 'text', glyph: 'A↓', blurb: 'Sort, reverse or shuffle a list of lines.',
+    id: 'sort-lines', name: 'Sort lines', cat: 'text', glyph: 'A-Z', blurb: 'Sort, reverse or shuffle a list of lines.',
     fields: [area('t', 'Lines', { rows: 6 }), sel('mode', 'Order', [{ value: 'az', label: 'A → Z' }, { value: 'za', label: 'Z → A' }, { value: 'len', label: 'By length' }, { value: 'num', label: 'Numeric' }, { value: 'shuffle', label: 'Shuffle' }], 'az'), tog('ci', 'Ignore case', true)], example: { t: 'pear\nApple\nbanana\ncherry', mode: 'az', ci: true },
     run: (v) => {
       const a = lines(S(v, 't')).filter((x) => x.length), m = S(v, 'mode'), ci = B(v, 'ci');
@@ -81,7 +81,7 @@ export const textTools: ToolDef[] = [
     },
   },
   {
-    id: 'find-replace', name: 'Find & replace', cat: 'text', glyph: '⌕', blurb: 'Plain or regular-expression find and replace.',
+    id: 'find-replace', name: 'Find & replace', cat: 'text', glyph: 'icon:search', blurb: 'Plain or regular-expression find and replace.',
     fields: [area('t', 'Text', { rows: 5 }), txt('find', 'Find', { mono: true }), txt('rep', 'Replace with', { mono: true }), tog('re', 'Regular expression'), tog('ci', 'Ignore case')], example: { t: 'cat bat rat', find: '[cb]at', rep: 'dog', re: true, ci: false },
     run: (v) => {
       try {
@@ -158,7 +158,7 @@ export const textTools: ToolDef[] = [
     },
   },
   {
-    id: 'pig-latin', name: 'Pig Latin', cat: 'text', glyph: '🐷', blurb: 'Translate English into Pig Latin.',
+    id: 'pig-latin', name: 'Pig Latin', cat: 'text', glyph: 'Pig', blurb: 'Translate English into Pig Latin.',
     fields: [area('t', 'Text', { rows: 3 })], example: { t: 'hello smart world' },
     run: (v) => text(S(v, 't').replace(/[a-z]+/gi, (w) => { const m = /^([^aeiou]*)(.*)$/i.exec(w)!; return m[1] ? `${m[2]}${m[1]}ay` : `${w}way`; })),
   },
@@ -178,7 +178,7 @@ export const textTools: ToolDef[] = [
     },
   },
   {
-    id: 'char-frequency', name: 'Letter frequency', cat: 'text', glyph: '▮▯', blurb: 'Which letters and words are used most.',
+    id: 'char-frequency', name: 'Letter frequency', cat: 'text', glyph: 'icon:chart', blurb: 'Which letters and words are used most.',
     fields: [area('t', 'Text', { rows: 5 }), sel('what', 'Count', [{ value: 'letters', label: 'Letters' }, { value: 'words', label: 'Words' }, { value: 'all', label: 'All characters' }], 'letters')], example: { t: 'Banana bandana banana', what: 'letters' },
     run: (v) => {
       const t = S(v, 't').toLowerCase(), what = S(v, 'what'), m = new Map<string, number>();
@@ -197,7 +197,7 @@ export const textTools: ToolDef[] = [
     },
   },
   {
-    id: 'remove-accents', name: 'Remove accents', cat: 'text', glyph: 'é→e', blurb: 'Strip accents and diacritics (Café → Cafe).',
+    id: 'remove-accents', name: 'Remove accents', cat: 'text', glyph: 'e/é', blurb: 'Strip accents and diacritics (Café → Cafe).',
     fields: [area('t', 'Text', { rows: 4 })], example: { t: 'Crème brûlée à la Zoë' },
     run: (v) => text(S(v, 't').normalize('NFD').replace(/[̀-ͯ]/g, '')),
   },
@@ -219,7 +219,7 @@ export const textTools: ToolDef[] = [
     },
   },
   {
-    id: 'word-wrap', name: 'Word wrap', cat: 'text', glyph: '↵', blurb: 'Wrap text to a fixed line width.',
+    id: 'word-wrap', name: 'Word wrap', cat: 'text', glyph: 'wrap', blurb: 'Wrap text to a fixed line width.',
     fields: [area('t', 'Text', { rows: 5 }), num('w', 'Width', { default: 40, min: 10, max: 200 })], example: { t: 'The quick brown fox jumps over the lazy dog and keeps running through the field.', w: 24 },
     run: (v) => {
       const w = Math.max(10, N(v, 'w', 40)), out: string[] = [];
@@ -242,7 +242,7 @@ export const textTools: ToolDef[] = [
     run: (v) => text(lines(S(v, 't')).map((l) => S(v, 'pre') + l + S(v, 'suf')).join('\n')),
   },
   {
-    id: 'palindrome', name: 'Palindrome & anagram', cat: 'text', glyph: '↔', blurb: 'Check if a text is a palindrome, or if two texts are anagrams.',
+    id: 'palindrome', name: 'Palindrome & anagram', cat: 'text', glyph: 'abba', blurb: 'Check if a text is a palindrome, or if two texts are anagrams.',
     fields: [txt('a', 'Text'), txt('b', 'Second text (for anagram)')], example: { a: 'A man, a plan, a canal: Panama', b: 'listen' },
     run: (v) => {
       const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
@@ -262,7 +262,7 @@ export const textTools: ToolDef[] = [
     run: (v) => text(words(S(v, 't')).filter((w) => !(B(v, 'skip') && /^(of|the|and|a|an|in|on|for|to)$/i.test(w))).map((w) => w[0]!.toUpperCase()).join('')),
   },
   {
-    id: 'text-columns', name: 'Text to table', cat: 'text', glyph: '▦', blurb: 'Align columns of text (tab, comma or space separated) into a neat table.',
+    id: 'text-columns', name: 'Text to table', cat: 'text', glyph: 'icon:table', blurb: 'Align columns of text (tab, comma or space separated) into a neat table.',
     fields: [area('t', 'Rows', { rows: 5, mono: true }), sel('sep', 'Separated by', [{ value: ',', label: 'Comma' }, { value: '\t', label: 'Tab' }, { value: ' ', label: 'Space' }, { value: ';', label: 'Semicolon' }, { value: '|', label: 'Pipe' }], ',')], example: { t: 'name,age\nAsha,24\nRavi,31', sep: ',' },
     run: (v) => {
       const rows = lines(S(v, 't')).filter(Boolean).map((l) => l.split(S(v, 'sep')).map((c) => c.trim()));
@@ -270,7 +270,7 @@ export const textTools: ToolDef[] = [
     },
   },
   {
-    id: 'random-text-picker', name: 'Pick a random line', cat: 'text', glyph: '🎯', blurb: 'Pick one or more random lines from your list.',
+    id: 'random-text-picker', name: 'Pick a random line', cat: 'text', glyph: 'icon:dice', blurb: 'Pick one or more random lines from your list.',
     fields: [area('t', 'Options (one per line)', { rows: 5 }), num('n', 'How many', { default: 1, min: 1, max: 50 }), num('seed', 'Seed (0 = random)', { default: 0 })], example: { t: 'pizza\nburger\nbiryani\nmomos', n: 2, seed: 3 }, manual: true,
     run: (v) => {
       const a = lines(S(v, 't')).filter((x) => x.trim()), r = rand(N(v, 'seed'));

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Icon } from '@/components/Icon';
 
 /**
  * The voice recordings that ship with Chomugiri.
@@ -127,7 +128,7 @@ export function VoiceTab() {
                   background: 'color-mix(in oklab, var(--accent) 10%, transparent)',
                 }}
               >
-                {active ? '❚❚' : '▶'}
+                <Icon name={active ? 'pause' : 'play'} size={16} />
               </button>
 
               <div className="min-w-0 flex-1">

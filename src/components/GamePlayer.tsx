@@ -11,6 +11,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { playerFrameSrc, takePlayable } from '@/lib/suites/godot/web-export';
+import { Icon } from '@/components/Icon';
 
 export function GamePlayer({ id, label }: { id: string; label: string }) {
   const [src, setSrc] = useState<string | null>(null);
@@ -48,7 +49,7 @@ export function GamePlayer({ id, label }: { id: string; label: string }) {
         className="mono mt-2 rounded border px-3 py-1.5 text-[11px]"
         style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
       >
-        ▶ Play here — {label}
+        <span className="inline-flex items-center gap-1.5"><Icon name="play" size={14} />Play here — {label}</span>
       </button>
     );
   }

@@ -6,6 +6,7 @@ import type { AssetRecord } from '@/lib/db/schema';
 import { useWorkspace } from '@/lib/store';
 import { downloadAsset } from './LibraryView';
 import { apiBase, authHeaders, endpointsFor, fmtTime, httpJson, mediaToBlob, modelsFor, pickMedia, saveMedia, srcOf } from './shared';
+import { Icon } from '@/components/Icon';
 
 const BARS = 160;
 
@@ -78,7 +79,7 @@ export function TrackPlayer({ src, title, big }: { src: string; title: string; b
       <p className="mb-2 truncate text-[12px]" style={{ color: 'var(--ink-dim)' }} title={title}>{title}</p>
       <canvas ref={canvas} onClick={seek} className={`w-full cursor-pointer ${big ? 'h-28' : 'h-14'}`} aria-label="Waveform — click to seek" />
       <div className="mt-2 flex items-center gap-2">
-        <button type="button" onClick={toggle} className="press mono w-9 rounded-lg border px-2 py-1.5 text-[13px]" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }} aria-label={playing ? 'Pause' : 'Play'}>{playing ? '❚❚' : '▶'}</button>
+        <button type="button" onClick={toggle} className="press mono w-9 rounded-lg border px-2 py-1.5 text-[13px]" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }} aria-label={playing ? 'Pause' : 'Play'}><Icon name={playing ? 'pause' : 'play'} size={16} /></button>
         <span className="mono text-[10.5px] tabular-nums" style={{ color: 'var(--ink-faint)' }}>{fmtTime(time.now)} / {fmtTime(time.len)}</span>
         <select value={rate} onChange={(e) => { const r = Number(e.target.value); setRate(r); if (audio.current) audio.current.playbackRate = r; }} className="mono ml-auto rounded border bg-transparent px-1.5 py-1 text-[10.5px]" style={{ borderColor: 'var(--line)', color: 'var(--ink)' }} aria-label="Speed">
           {[0.5, 0.75, 1, 1.25, 1.5, 2].map((r) => <option key={r} value={r}>{r}×</option>)}
@@ -170,9 +171,9 @@ export function AudioStudio() {
         <ul className="space-y-1.5">
           {tracks.map((t) => (
             <li key={t.id} className="flex items-center gap-1 rounded-lg border px-2 py-1.5" style={{ borderColor: t.id === now?.id ? 'var(--accent)' : 'var(--line)' }}>
-              <button type="button" onClick={() => setSelected(t.id)} className="min-w-0 flex-1 truncate text-left text-[11.5px]" style={{ color: 'var(--ink-dim)' }}>♪ {t.prompt}</button>
-              <button type="button" onClick={() => downloadAsset(t)} className="press px-1 text-[12px]" aria-label="Download">⬇</button>
-              <button type="button" onClick={async () => { await deleteAsset(t.id); void refresh(); }} className="press px-1 text-[12px]" aria-label="Delete">✕</button>
+              <button type="button" onClick={() => setSelected(t.id)} className="min-w-0 flex-1 truncate text-left text-[11.5px]" style={{ color: 'var(--ink-dim)' }}><span className="inline-flex items-center gap-1.5"><Icon name="note" size={13} />{t.prompt}</span></button>
+              <button type="button" onClick={() => downloadAsset(t)} className="press px-1 text-[12px]" aria-label="Download"><Icon name="download" size={14} /></button>
+              <button type="button" onClick={async () => { await deleteAsset(t.id); void refresh(); }} className="press px-1 text-[12px]" aria-label="Delete"><Icon name="close" size={14} /></button>
             </li>
           ))}
         </ul>

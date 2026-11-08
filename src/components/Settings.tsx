@@ -17,6 +17,7 @@ import { downloadText } from '@/lib/zip';
 import { isShellHosted, loadKeys, maskKey, nimConfigured, saveKeys, validateNimKey } from '@/lib/keys';
 import { normalizeBase } from '@/lib/providers/model-list';
 import { parseBridgeInput } from '@/lib/bridge/parse';
+import { Icon } from '@/components/Icon';
 
 type Tab = 'guide' | 'keys' | 'free' | 'tools' | 'bridge' | 'secrets' | 'endpoints' | 'media' | 'deploy' | 'drive' | 'voice' | 'guard';
 
@@ -83,13 +84,13 @@ function BridgeTab() {
     try {
       const health = await bridge.health();
       setResult(
-        `✔ ${health.agent} v${health.version} · ${health.platform}/${health.arch} · workspace ${health.workspace}`,
+        `Connected: ${health.agent} v${health.version} · ${health.platform}/${health.arch} · workspace ${health.workspace}`,
       );
     } catch (err) {
       setResult(
         !token
-          ? `✘ No token found in that paste. The address ${url ? `(${url}) ` : ''}needs its password after a # — like ${url || 'https://your-bridge'}#YOUR_TOKEN. For a Hugging Face Space, the token is the CHOMUGIRI_TOKEN secret you set in the Space's Settings.`
-          : `✘ ${(err as Error).message}`,
+          ? `Failed: no token found in that paste. The address ${url ? `(${url}) ` : ''}needs its password after a # — like ${url || 'https://your-bridge'}#YOUR_TOKEN. For a Hugging Face Space, the token is the CHOMUGIRI_TOKEN secret you set in the Space's Settings.`
+          : `Failed: ${(err as Error).message}`,
       );
     } finally {
       setTesting(false);
@@ -177,8 +178,8 @@ cloudflared tunnel --url http://localhost:7717`}</pre>
         <p
           className="mono rounded-lg border px-2.5 py-2 text-[10.5px] leading-[1.5]"
           style={{
-            borderColor: result.startsWith('✔') ? 'color-mix(in oklab, var(--accent) 40%, var(--line))' : 'color-mix(in oklab, var(--color-rose) 40%, var(--line))',
-            color: result.startsWith('✔') ? 'var(--accent)' : 'var(--color-rose)',
+            borderColor: result.startsWith('Connected') ? 'color-mix(in oklab, var(--accent) 40%, var(--line))' : 'color-mix(in oklab, var(--color-rose) 40%, var(--line))',
+            color: result.startsWith('Connected') ? 'var(--accent)' : 'var(--color-rose)',
           }}
         >
           {result}
@@ -193,7 +194,7 @@ cloudflared tunnel --url http://localhost:7717`}</pre>
           <div className="mono grid grid-cols-2 gap-x-3 gap-y-1 text-[10.5px]">
             {Object.entries(heartbeat.health.toolchains).map(([name, version]) => (
               <div key={name} className="flex items-baseline gap-1.5">
-                <span style={{ color: version ? 'var(--accent)' : 'var(--color-rose)' }}>{version ? '✔' : '✘'}</span>
+                <span style={{ color: version ? 'var(--accent)' : 'var(--color-rose)' }}>{version ? <Icon name="check" size={13} /> : <Icon name="close" size={13} />}</span>
                 <span style={{ color: 'var(--ink-dim)' }}>{name}</span>
                 <span className="truncate" style={{ color: 'var(--ink-faint)' }}>
                   {version ?? 'absent'}
@@ -533,7 +534,7 @@ function EndpointsTab({ goTo }: { goTo: (tab: Tab) => void }) {
                     color: here ? 'var(--panel)' : done ? 'var(--accent)' : 'var(--ink-faint)',
                   }}
                 >
-                  {done ? '✓' : n}
+                  {done ? <Icon name="check" size={12} stroke={2.4} /> : n}
                 </span>
                 {title}
               </button>
@@ -632,7 +633,7 @@ function EndpointsTab({ goTo }: { goTo: (tab: Tab) => void }) {
             className="press hand w-full rounded-xl px-4 py-2.5 text-[13px]"
             style={{ background: 'var(--accent)', color: 'var(--panel)', opacity: connecting || !baseUrl.trim() ? 0.5 : 1 }}
           >
-            {connecting ? 'connecting…' : 'Connect →'}
+            {connecting ? 'connecting…' : 'Connect'}
           </button>
         </>
       )}
@@ -643,7 +644,7 @@ function EndpointsTab({ goTo }: { goTo: (tab: Tab) => void }) {
           {probe?.ok ? (
             <div className="sketch-b p-2.5">
               <p className="mono text-[10.5px]" style={{ color: 'var(--color-success)' }}>
-                ✔ connected in {probe.latencyMs}ms{probe.dialect ? ` · speaks ${DIALECT_LABELS[probe.dialect]}` : ''}
+                <span className="inline-flex items-center gap-1.5"><Icon name="check" size={13} stroke={2.2} />connected in {probe.latencyMs}ms{probe.dialect ? ` · speaks ${DIALECT_LABELS[probe.dialect]}` : ''}</span>
               </p>
               <p className="mono mt-1 text-[10px]" style={{ color: 'var(--ink-faint)' }}>
                 {probe.models.length} model{probe.models.length === 1 ? '' : 's'} found at {probe.baseUrl}
@@ -700,7 +701,7 @@ function EndpointsTab({ goTo }: { goTo: (tab: Tab) => void }) {
               style={{ borderColor: test.ok ? 'var(--color-success)' : 'var(--color-danger)' }}
             >
               <p className="mono text-[10.5px]" style={{ color: test.ok ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                {test.ok ? `✔ it answered in ${test.ms}ms` : '✕ it did not answer'}
+                <span className="inline-flex items-center gap-1.5"><Icon name={test.ok ? 'check' : 'close'} size={13} stroke={2.2} />{test.ok ? `it answered in ${test.ms}ms` : 'it did not answer'}</span>
               </p>
               <p className="mono mt-1 break-words text-[10px]" style={{ color: 'var(--ink-dim)' }}>
                 {test.ok ? `“${test.reply}”` : test.error}
@@ -715,7 +716,7 @@ function EndpointsTab({ goTo }: { goTo: (tab: Tab) => void }) {
               className="press mono rounded-xl border px-3 py-2.5 text-[11px]"
               style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
             >
-              ← back
+              <span className="inline-flex items-center gap-1"><Icon name="back" size={13} />back</span>
             </button>
             <button
               type="button"
@@ -724,7 +725,7 @@ function EndpointsTab({ goTo }: { goTo: (tab: Tab) => void }) {
               className="press hand flex-1 rounded-xl px-4 py-2.5 text-[13px]"
               style={{ background: 'var(--accent)', color: 'var(--panel)', opacity: testing || !model.trim() ? 0.5 : 1 }}
             >
-              {testing ? 'sending a test message…' : 'Send a test message →'}
+              {testing ? 'sending a test message…' : 'Send a test message'}
             </button>
           </div>
 
@@ -747,7 +748,7 @@ function EndpointsTab({ goTo }: { goTo: (tab: Tab) => void }) {
           {test?.ok ? (
             <div className="sketch-b p-2.5" style={{ borderColor: 'var(--color-success)' }}>
               <p className="mono text-[10.5px]" style={{ color: 'var(--color-success)' }}>
-                ✔ {model} answered in {test.ms}ms. This endpoint works.
+                <span className="inline-flex items-center gap-1.5"><Icon name="check" size={13} stroke={2.2} />{model} answered in {test.ms}ms. This endpoint works.</span>
               </p>
               {test.reply && (
                 <p className="mono mt-1 break-words text-[10px]" style={{ color: 'var(--ink-dim)' }}>
@@ -803,7 +804,7 @@ function EndpointsTab({ goTo }: { goTo: (tab: Tab) => void }) {
               className="press mono rounded-xl border px-3 py-2.5 text-[11px]"
               style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
             >
-              ← back
+              <span className="inline-flex items-center gap-1"><Icon name="back" size={13} />back</span>
             </button>
             <button
               type="button"
@@ -952,7 +953,7 @@ function EndpointsTab({ goTo }: { goTo: (tab: Tab) => void }) {
                                     color: 'var(--panel)',
                                   }}
                                 >
-                                  {on ? '✓' : ''}
+                                  {on ? <Icon name="check" size={11} stroke={2.6} /> : null}
                                 </span>
                                 <span className="min-w-0 flex-1 truncate">{m.label || m.id}</span>
                               </button>
@@ -1089,7 +1090,7 @@ function SecretsTab() {
 
         {name && isClientExposed(name) && (
           <p className="mt-1.5 text-[10.5px] leading-[1.45]" style={{ color: 'var(--color-amber)' }}>
-            ⚠ {name.split('_')[0]}_ prefixed variables are inlined into the client bundle and shipped to every visitor.
+            <Icon name="alert" size={13} style={{ display: 'inline', verticalAlign: '-2px', marginRight: 4 }} />{name.split('_')[0]}_ prefixed variables are inlined into the client bundle and shipped to every visitor.
             Only put values here that are safe to publish.
           </p>
         )}
@@ -1158,7 +1159,7 @@ function SecretsTab() {
               className="press mono flex-1 rounded-lg border px-3 py-2 text-[10.5px]"
               style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
             >
-              ↓ .env.local (with values)
+              <span className="inline-flex items-center gap-1"><Icon name="download" size={13} />.env.local (with values)</span>
             </button>
             <button
               type="button"
@@ -1166,7 +1167,7 @@ function SecretsTab() {
               className="press mono flex-1 rounded-lg border px-3 py-2 text-[10.5px]"
               style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
             >
-              ↓ .env.example (names only)
+              <span className="inline-flex items-center gap-1"><Icon name="download" size={13} />.env.example (names only)</span>
             </button>
           </div>
         </>
@@ -1331,7 +1332,7 @@ function DriveTab() {
           <ul className="max-h-40 space-y-1 overflow-y-auto">
             {uploads.map((u) => (
               <li key={`${u.id}-${u.at}`} className="flex items-center gap-2 rounded-lg border px-2 py-1.5 text-[10.5px]" style={{ borderColor: 'var(--line)' }}>
-                <span aria-hidden style={{ color: u.status === 'ok' ? 'var(--accent)' : 'var(--color-rose, #e5484d)' }}>{u.status === 'ok' ? '✓' : '✕'}</span>
+                <span aria-hidden style={{ color: u.status === 'ok' ? 'var(--accent)' : 'var(--color-rose, #e5484d)' }}><Icon name={u.status === 'ok' ? 'check' : 'close'} size={13} /></span>
                 <span className="min-w-0 flex-1 truncate" style={{ color: 'var(--ink-dim)' }}>{u.filename}</span>
                 <span className="mono shrink-0" style={{ color: 'var(--ink-faint)' }}>{new Date(u.at).toLocaleTimeString()}</span>
               </li>
@@ -1373,7 +1374,7 @@ function ToolsTab() {
           </button>
         </div>
         <ul className="space-y-1 text-[11px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
-          <li>With this on, a <span className="mono" style={{ color: 'var(--accent)' }}>⬡ swarm</span> button appears under the message box. The swarm runs only when you tap it (it lights up); otherwise one model does the build, as before.</li>
+          <li>With this on, a <span className="mono" style={{ color: 'var(--accent)' }}>swarm</span> button appears under the message box. The swarm runs only when you tap it (it lights up); otherwise one model does the build, as before.</li>
           <li>If you picked one model yourself, that model plays every role. With <span className="mono">Gateway · Auto</span> each role gets the kind of model it needs: reasoning for the Architect and Reviewer, code for the Coder.</li>
           <li>It makes several model calls per build, so it uses more of your free limits than a single call.</li>
         </ul>
@@ -1638,7 +1639,7 @@ function KeysTab() {
 
       {nimSaved && !nim && (
         <p className="mono text-[10.5px]" style={{ color: 'var(--color-success)' }}>
-          ✔ a key is saved on this device — leave the field empty to keep it
+          <span className="inline-flex items-center gap-1.5"><Icon name="check" size={13} stroke={2.2} />a key is saved on this device — leave the field empty to keep it</span>
         </p>
       )}
 
@@ -1936,7 +1937,7 @@ function GuideTab() {
           >
             <p className="flex items-center gap-2 text-[12px]" style={{ color: 'var(--ink)' }}>
               <span className="mono text-[10px]" style={{ color: step.done ? 'var(--color-success)' : 'var(--ink-faint)' }}>
-                {step.done ? '✔' : String(i + 1).padStart(2, '0')}
+                {step.done ? <Icon name="check" size={13} stroke={2.4} /> : String(i + 1).padStart(2, '0')}
               </span>
               {step.title}
             </p>
@@ -1976,7 +1977,7 @@ function GuideTab() {
             in the box: /make-apk, /build-mcpack, /deploy, /research, /audit-code, /make-deck.
           </li>
           <li>
-            <span className="mono" style={{ color: 'var(--ink)' }}>Drafts</span> — the ⑂ button answers twice and lets you
+            <span className="mono" style={{ color: 'var(--ink)' }}>Drafts</span> — the drafts button answers twice and lets you
             pick. Costs two completions; on NVIDIA&apos;s free tier they run one after the other.
           </li>
           <li>
@@ -1988,8 +1989,8 @@ function GuideTab() {
             for deployment. Paste a key into the chat box and sending is blocked until it is removed.
           </li>
           <li>
-            <span className="mono" style={{ color: 'var(--ink)' }}>Theme</span> — the ☀ / ◐ / ☾ control in the header.
-            ◐ follows your phone.
+            <span className="mono" style={{ color: 'var(--ink)' }}>Theme</span> — the sun / half-circle / moon control in the header.
+            The half-circle follows your phone.
           </li>
           <li>
             <span className="mono" style={{ color: 'var(--ink)' }}>History</span> — every suite keeps its own, searchable
@@ -2137,7 +2138,7 @@ export function Settings({ open, onClose }: { open: boolean; onClose: () => void
         <header className="flex shrink-0 items-center gap-3 border-b px-4 py-3" style={{ borderColor: 'var(--line)' }}>
           <h2 className="text-[14px] font-semibold tracking-tight">Settings</h2>
           <button type="button" onClick={onClose} className="mono ml-auto text-[12px]" style={{ color: 'var(--ink-faint)' }} aria-label="Close">
-            ✕
+            <Icon name="close" size={16} />
           </button>
         </header>
 

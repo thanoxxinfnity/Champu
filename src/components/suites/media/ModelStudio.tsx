@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Icon } from '@/components/Icon';
 
 /**
  * A real, minimal 3D modelling studio: a perspective viewport, an outliner, Object-Mode transforms
@@ -366,7 +367,7 @@ export function ModelStudio({ src, title, onClose, onExport }: {
           <ul className="space-y-1">
             {outliner.map((o) => (
               <li key={o.id}>
-                <button type="button" onClick={() => api.current?.select(o.object)} className="press mono w-full truncate rounded-lg border px-2 py-1 text-left text-[11px]" style={{ borderColor: o.id === selectedId ? 'var(--accent)' : 'var(--line)', color: 'var(--ink-dim)' }}>⬡ {o.name}</button>
+                <button type="button" onClick={() => api.current?.select(o.object)} className="press mono w-full truncate rounded-lg border px-2 py-1 text-left text-[11px]" style={{ borderColor: o.id === selectedId ? 'var(--accent)' : 'var(--line)', color: 'var(--ink-dim)' }}><span className="inline-flex items-center gap-1.5"><Icon name="swarm" size={13} />{o.name}</span></button>
               </li>
             ))}
             {outliner.length === 0 && <li className="px-1 text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>Empty scene — add a mesh or import a file.</li>}

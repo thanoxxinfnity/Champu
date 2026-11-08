@@ -1,6 +1,7 @@
 'use client';
 
 import { useWorkspace, type ThemePref } from '@/lib/store';
+import { Icon } from '@/components/Icon';
 
 /**
  * Light / system / dark, as three hand-drawn keys.
@@ -11,9 +12,9 @@ import { useWorkspace, type ThemePref } from '@/lib/store';
  */
 
 const OPTIONS: Array<{ value: ThemePref; glyph: string; label: string }> = [
-  { value: 'light', glyph: '☀', label: 'Light' },
-  { value: 'system', glyph: '◐', label: 'Follow system' },
-  { value: 'dark', glyph: '☾', label: 'Dark' },
+  { value: 'light', glyph: 'sun', label: 'Light' },
+  { value: 'system', glyph: 'circleHalf', label: 'Follow system' },
+  { value: 'dark', glyph: 'moon', label: 'Dark' },
 ];
 
 export function ThemeToggle({ className = '' }: { className?: string }) {
@@ -52,7 +53,7 @@ export function ThemeToggle({ className = '' }: { className?: string }) {
               transition: 'background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out)',
             }}
           >
-            {opt.glyph}
+            <Icon name={opt.glyph} size={13} />
           </button>
         );
       })}

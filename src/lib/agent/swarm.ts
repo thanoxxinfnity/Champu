@@ -314,7 +314,7 @@ export async function runSwarm(task: string, deps: SwarmDeps, opts: { maxRounds?
     deps.log(`[1/${total}] Architect · no plan (${(err as Error).message.slice(0, 80)}), the Coder will plan as it writes`);
   }
   if (arch) {
-    deps.log(`[1/${total}] Architect ✓ ${arch.modules.length} file${arch.modules.length === 1 ? '' : 's'}: ${arch.modules.map((m) => m.path).join(', ')}`);
+    deps.log(`[1/${total}] Architect: ${arch.modules.length} file${arch.modules.length === 1 ? '' : 's'}: ${arch.modules.map((m) => m.path).join(', ')}`);
     deps.step?.('architect', 'done', `${arch.modules.length} files`);
   } else {
     deps.step?.('architect', 'failed', 'no plan');
@@ -348,7 +348,7 @@ export async function runSwarm(task: string, deps: SwarmDeps, opts: { maxRounds?
     }
     for (const p of applied.wrote) touched.add(p);
     commands.push(...applied.commands);
-    deps.log(`[2/${total}] Coder ✓ ${[...new Set(applied.wrote)].length} file${[...new Set(applied.wrote)].length === 1 ? '' : 's'} written`);
+    deps.log(`[2/${total}] Coder: ${[...new Set(applied.wrote)].length} file${[...new Set(applied.wrote)].length === 1 ? '' : 's'} written`);
     deps.step?.('coder', 'done', `batch ${i + 1}/${batches.length}`);
     if (aborted()) return finish(arch, [], 0, true);
   }
@@ -371,11 +371,11 @@ export async function runSwarm(task: string, deps: SwarmDeps, opts: { maxRounds?
     }
     issues = [...local, ...found.filter((f) => !local.some((l) => l.path === f.path && l.problem === f.problem))];
     if (!issues.length) {
-      deps.log(`[3/${total}] Reviewer ✓ no problems found`);
+      deps.log(`[3/${total}] Reviewer: no problems found`);
       deps.step?.('reviewer', 'done', 'clean');
       break;
     }
-    deps.log(`[3/${total}] Reviewer ✗ ${issues.length} issue${issues.length === 1 ? '' : 's'}: ${issues.slice(0, 3).map((i) => `${i.path} — ${i.problem}`).join('; ')}${issues.length > 3 ? '; …' : ''}`);
+    deps.log(`[3/${total}] Reviewer: ${issues.length} issue${issues.length === 1 ? '' : 's'}: ${issues.slice(0, 3).map((i) => `${i.path} — ${i.problem}`).join('; ')}${issues.length > 3 ? '; …' : ''}`);
     if (round === maxRounds || aborted()) {
       deps.step?.('reviewer', 'failed', `${issues.length} open`);
       break;

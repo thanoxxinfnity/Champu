@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { openSessionById } from '@/lib/session/open';
 import { useWorkspace } from '@/lib/store';
 import type { RunNotice } from '@/lib/store';
+import { Icon } from '@/components/Icon';
 
 /**
  * Finished background runs, announced and then gone.
@@ -81,13 +82,13 @@ export function RunNotices() {
               style={{ color: 'var(--ink-faint)' }}
               aria-label="Dismiss"
             >
-              ✕
+              <Icon name="close" size={14} />
             </button>
             <span
               className="mono flex items-center gap-1.5 text-[9.5px] uppercase tracking-[0.12em]"
               style={{ color: failed ? 'var(--color-danger)' : 'var(--accent)' }}
             >
-              <span aria-hidden>{failed ? '✕' : '✔'}</span>
+              <span aria-hidden><Icon name={failed ? 'circleX' : 'circleCheck'} size={15} /></span>
               {notice.title ?? (failed ? 'run failed' : 'run finished')}
               <span style={{ color: 'var(--ink-faint)' }}>· {SUITE_LABEL[notice.suite] ?? notice.suite}</span>
             </span>

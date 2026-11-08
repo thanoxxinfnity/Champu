@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useWorkspace, visibleFiles } from '@/lib/store';
 import { downloadZip, downloadText, formatBytes } from '@/lib/zip';
+import { Icon } from '@/components/Icon';
 
 interface TreeNode {
   name: string;
@@ -73,7 +74,7 @@ function TreeRow({
         }}
       >
         <span className="mono shrink-0 text-[9px]" style={{ color: 'var(--ink-faint)' }} aria-hidden>
-          {node.isDir ? (isCollapsed ? '▸' : '▾') : '·'}
+          {node.isDir ? <Icon name={isCollapsed ? 'chevronRight' : 'chevronDown'} size={12} /> : '·'}
         </span>
         <span className="mono truncate text-[11.5px]">{node.name}</span>
         {node.bytes != null && (
@@ -131,9 +132,9 @@ export function FileManager() {
     setSyncing(true);
     try {
       const result = await bridge.writeFiles(list.map((f) => ({ path: f.path, content: f.content })));
-      appendTerminal({ stream: 'system', text: `⇪ synced ${result.count} file(s) to the bridge workspace` });
+      appendTerminal({ stream: 'system', text: `Synced ${result.count} file(s) to the bridge workspace` });
     } catch (err) {
-      appendTerminal({ stream: 'system', text: `⚠  sync failed: ${(err as Error).message}` });
+      appendTerminal({ stream: 'system', text: `Sync failed: ${(err as Error).message}` });
     } finally {
       setSyncing(false);
     }

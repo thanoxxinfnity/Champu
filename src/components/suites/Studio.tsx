@@ -16,6 +16,7 @@ import {
 import { renderMarkdown } from '@/components/markdown';
 import { useWorkspace } from '@/lib/store';
 import { downloadText } from '@/lib/zip';
+import { Icon } from '@/components/Icon';
 
 const LAYOUTS: SlideLayout[] = ['title', 'section', 'bullets', 'split', 'quote', 'code', 'image', 'stats', 'end'];
 
@@ -157,7 +158,7 @@ export function Studio() {
                       className="mono shrink-0 text-[10px]"
                       style={{ color: 'var(--color-rose)' }}
                     >
-                      ✕
+                      <Icon name="close" size={14} />
                     </button>
                   )}
                 </div>

@@ -72,7 +72,7 @@ test('a run where every command passed says so in one line', () => {
     { command: 'npm run build', ok: true, exitCode: 0, durationMs: 8_100 },
   ]);
   assert.match(out, /Commands run\*\* — 2 — all passed/);
-  assert.match(out, /✔ exit 0 — `npm install` · 12\.3s/);
+  assert.match(out, /done · exit 0 — `npm install` · 12\.3s/);
   assert.ok(!out.includes('```'), 'no error block when nothing failed');
 });
 
@@ -81,7 +81,7 @@ test('a failed command shows its exit code and the real error text', () => {
     { command: 'gradle assembleRelease', ok: false, exitCode: 1, durationMs: 4_000, errorExcerpt: "error: resource mipmap/ic_launcher not found\nBUILD FAILED" },
   ]);
   assert.match(out, /1 failed/);
-  assert.match(out, /✘ exit 1 — `gradle assembleRelease`/);
+  assert.match(out, /failed · exit 1 — `gradle assembleRelease`/);
   assert.match(out, /resource mipmap\/ic_launcher not found/);
   assert.match(out, /BUILD FAILED/);
 });
@@ -109,7 +109,7 @@ test('a command parked because the bridge is offline is not reported as run', ()
 
 test('a banned command reads as blocked, not as a failure with an exit code', () => {
   const out = renderCommandLog([{ command: 'rm -rf /', ok: false, exitCode: null, skipped: 'banned' }]);
-  assert.match(out, /⛔ blocked — `rm -rf \/`/);
+  assert.match(out, /blocked — `rm -rf \/`/);
 });
 
 test('nothing run produces nothing', () => {
@@ -118,7 +118,7 @@ test('nothing run produces nothing', () => {
 
 test('a command that passed on retry says so; one that failed twice says that', () => {
   const ok = renderCommandLog([{ command: 'gradle assembleDebug', ok: true, exitCode: 0, retried: true }]);
-  assert.match(ok, /✔ exit 0 — `gradle assembleDebug` · passed on retry after a network hiccup/);
+  assert.match(ok, /done · exit 0 — `gradle assembleDebug` · passed on retry after a network hiccup/);
   assert.match(ok, /all passed/);
   const bad = renderCommandLog([{ command: 'npm i', ok: false, exitCode: 1, retried: true, errorExcerpt: 'ECONNRESET' }]);
   assert.match(bad, /failed again on retry/);

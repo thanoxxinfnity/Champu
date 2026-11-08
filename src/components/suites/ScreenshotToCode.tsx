@@ -225,7 +225,7 @@ export function ScreenshotToCode() {
       <aside className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto border-b p-3 md:w-80 md:border-b-0 md:border-r" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
         <div>
           <div className="text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>Screenshot → Code</div>
-          <div className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>Drop, paste (Ctrl/⌘ V) or pick a screenshot or mock-up; a vision model rebuilds it as code.</div>
+          <div className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>Drop, paste (Ctrl+V) or pick a screenshot or mock-up; a vision model rebuilds it as code.</div>
         </div>
 
         <div

@@ -358,11 +358,11 @@ function ModelSwitcher() {
         <span className="min-w-0 max-w-28 truncate sm:max-w-40">{active ? shortName(active) : selection.model.split('/').pop()}</span>
         {active?.capabilities.includes('reasoning') && (
           <span style={{ color: 'var(--color-indigo)' }} title="Emits reasoning tokens">
-            ⚛
+            <Icon name="atom" size={13} />
           </span>
         )}
         <span aria-hidden className="shrink-0" style={{ color: 'var(--ink-faint)' }}>
-          ▾
+          <Icon name="chevronDown" size={13} />
         </span>
       </button>
 
@@ -395,7 +395,7 @@ function ModelSwitcher() {
               style={{ color: 'var(--ink-faint)' }}
               title="Re-probe provider catalogues"
             >
-              {loading ? '…' : '↻'}
+              {loading ? '…' : <Icon name="refresh" size={14} />}
             </button>
           </div>
 
@@ -466,12 +466,12 @@ Open Settings → API Keys to add
                       <span className="ml-auto flex shrink-0 gap-1">
                         {model.capabilities.includes('reasoning') && (
                           <span className="text-[9px]" style={{ color: 'var(--color-indigo)' }} title="reasoning">
-                            ⚛
+                            <Icon name="atom" size={13} />
                           </span>
                         )}
                         {model.capabilities.includes('vision') && (
                           <span className="text-[9px]" style={{ color: 'var(--color-amber)' }} title="vision">
-                            ◉
+                            <Icon name="eye" size={12} />
                           </span>
                         )}
                         {model.origin === 'alias' && (
@@ -917,7 +917,7 @@ export function CommandDock() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={a.dataUrl} alt="" className="h-4 w-4 rounded-sm object-cover" />
                   ) : (
-                    <span style={{ color: a.text ? 'var(--accent)' : 'var(--ink-faint)' }}>◆</span>
+                    <span style={{ color: a.text ? 'var(--accent)' : 'var(--ink-faint)' }}><Icon name="file" size={13} /></span>
                   )}
                   <span className="max-w-40 truncate">{a.name}</span>
                   <span style={{ color: 'var(--ink-faint)' }}>{formatBytes(a.bytes)}</span>
@@ -927,7 +927,7 @@ export function CommandDock() {
                     style={{ color: 'var(--ink-faint)' }}
                     aria-label={`Remove ${a.name}`}
                   >
-                    ✕
+                    <Icon name="close" size={14} />
                   </button>
                 </span>
               ))}
@@ -949,7 +949,7 @@ export function CommandDock() {
                     style={{ color: 'var(--ink-faint)' }}
                     aria-label="Remove from queue"
                   >
-                    ✕
+                    <Icon name="close" size={14} />
                   </button>
                 </div>
               ))}
@@ -988,7 +988,7 @@ export function CommandDock() {
           />
 
           {/*
-            flex-wrap, not nowrap: at phone width ＋, Lane, drafts, the model
+            flex-wrap, not nowrap: at phone width the plus button, Lane, drafts, the model
             chip and Run do not fit on one line, and without wrapping the row
             simply overflowed — the model name ran underneath Run, which made
             Run unreadable and easy to miss.
@@ -1012,7 +1012,7 @@ export function CommandDock() {
               style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
               title="Attach images, code or documents"
             >
-              ＋
+              <Icon name="plus" size={16} />
             </button>
 
             <button
@@ -1023,7 +1023,7 @@ export function CommandDock() {
               title="Share your screen (or the agent's) with the AI — it sees one frame with your message"
               aria-label="Share screen with the AI"
             >
-              ⧉ screen
+              <span className="inline-flex items-center gap-1.5"><Icon name="screen" size={14} />screen</span>
             </button>
 
             {screenLive && (
@@ -1056,7 +1056,7 @@ export function CommandDock() {
                   : 'Generate two alternative answers and pick one.'
               }
             >
-              ⑂ drafts
+              <span className="inline-flex items-center gap-1.5"><Icon name="branch" size={14} />drafts</span>
             </button>
             {swarmEngine && (
               <button
@@ -1076,7 +1076,7 @@ export function CommandDock() {
                     : 'Tap to build with the Swarm: Architect plans, Coder writes, Reviewer checks, Orchestrator puts it together.'
                 }
               >
-                ⬡ swarm
+                <span className="inline-flex items-center gap-1.5"><Icon name="swarm" size={14} />swarm</span>
               </button>
             )}
 
@@ -1094,7 +1094,7 @@ export function CommandDock() {
                 }}
                 title={bgMode ? 'Background is on: the terminal writes the reply, so it keeps working with the app closed. Tap to turn off.' : 'Tap so the terminal writes the next replies in the background, even with the app closed.'}
               >
-                ☾ background
+                <span className="inline-flex items-center gap-1.5"><Icon name="moon" size={14} />background</span>
               </button>
             )}
 

@@ -16,6 +16,7 @@ import {
   type ToolDef,
   type Values,
 } from '@/lib/tools';
+import { Icon } from '@/components/Icon';
 
 /* ── tiny storage helpers (private windows and blocked storage must not break the screen) ── */
 const FAV_KEY = 'tools.fav.v1';
@@ -55,9 +56,9 @@ function GlyphTile({ glyph, cat, size = 44 }: { glyph: string; cat: Category; si
     <span
       aria-hidden
       className="grid shrink-0 place-items-center font-semibold text-white"
-      style={{ width: size, height: size, borderRadius: size * 0.3, background: gradient(cat), fontSize: size * (glyph.length > 2 ? 0.3 : 0.42), boxShadow: `0 6px 16px -8px hsl(${cat.hue} 80% 40% / .9), inset 0 1px 0 rgb(255 255 255 / .25)`, letterSpacing: glyph.length > 2 ? '-0.04em' : undefined }}
+      style={{ width: size, height: size, borderRadius: size * 0.3, background: gradient(cat), fontSize: size * (glyph.length > 2 && !glyph.startsWith('icon:') ? 0.3 : 0.42), boxShadow: `0 6px 16px -8px hsl(${cat.hue} 80% 40% / .9), inset 0 1px 0 rgb(255 255 255 / .25)`, letterSpacing: glyph.length > 2 && !glyph.startsWith('icon:') ? '-0.04em' : undefined }}
     >
-      {glyph}
+      {glyph.startsWith('icon:') ? <Icon name={glyph.slice(5)} size={Math.round(size * 0.5)} stroke={1.9} /> : glyph}
     </span>
   );
 }
@@ -207,8 +208,8 @@ function SvgView({ svg, name, onDone }: { svg: string; name: string; onDone: (m:
   };
   return (
     <Card title="Preview" actions={<>
-      <button type="button" className="press mono rounded-lg border px-2.5 text-[11px] font-medium" style={{ minHeight: 32, borderColor: 'var(--line)', color: 'var(--ink-dim)' }} onClick={() => saveBlob(new Blob([svg], { type: 'image/svg+xml' }), name)}>SVG ↓</button>
-      <button type="button" className="press mono rounded-lg px-2.5 text-[11px] font-medium text-white" style={{ minHeight: 32, background: 'var(--accent)' }} onClick={png}>PNG ↓</button>
+      <button type="button" className="press mono rounded-lg border px-2.5 text-[11px] font-medium" style={{ minHeight: 32, borderColor: 'var(--line)', color: 'var(--ink-dim)' }} onClick={() => saveBlob(new Blob([svg], { type: 'image/svg+xml' }), name)}><Icon name="download" size={13} /> SVG</button>
+      <button type="button" className="press mono rounded-lg px-2.5 text-[11px] font-medium text-white" style={{ minHeight: 32, background: 'var(--accent)' }} onClick={png}><Icon name="download" size={13} /> PNG</button>
       <CopyBtn text={svg} label="Code" onDone={onDone} />
     </>}>
       <div className="grid place-items-center p-4" style={{ background: 'repeating-conic-gradient(rgb(128 128 128 / .12) 0% 25%, transparent 0% 50%) 50% / 16px 16px' }}>
@@ -222,7 +223,7 @@ function SvgView({ svg, name, onDone }: { svg: string; name: string; onDone: (m:
 function Result({ out, cat, onDone }: { out: Out; cat: Category; onDone: (m: string) => void }) {
   switch (out.kind) {
     case 'error':
-      return <div role="alert" className="rounded-2xl border px-4 py-3 text-[13.5px]" style={{ borderColor: 'hsl(8 70% 55% / .5)', background: 'hsl(8 70% 55% / .1)', color: 'var(--ink)' }}>⚠ {out.message}</div>;
+      return <div role="alert" className="rounded-2xl border px-4 py-3 text-[13.5px]" style={{ borderColor: 'hsl(8 70% 55% / .5)', background: 'hsl(8 70% 55% / .1)', color: 'var(--ink)' }}><span className="inline-flex items-start gap-2"><Icon name="alert" size={16} style={{ marginTop: 2 }} />{out.message}</span></div>;
     case 'text':
       return (
         <Card title="Result" actions={<CopyBtn text={out.text} onDone={onDone} />}>
@@ -396,7 +397,7 @@ function ToolPanel({ tool, fav, onFav, onBack, onToast }: { tool: ToolDef; fav: 
           <h2 className="truncate text-[16px] font-semibold leading-tight" style={{ color: 'var(--ink)' }}>{tool.name}</h2>
           <p className="truncate text-[12px]" style={{ color: 'var(--ink-dim)' }}>{tool.blurb}</p>
         </div>
-        <button type="button" onClick={onFav} aria-pressed={fav} aria-label={fav ? 'Remove from favourites' : 'Add to favourites'} className="press grid place-items-center rounded-xl text-[20px]" style={{ width: 40, height: 40, color: fav ? 'hsl(45 95% 55%)' : 'var(--ink-faint)' }}>{fav ? '★' : '☆'}</button>
+        <button type="button" onClick={onFav} aria-pressed={fav} aria-label={fav ? 'Remove from favourites' : 'Add to favourites'} className="press grid place-items-center rounded-xl " style={{ width: 40, height: 40, color: fav ? 'hsl(45 95% 55%)' : 'var(--ink-faint)' }}><Icon name={fav ? 'starFill' : 'star'} size={20} /></button>
       </header>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 pb-24">
@@ -406,7 +407,7 @@ function ToolPanel({ tool, fav, onFav, onBack, onToast }: { tool: ToolDef; fav: 
             <div className="flex flex-wrap gap-2 pt-1">
               {tool.manual && (
                 <button type="button" onClick={() => void go(vals)} className="press min-w-[9rem] flex-1 whitespace-nowrap rounded-xl px-4 text-[14px] font-semibold text-white" style={{ minHeight: 46, background: gradient(cat), boxShadow: `0 8px 20px -10px hsl(${cat.hue} 80% 40%)` }}>
-                  {busy ? 'Working…' : out ? '↻ Generate again' : 'Generate'}
+                  {busy ? 'Working…' : out ? <span className="inline-flex items-center gap-1.5"><Icon name="refresh" size={15} />Generate again</span> : 'Generate'}
                 </button>
               )}
               <button type="button" onClick={example} className="press mono rounded-xl border px-3 text-[12px] font-medium" style={{ minHeight: 46, borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>Example</button>
@@ -441,7 +442,7 @@ function Tile({ t, fav, onOpen, onFav, active }: { t: ToolDef; fav: boolean; onO
           <span className="line-clamp-2 text-[11.5px] leading-snug" style={{ color: 'var(--ink-dim)' }}>{t.blurb}</span>
         </span>
       </button>
-      <button type="button" onClick={onFav} aria-pressed={fav} aria-label={fav ? `Unfavourite ${t.name}` : `Favourite ${t.name}`} className="press absolute right-1 top-1/2 grid -translate-y-1/2 place-items-center rounded-xl text-[18px]" style={{ width: 40, height: 40, color: fav ? 'hsl(45 95% 55%)' : 'var(--ink-faint)' }}>{fav ? '★' : '☆'}</button>
+      <button type="button" onClick={onFav} aria-pressed={fav} aria-label={fav ? `Unfavourite ${t.name}` : `Favourite ${t.name}`} className="press absolute right-1 top-1/2 grid -translate-y-1/2 place-items-center rounded-xl " style={{ width: 40, height: 40, color: fav ? 'hsl(45 95% 55%)' : 'var(--ink-faint)' }}><Icon name={fav ? 'starFill' : 'star'} size={18} /></button>
     </div>
   );
 }
@@ -504,14 +505,14 @@ export function ToolsHub() {
             </div>
           </div>
           <div className="relative">
-            <span aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px]" style={{ color: 'var(--ink-faint)' }}>⌕</span>
+            <span aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--ink-faint)' }}><Icon name="search" size={16} /></span>
             <input value={q} onChange={(e) => setQ(e.target.value)} type="search" placeholder="Search — emi, qr, json, password…" aria-label="Search tools" className={inputBase + ' pl-9'} style={{ ...inputStyle, borderRadius: 14 }} />
           </div>
           <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1" role="group" aria-label="Filter by category">
             {chip('all', 'All')}
-            {chip('fav', `★ ${favs.length}`)}
+            {chip('fav', `Favourites ${favs.length}`)}
             {chip('recent', 'Recent')}
-            {CATEGORIES.map((c) => chip(c.id, `${c.glyph} ${c.name}`, c.hue))}
+            {CATEGORIES.map((c) => chip(c.id, c.name, c.hue))}
           </div>
         </div>
 
@@ -531,9 +532,9 @@ export function ToolsHub() {
             <div className="space-y-2">{list.map((t) => <Tile key={t.id} t={t} fav={favs.includes(t.id)} onFav={() => toggleFav(t.id)} onOpen={() => open(t.id)} active={openId === t.id} />)}</div>
           ) : (
             <div className="grid place-items-center gap-1 py-16 text-center">
-              <span aria-hidden className="text-[34px]">{filter === 'fav' ? '☆' : '⌕'}</span>
+              <span aria-hidden style={{ color: 'var(--ink-faint)' }}><Icon name={filter === 'fav' ? 'star' : 'search'} size={34} /></span>
               <p className="text-[14px] font-medium" style={{ color: 'var(--ink)' }}>{filter === 'fav' && !q ? 'No favourites yet' : filter === 'recent' && !q ? 'Nothing opened yet' : 'No tool matches'}</p>
-              <p className="text-[12px]" style={{ color: 'var(--ink-faint)' }}>{filter === 'fav' && !q ? 'Tap ☆ on any tool to pin it here.' : 'Try another word, or pick All.'}</p>
+              <p className="text-[12px]" style={{ color: 'var(--ink-faint)' }}>{filter === 'fav' && !q ? 'Tap the star on any tool to pin it here.' : 'Try another word, or pick All.'}</p>
             </div>
           )}
         </div>
@@ -546,7 +547,7 @@ export function ToolsHub() {
         ) : (
           <div className="grid h-full place-items-center p-8 text-center">
             <div>
-              <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl text-[28px] text-white" style={{ background: 'linear-gradient(140deg, hsl(262 85% 62%), hsl(320 80% 50%))', boxShadow: '0 14px 30px -14px hsl(290 80% 40%)' }}>✦</div>
+              <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl text-white" style={{ background: 'linear-gradient(140deg, hsl(262 85% 62%), hsl(320 80% 50%))', boxShadow: '0 14px 30px -14px hsl(290 80% 40%)' }}><Icon name="sparkle" size={30} /></div>
               <p className="text-[15px] font-semibold" style={{ color: 'var(--ink)' }}>Pick a tool</p>
               <p className="mt-1 text-[12.5px]" style={{ color: 'var(--ink-faint)' }}>Calculators, converters, generators, developer helpers and more.</p>
             </div>

@@ -14,14 +14,14 @@ export type { Category, Field, Out, ToolDef, Values } from './types.ts';
 export const CATEGORIES: Category[] = [
   { id: 'text', name: 'Text', glyph: 'Aa', hue: 262, blurb: 'Count, clean, convert and play with text' },
   { id: 'dev', name: 'Developer', glyph: '{ }', hue: 199, blurb: 'JSON, encoders, regex, formatters and web basics' },
-  { id: 'convert', name: 'Converters', glyph: '⇄', hue: 160, blurb: 'Units, numbers, bases and sizes' },
+  { id: 'convert', name: 'Converters', glyph: 'icon:swap', hue: 160, blurb: 'Units, numbers, bases and sizes' },
   { id: 'calc', name: 'Calculators', glyph: '∑', hue: 32, blurb: 'Money, health, school and everyday maths' },
-  { id: 'generate', name: 'Generators', glyph: '✦', hue: 320, blurb: 'Passwords, QR codes, CSS, images and test data' },
-  { id: 'color', name: 'Colour', glyph: '◐', hue: 340, blurb: 'Palettes, contrast, gradients and conversions' },
-  { id: 'time', name: 'Date & time', glyph: '◷', hue: 48, blurb: 'Dates, ages, time zones and calendars' },
-  { id: 'security', name: 'Security', glyph: '⛨', hue: 140, blurb: 'Hashes, encryption, 2FA and password checks' },
-  { id: 'web', name: 'Web & SEO', glyph: '⌘', hue: 220, blurb: 'Meta tags, sitemaps, redirects and share links' },
-  { id: 'fun', name: 'Fun', glyph: '☺', hue: 12, blurb: 'Dice, coins, teams and party games' },
+  { id: 'generate', name: 'Generators', glyph: 'icon:sparkle', hue: 320, blurb: 'Passwords, QR codes, CSS, images and test data' },
+  { id: 'color', name: 'Colour', glyph: 'icon:palette2', hue: 340, blurb: 'Palettes, contrast, gradients and conversions' },
+  { id: 'time', name: 'Date & time', glyph: 'icon:clock', hue: 48, blurb: 'Dates, ages, time zones and calendars' },
+  { id: 'security', name: 'Security', glyph: 'icon:shield', hue: 140, blurb: 'Hashes, encryption, 2FA and password checks' },
+  { id: 'web', name: 'Web & SEO', glyph: 'icon:globe', hue: 220, blurb: 'Meta tags, sitemaps, redirects and share links' },
+  { id: 'fun', name: 'Fun', glyph: 'icon:face', hue: 12, blurb: 'Dice, coins, teams and party games' },
 ];
 
 export const TOOLS: ToolDef[] = [...textTools, ...devTools, ...convertTools, ...calcTools, ...generateTools, ...colorTools, ...timeTools, ...securityTools, ...webFunTools];

@@ -8,6 +8,7 @@ import { downloadAsset } from './LibraryView';
 import { ModelStudio } from './ModelStudio';
 import { ModelViewer } from './ModelViewer';
 import { apiBase, authHeaders, endpointsFor, httpJson, mediaToBlob, modelsFor, pickMedia, saveMedia, sleep, srcOf } from './shared';
+import { Icon } from '@/components/Icon';
 
 /** 3D: describe an object, get a model you can turn around. Also opens a .glb from your files. */
 export function Model3D() {
@@ -88,9 +89,9 @@ export function Model3D() {
         <ul className="space-y-1.5">
           {items.map((i) => (
             <li key={i.id} className="flex items-center gap-1 rounded-lg border px-2 py-1.5" style={{ borderColor: i.id === now?.id ? 'var(--accent)' : 'var(--line)' }}>
-              <button type="button" onClick={() => setSelected(i.id)} className="min-w-0 flex-1 truncate text-left text-[11.5px]" style={{ color: 'var(--ink-dim)' }}>⬢ {i.prompt}</button>
-              <button type="button" onClick={() => downloadAsset(i)} className="press px-1 text-[12px]" aria-label="Download">⬇</button>
-              <button type="button" onClick={async () => { await deleteAsset(i.id); void refresh(); }} className="press px-1 text-[12px]" aria-label="Delete">✕</button>
+              <button type="button" onClick={() => setSelected(i.id)} className="min-w-0 flex-1 truncate text-left text-[11.5px]" style={{ color: 'var(--ink-dim)' }}><span className="inline-flex items-center gap-1.5"><Icon name="model3d" size={13} />{i.prompt}</span></button>
+              <button type="button" onClick={() => downloadAsset(i)} className="press px-1 text-[12px]" aria-label="Download"><Icon name="download" size={14} /></button>
+              <button type="button" onClick={async () => { await deleteAsset(i.id); void refresh(); }} className="press px-1 text-[12px]" aria-label="Delete"><Icon name="close" size={14} /></button>
             </li>
           ))}
         </ul>

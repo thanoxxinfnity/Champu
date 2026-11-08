@@ -7,6 +7,7 @@ import { deleteSession, exportSuite, listMessages, listSessions, searchSessions,
 import { SUITE_LABELS, type SessionRecord, type SuiteId } from '@/lib/db/schema';
 import { downloadText, formatBytes } from '@/lib/zip';
 import { LogoWordmark } from './Logo';
+import { Icon } from '@/components/Icon';
 
 interface SuiteEntry {
   id: SuiteId;
@@ -16,32 +17,32 @@ interface SuiteEntry {
 }
 
 const CORE_SUITES: SuiteEntry[] = [
-  { id: 'chat', label: 'Chat', icon: '◈', hint: 'Technical discourse and general execution' },
-  { id: 'android', label: 'Android', icon: '▤', hint: 'EXE/desktop migration, APK builds' },
-  { id: 'minecraft', label: 'Minecraft', icon: '▩', hint: 'Bedrock addons, Java conversion, Blockbench' },
-  { id: 'studio', label: 'Studio', icon: '◫', hint: 'Decks, canvas, documents, images' },
-  { id: 'game', label: 'Game Studio', icon: '⬡', hint: 'Godot games — plan, assets, project, APK' },
-  { id: 'workdrive', label: 'Workdrive', icon: '◎', hint: 'Autonomous research and milestones' },
-  { id: 'assets', label: 'Asset Studio', icon: '◆', hint: 'Background removal, icons and drawables' },
-  { id: 'skills', label: 'Skills', icon: '✦', hint: 'Slash commands and custom skills' },
+  { id: 'chat', label: 'Chat', icon: 'chat', hint: 'Technical discourse and general execution' },
+  { id: 'android', label: 'Android', icon: 'android', hint: 'EXE/desktop migration, APK builds' },
+  { id: 'minecraft', label: 'Minecraft', icon: 'minecraft', hint: 'Bedrock addons, Java conversion, Blockbench' },
+  { id: 'studio', label: 'Studio', icon: 'studio', hint: 'Decks, canvas, documents, images' },
+  { id: 'game', label: 'Game Studio', icon: 'game', hint: 'Godot games — plan, assets, project, APK' },
+  { id: 'workdrive', label: 'Workdrive', icon: 'workdrive', hint: 'Autonomous research and milestones' },
+  { id: 'assets', label: 'Asset Studio', icon: 'assets', hint: 'Background removal, icons and drawables' },
+  { id: 'skills', label: 'Skills', icon: 'skills', hint: 'Slash commands and custom skills' },
 ];
 
 const CAPABILITY_SUITE_META: Record<string, { label: string; icon: string; hint: string }> = {
-  image: { label: 'Image', icon: '◐', hint: 'Multi-provider image generation' },
-  video: { label: 'Video', icon: '▷', hint: 'Scenes on a timeline, generated clips' },
-  audio: { label: 'Audio', icon: '◍', hint: 'Speech and sound, with a waveform' },
-  model3d: { label: '3D', icon: '⬢', hint: 'Make and turn 3D models' },
+  image: { label: 'Image', icon: 'image', hint: 'Multi-provider image generation' },
+  video: { label: 'Video', icon: 'video', hint: 'Scenes on a timeline, generated clips' },
+  audio: { label: 'Audio', icon: 'audio', hint: 'Speech and sound, with a waveform' },
+  model3d: { label: '3D', icon: 'model3d', hint: 'Make and turn 3D models' },
 };
 
 /** Opens a viewer or editor of its own, so it has no list of chat sessions. */
 const STANDALONE = new Set(['library', 'canvas', 'motion', 'shot2code', 'tools', 'handoff', 'video', 'audio', 'model3d', 'skills']);
 
-const CANVAS_ENTRY: SuiteEntry = { id: 'canvas', label: 'Canvas', icon: '◰', hint: 'Design app or website screens on a board and export them' };
-const MOTION_ENTRY: SuiteEntry = { id: 'motion', label: 'Motion Studio', icon: '◧', hint: 'Layers, keyframes and a timeline — export CSS, GSAP or HTML' };
-const SHOT2CODE_ENTRY: SuiteEntry = { id: 'shot2code', label: 'Screenshot → Code', icon: '⧉', hint: 'Turn a screenshot or mock-up into HTML, Tailwind, React or Vue' };
-const HANDOFF_ENTRY: SuiteEntry = { id: 'handoff', label: 'Handoff', icon: '✋', hint: 'Give a job to an agent that uses its own browser or computer — watch live, approve, take over; plus Panels' };
-const TOOLS_ENTRY: SuiteEntry = { id: 'tools', label: 'Tools', icon: '✦', hint: '190+ calculators, converters, generators and developer helpers — all on your device' };
-const LIBRARY_ENTRY: SuiteEntry = { id: 'library', label: 'Library', icon: '▦', hint: 'Everything you generated — open and zoom up to 50×' };
+const CANVAS_ENTRY: SuiteEntry = { id: 'canvas', label: 'Canvas', icon: 'canvas', hint: 'Design app or website screens on a board and export them' };
+const MOTION_ENTRY: SuiteEntry = { id: 'motion', label: 'Motion Studio', icon: 'motion', hint: 'Layers, keyframes and a timeline — export CSS, GSAP or HTML' };
+const SHOT2CODE_ENTRY: SuiteEntry = { id: 'shot2code', label: 'Screenshot → Code', icon: 'shot2code', hint: 'Turn a screenshot or mock-up into HTML, Tailwind, React or Vue' };
+const HANDOFF_ENTRY: SuiteEntry = { id: 'handoff', label: 'Handoff', icon: 'handoff', hint: 'Give a job to an agent that uses its own browser or computer — watch live, approve, take over; plus Panels' };
+const TOOLS_ENTRY: SuiteEntry = { id: 'tools', label: 'Tools', icon: 'tools', hint: '190+ calculators, converters, generators and developer helpers — all on your device' };
+const LIBRARY_ENTRY: SuiteEntry = { id: 'library', label: 'Library', icon: 'library', hint: 'Everything you generated — open and zoom up to 50×' };
 
 function BridgeStatusCard({ onOpenSettings }: { onOpenSettings: () => void }) {
   const heartbeat = useWorkspace((s) => s.heartbeat);
@@ -75,10 +76,10 @@ function BridgeStatusCard({ onOpenSettings }: { onOpenSettings: () => void }) {
 
       {heartbeat.status === 'online' && tools ? (
         <div className="mono mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[9.5px]" style={{ color: 'var(--ink-faint)' }}>
-          <span style={{ color: tools.java ? 'var(--accent)' : undefined }}>java {tools.java ? '✔' : '✘'}</span>
-          <span style={{ color: tools.gradle ? 'var(--accent)' : undefined }}>gradle {tools.gradle ? '✔' : '✘'}</span>
-          <span style={{ color: tools.androidSdk ? 'var(--accent)' : undefined }}>sdk {tools.androidSdk ? '✔' : '✘'}</span>
-          <span style={{ color: tools.node ? 'var(--accent)' : undefined }}>node {tools.node ? '✔' : '✘'}</span>
+          <span style={{ color: tools.java ? 'var(--accent)' : undefined }}>java <Icon name={tools.java ? 'check' : 'close'} size={10} style={{ display: 'inline', verticalAlign: '-1px' }} /></span>
+          <span style={{ color: tools.gradle ? 'var(--accent)' : undefined }}>gradle <Icon name={tools.gradle ? 'check' : 'close'} size={10} style={{ display: 'inline', verticalAlign: '-1px' }} /></span>
+          <span style={{ color: tools.androidSdk ? 'var(--accent)' : undefined }}>sdk <Icon name={tools.androidSdk ? 'check' : 'close'} size={10} style={{ display: 'inline', verticalAlign: '-1px' }} /></span>
+          <span style={{ color: tools.node ? 'var(--accent)' : undefined }}>node <Icon name={tools.node ? 'check' : 'close'} size={10} style={{ display: 'inline', verticalAlign: '-1px' }} /></span>
         </div>
       ) : (
         <p className="mt-1 text-[10px] leading-[1.45]" style={{ color: 'var(--ink-faint)' }}>
@@ -205,7 +206,7 @@ export function Sidebar({ onOpenSettings, onNavigate }: { onOpenSettings: () => 
                   }}
                   title={suite.hint}
                 >
-                  <span className="shrink-0 text-[12px]" aria-hidden>{suite.icon}</span>
+                  <span className="shrink-0" aria-hidden style={{ color: 'var(--ink-dim)' }}><Icon name={suite.icon} size={15} /></span>
                   <span className="truncate text-[12.5px] font-medium">{suite.label}</span>
                 </button>
               </div>
@@ -228,16 +229,16 @@ export function Sidebar({ onOpenSettings, onNavigate }: { onOpenSettings: () => 
                 }}
                 title={suite.hint}
               >
-                <span className="shrink-0 text-[12px]" aria-hidden>
-                  {suite.icon}
+                <span className="shrink-0" aria-hidden style={{ color: 'var(--ink-dim)' }}>
+                  <Icon name={suite.icon} size={15} />
                 </span>
                 <span className="truncate text-[12.5px] font-medium">{suite.label}</span>
                 <span
-                  className="mono ml-auto shrink-0 text-[9px] transition-transform duration-200"
+                  className="ml-auto shrink-0 transition-transform duration-200"
                   style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', color: 'var(--ink-faint)' }}
                   aria-hidden
                 >
-                  ▶
+                  <Icon name="chevronRight" size={13} />
                 </span>
               </button>
 
@@ -290,7 +291,7 @@ export function Sidebar({ onOpenSettings, onNavigate }: { onOpenSettings: () => 
                           style={{ color: 'var(--color-rose)' }}
                           aria-label={`Delete ${session.title}`}
                         >
-                          ✕
+                          <Icon name="close" size={13} />
                         </button>
                       </div>
                     ))
@@ -311,7 +312,7 @@ export function Sidebar({ onOpenSettings, onNavigate }: { onOpenSettings: () => 
                       style={{ color: 'var(--ink-faint)' }}
                       title={`Export ${SUITE_LABELS[suite.id]} history (credentials excluded)`}
                     >
-                      ↓ export history
+                      <span className="inline-flex items-center gap-1"><Icon name="download" size={11} />export history</span>
                     </button>
                   )}
                 </div>
@@ -328,7 +329,7 @@ export function Sidebar({ onOpenSettings, onNavigate }: { onOpenSettings: () => 
           className="mono w-full rounded-lg border px-2 py-1.5 text-[10.5px] transition-colors"
           style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
         >
-          ⚙ settings
+          <span className="inline-flex items-center justify-center gap-1.5"><Icon name="settings" size={13} />settings</span>
         </button>
         {storage && storage.quotaBytes > 0 && (
           <p className="mono mt-1.5 text-center text-[9px]" style={{ color: 'var(--ink-faint)' }}>

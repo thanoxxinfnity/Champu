@@ -10,6 +10,7 @@
  */
 import { spawn } from 'node:child_process';
 import { readFile, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 export const PLAYWRIGHT_MCP = '@playwright/mcp@0.0.83';
@@ -81,6 +82,17 @@ export class McpStdio {
 
 // ── The bridge's one browser ────────────────────────────────────────────────
 
+/**
+ * Chromium refuses to start as root ("Running as root without --no-sandbox is not supported") — which is how a bridge runs in a
+ * container, a Hugging Face Space or a Termux/proot shell — and in a container the sandbox cannot be created anyway. So the sandbox
+ * is switched off exactly there; on a normal desktop user account it stays on. CHOMUGIRI_BROWSER_SANDBOX=1 forces it on, =0 off.
+ */
+export function needsNoSandbox(env = process.env, { root = typeof process.getuid === 'function' && process.getuid() === 0, docker = existsSync('/.dockerenv') } = {}) {
+  if (env.CHOMUGIRI_BROWSER_SANDBOX === '1') return false;
+  if (env.CHOMUGIRI_BROWSER_SANDBOX === '0') return true;
+  return root || docker || !!env.SPACE_ID || !!env.KUBERNETES_SERVICE_HOST;
+}
+
 /** Where Playwright MCP puts screenshots and page snapshots: the bridge's artifacts folder, so a screenshot is downloadable. */
 export function createBrowser({ outDir, env = process.env, spawnSpec = null, displayOf = null }) {
   let mcp = null;
@@ -104,6 +116,7 @@ export function createBrowser({ outDir, env = process.env, spawnSpec = null, dis
     '-y', PLAYWRIGHT_MCP,
     ...(headed ? ['--viewport-size', '1280,800'] : ['--headless']),
     '--isolated',
+    ...(needsNoSandbox(env) ? ['--no-sandbox'] : []),
     '--output-dir', outDir,
     ...(env.CHOMUGIRI_BROWSER_CHROMIUM ? ['--executable-path', env.CHOMUGIRI_BROWSER_CHROMIUM] : []),
     ...(env.CHOMUGIRI_BROWSER_ARGS ? env.CHOMUGIRI_BROWSER_ARGS.split(/\s+/).filter(Boolean) : []),
@@ -290,6 +303,12 @@ export function explainBrowserError(message) {
   const m = String(message);
   if (/Executable doesn't exist|browserType\.launch|playwright install|Chromium distribution|ms-playwright/i.test(m)) {
     return `The browser is not installed on this machine. Run: npx -y playwright@latest install chromium — then repeat the browse command. (${m.split('\n')[0].slice(0, 160)})`;
+  }
+  if (/Running as root without --no-sandbox|Chromium sandboxing failed|No usable sandbox/i.test(m)) {
+    return `The browser refused to start because it runs as root without a sandbox. The bridge (5.0.1+) turns the sandbox off by itself in that case; if you still see this, set CHOMUGIRI_BROWSER_SANDBOX=0 and restart the bridge. (${m.split('\n')[0].slice(0, 120)})`;
+  }
+  if (/missing dependencies|error while loading shared libraries|libnss|libatk|libgbm/i.test(m)) {
+    return `The browser is installed but its system libraries are missing. On Debian/Ubuntu run: npx -y playwright@latest install --with-deps chromium. (${m.split('\n')[0].slice(0, 140)})`;
   }
   if (/could not start npx|ENOENT/i.test(m)) return 'Node\'s npx was not found on the bridge machine, so the browser server could not start. Install Node 18+ (it includes npx).';
   if (/timed out/i.test(m)) return `The browser did not answer in time (${m}). The page may be slow or blocked: try browse snapshot, or open it again.`;

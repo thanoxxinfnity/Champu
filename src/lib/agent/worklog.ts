@@ -246,7 +246,7 @@ export function renderCommandLog(results: CommandOutcome[]): string {
   for (const r of ran) {
     const where = r.cwd ? ` in \`${r.cwd}\`` : '';
     const time = r.durationMs != null ? ` · ${(r.durationMs / 1000).toFixed(1)}s` : '';
-    const status = r.skipped === 'banned' ? '⛔ blocked' : r.ok ? `✔ exit ${r.exitCode ?? 0}` : `✘ exit ${r.exitCode ?? 'null'}`;
+    const status = r.skipped === 'banned' ? 'blocked' : r.ok ? `done · exit ${r.exitCode ?? 0}` : `failed · exit ${r.exitCode ?? 'null'}`;
     const again = r.retried ? (r.ok ? ' · passed on retry after a network hiccup' : ' · failed again on retry') : '';
     lines.push(`- ${status} — \`${r.command}\`${where}${time}${again}`);
     if (!r.ok && r.errorExcerpt) {

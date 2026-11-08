@@ -15,6 +15,7 @@ import {
   type Geometry,
 } from '@/lib/suites/minecraft/blockbench';
 import { downloadText, downloadZip } from '@/lib/zip';
+import { Icon } from '@/components/Icon';
 
 /**
  * In-browser voxel model editor.
@@ -310,7 +311,7 @@ export function BlockbenchStudio() {
             style={{ background: 'rgba(0,0,0,0.65)', color: 'var(--color-amber)' }}
           >
             {issues.map((issue, i) => (
-              <div key={i}>⚠ {issue}</div>
+              <div key={i} className="flex items-start gap-1.5"><Icon name="alert" size={13} style={{ marginTop: 2 }} />{issue}</div>
             ))}
           </div>
         )}

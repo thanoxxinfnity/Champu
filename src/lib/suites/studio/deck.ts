@@ -572,7 +572,7 @@ export function renderDeck(spec: DeckSpec): string {
 ${spec.slides.map((s, i) => renderSlide(s, i + 1, total)).join('\n')}
 </div>
 <div class="progress" id="progress"></div>
-<div class="hint" id="hint">← → navigate · F fullscreen · P print</div>
+<div class="hint" id="hint">Arrow keys navigate · F fullscreen · P print</div>
 
 <script>
 (function () {

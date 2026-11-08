@@ -15,6 +15,7 @@ import { SKILL_ICON_NAMES, iconKey } from '@/lib/skills/icons';
 import { SkillIcon } from '@/components/SkillIcon';
 import { makeMemory, type Memory } from '@/lib/memory/memory';
 import { forget, loadMemories, memoryEnabled, remember, saveMemories, setMemoryEnabled } from '@/lib/memory/store';
+import { Icon } from '@/components/Icon';
 
 const SOURCE_LABEL = { superpowers: 'superpowers', anthropic: 'anthropic', agentic: 'agentic-awesome-skills', chomu: 'Chomugiri' } as const;
 
@@ -352,7 +353,7 @@ export function SkillsManager() {
                   </button>
                   {skills.some((s) => s.id === skill.id) && (
                     <button type="button" onClick={() => void remove(skill.id)} className="mono text-[10px]" style={{ color: 'var(--color-rose)' }}>
-                      ✕
+                      <Icon name="close" size={14} />
                     </button>
                   )}
                 </div>
@@ -366,7 +367,7 @@ export function SkillsManager() {
             className="mono mt-2 w-full rounded border px-2 py-1.5 text-[10px]"
             style={{ borderColor: 'var(--line)', color: 'var(--ink-faint)' }}
           >
-            ↓ export skills
+            <span className="inline-flex items-center gap-1"><Icon name="download" size={13} />export skills</span>
           </button>
         </section>
 

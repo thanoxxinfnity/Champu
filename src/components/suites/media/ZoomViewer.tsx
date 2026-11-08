@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ZOOM_MAX, fmtTime } from './shared';
+import { Icon } from '@/components/Icon';
 
 /**
  * Full-screen viewer for an image or a video, with zoom from 1x to 50x.
@@ -102,7 +103,7 @@ export function ZoomViewer({ kind, src, title, onClose, onPrev, onNext }: {
   return (
     <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(8,6,4,0.94)' }} role="dialog" aria-modal="true" aria-label={title ?? 'Viewer'}>
       <div className="flex shrink-0 items-center gap-2 px-3 py-2" style={{ color: '#f6ebde' }}>
-        <button type="button" onClick={onClose} className="press mono rounded-lg px-2.5 py-1.5 text-[12px]" aria-label="Close viewer">✕</button>
+        <button type="button" onClick={onClose} className="press mono rounded-lg px-2.5 py-1.5 text-[12px]" aria-label="Close viewer"><Icon name="close" size={16} /></button>
         <span className="min-w-0 flex-1 truncate text-[12px] opacity-80">{title}</span>
         {onPrev && <button type="button" onClick={onPrev} className="press mono rounded-lg px-2 py-1.5 text-[12px]" aria-label="Previous">‹</button>}
         {onNext && <button type="button" onClick={onNext} className="press mono rounded-lg px-2 py-1.5 text-[12px]" aria-label="Next">›</button>}
@@ -134,7 +135,7 @@ export function ZoomViewer({ kind, src, title, onClose, onPrev, onNext }: {
       <div className="flex shrink-0 flex-wrap items-center gap-2 px-3 py-2.5" style={{ color: '#f6ebde' }}>
         {kind === 'video' && (
           <>
-            <button type="button" onClick={toggle} className="press mono w-9 rounded-lg px-2 py-1.5 text-[13px]" aria-label={playing ? 'Pause' : 'Play'}>{playing ? '❚❚' : '▶'}</button>
+            <button type="button" onClick={toggle} className="press mono w-9 rounded-lg px-2 py-1.5 text-[13px]" aria-label={playing ? 'Pause' : 'Play'}><Icon name={playing ? 'pause' : 'play'} size={16} /></button>
             <input type="range" min={0} max={time.len || 1} step={0.01} value={time.now} aria-label="Seek"
               onChange={(e) => { if (video.current) video.current.currentTime = Number(e.target.value); }} className="min-w-24 flex-1 accent-[var(--accent)]" />
             <span className="mono w-20 text-[10.5px] tabular-nums opacity-70">{fmtTime(time.now)} / {fmtTime(time.len)}</span>

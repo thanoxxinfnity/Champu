@@ -97,3 +97,15 @@ test('a browsing request is work for the terminal, and the /browse command is on
   // a short reply carries a browsing job on
   assert.equal(classifyLocal('ha', { previousLane: 'B', previousOps: true, previousBrowse: true }).browse, true);
 });
+
+import { needsNoSandbox } from '../agent/browser.mjs';
+test('the sandbox is switched off where Chromium cannot use it (root, containers), and only there', () => {
+  assert.equal(needsNoSandbox({}, { root: true, docker: false }), true, 'root');
+  assert.equal(needsNoSandbox({}, { root: false, docker: true }), true, 'docker');
+  assert.equal(needsNoSandbox({ SPACE_ID: 'a/b' }, { root: false, docker: false }), true, 'a Space');
+  assert.equal(needsNoSandbox({}, { root: false, docker: false }), false, 'a normal user keeps the sandbox');
+  assert.equal(needsNoSandbox({ CHOMUGIRI_BROWSER_SANDBOX: '1' }, { root: true, docker: true }), false, 'forced on');
+  assert.equal(needsNoSandbox({ CHOMUGIRI_BROWSER_SANDBOX: '0' }, { root: false, docker: false }), true, 'forced off');
+  assert.match(explainBrowserError('Running as root without --no-sandbox is not supported'), /sandbox/);
+  assert.match(explainBrowserError('error while loading shared libraries: libnss3.so'), /install --with-deps/);
+});

@@ -80,7 +80,7 @@ test('architect → coder (two batches) → reviewer finds a problem → coder f
   // clean, ordered progress
   assert.match(lines[0], /^\[1\/4\] Architect/);
   assert.ok(lines.some((l) => /^\[2\/4\] Coder · batch 2\/2/.test(l)));
-  assert.ok(lines.some((l) => /^\[3\/4\] Reviewer ✗ 1 issue: src\/page\.js — unbalanced/.test(l)));
+  assert.ok(lines.some((l) => /^\[3\/4\] Reviewer: 1 issue: src\/page\.js — unbalanced/.test(l)));
   assert.match(lines[lines.length - 1], /^\[4\/4\] Orchestrator · 2 files in sync/);
   assert.ok(steps.includes('architect:done') && steps.includes('coder:done') && steps.includes('reviewer:done') && steps.includes('orchestrator:done'));
   // only the last batch was told it may give commands

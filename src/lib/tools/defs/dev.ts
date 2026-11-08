@@ -57,7 +57,7 @@ export const devTools: ToolDef[] = [
     },
   },
   {
-    id: 'json-to-csv', name: 'JSON → CSV', cat: 'dev', glyph: '{}→▦', blurb: 'An array of objects to CSV.',
+    id: 'json-to-csv', name: 'JSON → CSV', cat: 'dev', glyph: 'J>C', blurb: 'An array of objects to CSV.',
     fields: [area('t', 'JSON array', { rows: 7, mono: true }), sel('sep', 'Separator', [{ value: ',', label: 'Comma' }, { value: ';', label: 'Semicolon' }, { value: '\t', label: 'Tab' }], ',')], example: { t: '[{"name":"Asha","age":24},{"name":"Ravi, K","age":31,"city":"Pune"}]', sep: ',' },
     run: (v) => {
       try {
@@ -68,7 +68,7 @@ export const devTools: ToolDef[] = [
     },
   },
   {
-    id: 'csv-to-json', name: 'CSV → JSON', cat: 'dev', glyph: '▦→{}', blurb: 'CSV with a header row to a JSON array.',
+    id: 'csv-to-json', name: 'CSV → JSON', cat: 'dev', glyph: 'C>J', blurb: 'CSV with a header row to a JSON array.',
     fields: [area('t', 'CSV', { rows: 7, mono: true }), sel('sep', 'Separator', [{ value: ',', label: 'Comma' }, { value: ';', label: 'Semicolon' }, { value: '\t', label: 'Tab' }], ','), tog('num', 'Turn numbers into numbers', true)], example: { t: 'name,age\nAsha,24\n"Ravi, K",31', sep: ',', num: true },
     run: (v) => {
       const rows = parseCsv(S(v, 't'), S(v, 'sep') || ',');
@@ -78,7 +78,7 @@ export const devTools: ToolDef[] = [
     },
   },
   {
-    id: 'json-to-yaml', name: 'JSON → YAML', cat: 'dev', glyph: '{}→-', blurb: 'Convert JSON to YAML.',
+    id: 'json-to-yaml', name: 'JSON → YAML', cat: 'dev', glyph: 'J>Y', blurb: 'Convert JSON to YAML.',
     fields: [area('t', 'JSON', { rows: 7, mono: true })], example: { t: '{"name":"app","ports":[80,443],"db":{"host":"localhost","debug":true}}' },
     run: (v) => { try { return text(yaml(JSON.parse(S(v, 't'))), 'yaml'); } catch (e) { return err(`Invalid JSON: ${(e as Error).message}`); } },
   },
@@ -107,7 +107,7 @@ export const devTools: ToolDef[] = [
     run: (v) => text(S(v, 'mode') === 'enc' ? escapeHtml(S(v, 't')) : S(v, 't').replace(/&(#x?[0-9a-f]+|amp|lt|gt|quot|apos|nbsp);/gi, (_m, e: string) => { const l = e.toLowerCase(); if (l[0] === '#') return String.fromCodePoint(l[1] === 'x' ? parseInt(l.slice(2), 16) : parseInt(l.slice(1), 10)); return ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' })[l] ?? _m; })),
   },
   {
-    id: 'jwt-decoder', name: 'JWT decoder', cat: 'dev', glyph: '🔑', blurb: 'Read the header and payload of a JSON Web Token (does not verify it).',
+    id: 'jwt-decoder', name: 'JWT decoder', cat: 'dev', glyph: 'icon:key', blurb: 'Read the header and payload of a JSON Web Token (does not verify it).',
     fields: [area('t', 'Token', { rows: 4, mono: true })], example: { t: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTYiLCJuYW1lIjoiQXNoYSIsImV4cCI6MTk5OTk5OTk5OX0.c2lnbg' },
     run: (v) => {
       try {
@@ -133,7 +133,7 @@ export const devTools: ToolDef[] = [
     },
   },
   {
-    id: 'cron-explainer', name: 'Cron explainer', cat: 'dev', glyph: '⏲', blurb: 'Explain a 5-field cron expression and list its next runs.',
+    id: 'cron-explainer', name: 'Cron explainer', cat: 'dev', glyph: 'icon:timer', blurb: 'Explain a 5-field cron expression and list its next runs.',
     fields: [txt('c', 'Cron', { default: '*/15 9-17 * * 1-5', mono: true })], example: { c: '*/15 9-17 * * 1-5' },
     run: (v) => {
       const p = S(v, 'c').trim().split(/\s+/); if (p.length !== 5) return err('Use 5 fields: minute hour day month weekday.');
@@ -165,7 +165,7 @@ export const devTools: ToolDef[] = [
     run: (v) => { const q = S(v, 'q'); const sp = new URLSearchParams(q.includes('?') ? q.slice(q.indexOf('?') + 1).split('#')[0] : q); const rows = [...sp.entries()].map(([k, x]) => [k, x]); return rows.length ? table(['Key', 'Value'], rows) : text('No parameters.'); },
   },
   {
-    id: 'url-parser', name: 'URL parser', cat: 'dev', glyph: '🔗', blurb: 'Break a URL into protocol, host, path, query and hash.',
+    id: 'url-parser', name: 'URL parser', cat: 'dev', glyph: 'icon:link', blurb: 'Break a URL into protocol, host, path, query and hash.',
     fields: [txt('u', 'URL', { default: 'https://user@example.com:8080/a/b?x=1#top', mono: true })], example: { u: 'https://user@example.com:8080/a/b?x=1#top' },
     run: (v) => { try { const u = new URL(S(v, 'u')); return table(['Part', 'Value'], [['Protocol', u.protocol], ['Username', u.username || '—'], ['Host', u.hostname], ['Port', u.port || '(default)'], ['Path', u.pathname], ['Query', u.search || '—'], ['Hash', u.hash || '—'], ['Origin', u.origin]]); } catch { return err('That is not a full URL (include https://).'); } },
   },
@@ -220,7 +220,7 @@ export const devTools: ToolDef[] = [
     },
   },
   {
-    id: 'markdown-to-html', name: 'Markdown → HTML', cat: 'dev', glyph: 'M↓', blurb: 'Headings, bold, italic, links, code, lists and quotes to HTML.',
+    id: 'markdown-to-html', name: 'Markdown → HTML', cat: 'dev', glyph: 'M>H', blurb: 'Headings, bold, italic, links, code, lists and quotes to HTML.',
     fields: [area('t', 'Markdown', { rows: 8, mono: true })], example: { t: '# Title\n\nSome **bold** and *italic* with `code` and a [link](https://x.com).\n\n- one\n- two\n\n> quote' },
     run: (v) => {
       const out: string[] = []; let inList = false, inCode = false;
@@ -291,7 +291,7 @@ export const devTools: ToolDef[] = [
     },
   },
   {
-    id: 'html-to-text', name: 'HTML → plain text', cat: 'dev', glyph: '<>→T', blurb: 'Strip tags and decode entities.',
+    id: 'html-to-text', name: 'HTML → plain text', cat: 'dev', glyph: 'H>T', blurb: 'Strip tags and decode entities.',
     fields: [area('t', 'HTML', { rows: 6, mono: true })], example: { t: '<h1>Hi</h1><p>Tom &amp; <b>Jerry</b></p><script>x()</script>' },
     run: (v) => text(S(v, 't').replace(/<(script|style)[\s\S]*?<\/\1>/gi, '').replace(/<br\s*\/?>|<\/(p|div|h\d|li|tr)>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&nbsp;/g, ' ').replace(/\n{3,}/g, '\n\n').trim()),
   },

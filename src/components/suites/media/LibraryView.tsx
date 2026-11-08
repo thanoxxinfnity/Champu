@@ -8,6 +8,7 @@ import { ZoomViewer } from './ZoomViewer';
 import { ModelViewer } from './ModelViewer';
 import { TrackPlayer } from './AudioStudio';
 import { fmtBytes, srcOf } from './shared';
+import { Icon } from '@/components/Icon';
 
 const FILTERS: Array<[AssetRecord['kind'] | 'all', string]> = [['all', 'All'], ['image', 'Images'], ['video', 'Videos'], ['audio', 'Audio'], ['model3d', '3D']];
 const EXT: Record<string, string> = { image: 'png', video: 'mp4', audio: 'mp3', model3d: 'glb' };
@@ -68,15 +69,15 @@ export function LibraryView() {
                 <button type="button" onClick={() => setOpen(a.id)} className="block aspect-square w-full" aria-label={`Open ${a.kind}: ${a.prompt ?? ''}`}>
                   {a.kind === 'image' && /* eslint-disable-next-line @next/next/no-img-element */ <img src={srcOf(a)} alt={a.prompt ?? ''} loading="lazy" className="h-full w-full object-cover" />}
                   {a.kind === 'video' && <video src={`${srcOf(a)}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />}
-                  {a.kind === 'audio' && <span className="flex h-full items-center justify-center text-[34px]" style={{ color: 'var(--accent)' }}>♪</span>}
-                  {a.kind === 'model3d' && <span className="flex h-full items-center justify-center text-[34px]" style={{ color: 'var(--accent)' }}>⬢</span>}
-                  {a.kind === 'video' && <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">▷</span>}
+                  {a.kind === 'audio' && <span className="flex h-full items-center justify-center text-[34px]" style={{ color: 'var(--accent)' }}><Icon name="note" size={34} /></span>}
+                  {a.kind === 'model3d' && <span className="flex h-full items-center justify-center text-[34px]" style={{ color: 'var(--accent)' }}><Icon name="model3d" size={34} /></span>}
+                  {a.kind === 'video' && <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white"><Icon name="play" size={12} /></span>}
                 </button>
                 <div className="flex items-center gap-1 px-2 py-1.5">
                   <span className="min-w-0 flex-1 truncate text-[10.5px]" style={{ color: 'var(--ink-dim)' }} title={a.prompt}>{a.prompt || a.kind}</span>
                   <span className="mono shrink-0 text-[9px]" style={{ color: 'var(--ink-faint)' }}>{fmtBytes(a.bytes)}</span>
-                  <button type="button" onClick={() => downloadAsset(a)} className="press mono px-1 text-[12px]" aria-label="Download" title="Download">⬇</button>
-                  <button type="button" onClick={async () => { await deleteAsset(a.id); void refresh(); }} className="press mono px-1 text-[12px]" aria-label="Delete" title="Delete">✕</button>
+                  <button type="button" onClick={() => downloadAsset(a)} className="press mono px-1 text-[12px]" aria-label="Download" title="Download"><Icon name="download" size={14} /></button>
+                  <button type="button" onClick={async () => { await deleteAsset(a.id); void refresh(); }} className="press mono px-1 text-[12px]" aria-label="Delete" title="Delete"><Icon name="close" size={14} /></button>
                 </div>
               </div>
             ))}

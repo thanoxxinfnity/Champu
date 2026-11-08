@@ -77,6 +77,7 @@ import { autoCelShadow } from '@/lib/suites/motion/shading';
 import { hexToRgb } from '@/lib/suites/motion/color';
 import { sampleMeshGradient } from '@/lib/suites/motion/gradient';
 import { PaintToolbar, type PaintTool } from './motion/PaintToolbar';
+import { Icon } from '@/components/Icon';
 
 function hexToRgbLocal(hex: string): [number, number, number] { return hexToRgb(hex); }
 function sameColor(a: string, b: string, tolerance = 24): boolean {
@@ -1162,7 +1163,7 @@ export function MotionStudio() {
                     {savedCharacters.map((entry) => (
                       <div key={entry.id} className="mono flex items-center justify-between gap-1 text-[10.5px]" style={{ color: 'var(--ink-dim)' }}>
                         <button type="button" onClick={() => loadSavedCharacter(entry.id)} className="press flex-1 truncate rounded px-1.5 py-1 text-left">{entry.name}</button>
-                        <Btn onClick={() => deleteSavedCharacter(entry.id)} small title="Remove from library">✕</Btn>
+                        <Btn onClick={() => deleteSavedCharacter(entry.id)} small title="Remove from library"><Icon name="close" size={12} /></Btn>
                       </div>
                     ))}
                   </div>
@@ -1384,7 +1385,7 @@ export function MotionStudio() {
                     <div key={role} className="mb-2 border-b pb-2 last:mb-0 last:border-0 last:pb-0" style={{ borderColor: 'var(--line)' }}>
                       <div className="mono mb-1 flex items-center justify-between text-[9.5px] uppercase tracking-wide" style={{ color: 'var(--ink-faint)' }}>
                         <span>{role === 'bgm' ? 'music (bgm)' : role}</span>
-                        {track && <Btn onClick={() => removeAudioTrack(role)} small title="Remove this track">✕</Btn>}
+                        {track && <Btn onClick={() => removeAudioTrack(role)} small title="Remove this track"><Icon name="close" size={12} /></Btn>}
                       </div>
                       {!track ? (
                         <label className="press mono flex cursor-pointer items-center justify-center gap-1.5 rounded border border-dashed px-2 py-1.5 text-[10.5px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>
@@ -1483,10 +1484,10 @@ export function MotionStudio() {
               return (
                 <div key={g.id}>
                   <div className="flex items-center gap-1.5 py-0.5">
-                    <button type="button" onClick={() => setProject((p) => updateGroup(p, g.id, { collapsed: !g.collapsed }))} className="mono shrink-0 text-[9px]" style={{ color: 'var(--ink-faint)' }}>{g.collapsed ? '▶' : '▼'}</button>
+                    <button type="button" onClick={() => setProject((p) => updateGroup(p, g.id, { collapsed: !g.collapsed }))} className="mono shrink-0 text-[9px]" style={{ color: 'var(--ink-faint)' }}><Icon name={g.collapsed ? 'chevronRight' : 'chevronDown'} size={11} /></button>
                     <input value={g.name} onChange={(e) => setProject((p) => updateGroup(p, g.id, { name: e.target.value }))} className="mono w-20 shrink-0 truncate bg-transparent text-[10.5px] outline-none" style={{ color: 'var(--ink)' }} />
                     <input type="range" min={0} max={1} step={0.05} value={g.opacity} onChange={(e) => setProject((p) => updateGroup(p, g.id, { opacity: Number(e.target.value) }))} className="h-3 w-12" title="Folder opacity" />
-                    <button type="button" onClick={() => setProject((p) => removeGroup(p, g.id))} className="mono shrink-0 text-[9px]" style={{ color: 'var(--color-rose)' }}>✕</button>
+                    <button type="button" onClick={() => setProject((p) => removeGroup(p, g.id))} className="shrink-0" style={{ color: 'var(--color-rose)' }}><Icon name="close" size={12} /></button>
                   </div>
                   {!g.collapsed && members.map((l) => (
                     <LayerTrackRow key={l.id} layer={l} project={project} selId={selId} selKf={selKf} time={time} indent onSelect={() => { setSelId(l.id); setSelMarker(null); }}
@@ -1520,7 +1521,7 @@ function LayerTrackRow({ layer, project, selId, selKf, time, indent, onSelect, o
   return (
     <div className={`flex items-center gap-2 ${indent ? 'pl-4' : ''}`}>
       <button type="button" onClick={onToggleVisible} className="mono shrink-0 text-[10px]" style={{ color: layer.visible ? 'var(--ink-dim)' : 'var(--ink-faint)' }} title="Toggle visibility">
-        {layer.visible ? '◉' : '○'}
+        <Icon name={layer.visible ? 'eye' : 'circle'} size={13} />
       </button>
       <button type="button" onClick={onSelect} className="mono w-16 shrink-0 truncate text-left text-[10.5px]" style={{ color: layer.id === selId ? 'var(--accent)' : 'var(--ink-dim)', opacity: layer.visible ? 1 : 0.5 }}>{layer.name}</button>
       {layer.kind === 'paint' && layer.paint ? (
@@ -1717,7 +1718,7 @@ function LayerPanel({ layer, time, selKf, groups, onPatchLayer, onKeyNow, onPose
               {layer.rig.detachments.map((d) => (
                 <div key={d.id} className="mono flex items-center justify-between text-[10px]" style={{ color: 'var(--ink-dim)' }}>
                   <span>{layer.rig!.bones.find((b) => b.id === d.boneId)?.name ?? d.boneId} @ {d.t.toFixed(2)}s</span>
-                  <Btn onClick={() => onPatchLayer({ rig: { ...layer.rig!, detachments: (layer.rig!.detachments ?? []).filter((x) => x.id !== d.id) } })} small title="Re-attach">✕</Btn>
+                  <Btn onClick={() => onPatchLayer({ rig: { ...layer.rig!, detachments: (layer.rig!.detachments ?? []).filter((x) => x.id !== d.id) } })} small title="Re-attach"><Icon name="close" size={12} /></Btn>
                 </div>
               ))}
             </div>

@@ -5,7 +5,7 @@ const nums = (s: string): number[] => (s.match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/gi
 
 export const calcTools: ToolDef[] = [
   {
-    id: 'calculator', name: 'Calculator', cat: 'calc', glyph: '＋−', blurb: 'Type any expression: 2+3*4, sqrt(16), sin(30), 5!, 12% …',
+    id: 'calculator', name: 'Calculator', cat: 'calc', glyph: '+−', blurb: 'Type any expression: 2+3*4, sqrt(16), sin(30), 5!, 12% …',
     fields: [txt('e', 'Expression', { default: '(12+8)*3 - sqrt(49)', mono: true }), tog('deg', 'Angles in degrees', true)], example: { e: '(12+8)*3 - sqrt(49)', deg: true },
     run: (v) => { try { const r = evaluate(S(v, 'e'), B(v, 'deg')); return Number.isFinite(r) ? stats([['Result', fmt(r, 10)], ['Scientific', r.toExponential(6)]]) : err('That is not a finite number.'); } catch (e) { return err((e as Error).message); } },
   },
@@ -20,7 +20,7 @@ export const calcTools: ToolDef[] = [
     run: (v) => { const h = N(v, 'cm') / 100, kg = N(v, 'kg'); if (h <= 0 || kg <= 0) return err('Enter height and weight.'); const b = kg / (h * h); return stats([['BMI', fmt(b, 1)], ['Category', b < 18.5 ? 'Underweight' : b < 25 ? 'Normal' : b < 30 ? 'Overweight' : 'Obese'], ['Healthy weight', `${fmt(18.5 * h * h, 1)} – ${fmt(24.9 * h * h, 1)} kg`]]); },
   },
   {
-    id: 'calorie-calculator', name: 'Calorie needs', cat: 'calc', glyph: '🔥', blurb: 'BMR and daily calories (Mifflin–St Jeor).',
+    id: 'calorie-calculator', name: 'Calorie needs', cat: 'calc', glyph: 'icon:flame', blurb: 'BMR and daily calories (Mifflin–St Jeor).',
     fields: [sel('sex', 'Sex', ['male', 'female'], 'male'), num('age', 'Age', { default: 25 }), num('kg', 'Weight (kg)', { default: 70 }), num('cm', 'Height (cm)', { default: 172 }), sel('act', 'Activity', [{ value: '1.2', label: 'Sitting most of the day' }, { value: '1.375', label: 'Light exercise' }, { value: '1.55', label: 'Moderate exercise' }, { value: '1.725', label: 'Hard exercise' }], '1.375')], example: { sex: 'male', age: 25, kg: 70, cm: 172, act: '1.375' },
     run: (v) => { const bmr = 10 * N(v, 'kg') + 6.25 * N(v, 'cm') - 5 * N(v, 'age') + (S(v, 'sex') === 'male' ? 5 : -161), tdee = bmr * Number(S(v, 'act')); return stats([['BMR', `${Math.round(bmr)} kcal`], ['Maintain', `${Math.round(tdee)} kcal`], ['Lose weight', `${Math.round(tdee - 500)} kcal`], ['Gain weight', `${Math.round(tdee + 500)} kcal`]]); },
   },
@@ -30,7 +30,7 @@ export const calcTools: ToolDef[] = [
     run: (v) => { const p = N(v, 'p'), n = Math.round(N(v, 'y') * 12), i = N(v, 'r') / 1200; if (p <= 0 || n <= 0) return err('Enter an amount and a term.'); const emi = i ? (p * i * (1 + i) ** n) / ((1 + i) ** n - 1) : p / n; return stats([['Monthly EMI', '₹' + money(emi)], ['Total paid', '₹' + money(emi * n)], ['Total interest', '₹' + money(emi * n - p)], ['Months', n]]); },
   },
   {
-    id: 'compound-interest', name: 'Compound interest', cat: 'calc', glyph: '📈', blurb: 'How an amount grows with compounding.',
+    id: 'compound-interest', name: 'Compound interest', cat: 'calc', glyph: 'icon:trending', blurb: 'How an amount grows with compounding.',
     fields: [num('p', 'Principal', { default: 100000 }), num('r', 'Rate % per year', { default: 8, step: 0.1 }), num('y', 'Years', { default: 10 }), sel('n', 'Compounded', [{ value: '1', label: 'Yearly' }, { value: '2', label: 'Half-yearly' }, { value: '4', label: 'Quarterly' }, { value: '12', label: 'Monthly' }], '4')], example: { p: 100000, r: 8, y: 10, n: '4' },
     run: (v) => { const p = N(v, 'p'), r = N(v, 'r') / 100, y = N(v, 'y'), n = Number(S(v, 'n')), a = p * (1 + r / n) ** (n * y); return { kind: 'multi', parts: [{ out: stats([['Final amount', '₹' + money(a)], ['Interest earned', '₹' + money(a - p)], ['Simple interest would give', '₹' + money(p * (1 + r * y))]]) }, { out: { kind: 'bars', items: Array.from({ length: Math.min(12, Math.ceil(y)) }, (_, k) => ({ label: `Year ${k + 1}`, value: Math.round(p * (1 + r / n) ** (n * (k + 1))) })) } }] }; },
   },
@@ -50,12 +50,12 @@ export const calcTools: ToolDef[] = [
     run: (v) => { const a = N(v, 'a'), r = N(v, 'r') / 100, base = S(v, 'mode') === 'incl' ? a / (1 + r) : a, g = base * r; return stats([['Price before GST', '₹' + money(base)], ['GST', '₹' + money(g)], ['CGST + SGST (each)', '₹' + money(g / 2)], ['Total', '₹' + money(base + g)]]); },
   },
   {
-    id: 'tip-split', name: 'Tip & split the bill', cat: 'calc', glyph: '🍽', blurb: 'Tip and each person\'s share.',
+    id: 'tip-split', name: 'Tip & split the bill', cat: 'calc', glyph: 'icon:food', blurb: 'Tip and each person\'s share.',
     fields: [num('b', 'Bill', { default: 2400 }), rng0('tip', 'Tip %', 10), num('n', 'People', { default: 4, min: 1 })], example: { b: 2400, tip: 10, n: 4 },
     run: (v) => { const b = N(v, 'b'), tip = (b * N(v, 'tip')) / 100, n = Math.max(1, N(v, 'n', 1)); return stats([['Tip', '₹' + money(tip)], ['Total', '₹' + money(b + tip)], ['Each person pays', '₹' + money((b + tip) / n)]]); },
   },
   {
-    id: 'discount-calculator', name: 'Discount calculator', cat: 'calc', glyph: '🏷', blurb: 'Sale price after one or two discounts.',
+    id: 'discount-calculator', name: 'Discount calculator', cat: 'calc', glyph: 'icon:tag', blurb: 'Sale price after one or two discounts.',
     fields: [num('p', 'Price', { default: 2999 }), num('d1', 'Discount %', { default: 30 }), num('d2', 'Extra discount %', { default: 10 })], example: { p: 2999, d1: 30, d2: 10 },
     run: (v) => { const p = N(v, 'p'), a = p * (1 - N(v, 'd1') / 100), b = a * (1 - N(v, 'd2') / 100); return stats([['After first discount', '₹' + money(a)], ['Final price', '₹' + money(b)], ['You save', '₹' + money(p - b)], ['Real total discount', fmt(((p - b) / p) * 100, 2) + '%']]); },
   },
@@ -112,7 +112,7 @@ export const calcTools: ToolDef[] = [
     run: (v) => { const a = nums(S(v, 't')); if (a.length < 2 || a.some((x) => x <= 0)) return err('Use positive numbers like 16:9.'); const g = a.reduce(gcd); const r = a.map((x) => x / g); return stats([['Simplified', r.join(' : ')], ['Scaled', a.map((x) => fmt((x * N(v, 'scale')) / a[0]!, 2)).join(' : ')], ['Decimal', fmt(a[0]! / a[1]!, 4)]]); },
   },
   {
-    id: 'geometry-shapes', name: 'Area & perimeter', cat: 'calc', glyph: '△○', blurb: 'Area, perimeter and volume of common shapes.',
+    id: 'geometry-shapes', name: 'Area & perimeter', cat: 'calc', glyph: 'icon:ruler', blurb: 'Area, perimeter and volume of common shapes.',
     fields: [sel('shape', 'Shape', ['circle', 'rectangle', 'triangle', 'square', 'trapezoid', 'sphere', 'cylinder', 'cone', 'cube', 'box'], 'circle'), num('a', 'a (radius / length / base)', { default: 5 }), num('b', 'b (width / height)', { default: 3 }), num('c', 'c (third side / height)', { default: 4 })], example: { shape: 'circle', a: 5, b: 3, c: 4 },
     run: (v) => {
       const a = N(v, 'a'), b = N(v, 'b'), c = N(v, 'c'), P = Math.PI, s = S(v, 'shape');
@@ -131,7 +131,7 @@ export const calcTools: ToolDef[] = [
     run: (v) => { const d = N(v, 'd'), s = N(v, 's'), t = N(v, 't'); if (!d && s && t) return stats([['Distance', fmt(s * t) + ' km']]); if (d && !s && t) return stats([['Speed', fmt(d / t) + ' km/h']]); if (d && s && !t) { const h = d / s; return stats([['Time', `${Math.floor(h)} h ${Math.round((h % 1) * 60)} min`]]); } return err('Leave exactly one of the three as 0.'); },
   },
   {
-    id: 'trip-cost', name: 'Trip fuel cost', cat: 'calc', glyph: '🛣', blurb: 'What a trip costs in fuel, and each rider\'s share.',
+    id: 'trip-cost', name: 'Trip fuel cost', cat: 'calc', glyph: 'icon:road', blurb: 'What a trip costs in fuel, and each rider\'s share.',
     fields: [num('km', 'Distance (km)', { default: 450 }), num('mileage', 'Mileage (km/L)', { default: 16 }), num('price', 'Fuel price per litre', { default: 105 }), num('n', 'Riders', { default: 3, min: 1 })], example: { km: 450, mileage: 16, price: 105, n: 3 },
     run: (v) => { const l = N(v, 'km') / Math.max(0.1, N(v, 'mileage')), c = l * N(v, 'price'); return stats([['Fuel needed', fmt(l, 1) + ' L'], ['Cost', '₹' + money(c)], ['Per rider', '₹' + money(c / Math.max(1, N(v, 'n')))]]); },
   },
@@ -141,7 +141,7 @@ export const calcTools: ToolDef[] = [
     run: (v) => stats([[S(v, 'mode') === 'c2p' ? 'Percentage' : 'CGPA', S(v, 'mode') === 'c2p' ? fmt(N(v, 'x') * 9.5, 2) + '%' : fmt(N(v, 'x') / 9.5, 2)]]),
   },
   {
-    id: 'marks-percentage', name: 'Marks to percentage', cat: 'calc', glyph: '📝', blurb: 'Percentage and grade from marks.',
+    id: 'marks-percentage', name: 'Marks to percentage', cat: 'calc', glyph: 'icon:edit', blurb: 'Percentage and grade from marks.',
     fields: [num('got', 'Marks obtained', { default: 432 }), num('max', 'Maximum marks', { default: 500 })], example: { got: 432, max: 500 },
     run: (v) => { const p = (N(v, 'got') / Math.max(1, N(v, 'max'))) * 100; return stats([['Percentage', fmt(p, 2) + '%'], ['Grade', p >= 90 ? 'A+' : p >= 80 ? 'A' : p >= 70 ? 'B' : p >= 60 ? 'C' : p >= 50 ? 'D' : p >= 33 ? 'E (pass)' : 'Fail'], ['Division', p >= 60 ? 'First' : p >= 45 ? 'Second' : p >= 33 ? 'Third' : '—']]); },
   },
@@ -156,7 +156,7 @@ export const calcTools: ToolDef[] = [
     run: (v) => { const a = N(v, 'a'), b = N(v, 'b'), y = N(v, 'y'); if (a <= 0 || b <= 0 || y <= 0) return err('Use positive numbers.'); return stats([['CAGR', fmt((Math.pow(b / a, 1 / y) - 1) * 100, 2) + '% per year'], ['Total growth', fmt(((b - a) / a) * 100, 1) + '%'], ['Doubles in about', fmt(Math.log(2) / Math.log(Math.pow(b / a, 1 / y)), 1) + ' years']]); },
   },
   {
-    id: 'hourly-salary', name: 'Salary converter', cat: 'calc', glyph: '💼', blurb: 'Hourly, daily, monthly and yearly pay.',
+    id: 'hourly-salary', name: 'Salary converter', cat: 'calc', glyph: 'icon:briefcase', blurb: 'Hourly, daily, monthly and yearly pay.',
     fields: [num('x', 'Amount', { default: 50000 }), sel('per', 'Per', ['hour', 'day', 'week', 'month', 'year'], 'month'), num('hours', 'Hours per week', { default: 40 })], example: { x: 50000, per: 'month', hours: 40 },
     run: (v) => { const f: Record<string, number> = { hour: 1, day: 8, week: N(v, 'hours', 40), month: (N(v, 'hours', 40) * 52) / 12, year: N(v, 'hours', 40) * 52 }, h = N(v, 'x') / f[S(v, 'per')]!; return table(['Per', 'Amount'], [['Hour', money(h)], ['Day (8 h)', money(h * 8)], ['Week', money(h * N(v, 'hours', 40))], ['Month', money((h * N(v, 'hours', 40) * 52) / 12)], ['Year', money(h * N(v, 'hours', 40) * 52)]]); },
   },
@@ -171,7 +171,7 @@ export const calcTools: ToolDef[] = [
     run: (v) => { const m = N(v, 'price') - N(v, 'var'); if (m <= 0) return err('Price must be above the variable cost.'); const u = Math.ceil(N(v, 'fixed') / m); return stats([['Break-even units', u], ['Break-even revenue', '₹' + money(u * N(v, 'price'))], ['Margin per unit', '₹' + money(m)]]); },
   },
   {
-    id: 'random-number', name: 'Random numbers', cat: 'calc', glyph: '🎲', blurb: 'Random whole numbers in a range, with or without repeats.',
+    id: 'random-number', name: 'Random numbers', cat: 'calc', glyph: 'icon:dice', blurb: 'Random whole numbers in a range, with or without repeats.',
     fields: [num('min', 'Min', { default: 1 }), num('max', 'Max', { default: 100 }), num('n', 'How many', { default: 5, min: 1, max: 1000 }), tog('uniq', 'No repeats', true)], example: { min: 1, max: 10, n: 5, uniq: true }, manual: true,
     run: (v) => {
       const lo = Math.ceil(Math.min(N(v, 'min'), N(v, 'max'))), hi = Math.floor(Math.max(N(v, 'min'), N(v, 'max'))), n = Math.max(1, Math.min(1000, N(v, 'n', 5))); const span = hi - lo + 1;

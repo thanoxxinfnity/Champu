@@ -66,7 +66,7 @@ const TOKEN = arg('token', process.env.CHOMUGIRI_TOKEN ?? randomBytes(24).toStri
 const ALLOW_CMD = (arg('allow-cmd', process.env.CHOMUGIRI_ALLOW_CMD ?? '') || '')
   .split(',').map((s) => s.trim()).filter(Boolean);
 const MAX_EXEC_MS = Number(arg('max-exec-ms', 45 * 60_000));
-const VERSION = '5.0.0';
+const VERSION = '5.0.1';
 
 // ── Updates: newer files pushed by the app win; /v1/restart applies them ───
 // The app writes a newer bridge into <workspace>/.chomugiri-agent/. Starting the OLD command again (a restart by hand, or by the

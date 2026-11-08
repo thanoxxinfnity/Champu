@@ -95,7 +95,7 @@ marked.use({
         : '';
 
       const header =
-        `<div class="code-head">${work ? SCENE_HTML : ''}<span class="code-label${path ? ' is-path' : ''}">${path ? '<span style="color:var(--accent)">▸</span> ' : ''}${escapeHtml(label)}</span>${chip}` +
+        `<div class="code-head">${work ? SCENE_HTML : ''}<span class="code-label${path ? ' is-path' : ''}">${path ? '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-1px;margin-right:4px"><path d="M9 6l6 6-6 6"/></svg>' : ''}${escapeHtml(label)}</span>${chip}` +
         `<span class="code-actions">` +
         `<button type="button" class="code-btn" data-code-action="copy" aria-label="Copy code" title="Copy"><span class="ic-copy">${copyIcon}</span><span class="ic-done">${doneIcon}</span></button>` +
         `<button type="button" class="code-btn" data-code-action="expand" aria-label="Expand code" title="Expand"><span class="ic-expand">${expandIcon}</span><span class="ic-close">${closeIcon}</span></button>` +

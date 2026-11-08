@@ -7,6 +7,7 @@ import { useWorkspace } from '@/lib/store';
 import { downloadAsset } from './LibraryView';
 import { ZoomViewer } from './ZoomViewer';
 import { apiBase, authHeaders, blobToDataUrl, endpointsFor, fmtTime, httpJson, mediaToBlob, modelsFor, pickMedia, saveMedia, sleep, srcOf } from './shared';
+import { Icon } from '@/components/Icon';
 
 const ASPECTS: Array<[string, string]> = [['16:9', '1280x720'], ['9:16', '720x1280'], ['1:1', '1024x1024']];
 const DURATIONS = [4, 6, 8, 10];
@@ -139,7 +140,7 @@ export function VideoFlow() {
       <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2" style={{ borderColor: 'var(--line)' }}>
         <h2 className="hand text-[24px] leading-none">Video</h2>
         <span className="mono text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>{timeline.length} scene{timeline.length === 1 ? '' : 's'}{total ? ` · ${fmtTime(total)}` : ''}</span>
-        <button type="button" onClick={playAll} disabled={!timeline.length} className="press mono ml-auto rounded-lg border px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>▶ play all</button>
+        <button type="button" onClick={playAll} disabled={!timeline.length} className="press mono ml-auto rounded-lg border px-3 py-1.5 text-[11px] disabled:opacity-40" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}><span className="inline-flex items-center gap-1.5"><Icon name="play" size={13} />play all</span></button>
       </div>
 
       <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/80 p-2" aria-label="Monitor">
@@ -149,10 +150,10 @@ export function VideoFlow() {
               onPlay={() => setPaused(false)} onPause={() => setPaused(true)}
               onLoadedMetadata={(e) => setTime({ now: 0, len: e.currentTarget.duration })} onTimeUpdate={(e) => setTime({ now: e.currentTarget.currentTime, len: e.currentTarget.duration })} />
             <div className="absolute inset-x-2 bottom-2 flex items-center gap-2 rounded-xl px-2.5 py-1.5" style={{ background: 'rgba(15,10,6,0.78)', color: '#f6ebde' }}>
-              <button type="button" onClick={() => { const v = monitor.current; if (v) (v.paused ? void v.play() : v.pause()); }} className="press mono w-8 text-[13px]" aria-label={paused ? 'Play' : 'Pause'}>{paused ? '▶' : '❚❚'}</button>
+              <button type="button" onClick={() => { const v = monitor.current; if (v) (v.paused ? void v.play() : v.pause()); }} className="press mono w-8 text-[13px]" aria-label={paused ? 'Play' : 'Pause'}><Icon name={paused ? 'play' : 'pause'} size={15} /></button>
               <input type="range" min={0} max={time.len || 1} step={0.01} value={time.now} aria-label="Seek" onChange={(e) => { if (monitor.current) monitor.current.currentTime = Number(e.target.value); }} className="min-w-0 flex-1 accent-[var(--accent)]" />
               <span className="mono text-[10px] tabular-nums opacity-75">{fmtTime(time.now)}</span>
-              <button type="button" onClick={() => { monitor.current?.pause(); setPlayingAll(false); setZoom(true); }} className="press mono px-1.5 text-[12px]" aria-label="Open and zoom" title="Open & zoom up to 50×">⤢</button>
+              <button type="button" onClick={() => { monitor.current?.pause(); setPlayingAll(false); setZoom(true); }} className="press mono px-1.5 text-[12px]" aria-label="Open and zoom" title="Open & zoom up to 50×"><Icon name="expand" size={14} /></button>
             </div>
           </>
         ) : (
@@ -172,8 +173,8 @@ export function VideoFlow() {
               <div className="flex items-center px-1 pb-1">
                 <button type="button" onClick={() => void move(c.id, -1)} className="press px-1.5 text-[12px]" aria-label="Move earlier">‹</button>
                 <button type="button" onClick={() => void move(c.id, 1)} className="press px-1.5 text-[12px]" aria-label="Move later">›</button>
-                <button type="button" onClick={() => downloadAsset(c)} className="press ml-auto px-1.5 text-[12px]" aria-label="Download">⬇</button>
-                <button type="button" onClick={async () => { await deleteAsset(c.id); void refresh(); }} className="press px-1.5 text-[12px]" aria-label="Delete scene">✕</button>
+                <button type="button" onClick={() => downloadAsset(c)} className="press ml-auto px-1.5 text-[12px]" aria-label="Download"><Icon name="download" size={14} /></button>
+                <button type="button" onClick={async () => { await deleteAsset(c.id); void refresh(); }} className="press px-1.5 text-[12px]" aria-label="Delete scene"><Icon name="close" size={14} /></button>
               </div>
             </div>
           ))}
@@ -202,7 +203,7 @@ export function VideoFlow() {
             <select value={model} onChange={(e) => setModel(e.target.value)} className="mono max-w-[10rem] rounded border bg-transparent px-2 py-1 text-[10.5px]" style={{ borderColor: 'var(--line)', color: 'var(--ink)' }} aria-label="Model">{models.map((m) => <option key={m} value={m}>{m}</option>)}</select>
             {ASPECTS.map((a) => <button key={a[0]} type="button" onClick={() => setAspect(a)} className="press mono rounded-full border px-2.5 py-1 text-[10.5px]" style={{ borderColor: aspect[0] === a[0] ? 'var(--accent)' : 'var(--line)', color: aspect[0] === a[0] ? 'var(--accent)' : 'var(--ink-dim)' }}>{a[0]}</button>)}
             {DURATIONS.map((d) => <button key={d} type="button" onClick={() => setSeconds(d)} className="press mono rounded-full border px-2.5 py-1 text-[10.5px]" style={{ borderColor: seconds === d ? 'var(--accent)' : 'var(--line)', color: seconds === d ? 'var(--accent)' : 'var(--ink-dim)' }}>{d}s</button>)}
-            <button type="button" onClick={() => (startFrame ? setStartFrame(null) : frameInput.current?.click())} className="press mono rounded-full border px-2.5 py-1 text-[10.5px]" style={{ borderColor: startFrame ? 'var(--accent)' : 'var(--line)', color: startFrame ? 'var(--accent)' : 'var(--ink-dim)' }}>{startFrame ? '✕ start frame' : '＋ start frame'}</button>
+            <button type="button" onClick={() => (startFrame ? setStartFrame(null) : frameInput.current?.click())} className="press mono rounded-full border px-2.5 py-1 text-[10.5px]" style={{ borderColor: startFrame ? 'var(--accent)' : 'var(--line)', color: startFrame ? 'var(--accent)' : 'var(--ink-dim)' }}><span className="inline-flex items-center gap-1"><Icon name={startFrame ? 'close' : 'plus'} size={12} />start frame</span></button>
             <input ref={frameInput} type="file" accept="image/*" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (f) setStartFrame(await blobToDataUrl(f)); e.target.value = ''; }} />
             <button type="button" onClick={generate} disabled={!prompt.trim() || !endpoint || !model} className="press mono ml-auto rounded-xl px-4 py-1.5 text-[11.5px] font-semibold disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--panel)' }}>{!model && endpoint ? 'no video model on this provider' : 'generate scene'}</button>
           </div>

@@ -269,13 +269,13 @@ export async function executeCommand(
 
   if (heartbeat.status !== 'online' && heartbeat.status !== 'degraded') {
     const message = `Terminal bridge is ${heartbeat.status}. Command parked: ${command}`;
-    appendTerminal({ stream: 'system', text: `⏸  ${message}` });
+    appendTerminal({ stream: 'system', text: `Paused: ${message}` });
     return { ok: false, exitCode: null, stdout: '', stderr: '', skipped: 'offline', message };
   }
 
   const precheck = guard.precheck('terminal', command);
   if (precheck?.action === 'halt') {
-    appendTerminal({ stream: 'system', text: `⛔ ${precheck.message}\n   → ${precheck.directive}` });
+    appendTerminal({ stream: 'system', text: `Blocked: ${precheck.message}\n   Next: ${precheck.directive}` });
     refreshFingerprints();
     return { ok: false, exitCode: null, stdout: '', stderr: '', skipped: 'banned', message: precheck.message };
   }
@@ -312,8 +312,8 @@ export async function executeCommand(
     appendTerminal({
       stream: 'system',
       text: ok
-        ? `✔ exit 0 · ${(outcome.durationMs / 1000).toFixed(1)}s`
-        : `✘ exit ${outcome.exitCode ?? 'null'}${outcome.killed ? ' (killed)' : ''} · ${(outcome.durationMs / 1000).toFixed(1)}s`,
+        ? `Done · exit 0 · ${(outcome.durationMs / 1000).toFixed(1)}s`
+        : `Failed · exit ${outcome.exitCode ?? 'null'}${outcome.killed ? ' (killed)' : ''} · ${(outcome.durationMs / 1000).toFixed(1)}s`,
     });
 
     let fingerprint: string | undefined;
@@ -331,8 +331,8 @@ export async function executeCommand(
       appendTerminal({
         stream: 'system',
         text: verdict.action === 'halt'
-          ? `⛔ ${verdict.message}\n   → ${verdict.directive}`
-          : `⚠  ${verdict.message}`,
+          ? `Blocked: ${verdict.message}\n   Next: ${verdict.directive}`
+          : `Warning: ${verdict.message}`,
       });
     }
 
@@ -359,7 +359,7 @@ export async function executeCommand(
     const offline = err instanceof BridgeOfflineError;
     const message = (err as Error).message;
 
-    appendTerminal({ stream: 'system', text: offline ? `⏸  ${message}` : `✘ ${message}` });
+    appendTerminal({ stream: 'system', text: offline ? `Paused: ${message}` : `Failed: ${message}` });
 
     if (!offline) {
       guard.record({ kind: 'terminal', subject: command, error: message, at: Date.now() });
@@ -419,7 +419,7 @@ async function deliverSends(
     const withCaption = attachments.map((a, i) => ({ ...a, caption: items.find((it) => baseName(it.source) === a.name)?.caption ?? items[i]?.caption }));
     ctx.patch(messageId, { attachments: withCaption.map((a, i) => ({ id: `${messageId}_s${i}`, ...a })) });
     await updateMessage(messageId, { attachments: withCaption });
-    useWorkspace.getState().appendTerminal({ stream: 'system', text: `⇧ sent ${attachments.length} file${attachments.length === 1 ? '' : 's'}: ${attachments.map((a) => a.name).join(', ')}` });
+    useWorkspace.getState().appendTerminal({ stream: 'system', text: `Sent ${attachments.length} file${attachments.length === 1 ? '' : 's'}: ${attachments.map((a) => a.name).join(', ')}` });
   }
   if (missing.length) ctx.note(`Could not send ${missing.join('; ')}.`);
 }
@@ -1692,7 +1692,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
         }
         const failed = edited.results.filter((r) => !r.ok);
         const okCount = edited.results.length - failed.length;
-        useWorkspace.getState().appendTerminal({ stream: 'system', text: `✎ ${okCount} of ${edited.results.length} edit${edited.results.length === 1 ? '' : 's'} applied${failed.length ? ` · ${failed.length} did not match` : ''}` });
+        useWorkspace.getState().appendTerminal({ stream: 'system', text: `Edited: ${okCount} of ${edited.results.length} edit${edited.results.length === 1 ? '' : 's'} applied${failed.length ? ` · ${failed.length} did not match` : ''}` });
         if (failed.length) {
           // One more try, with the reasons and the files as they are: a model that mis-copied a line usually gets it right when shown.
           const repairId = uid('msg');
@@ -2682,12 +2682,12 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
             );
             useWorkspace.getState().appendTerminal({
               stream: 'system',
-              text: `⇪ synced ${workspace.size} file${workspace.size === 1 ? '' : 's'} to the bridge workspace`,
+              text: `Synced ${workspace.size} file${workspace.size === 1 ? '' : 's'} to the bridge workspace`,
             });
           } catch (err) {
             useWorkspace.getState().appendTerminal({
               stream: 'system',
-              text: `⚠  file sync failed: ${(err as Error).message}`,
+              text: `File sync failed: ${(err as Error).message}`,
             });
           }
         }
@@ -2720,7 +2720,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
             retried = true;
             useWorkspace.getState().appendTerminal({
               stream: 'system',
-              text: '↻ that failure looks like a network hiccup (a download that did not finish) — trying once more',
+              text: 'Retrying: that failure looks like a network hiccup (a download that did not finish) — trying once more',
             });
             outcome = await runOnce();
           }
@@ -2827,23 +2827,23 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
               }
               try {
                 await useWorkspace.getState().bridge.writeFiles(fixed.map((f) => ({ path: f.path, content: f.content })));
-                useWorkspace.getState().appendTerminal({ stream: 'system', text: `⇪ re-synced ${fixed.length} fixed file${fixed.length === 1 ? '' : 's'} to the bridge` });
+                useWorkspace.getState().appendTerminal({ stream: 'system', text: `Re-synced ${fixed.length} fixed file${fixed.length === 1 ? '' : 's'} to the bridge` });
               } catch (err) {
-                useWorkspace.getState().appendTerminal({ stream: 'system', text: `⚠  file sync failed: ${(err as Error).message}` });
+                useWorkspace.getState().appendTerminal({ stream: 'system', text: `File sync failed: ${(err as Error).message}` });
               }
             }
             // Edit blocks in a fix turn change the files in place, then the same sync as above.
             const fixEdits = applyReplyEdits(answer.content, { sessionId, suite, save: upsertFile });
             const editFailures = fixEdits.results.filter((r) => !r.ok);
             if (fixEdits.results.length) {
-              useWorkspace.getState().appendTerminal({ stream: 'system', text: `✎ self-heal ${turn + 1}/${maxTurns}: ${fixEdits.files.length} of ${fixEdits.results.length} edit${fixEdits.results.length === 1 ? '' : 's'} applied${editFailures.length ? `, ${editFailures.length} did not match` : ''}` });
+              useWorkspace.getState().appendTerminal({ stream: 'system', text: `Edit: self-heal ${turn + 1}/${maxTurns}: ${fixEdits.files.length} of ${fixEdits.results.length} edit${fixEdits.results.length === 1 ? '' : 's'} applied${editFailures.length ? `, ${editFailures.length} did not match` : ''}` });
             }
             if (fixEdits.files.length) {
               try {
                 await useWorkspace.getState().bridge.writeFiles(fixEdits.files.map((f) => ({ path: f.path, content: f.content })));
-                useWorkspace.getState().appendTerminal({ stream: 'system', text: `⇪ re-synced ${fixEdits.files.length} edited file${fixEdits.files.length === 1 ? '' : 's'} to the bridge` });
+                useWorkspace.getState().appendTerminal({ stream: 'system', text: `Re-synced ${fixEdits.files.length} edited file${fixEdits.files.length === 1 ? '' : 's'} to the bridge` });
               } catch (err) {
-                useWorkspace.getState().appendTerminal({ stream: 'system', text: `⚠  file sync failed: ${(err as Error).message}` });
+                useWorkspace.getState().appendTerminal({ stream: 'system', text: `File sync failed: ${(err as Error).message}` });
               }
             }
             if (answer.error || (!more.length && !editFailures.length)) break;
@@ -2926,7 +2926,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
         if (progress.blocked) {
           useWorkspace.getState().appendTerminal({
             stream: 'system',
-            text: `⏸  ${progress.blocked} step${progress.blocked === 1 ? '' : 's'} parked on the terminal bridge. They resume automatically once the tunnel is up.`,
+            text: `Paused: ${progress.blocked} step${progress.blocked === 1 ? '' : 's'} parked on the terminal bridge. They resume automatically once the tunnel is up.`,
           });
         }
       }
@@ -3072,7 +3072,7 @@ export async function resumeParkedWork(): Promise<void> {
 
   appendTerminal({
     stream: 'system',
-    text: `▶  Bridge is back. ${parked.length} parked step${parked.length === 1 ? '' : 's'} are runnable again.`,
+    text: `Bridge is back. ${parked.length} parked step${parked.length === 1 ? '' : 's'} are runnable again.`,
   });
 
   setPlan({

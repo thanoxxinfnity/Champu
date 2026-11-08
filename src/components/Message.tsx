@@ -17,6 +17,7 @@ import { GamePlayer } from '@/components/GamePlayer';
 import { CommandRuns } from '@/components/CommandRuns';
 import { activityCount, diffTotals, splitCommandBlocks, type FileChange } from '@/lib/text/command-blocks';
 import { isImageMime, stripSendBlocks } from '@/lib/text/send-blocks';
+import { Icon } from '@/components/Icon';
 
 function Avatar({ role, lane }: { role: string; lane?: 'A' | 'B' }) {
   const isUser = role === 'user';
@@ -61,7 +62,7 @@ function ReasoningDrawer({ reasoning, streaming }: { reasoning: string; streamin
           style={{ transform: open ? 'rotate(90deg)' : 'none', color: 'var(--accent-alt)' }}
           aria-hidden
         >
-          ▶
+          <Icon name="chevronRight" size={12} />
         </span>
         <span
           className={`mono text-[10.5px] uppercase tracking-[0.12em] ${streaming ? 'thinking-phrase' : ''}`}
@@ -178,7 +179,7 @@ function SentFiles({ files }: { files: NonNullable<ChatMessageView['attachments'
                 </span>
               </button>
               <div className="mt-1 flex gap-1.5 px-0.5">
-                <button type="button" onClick={() => save(a)} className="press mono text-[11px]" style={{ color: 'var(--accent)' }}>↓ save</button>
+                <button type="button" onClick={() => save(a)} className="press mono text-[11px]" style={{ color: 'var(--accent)' }}><span className="inline-flex items-center gap-1"><Icon name="download" size={13} />save</span></button>
                 {share ? <button type="button" onClick={() => shareIt(a)} className="press mono text-[11px]" style={{ color: 'var(--ink-dim)' }}>share</button> : null}
               </div>
               {a.caption ? <p className="mt-0.5 px-0.5 text-[11.5px]" style={{ color: 'var(--ink-dim)' }}>{a.caption}</p> : null}
@@ -195,7 +196,7 @@ function SentFiles({ files }: { files: NonNullable<ChatMessageView['attachments'
           <div className="flex gap-3" onClick={(e) => e.stopPropagation()}>
             {images.filter((a) => a.dataUrl === big).map((a) => (
               <span key={a.id} className="flex gap-3">
-                <button type="button" onClick={() => save(a)} className="press mono rounded-xl border px-3 py-2 text-[12px]" style={{ borderColor: 'rgba(255,255,255,.3)', color: '#fff' }}>↓ save</button>
+                <button type="button" onClick={() => save(a)} className="press mono rounded-xl border px-3 py-2 text-[12px]" style={{ borderColor: 'rgba(255,255,255,.3)', color: '#fff' }}><span className="inline-flex items-center gap-1"><Icon name="download" size={13} />save</span></button>
                 {share ? <button type="button" onClick={() => shareIt(a)} className="press mono rounded-xl border px-3 py-2 text-[12px]" style={{ borderColor: 'rgba(255,255,255,.3)', color: '#fff' }}>share</button> : null}
               </span>
             ))}
@@ -220,7 +221,7 @@ function WorkSummary({ segments, durationMs }: { segments: ReturnType<typeof spl
   if (!bits.length) return null;
   return (
     <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t pt-2 text-[12px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-faint)' }} data-testid="work-summary">
-      <span style={{ color: 'var(--accent)' }}>✓</span>
+      <span style={{ color: 'var(--accent)' }}><Icon name="check" size={14} stroke={2.2} /></span>
       <span>{bits.join(' · ')}</span>
       {paths.size ? (
         <span className="mono inline-flex overflow-hidden rounded-md text-[11px] font-semibold leading-none">
@@ -238,7 +239,7 @@ function BackgroundStrip({ jobId }: { jobId: string }) {
   const [stopped, setStopped] = useState(false);
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-[11.5px]" style={{ borderColor: 'color-mix(in oklab, var(--accent) 40%, var(--line))', color: 'var(--ink-dim)' }} role="status" data-testid="background-strip">
-      <span aria-hidden>⏳</span>
+      <span aria-hidden><Icon name="hourglass" size={14} /></span>
       <span>{stopped ? 'Stopping…' : 'Working on the terminal — you can close the app. The reply will be here when you come back.'}</span>
       {!stopped && (
         <button type="button" className="press mono rounded-lg border px-2 py-1 text-[10.5px]" style={{ borderColor: 'var(--line)' }} onClick={() => { setStopped(true); void bridge.cancelJob(jobId).catch(() => setStopped(false)); }}>
@@ -488,7 +489,7 @@ function OfferDownload({ offer }: { offer: NonNullable<ChatMessageView['offer']>
           color: 'var(--accent)',
         }}
       >
-        ↓ {offer.filename}
+        <span className="inline-flex items-center gap-1.5"><Icon name="download" size={14} />{offer.filename}</span>
       </button>
       {canShare && (
         <button

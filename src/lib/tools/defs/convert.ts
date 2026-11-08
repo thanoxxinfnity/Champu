@@ -34,21 +34,21 @@ export function toRoman(n: number): string { const t: Array<[number, string]> = 
 export function fromRoman(s: string): number { const m: Record<string, number> = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 }; let t = 0; const u = s.toUpperCase(); for (let i = 0; i < u.length; i++) { const a = m[u[i]!], b = m[u[i + 1]!] ?? 0; if (!a) return NaN; t += a < b ? -a : a; } return t; }
 
 export const convertTools: ToolDef[] = [
-  unitTool('length-converter', 'Length converter', '📏', 'Metres, feet, inches, miles, km and more.', { 'millimetre': 0.001, 'centimetre': 0.01, 'metre': 1, 'kilometre': 1000, 'inch': 0.0254, 'foot': 0.3048, 'yard': 0.9144, 'mile': 1609.344, 'nautical mile': 1852, 'light-year': 9.4607e15 }, 'foot', 6),
-  unitTool('weight-converter', 'Weight converter', '⚖', 'Kilograms, pounds, ounces, tola, quintal and more.', { 'milligram': 1e-6, 'gram': 0.001, 'kilogram': 1, 'quintal': 100, 'tonne': 1000, 'ounce': 0.0283495, 'pound': 0.45359237, 'stone': 6.35029, 'tola': 0.01166, 'seer': 0.933 }, 'kilogram', 70),
-  unitTool('volume-converter', 'Volume converter', '🧪', 'Litres, millilitres, gallons, cups and more.', { 'millilitre': 0.001, 'litre': 1, 'cubic metre': 1000, 'teaspoon': 0.00492892, 'tablespoon': 0.0147868, 'cup (US)': 0.236588, 'pint (US)': 0.473176, 'quart (US)': 0.946353, 'gallon (US)': 3.78541, 'gallon (UK)': 4.54609 }, 'litre', 2),
-  unitTool('area-converter', 'Area converter', '▭', 'Square metres, acres, hectares, bigha and more.', { 'sq centimetre': 0.0001, 'sq metre': 1, 'sq kilometre': 1e6, 'hectare': 1e4, 'acre': 4046.8564, 'sq foot': 0.092903, 'sq yard': 0.836127, 'sq mile': 2589988.11, 'guntha': 101.17, 'bigha (UP)': 2529.29 }, 'acre', 1),
-  unitTool('speed-converter', 'Speed converter', '🚀', 'km/h, mph, m/s, knots and Mach.', { 'm/s': 1, 'km/h': 1 / 3.6, 'mph': 0.44704, 'knot': 0.514444, 'foot/s': 0.3048, 'Mach': 340.29 }, 'km/h', 100),
-  unitTool('data-size-converter', 'Data size converter', '💾', 'Bytes, KB, MB, GB, TB (1024) and bits.', { 'bit': 1 / 8, 'byte': 1, 'KB': 1024, 'MB': 1024 ** 2, 'GB': 1024 ** 3, 'TB': 1024 ** 4, 'PB': 1024 ** 5 }, 'MB', 256),
-  unitTool('time-unit-converter', 'Time unit converter', '⏳', 'Seconds, minutes, hours, days, weeks, years.', { 'millisecond': 0.001, 'second': 1, 'minute': 60, 'hour': 3600, 'day': 86400, 'week': 604800, 'month (30 d)': 2592000, 'year (365 d)': 31536000 }, 'hour', 36),
-  unitTool('pressure-converter', 'Pressure converter', '🎈', 'Pascal, bar, atm, psi, mmHg.', { 'pascal': 1, 'kilopascal': 1000, 'bar': 1e5, 'atmosphere': 101325, 'psi': 6894.757, 'mmHg': 133.322, 'torr': 133.322 }, 'psi', 32),
-  unitTool('energy-converter', 'Energy converter', '⚡', 'Joules, calories, kWh, BTU.', { 'joule': 1, 'kilojoule': 1000, 'calorie': 4.184, 'kilocalorie': 4184, 'watt-hour': 3600, 'kilowatt-hour': 3.6e6, 'BTU': 1055.06 }, 'kilocalorie', 500),
-  unitTool('power-converter', 'Power converter', '🔌', 'Watts, kW, horsepower.', { 'watt': 1, 'kilowatt': 1000, 'megawatt': 1e6, 'horsepower (mech)': 745.7, 'horsepower (metric)': 735.5 }, 'horsepower (mech)', 150),
+  unitTool('length-converter', 'Length converter', 'icon:ruler', 'Metres, feet, inches, miles, km and more.', { 'millimetre': 0.001, 'centimetre': 0.01, 'metre': 1, 'kilometre': 1000, 'inch': 0.0254, 'foot': 0.3048, 'yard': 0.9144, 'mile': 1609.344, 'nautical mile': 1852, 'light-year': 9.4607e15 }, 'foot', 6),
+  unitTool('weight-converter', 'Weight converter', 'icon:scale', 'Kilograms, pounds, ounces, tola, quintal and more.', { 'milligram': 1e-6, 'gram': 0.001, 'kilogram': 1, 'quintal': 100, 'tonne': 1000, 'ounce': 0.0283495, 'pound': 0.45359237, 'stone': 6.35029, 'tola': 0.01166, 'seer': 0.933 }, 'kilogram', 70),
+  unitTool('volume-converter', 'Volume converter', 'icon:flask', 'Litres, millilitres, gallons, cups and more.', { 'millilitre': 0.001, 'litre': 1, 'cubic metre': 1000, 'teaspoon': 0.00492892, 'tablespoon': 0.0147868, 'cup (US)': 0.236588, 'pint (US)': 0.473176, 'quart (US)': 0.946353, 'gallon (US)': 3.78541, 'gallon (UK)': 4.54609 }, 'litre', 2),
+  unitTool('area-converter', 'Area converter', 'm²', 'Square metres, acres, hectares, bigha and more.', { 'sq centimetre': 0.0001, 'sq metre': 1, 'sq kilometre': 1e6, 'hectare': 1e4, 'acre': 4046.8564, 'sq foot': 0.092903, 'sq yard': 0.836127, 'sq mile': 2589988.11, 'guntha': 101.17, 'bigha (UP)': 2529.29 }, 'acre', 1),
+  unitTool('speed-converter', 'Speed converter', 'km/h', 'km/h, mph, m/s, knots and Mach.', { 'm/s': 1, 'km/h': 1 / 3.6, 'mph': 0.44704, 'knot': 0.514444, 'foot/s': 0.3048, 'Mach': 340.29 }, 'km/h', 100),
+  unitTool('data-size-converter', 'Data size converter', 'KiB', 'Bytes, KB, MB, GB, TB (1024) and bits.', { 'bit': 1 / 8, 'byte': 1, 'KB': 1024, 'MB': 1024 ** 2, 'GB': 1024 ** 3, 'TB': 1024 ** 4, 'PB': 1024 ** 5 }, 'MB', 256),
+  unitTool('time-unit-converter', 'Time unit converter', 'icon:clock', 'Seconds, minutes, hours, days, weeks, years.', { 'millisecond': 0.001, 'second': 1, 'minute': 60, 'hour': 3600, 'day': 86400, 'week': 604800, 'month (30 d)': 2592000, 'year (365 d)': 31536000 }, 'hour', 36),
+  unitTool('pressure-converter', 'Pressure converter', 'psi', 'Pascal, bar, atm, psi, mmHg.', { 'pascal': 1, 'kilopascal': 1000, 'bar': 1e5, 'atmosphere': 101325, 'psi': 6894.757, 'mmHg': 133.322, 'torr': 133.322 }, 'psi', 32),
+  unitTool('energy-converter', 'Energy converter', 'icon:zap', 'Joules, calories, kWh, BTU.', { 'joule': 1, 'kilojoule': 1000, 'calorie': 4.184, 'kilocalorie': 4184, 'watt-hour': 3600, 'kilowatt-hour': 3.6e6, 'BTU': 1055.06 }, 'kilocalorie', 500),
+  unitTool('power-converter', 'Power converter', 'icon:plug', 'Watts, kW, horsepower.', { 'watt': 1, 'kilowatt': 1000, 'megawatt': 1e6, 'horsepower (mech)': 745.7, 'horsepower (metric)': 735.5 }, 'horsepower (mech)', 150),
   unitTool('angle-converter', 'Angle converter', '∠', 'Degrees, radians, gradians, turns.', { 'degree': 1, 'radian': 180 / Math.PI, 'gradian': 0.9, 'turn': 360, 'arcminute': 1 / 60, 'arcsecond': 1 / 3600 }, 'degree', 90),
   unitTool('frequency-converter', 'Frequency converter', '〰', 'Hz, kHz, MHz, GHz, RPM.', { 'hertz': 1, 'kilohertz': 1e3, 'megahertz': 1e6, 'gigahertz': 1e9, 'RPM': 1 / 60 }, 'megahertz', 98.3),
-  unitTool('cooking-converter', 'Cooking measures', '🍳', 'Cups, spoons and millilitres for the kitchen.', { 'millilitre': 1, 'teaspoon': 4.92892, 'tablespoon': 14.7868, 'fluid ounce': 29.5735, 'cup': 236.588, 'pint': 473.176, 'litre': 1000 }, 'cup', 1.5),
+  unitTool('cooking-converter', 'Cooking measures', 'icon:food', 'Cups, spoons and millilitres for the kitchen.', { 'millilitre': 1, 'teaspoon': 4.92892, 'tablespoon': 14.7868, 'fluid ounce': 29.5735, 'cup': 236.588, 'pint': 473.176, 'litre': 1000 }, 'cup', 1.5),
   {
-    id: 'temperature-converter', name: 'Temperature converter', cat: 'convert', glyph: '🌡', blurb: 'Celsius, Fahrenheit, Kelvin and Rankine.',
+    id: 'temperature-converter', name: 'Temperature converter', cat: 'convert', glyph: 'icon:thermometer', blurb: 'Celsius, Fahrenheit, Kelvin and Rankine.',
     fields: [num('x', 'Value', { default: 36.6 }), sel('from', 'From', ['Celsius', 'Fahrenheit', 'Kelvin', 'Rankine'], 'Celsius')], example: { x: 100, from: 'Celsius' },
     run: (v) => {
       const x = N(v, 'x'), f = S(v, 'from'); const c = f === 'Celsius' ? x : f === 'Fahrenheit' ? ((x - 32) * 5) / 9 : f === 'Kelvin' ? x - 273.15 : ((x - 491.67) * 5) / 9;
@@ -56,7 +56,7 @@ export const convertTools: ToolDef[] = [
     },
   },
   {
-    id: 'fuel-economy', name: 'Fuel economy', cat: 'convert', glyph: '⛽', blurb: 'km/L, L/100 km, mpg (US and UK).',
+    id: 'fuel-economy', name: 'Fuel economy', cat: 'convert', glyph: 'icon:fuel', blurb: 'km/L, L/100 km, mpg (US and UK).',
     fields: [num('x', 'Value', { default: 15 }), sel('from', 'From', ['km/L', 'L/100km', 'mpg (US)', 'mpg (UK)'], 'km/L')], example: { x: 15, from: 'km/L' },
     run: (v) => {
       const x = N(v, 'x'); if (x <= 0) return err('Use a positive number.'); const f = S(v, 'from');
@@ -80,7 +80,7 @@ export const convertTools: ToolDef[] = [
     run: (v) => { const t = S(v, 't').trim(); if (/^\d+$/.test(t)) { const n = Number(t); return n < 1 || n > 3999 ? err('Use 1 to 3999.') : text(toRoman(n)); } const n = fromRoman(t); return Number.isNaN(n) || !t ? err('Not a Roman numeral.') : text(String(n)); },
   },
   {
-    id: 'number-to-words', name: 'Number to words', cat: 'convert', glyph: '1→one', blurb: 'Spell a number in English (international or Indian lakh/crore).',
+    id: 'number-to-words', name: 'Number to words', cat: 'convert', glyph: '1=one', blurb: 'Spell a number in English (international or Indian lakh/crore).',
     fields: [txt('n', 'Number', { default: '1234567' }), tog('ind', 'Indian system (lakh, crore)', true)], example: { n: '1234567', ind: true },
     run: (v) => { try { return text(numberToWords(Math.trunc(Number(S(v, 'n').replace(/,/g, ''))), B2(v, 'ind'))); } catch (e) { return err((e as Error).message); } },
   },
@@ -110,7 +110,7 @@ export const convertTools: ToolDef[] = [
     run: (v) => { const b = N(v, 'n'); const f = (base: number, u: string[]) => { let i = 0, x = Math.abs(b); while (x >= base && i < u.length - 1) { x /= base; i++; } return `${fmt(Math.sign(b) * x, 2)} ${u[i]}`; }; return stats([['Decimal (1000)', f(1000, ['B', 'kB', 'MB', 'GB', 'TB', 'PB'])], ['Binary (1024)', f(1024, ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'])]]); },
   },
   {
-    id: 'shoe-size', name: 'Shoe size converter', cat: 'convert', glyph: '👟', blurb: 'Indian/UK, US and EU shoe sizes (adult, approximate).',
+    id: 'shoe-size', name: 'Shoe size converter', cat: 'convert', glyph: 'icon:shoe', blurb: 'Indian/UK, US and EU shoe sizes (adult, approximate).',
     fields: [num('x', 'Size', { default: 8, step: 0.5 }), sel('from', 'From', ['UK / India', 'US men', 'US women', 'EU'], 'UK / India')], example: { x: 8, from: 'UK / India' },
     run: (v) => { const x = N(v, 'x'), f = S(v, 'from'); const uk = f === 'UK / India' ? x : f === 'US men' ? x - 1 : f === 'US women' ? x - 2.5 : x - 33.5; return table(['System', 'Size'], [['UK / India', fmt(uk, 1)], ['US men', fmt(uk + 1, 1)], ['US women', fmt(uk + 2.5, 1)], ['EU', fmt(uk + 33.5, 1)], ['Foot length (cm)', fmt((uk + 23) * 0.847 + 0.0, 1)]]); },
   },

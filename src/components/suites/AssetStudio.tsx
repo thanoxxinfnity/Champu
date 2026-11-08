@@ -17,6 +17,7 @@ import { bundleFor, type AssetTarget } from '@/lib/suites/assets/export';
 import { downloadZip, formatBytes } from '@/lib/zip';
 import { listAssets, saveAsset } from '@/lib/db/history';
 import type { AssetRecord } from '@/lib/db/schema';
+import { Icon } from '@/components/Icon';
 
 /**
  * Asset Studio — generate or upload, cut the background, export the platform set.
@@ -198,7 +199,7 @@ export function AssetStudio() {
     try {
       const bundle = bundleFor(target, matte.canvas, name, { background, appName: name, baselineDp });
       downloadZip(bundle.entries, `${name.replace(/\W+/g, '-')}-${target}.zip`);
-      for (const note of bundle.notes) appendTerminal({ stream: 'system', text: `📦 ${note}` });
+      for (const note of bundle.notes) appendTerminal({ stream: 'system', text: note });
 
       await saveAsset({
         suite: 'assets',
@@ -332,7 +333,7 @@ export function AssetStudio() {
 
             {matte?.warnings.map((w, i) => (
               <p key={i} className="mt-1.5 text-[10.5px] leading-[1.45]" style={{ color: 'var(--color-amber)' }}>
-                ⚠ {w}
+                <span className="inline-flex items-start gap-1.5"><Icon name="alert" size={13} style={{ marginTop: 2 }} />{w}</span>
               </p>
             ))}
 

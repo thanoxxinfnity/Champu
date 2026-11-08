@@ -7,6 +7,7 @@ import { getResearchRun, listResearchRuns, saveResearchRun, uid } from '@/lib/db
 import type { ResearchRunRecord } from '@/lib/db/schema';
 import { send } from '@/lib/agent/runtime';
 import { downloadText } from '@/lib/zip';
+import { Icon } from '@/components/Icon';
 
 /**
  * Autonomous research mode.
@@ -315,7 +316,7 @@ ${data.notes?.length ? `## Retrieval notes\n${data.notes.join('\n')}` : ''}`,
                         style={{ color: milestone.done ? 'var(--ink-faint)' : 'var(--ink)' }}
                       >
                         <span className="mono" style={{ color: milestone.done ? 'var(--accent)' : 'var(--ink-faint)' }}>
-                          {milestone.done ? '●' : '○'}
+                          <Icon name={milestone.done ? 'circleCheck' : 'circle'} size={14} />
                         </span>
                         <span style={{ textDecoration: milestone.done ? 'line-through' : undefined }}>{milestone.title}</span>
                       </button>
@@ -332,7 +333,7 @@ ${data.notes?.length ? `## Retrieval notes\n${data.notes.join('\n')}` : ''}`,
                 className="mono w-full rounded-lg border px-3 py-2 text-[11px]"
                 style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
               >
-                ↓ export retrieved context
+                <span className="inline-flex items-center gap-1"><Icon name="download" size={13} />export retrieved context</span>
               </button>
             )}
           </div>

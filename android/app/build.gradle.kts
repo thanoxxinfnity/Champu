@@ -15,8 +15,8 @@ android {
         applicationId = "com.chomugiri.workspace"
         minSdk = 24
         targetSdk = 35
-        versionCode = 97
-        versionName = "3.67"
+        versionCode = 98
+        versionName = "3.68"
         // A build that must sit beside the real app rather than replace it (the CI test APK) sets this, e.g. ".ag".
         providers.gradleProperty("CHOMUGIRI_APP_ID_SUFFIX").orNull?.let { applicationIdSuffix = it }
     }

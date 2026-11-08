@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useWorkspace } from '@/lib/store';
 import { executeCommand } from '@/lib/agent/runtime';
 import { LiveBar } from './LiveBar';
+import { Icon } from '@/components/Icon';
 
 const STREAM_COLOR: Record<string, string> = {
   stdout: 'var(--ink)',
@@ -18,6 +19,10 @@ const STREAM_COLOR: Record<string, string> = {
  * Autoscroll sticks to the bottom only while the user is already there — a build
  * that yanks the viewport away mid-scroll makes long logs unreadable.
  */
+function Tick({ ok }: { ok: boolean }) {
+  return <Icon name={ok ? 'check' : 'close'} size={11} style={{ display: 'inline', verticalAlign: '-1px' }} />;
+}
+
 export function Terminal() {
   const lines = useWorkspace((s) => s.terminal);
   const clearTerminal = useWorkspace((s) => s.clearTerminal);
@@ -135,9 +140,9 @@ export function Terminal() {
                 <br />
                 {heartbeat.health?.platform} · node {heartbeat.health?.node}
                 <br />
-                java {heartbeat.health?.toolchains.java ? '✔' : '✘'} · gradle{' '}
-                {heartbeat.health?.toolchains.gradle ? '✔' : '✘'} · sdk{' '}
-                {heartbeat.health?.toolchains.androidSdk ? '✔' : '✘'}
+                java <Tick ok={!!heartbeat.health?.toolchains.java} /> · gradle{' '}
+                <Tick ok={!!heartbeat.health?.toolchains.gradle} /> · sdk{' '}
+                <Tick ok={!!heartbeat.health?.toolchains.androidSdk} />
               </>
             ) : (
               <>

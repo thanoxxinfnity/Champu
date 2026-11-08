@@ -42,6 +42,7 @@ import { getSetting, setSetting } from '@/lib/db/history';
 import { openSessionById } from '@/lib/session/open';
 import { useAutoPushKeys } from '@/lib/bridge/auto-push';
 import { useBackgroundInbox } from '@/lib/agent/background-inbox';
+import { Icon } from '@/components/Icon';
 
 /** Suite-specific tool pane shown on the right when the suite has one. */
 function SuiteTool() {
@@ -300,9 +301,9 @@ export function Workspace() {
             className="press mono rounded-lg px-2 py-1 text-[12px]"
             style={{ color: 'var(--ink-faint)' }}
             aria-label="Toggle sidebar"
-            title="⌘B"
+            title="Ctrl+B"
           >
-            ☰
+            <Icon name="menu" size={18} />
           </button>
 
           <span className="hand text-[17px] leading-none" style={{ color: 'var(--ink-dim)' }}>
@@ -319,9 +320,9 @@ export function Workspace() {
               className="press mono rounded-lg px-2 py-1 text-[12px]"
               style={{ color: 'var(--ink-faint)' }}
               aria-label="Settings"
-              title="⌘,"
+              title="Ctrl+,"
             >
-              ⚙
+              <Icon name="settings" size={18} />
             </button>
           </div>
         </header>
@@ -360,7 +361,7 @@ export function Workspace() {
               style={{ color: 'var(--color-amber)' }}
               aria-label="Dismiss"
             >
-              ✕
+              <Icon name="close" size={16} />
             </button>
           </div>
         )}
@@ -535,7 +536,7 @@ export function Workspace() {
                 style={{ color: 'var(--ink-faint)' }}
                 aria-label="Close"
               >
-                ✕
+                <Icon name="close" size={16} />
               </button>
             </div>
             <div className="min-h-0 flex-1">{paneBody}</div>
