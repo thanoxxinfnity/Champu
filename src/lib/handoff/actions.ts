@@ -257,7 +257,7 @@ export function describe(a: Action): string {
     case 'wait': return `Wait ${a.seconds}s`;
     case 'launch': return `Start ${a.argv[0]}`;
     case 'shot': return 'Look at the screen';
-    case 'fill_secret': return `Fill ${a.field} from ${a.secret} 🔒`;
+    case 'fill_secret': return a.secret.startsWith('once:') ? `Fill ${a.secret.slice(5).replace(/_/g, ' ')} securely 🔒` : `Fill ${a.field} from ${a.secret} 🔒`;
     case 'request_secret': return `Ask you securely for ${a.fields.join(', ')} 🔒`;
     case 'shell': return `Run ${a.cmd.slice(0, 60)}`;
     case 'ask': return 'Ask you';

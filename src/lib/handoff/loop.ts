@@ -120,6 +120,15 @@ export async function runHandoff(opts: RunOptions, deps: LoopDeps): Promise<RunR
     }
   };
 
+  /** Typing and key presses answer with nothing; the model still needs to see the page, so read it again. */
+  const pageAfter = async (text: string): Promise<string> => {
+    if (mode !== 'browser' || /\[ref=/.test(text)) return text;
+    try {
+      const snap = await deps.browser('browser_snapshot', {});
+      return snap.ok ? `${text.trim() ? `${text.trim()}\n` : ''}${snap.text}` : text;
+    } catch { return text; }
+  };
+
   const whereAmI = async (): Promise<{ url: string | null; host: string | null }> => {
     if (mode !== 'browser') return { url: null, host: null };
     try {
@@ -261,7 +270,7 @@ export async function runHandoff(opts: RunOptions, deps: LoopDeps): Promise<RunR
       try { const r = await deps.browser('browser_type', { target: action.ref, element: action.target || action.ref, text: hit.value, submit: false }); ok = r.ok; text = R(r.text); } catch (e) { text = R((e as Error).message); }
       rec.ok = ok; rec.result = ok ? `Filled ${action.field} (hidden).` : `Could not fill: ${text.slice(0, 300)}`;
       emit({ kind: 'result', index, ok, text: rec.result });
-      observation = text;
+      observation = R(await pageAfter(text));
       turns.push({ reply: replyJson, observation: `${ok ? 'Done' : 'Failed'}: ${label} (value hidden from you)`, label });
       continue;
     }
@@ -305,8 +314,9 @@ export async function runHandoff(opts: RunOptions, deps: LoopDeps): Promise<RunR
     if (mode === 'desktop' && action.type !== 'shell') {
       if (action.type !== 'wait') await new Promise((r) => setTimeout(r, 400));
       seen = `${ok ? 'OK' : 'FAILED'}: ${text}\n${await takeScreen()}`;
-    } else if (mode === 'browser' && opts.liveView && PAGE_CHANGING.has(action.type) && ok) {
-      await takeScreen();
+    } else if (mode === 'browser' && action.type !== 'shell') {
+      if (ok) seen = R(await pageAfter(text));
+      if (opts.liveView && PAGE_CHANGING.has(action.type) && ok) await takeScreen();
     }
     observation = action.type === 'shell' ? `Terminal output:\n${text}` : seen;
     // Older turns keep a short extract, so facts read on an earlier page are not lost when the page changes.

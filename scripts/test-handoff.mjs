@@ -452,3 +452,22 @@ test('chat commands: /computer-use and /screen are read the way people type them
   assert.equal(pickMode('open the app LibreOffice and write a letter', true).mode, 'desktop');
   assert.equal(pickMode('compare prices on amazon', true).mode, 'browser');
 });
+
+test('after typing or a key press (which answer with nothing) the model still sees the page', async () => {
+  const h = harness(['{"action":"type","ref":"e17","text":"tomsmith","target":"Username"}', '{"action":"done","summary":"typed"}'], {
+    browser: async (tool, args) => {
+      h.calls.push({ browser: tool, args });
+      if (tool === 'browser_type') return { ok: true, text: '' };
+      if (tool === 'browser_snapshot') return { ok: true, text: '- textbox "Username": tomsmith [ref=e17]\n- button "Login" [ref=e22]' };
+      return { ok: true, text: '' };
+    },
+  });
+  await runHandoff({ task: 't', mode: 'browser', vision: false }, h.deps);
+  assert.ok(h.calls.some((c) => c.browser === 'browser_snapshot'), 'read the page again');
+  assert.match(JSON.stringify(h.calls.filter((c) => c.llm).at(-1).llm), /button \\"Login\\" \[ref=e22\]/);
+});
+
+test('secure steps read like words, not codes', () => {
+  assert.equal(label({ type: 'fill_secret', ref: 'e1', secret: 'once:password', field: 'value' }), 'Fill password securely 🔒');
+  assert.equal(label({ type: 'fill_secret', ref: 'e1', secret: 'login:amazon', field: 'password' }), 'Fill password from login:amazon 🔒');
+});

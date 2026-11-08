@@ -8,6 +8,7 @@ import { buildGodotExport } from '@/lib/suites/godot/export';
 import { useEffect, useMemo, useState } from 'react';
 import { markLive, renderMarkdown } from './markdown';
 import { ComputerUseCard } from './ComputerUseCard';
+import { LogoMark } from './Logo';
 import { useRunner } from '@/lib/handoff/runner';
 import { TextWithSites } from './SiteChip';
 import './codeActions';
@@ -23,13 +24,13 @@ function Avatar({ role, lane }: { role: string; lane?: 'A' | 'B' }) {
     <div
       className="mono flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold"
       style={{
-        background: isUser ? 'var(--surface)' : 'color-mix(in oklab, var(--accent) 14%, var(--surface))',
-        border: `1px solid ${isUser ? 'var(--line)' : 'color-mix(in oklab, var(--accent) 30%, var(--line))'}`,
-        color: isUser ? 'var(--ink-dim)' : 'var(--accent)',
+        background: isUser ? 'var(--surface)' : 'transparent',
+        border: isUser ? '1px solid var(--line)' : 'none',
+        color: isUser ? 'var(--ink-dim)' : 'var(--ink)',
       }}
       title={isUser ? 'You' : `Chomugiri · Lane ${lane ?? 'A'}`}
     >
-      {isUser ? 'YOU' : 'CHO'}
+      {isUser ? 'YOU' : <LogoMark size={22} id="msg-avatar" />}
     </div>
   );
 }
