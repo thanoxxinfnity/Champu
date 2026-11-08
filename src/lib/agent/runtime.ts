@@ -853,9 +853,17 @@ async function drainQueue(): Promise<void> {
 async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
   const state = useWorkspace.getState();
   const {
-    selection, activeSuite, guard, heartbeat, pushMessage, patchMessage,
+    selection, activeSuite, guard, pushMessage, patchMessage,
     setPlan, setTaskStatus, setRightPaneTab,
   } = state;
+  // The heartbeat the page last saw can be stale: right after the app opens (or after the phone slept) it still says "offline" for the
+  // few seconds before the first ping answers, and the model was then told the terminal is down while the sidebar already showed it up.
+  // So when it is not online, ask once more and wait briefly for the answer before the status goes into the prompt.
+  let heartbeat = state.heartbeat;
+  if (heartbeat.status !== 'online' && heartbeat.status !== 'degraded' && state.monitor) {
+    await Promise.race([state.monitor.ping().catch(() => undefined), new Promise((r) => setTimeout(r, 5000))]);
+    heartbeat = useWorkspace.getState().heartbeat;
+  }
 
   const baseSuite = opts.suite ?? activeSuite;
   const attachments = opts.attachments ?? [];
