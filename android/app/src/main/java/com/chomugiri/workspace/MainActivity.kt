@@ -9,7 +9,9 @@ import android.text.InputType
 import android.view.Menu
 import android.view.MenuItem
 import android.view.ViewGroup
+import android.graphics.Color
 import android.webkit.ConsoleMessage
+import android.webkit.JavascriptInterface
 import android.webkit.CookieManager
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -18,11 +20,16 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.chomugiri.workspace.server.AndroidAssetSource
 import com.chomugiri.workspace.server.ApiRouter
 import com.chomugiri.workspace.server.HttpServer
@@ -39,6 +46,8 @@ import com.chomugiri.workspace.server.PrefsSecretStore
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
+    private lateinit var root: FrameLayout
+    private var barColor = 0
     private lateinit var server: HttpServer
     private lateinit var router: ApiRouter
     private var filePicker: ValueCallback<Array<Uri>>? = null
@@ -175,7 +184,23 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        setContentView(webView)
+        // Android 15 draws every app edge to edge (behind the status and navigation bars). The page is kept inside the
+        // bars instead: the container is padded by the system bars, the camera cutout and the keyboard, and painted in
+        // the page's own background colour so the bars match the light or dark theme.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        root = FrameLayout(this).apply {
+            setBackgroundColor(Color.parseColor("#1C1A17"))
+            addView(webView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            v.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+            WindowInsetsCompat.CONSUMED
+        }
+        webView.addJavascriptInterface(BarsBridge(), "ChomugiriBars")
+        setContentView(root)
+        applyBarColor(Color.parseColor("#1C1A17"))
 
         // The session token gates /api endpoints so other apps sharing loopback
         // cannot drive the user's keys. Re-injected on every navigation, because
@@ -227,6 +252,21 @@ class MainActivity : AppCompatActivity() {
           if (window.__chomugiriShell) return;
           window.__chomugiriShell = { platform: 'android', token: '${server.sessionToken}' };
 
+          // Keep the system bars the colour of the page (light, dark, or whatever the theme is).
+          var lastBar = '';
+          function syncBars() {
+            try {
+              var el = document.body || document.documentElement;
+              if (!el || !window.ChomugiriBars) return;
+              var c = getComputedStyle(el).backgroundColor;
+              if (!c || c === 'transparent' || c.indexOf('rgba(0, 0, 0, 0)') === 0) c = getComputedStyle(document.documentElement).backgroundColor;
+              if (c && c !== lastBar) { lastBar = c; window.ChomugiriBars.setColor(c); }
+            } catch (e) { /* the bars keep their last colour */ }
+          }
+          document.addEventListener('DOMContentLoaded', syncBars);
+          window.addEventListener('load', syncBars);
+          setInterval(syncBars, 1500);
+
           var original = window.fetch;
           window.fetch = function (input, init) {
             try {
@@ -243,6 +283,36 @@ class MainActivity : AppCompatActivity() {
           };
         })();
     """.trimIndent()
+
+    /** The page tells the shell its background colour, so the status and navigation bars match the theme. */
+    private inner class BarsBridge {
+        @JavascriptInterface
+        fun setColor(css: String?) {
+            val c = parseCssColor(css ?: return) ?: return
+            runOnUiThread { applyBarColor(c) }
+        }
+    }
+
+    private fun applyBarColor(c: Int) {
+        if (c == barColor) return
+        barColor = c
+        root.setBackgroundColor(c)
+        @Suppress("DEPRECATION")
+        run { window.statusBarColor = c; window.navigationBarColor = c }
+        val light = (0.299 * Color.red(c) + 0.587 * Color.green(c) + 0.114 * Color.blue(c)) > 150
+        WindowInsetsControllerCompat(window, root).apply {
+            isAppearanceLightStatusBars = light
+            isAppearanceLightNavigationBars = light
+        }
+    }
+
+    private fun parseCssColor(css: String): Int? {
+        val m = Regex("rgba?\\(\\s*(\\d+)[,\\s]+(\\d+)[,\\s]+(\\d+)(?:[,\\s/]+([\\d.]+))?").find(css) ?: return null
+        val a = m.groupValues[4].toDoubleOrNull() ?: 1.0
+        if (a < 0.5) return null
+        val ch = { i: Int -> m.groupValues[i].toInt().coerceIn(0, 255) }
+        return Color.rgb(ch(1), ch(2), ch(3))
+    }
 
     // ── Options menu ────────────────────────────────────────────────────────
 
