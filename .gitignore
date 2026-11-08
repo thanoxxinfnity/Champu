@@ -36,3 +36,6 @@ examples/crimson-mist/raw/
 examples/city-shifter/raw/
 examples/city-shifter/private/
 examples/city-shifter/tools/__pycache__/
+
+# fan / licensed models: never committed
+private/
