@@ -52,8 +52,22 @@ test('Settings shows the update offer for an old bridge and keeps Pull/Delete of
   assert.match(ui, /lacksKeyStore\(heartbeat\.health\)/);
   assert.match(ui, /data-testid="bridge-old"/);
   assert.match(ui, /Update the terminal bridge/);
-  assert.match(ui, /disabled=\{!online \|\| old \|\|/);
+  assert.match(ui, /disabled=\{!online \|\| !keysOk \|\|/);
+  assert.match(ui, /bridgeOutdated\(heartbeat\.health, latest\)/);
   const pkg = readFileSync('package.json', 'utf8');
   assert.match(pkg, /"prebuild": "node scripts\/sync-agent-assets\.mjs"/);
   assert.match(readFileSync('scripts/export-static.mjs', 'utf8'), /sync-agent-assets\.mjs/);
+});
+
+import { bridgeOutdated, canRestart, RESTART_MIN_VERSION } from '../src/lib/bridge/update.ts';
+test('a bridge older than the one in the app is offered the update; 5.0+ restarts itself', () => {
+  assert.equal(RESTART_MIN_VERSION, '5.0.0');
+  assert.equal(bridgeOutdated({ version: '1.3.0' }, '5.0.0'), true);
+  assert.equal(bridgeOutdated({ version: '5.0.0' }, '5.0.0'), false);
+  assert.equal(bridgeOutdated({ version: '5.1.0' }, '5.0.0'), false);
+  assert.equal(bridgeOutdated({}, '5.0.0'), true);
+  assert.equal(bridgeOutdated({ version: '1.3.0' }, null), false);
+  assert.equal(canRestart({ version: '1.4.1' }), false);
+  assert.equal(canRestart({ version: '5.0.0' }), true);
+  assert.equal(canRestart({ version: '1.4.1', features: ['update'] }), true);
 });

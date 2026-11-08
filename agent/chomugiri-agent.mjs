@@ -26,7 +26,7 @@ import { createServer } from 'node:http';
 import { spawn, spawnSync, execSync } from 'node:child_process';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile, readdir, stat, rm } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -66,7 +66,41 @@ const TOKEN = arg('token', process.env.CHOMUGIRI_TOKEN ?? randomBytes(24).toStri
 const ALLOW_CMD = (arg('allow-cmd', process.env.CHOMUGIRI_ALLOW_CMD ?? '') || '')
   .split(',').map((s) => s.trim()).filter(Boolean);
 const MAX_EXEC_MS = Number(arg('max-exec-ms', 45 * 60_000));
-const VERSION = '1.4.1';
+const VERSION = '5.0.0';
+
+// ── Updates: newer files pushed by the app win; /v1/restart applies them ───
+// The app writes a newer bridge into <workspace>/.chomugiri-agent/. Starting the OLD command again (a restart by hand, or by the
+// host that supervises this process, like a Docker Space) then runs those files instead — nothing to retype.
+const UPDATE_DIR = '.chomugiri-agent';
+const SELF = fileURLToPath(import.meta.url);
+const cmpVersion = (a, b) => {
+  const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0), pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) { const d = (pa[i] ?? 0) - (pb[i] ?? 0); if (d) return d < 0 ? -1 : 1; }
+  return 0;
+};
+/** The pushed bridge file, when it is a newer version than this one. */
+function newerEntry() {
+  const file = path.join(WORKSPACE, UPDATE_DIR, 'chomugiri-agent.mjs');
+  if (path.resolve(file) === path.resolve(SELF) || !existsSync(file)) return null;
+  try {
+    const v = /const VERSION = '([^']+)'/.exec(readFileSync(file, 'utf8'))?.[1];
+    return v && cmpVersion(v, VERSION) > 0 ? { file, version: v } : null;
+  } catch { return null; }
+}
+/** Under a supervisor (a Hugging Face Space, Kubernetes, systemd) a process that exits is started again by it. */
+const SUPERVISED = flag('supervised') || process.env.CHOMUGIRI_SUPERVISED === '1' || !!process.env.SPACE_ID || !!process.env.KUBERNETES_SERVICE_HOST || !!process.env.INVOCATION_ID;
+if (process.env.CHOMUGIRI_WAIT_MS) await new Promise((r) => setTimeout(r, Math.min(15_000, Number(process.env.CHOMUGIRI_WAIT_MS) || 0)));
+if (!process.env.CHOMUGIRI_NO_HANDOFF) {
+  const next = newerEntry();
+  if (next) {
+    process.stderr.write(`Bridge ${VERSION} found newer files (${next.version}) in the workspace; running those.\n`);
+    const child = spawn(process.execPath, [next.file, ...process.argv.slice(2)], { stdio: 'inherit', env: { ...process.env, CHOMUGIRI_TOKEN: TOKEN, CHOMUGIRI_NO_HANDOFF: '1' } });
+    for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => child.kill(sig));
+    child.on('exit', (code) => process.exit(code ?? 0));
+    child.on('error', () => process.exit(1));
+    await new Promise(() => {});
+  }
+}
 const desktop = createDesktop({ outDir: ARTIFACTS });
 // The browser opens as a real window on the agent's screen when one is running, so the Linux-screen view shows it working.
 const browser = createBrowser({ outDir: ARTIFACTS, displayOf: () => desktop.display });
@@ -321,7 +355,11 @@ const routes = {
     agent: 'chomugiri-bridge',
     version: VERSION,
     /** What this bridge can do beyond the basics, so the app knows without trying. */
-    features: ['keys', 'jobs', 'desktop'],
+    features: ['keys', 'jobs', 'desktop', 'install', 'update'],
+    /** Which screen the browser is a real window on (null = headless). */
+    browserWindow: browser.visible || null,
+    supervised: SUPERVISED,
+    pendingUpdate: newerEntry()?.version ?? null,
     platform: process.platform,
     arch: process.arch,
     node: process.version,
@@ -448,6 +486,20 @@ routes['POST /v1/job/cancel'] = async (req) => jobs.cancel(String((await readJso
 routes['POST /v1/job/ack'] = async (req) => jobs.ack((await readJson(req)).ids);
 
 /** The bridge's browser (Playwright MCP). `{tool,args}` runs one step; `{list:true}` names the tools. */
+/** Starts the newest bridge files: exit under a supervisor (it starts us again, and the hand-off picks the new files), else start a replacement. */
+routes['POST /v1/restart'] = async () => {
+  const next = newerEntry();
+  setTimeout(() => {
+    const entry = next?.file ?? SELF;
+    if (SUPERVISED) { shutdown(); return; }
+    const args = [entry, '--port', String(PORT), '--host', HOST, '--workspace', WORKSPACE, '--max-exec-ms', String(MAX_EXEC_MS), ...(ALLOW_CMD.length ? ['--allow-cmd', ALLOW_CMD.join(',')] : [])];
+    const child = spawn(process.execPath, args, { detached: true, stdio: 'ignore', env: { ...process.env, CHOMUGIRI_TOKEN: TOKEN, CHOMUGIRI_WAIT_MS: '1500', CHOMUGIRI_NO_HANDOFF: next ? '1' : '' } });
+    child.unref();
+    shutdown();
+  }, 400);
+  return { ok: true, restarting: true, supervised: SUPERVISED, from: VERSION, to: next?.version ?? VERSION };
+};
+
 routes['POST /v1/browser'] = async (req) => {
   const body = await readJson(req);
   try {

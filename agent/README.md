@@ -1,6 +1,6 @@
 # Chomugiri Terminal Bridge
 
-Zero-dependency daemon that gives the Chomugiri web workspace a real shell on
+Zero-dependency daemon (v5.0) that gives the Chomugiri web workspace a real shell on
 your machine. Node >= 20, nothing to install.
 
 ```bash
@@ -10,6 +10,19 @@ cloudflared tunnel --url http://localhost:7717
 ```
 
 Paste the public URL and the printed token into Chomugiri → Settings.
+
+## Updating (5.0)
+
+The app carries the newest bridge files. Settings → Terminal keys → "Update the terminal bridge" writes them into
+`<workspace>/.chomugiri-agent/` and, on a 5.0+ bridge, calls `POST /v1/restart`:
+
+- Starting the bridge looks in that folder first and runs the files there when they are newer, so the **same start command**
+  (or the host's own restart) picks up the update. Nothing to retype.
+- `POST /v1/restart` starts the newest files. Under a supervisor (a Hugging Face Space, Kubernetes, systemd, `--supervised`) the
+  process just exits and the supervisor starts it again; otherwise it starts the replacement itself on the same port, token and workspace.
+- `GET /v1/health` reports `version`, `features` (`update`, `install`, ...), `pendingUpdate` and `browserWindow`.
+
+An older bridge (before 5.0) cannot restart itself: restart it once by hand from the new files, and every later update is one tap.
 
 ## Security
 

@@ -81,3 +81,40 @@ export function titleFromInput(raw: string): string {
   s = s.charAt(0).toUpperCase() + s.slice(1);
   return s || 'Untitled run';
 }
+
+// Words that carry no topic in English or Hinglish requests ("ek simple todo app bana do html me").
+const STOP = new Set((
+  'a an the and or of for to in on at with by from about into as is are be it this that these those my me mine your our ' +
+  'i we you can could would should will please plz pls kindly want need like make build create generate design write give show tell ' +
+  'help fix add do does did done just now also some any one new using use via ' +
+  'ek ko ka ki ke me mein main mai hai ha h hain ho tha thi the aur bhi bhe jo jab tab na tho to toh yar yaar bro bhai please ' +
+  'bana banao banado bana do de dena dedo kar karo kardo karna karke kya kaise kese mujhe mere mera meri humko hum tum aap ' +
+  'liye wala wali wale jaisa jasa jesa jaise chahiye chahie sab sabhi accha acha achha thoda bahut jaldi abhi isko usko iska uska ' +
+  'raha rahi rahe raha rha rhi pe par se tak hota hoti hote hua hui hue gaya gayi gaye nahi nahin nhi kyu kyun kuch koi woh wo yeh ye is us isme usme'
+).split(/\s+/));
+const KEEP_UPPER = new Set(['html', 'css', 'js', 'ts', 'api', 'apk', 'ui', 'ux', 'ai', 'pdf', 'sql', 'json', 'csv', 'url', 'seo', 'rpg', 'fps', 'jjk', 'gpu', 'cpu', 'ios', '2d', '3d', 'mcp', 'llm']);
+
+/**
+ * A topic title from the user's words alone ("ek simple todo app bana do html me" → "Simple Todo App HTML"): filler and
+ * Hinglish request words dropped, the first few content words kept in Title Case. Used when no model may name the chat.
+ */
+export function topicTitle(raw: string): string {
+  if (isSmallTalk(raw)) return NEW_CHAT_TITLE;
+  const words = raw
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .split(/[^\p{L}\p{N}+#.-]+/u)
+    .map((w) => w.replace(/^[.-]+|[.-]+$/g, ''))
+    .filter((w) => w && !STOP.has(w.toLowerCase()) && !/^\d+$/.test(w));
+  const seen = new Set<string>();
+  const picked: string[] = [];
+  for (const w of words) {
+    const k = w.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    picked.push(KEEP_UPPER.has(k) ? k.toUpperCase() : w.length > 1 && w === w.toUpperCase() ? w : k.charAt(0).toUpperCase() + k.slice(1));
+    if (picked.length >= 5) break;
+  }
+  const t = picked.join(' ').slice(0, 60).trim();
+  return t && !isGenericTitle(t) ? t : titleFromInput(raw);
+}

@@ -211,6 +211,11 @@ object Pollinations {
 
         if (inner.isEmpty()) return null
 
+        // The keyless tier answers one reply per ~45 s per IP. The wait stays in the message so the app retries by itself.
+        Regex("Free limit reached[^.]*\\.(?:\\s*Retry after \\d+\\s*s)?", RegexOption.IGNORE_CASE).find(inner)?.let {
+            return Upstream.ErrorInfo("${it.value} The anonymous Pollinations tier gives one reply per 45 seconds.", "FREE_LIMIT", true)
+        }
+
         return when {
             Regex("402|payment required|quota|insufficient", RegexOption.IGNORE_CASE).containsMatchIn(inner) ->
                 Upstream.ErrorInfo(
@@ -235,7 +240,12 @@ object Pollinations {
         else mapOf("Referer" to REFERRER, "Authorization" to "Bearer $token"),
         describeError = ::describeError,
         // The free tier rejects stream_options; keep the payload minimal.
-        shapeBody = { body -> body.put("referrer", REFERRER); body.remove("stream_options") },
+        // gpt-oss behind Pollinations fails with "invalid or omitted terminal usage" when max_tokens is above ~4096 (8192 fails every
+        // time, 4096 answers); the app continues longer output itself.
+        shapeBody = { body ->
+            body.put("referrer", REFERRER); body.remove("stream_options")
+            if (body.has("max_tokens")) body.put("max_tokens", minOf(body.getInt("max_tokens"), 4096))
+        },
         timeoutMs = 180_000,
     )
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { freeLimitWait } from './free-limit';
 import { withKeys } from '@/lib/keys';
 import { useWorkspace } from '@/lib/store';
 import {
@@ -32,6 +33,8 @@ export interface StreamCallbacks {
   onDelta?: (delta: string, full: string) => void;
   onReasoning?: (delta: string, full: string) => void;
   onError?: (message: string) => void;
+  /** A short line about a wait the user should know about ("Pollinations free tier: next reply in 30 s"). */
+  onStatus?: (text: string) => void;
 }
 
 export interface ChatBody {
@@ -61,6 +64,43 @@ export interface StreamResult {
 /** One health record for the whole session: what is resting, and who answered last. */
 const health = createHealth();
 let rotation = 0;
+
+// ── Pollinations' free tier ──────────────────────────────────────────────────
+//
+// Pollinations without a key answers ONE reply every ~45 s per IP address ("Free limit reached: 1 reply every 45 seconds per
+// IP"). A message used to make five calls (plan, answer, review, memory, title), so the answer itself or the title lost the
+// slot. On Pollinations the side steps are skipped (each has a local fallback), the answer waits for the slot when it has to,
+// and a FREE_LIMIT reply is retried after the wait the server names.
+
+export const POLLINATIONS_GAP_MS = 46_000;
+export { freeLimitWait };
+const POLL_KEY = 'chomugiri.pollinations.nextAt';
+let pollNextAt = 0;
+try { pollNextAt = Number(globalThis.localStorage?.getItem(POLL_KEY)) || 0; } catch { /* no storage */ }
+
+function pollMark(ms = POLLINATIONS_GAP_MS): void {
+  pollNextAt = Date.now() + ms;
+  try { globalThis.localStorage?.setItem(POLL_KEY, String(pollNextAt)); } catch { /* no storage */ }
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => { clearTimeout(t); resolve(); }, { once: true });
+  });
+}
+
+async function pollGate(signal?: AbortSignal, onStatus?: (text: string) => void): Promise<void> {
+  const wait = pollNextAt - Date.now();
+  if (wait <= 0 || wait > 95_000) return;
+  onStatus?.(`Pollinations free tier: next reply in ${Math.ceil(wait / 1000)} s…`);
+  await sleep(wait, signal);
+}
+
+/** Thrown instead of spending Pollinations' one free reply on a side step; every caller has a local fallback. */
+export class SideStepSkipped extends Error {
+  constructor() { super('Skipped: on Pollinations the free reply is kept for the answer.'); this.name = 'SideStepSkipped'; }
+}
 
 // ── Streaming ───────────────────────────────────────────────────────────────
 
@@ -308,6 +348,22 @@ function failureOf(r: StreamResult): Failure {
 /** Streams a reply. A gateway model ("gateway/auto") is resolved to a real one here, with fallbacks. */
 export async function streamCompletion(body: ChatBody, callbacks: StreamCallbacks, signal?: AbortSignal): Promise<StreamResult> {
   const route = routeFor(body);
+  if (!route && body.provider === 'pollinations') {
+    // Errors are held back while a free-limit retry is still possible; only the final outcome is shown.
+    const quiet: StreamCallbacks = { onDelta: callbacks.onDelta, onReasoning: callbacks.onReasoning };
+    let r: StreamResult = { content: '', reasoning: '' };
+    for (let attempt = 0; attempt < 3 && !signal?.aborted; attempt++) {
+      await pollGate(signal, callbacks.onStatus);
+      r = await streamOnce(body, quiet, signal);
+      pollMark();
+      const wait = r.emitted ? null : freeLimitWait(r.error);
+      if (wait === null) break;
+      pollMark(wait);
+    }
+    if (r.error) callbacks.onError?.(r.error);
+    count(body.provider, body.model, body.custom, body.messages, r.content.length + r.reasoning.length, r.usage);
+    return r;
+  }
   if (!route) {
     const r = await streamOnce(body, callbacks, signal);
     count(body.provider, body.model, body.custom, body.messages, r.content.length + r.reasoning.length, r.usage);
@@ -341,8 +397,28 @@ export async function streamCompletion(body: ChatBody, callbacks: StreamCallback
 }
 
 /** One answer, no streaming — for planning and other internal steps. A gateway model is resolved here too. */
-export async function complete(body: ChatBody, signal?: AbortSignal, timeoutMs = 45_000): Promise<string> {
+export async function complete(body: ChatBody, signal?: AbortSignal, timeoutMs = 45_000, opts: { sideStep?: boolean } = {}): Promise<string> {
   const route = routeFor(body);
+  if (!route && body.provider === 'pollinations') {
+    if (opts.sideStep) throw new SideStepSkipped();
+    let last: unknown;
+    for (let attempt = 0; attempt < 3 && !signal?.aborted; attempt++) {
+      await pollGate(signal);
+      try {
+        const text = await completeOnce(body, signal, Math.max(timeoutMs, 90_000));
+        pollMark();
+        count(body.provider, body.model, body.custom, body.messages, text.length);
+        return text;
+      } catch (err) {
+        pollMark();
+        last = err;
+        const wait = freeLimitWait((err as Error).message);
+        if (wait === null) throw err;
+        pollMark(wait);
+      }
+    }
+    throw last instanceof Error ? last : new Error('Pollinations did not answer.');
+  }
   if (!route) {
     const text = await completeOnce(body, signal, timeoutMs);
     count(body.provider, body.model, body.custom, body.messages, text.length);

@@ -218,6 +218,11 @@ export class BridgeClient {
     return this.request<{ deleted: number }>('/v1/keys/delete', { method: 'POST', body: JSON.stringify({ names }) });
   }
 
+  /** Starts the newest bridge files the app wrote to the workspace (bridge 5.0.0+). The bridge is back within a few seconds. */
+  restartBridge() {
+    return this.request<{ ok: boolean; restarting: boolean; supervised: boolean; from: string; to: string }>('/v1/restart', { method: 'POST', body: '{}' });
+  }
+
   /** Background jobs: model calls the bridge keeps running while the app is closed (bridge 1.3.0+). */
   createJob(spec: JobSpec) {
     return this.request<JobSummary>('/v1/jobs', { method: 'POST', body: JSON.stringify(spec) }, 60_000);

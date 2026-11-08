@@ -15,6 +15,21 @@ export const JOBS_MIN_VERSION = '1.3.0';
 /** The first bridge version with desktop control (/v1/desktop). */
 export const DESKTOP_MIN_VERSION = '1.4.0';
 
+/** The first bridge that can restart itself on newer files the app wrote (/v1/restart) and picks them up when started again. */
+export const RESTART_MIN_VERSION = '5.0.0';
+
+export function canRestart(health: { version?: string; features?: string[] } | null | undefined): boolean {
+  if (!health) return false;
+  if (health.features?.includes('update')) return true;
+  return !!health.version && compareVersions(health.version, RESTART_MIN_VERSION) >= 0;
+}
+
+/** True when the bridge is older than the one this app carries. */
+export function bridgeOutdated(health: { version?: string } | null | undefined, latest: string | null | undefined): boolean {
+  if (!health || !latest) return false;
+  return !health.version || compareVersions(health.version, latest) < 0;
+}
+
 export function hasDesktop(health: { version?: string; features?: string[] } | null | undefined): boolean {
   if (!health) return false;
   if (health.features?.includes('desktop')) return true;

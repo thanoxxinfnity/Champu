@@ -51,6 +51,11 @@ export function describePollinationsError(
   if (!inner && status < 400) return null;
   const text = `${inner ?? ''}`;
 
+  // The keyless tier answers ONE reply per ~45 s per IP and says so ("Free limit reached: 1 reply every 45 seconds per IP.
+  // Retry after 39s"). The wait is kept in the message: the app reads it and retries by itself.
+  const free = /Free limit reached[^.]*\.(?:\s*Retry after \d+\s*s)?/i.exec(text);
+  if (free) return { message: `${free[0]} The anonymous Pollinations tier gives one reply per 45 seconds.`, code: 'FREE_LIMIT', retryable: true };
+
   if (/402|payment required|quota|insufficient/i.test(text)) {
     return {
       message:
@@ -78,6 +83,8 @@ export function describePollinationsError(
   return null;
 }
 
+export const POLLINATIONS_MAX_TOKENS = 4096;
+
 export function pollinationsChatConfig(): UpstreamConfig {
   return {
     url: `${TEXT_BASE}/openai`,
@@ -89,6 +96,9 @@ export function pollinationsChatConfig(): UpstreamConfig {
       body.referrer = REFERRER;
       // The free tier rejects `stream_options`; keep the payload minimal.
       delete body.stream_options;
+      // gpt-oss behind Pollinations fails a reply with "invalid or omitted terminal usage" whenever max_tokens is above ~4096
+      // (checked: 8192 fails every time, 4096 answers). Output beyond that is carried on by the app's own "continue" step.
+      if (typeof body.max_tokens === 'number') body.max_tokens = Math.min(body.max_tokens, POLLINATIONS_MAX_TOKENS);
       return body;
     },
   };

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useWorkspace } from '@/lib/store';
-import { lacksKeyStore, pushAgentFiles, restartCommand } from '@/lib/bridge/update';
+import { bridgeOutdated, canRestart, lacksKeyStore, pushAgentFiles, restartCommand } from '@/lib/bridge/update';
 import { copyText } from './codeActions';
 import { currentKeyEnv, useAutoPush } from '@/lib/bridge/auto-push';
 
@@ -40,7 +40,12 @@ export function TerminalKeys() {
   }, [refresh]);
 
   // An older bridge has no key store. The app can write the new bridge files into its workspace; the user restarts it from them.
-  const old = online && lacksKeyStore(heartbeat.health);
+  const [latest, setLatest] = useState<string | null>(null);
+  useEffect(() => {
+    void fetch('/agent/manifest.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((m) => setLatest(m?.version ?? null)).catch(() => setLatest(null));
+  }, []);
+  const old = online && (lacksKeyStore(heartbeat.health) || bridgeOutdated(heartbeat.health, latest));
+  const keysOk = !lacksKeyStore(heartbeat.health);
   const [updating, setUpdating] = useState(false);
   const [restart, setRestart] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -58,8 +63,17 @@ export function TerminalKeys() {
         writeFiles: (files) => bridge.writeFiles(files),
       });
       const { url, token } = bridge.describe();
-      setRestart(restartCommand({ workspace: heartbeat.health?.workspace ?? '~/chomugiri-work', token, url }));
-      setNote({ ok: true, text: `The new bridge (${r.version}) is written to the bridge's workspace. Now restart it from the new files with the command below.` });
+      if (canRestart(heartbeat.health)) {
+        // A 5.0+ bridge restarts itself on the new files; give it a few seconds, then look again.
+        await bridge.restartBridge();
+        setRestart(null);
+        setNote({ ok: true, text: `Bridge ${r.version} is written and the terminal is restarting on it. It is back in a few seconds.` });
+        setTimeout(() => void useWorkspace.getState().monitor?.ping(), 6000);
+        setTimeout(() => void useWorkspace.getState().monitor?.ping(), 14000);
+      } else {
+        setRestart(restartCommand({ workspace: heartbeat.health?.workspace ?? '~/chomugiri-work', token, url }));
+        setNote({ ok: true, text: `The new bridge (${r.version}) is written to the bridge's workspace. This older bridge cannot restart itself: restart it from the new files with the command below (on a hosted terminal, use its Restart button).` });
+      }
     } catch (err) {
       setNote({ ok: false, text: (err as Error).message });
     } finally {
@@ -112,15 +126,15 @@ export function TerminalKeys() {
         {held ? ` On the terminal now: ${held.length}.` : ''}
       </p>
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={btn} disabled={!online || old || busy !== null || count === 0} onClick={() => void pull()} style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
+        <button type="button" className={btn} disabled={!online || !keysOk || busy !== null || count === 0} onClick={() => void pull()} style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
           {busy === 'pull' ? 'pulling…' : `Pull APIs on terminal${count ? ` (${count})` : ''}`}
         </button>
-        <button type="button" className={btn} disabled={!online || old || busy !== null || !held?.length} onClick={() => void remove()} style={{ borderColor: 'var(--line)', color: 'var(--color-rose, #e5484d)' }}>
+        <button type="button" className={btn} disabled={!online || !keysOk || busy !== null || !held?.length} onClick={() => void remove()} style={{ borderColor: 'var(--line)', color: 'var(--color-rose, #e5484d)' }}>
           {busy === 'delete' ? 'deleting…' : 'Delete APIs from terminal'}
         </button>
       </div>
       <label className="flex cursor-pointer items-start gap-2 rounded-lg border p-2.5" style={{ borderColor: autoOn ? 'var(--accent)' : 'var(--line)' }}>
-        <input type="checkbox" className="mt-0.5" checked={autoOn} disabled={!online || old} onChange={(e) => autoSet(e.target.checked)} data-testid="auto-push" />
+        <input type="checkbox" className="mt-0.5" checked={autoOn} disabled={!online || !keysOk} onChange={(e) => autoSet(e.target.checked)} data-testid="auto-push" />
         <span className="text-[11.5px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
           <span style={{ color: 'var(--ink)' }}>Auto-push keys</span> — every key and every custom endpoint (with its base URL) goes to the terminal by itself when you add or
           change it, and again if the terminal loses them. No need to press the button.
@@ -130,7 +144,7 @@ export function TerminalKeys() {
       {old && (
         <div className="space-y-2 rounded-lg border p-2.5" style={{ borderColor: 'var(--color-amber, #d99a2b)' }} data-testid="bridge-old">
           <p className="text-[11px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
-            Your terminal bridge is version {heartbeat.health?.version ?? 'unknown'}; keeping keys needs 1.2.0 or newer. The app can send the new bridge to it.
+            Your terminal bridge is version {heartbeat.health?.version ?? 'unknown'}{latest ? `; this app carries ${latest}` : ''}{keysOk ? '' : ' and keeping keys needs 1.2.0 or newer'}. The app can send the new bridge to it{latest ? ` (${latest}: visible browser, install and download steps, self-restart)` : ''}.
           </p>
           <button type="button" className={btn} disabled={updating} onClick={() => void updateBridge()} style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
             {updating ? 'sending…' : 'Update the terminal bridge'}

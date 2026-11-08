@@ -48,6 +48,7 @@ export function recipeFor(c: RecipeCandidate, messages: ChatMessage[], opts: Rec
     const body = buildBody({ ...req, stream: true }, c.model, true, 'openai');
     body.referrer = 'chomugiri';
     delete body.stream_options;
+    if (typeof body.max_tokens === 'number') body.max_tokens = Math.min(body.max_tokens, 4096);
     return { label: c.label ?? `Pollinations · ${c.model}`, url: 'https://text.pollinations.ai/openai', headers: { Referer: 'chomugiri', 'User-Agent': USER_AGENT }, body, stream: true, timeoutMs: 10 * 60 * 1000 };
   }
   return null;

@@ -83,3 +83,13 @@ test('a finished run never writes the raw message over the chat title', async ()
     if (/model: selection\.model/.test(m[1])) assert.equal(/\btitle:/.test(m[1]), false, 'the end-of-run touch must not set the title');
   }
 });
+
+// ── Hinglish-aware topic titles (used when no model may name the chat) ─────
+import { topicTitle } from '../src/lib/text/session-title.ts';
+test('topicTitle names the subject from Hinglish and English requests', () => {
+  assert.equal(topicTitle('ek simple todo app bana do html me'), 'Simple Todo App HTML');
+  assert.equal(topicTitle('bro mujhe ek snake game bana do please'), 'Snake Game');
+  assert.equal(topicTitle('Can you build me a weather dashboard with charts'), 'Weather Dashboard Charts');
+  assert.equal(topicTitle('mera apk crash ho raha ha login pe fix karo'), 'APK Crash Login');
+  assert.equal(topicTitle('hello bro kaise ho'), 'New chat');
+});

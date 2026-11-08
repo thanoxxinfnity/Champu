@@ -67,7 +67,7 @@ import { complete, streamCompletion, type StreamCallbacks } from '@/lib/provider
 import { draftSystemSuffix, pickAngles } from './drafts';
 import { scanForSecrets, hasBlockingSecret } from '@/lib/security/secrets';
 import { appendMessage, createSession, getSetting, listMessages, saveDraftProgress, setSetting, titleFromInput, touchSession, updateMessage, upsertArtifact, recordRun, uid } from '@/lib/db/history';
-import { isGenericTitle, isSmallTalk, NEW_CHAT_TITLE } from '@/lib/text/session-title';
+import { isGenericTitle, isSmallTalk, NEW_CHAT_TITLE, topicTitle } from '@/lib/text/session-title';
 import type { SuiteId } from '@/lib/db/schema';
 import { BridgeOfflineError } from '@/lib/bridge/client';
 import { applyEdits, parseEdits, type EditResult } from './diff-edit';
@@ -454,6 +454,8 @@ async function buildPlan(
         custom,
       },
       signal,
+      undefined,
+      { sideStep: true },
     );
     return parsePlan(raw, input, suite) ?? heuristicPlan(input, suite);
   } catch {
@@ -715,7 +717,7 @@ export async function send(opts: SendOptions): Promise<void> {
   // A brand-new chat gets its session now, once, so everything typed into it while it waits belongs together.
   let sessionId = opts.sessionId ?? st.sessionId;
   if (!sessionId) {
-    creating ??= createSession(suite, titleFromInput(input), { provider: st.selection.provider, model: st.selection.model })
+    creating ??= createSession(suite, topicTitle(input), { provider: st.selection.provider, model: st.selection.model })
       .then((made) => {
         useWorkspace.getState().setSessionId(made.id);
         return made.id;
@@ -784,6 +786,12 @@ async function retitleSession(sessionId: string, fresh: boolean): Promise<void> 
 
     const selection = useWorkspace.getState().selection;
     const model = selection.provider === 'nim' ? PLANNER_NIM_MODEL : selection.model;
+    // If the model cannot name it (Pollinations keeps its one free reply for answers, or the call fails), the chat is still
+    // named from the user's own words instead of staying "New chat".
+    const fallback = async () => {
+      const t = topicTitle(topic!.user);
+      if (t && !isGenericTitle(t) && t !== current) await touchSession(sessionId, { title: t });
+    };
     const raw = await complete({
       provider: selection.provider,
       model,
@@ -798,8 +806,11 @@ async function retitleSession(sessionId: string, fresh: boolean): Promise<void> 
         },
         { role: 'user', content: `User: ${topic.user.slice(0, 600)}\n\nReply: ${topic.reply.slice(0, 600)}` },
       ],
-      maxTokens: 20,
-    });
+      // Reasoning models think before they answer; 20 tokens were all spent thinking and the title came back empty.
+      maxTokens: 400,
+      reasoningEffort: 'low',
+    }, undefined, 45_000, { sideStep: true }).catch(async () => { await fallback(); return null; });
+    if (raw === null) return;
 
     let title = raw
       .replace(/^["'“”]+|["'“”]+$/g, '')
@@ -807,7 +818,7 @@ async function retitleSession(sessionId: string, fresh: boolean): Promise<void> 
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 72);
-    if (!title || title.split(' ').length > 10 || isGenericTitle(title)) title = titleFromInput(topic.user);
+    if (!title || title.split(' ').length > 10 || isGenericTitle(title)) title = topicTitle(topic.user);
     if (isGenericTitle(title) || title === current) return;
     await touchSession(sessionId, { title });
   } catch {
@@ -881,7 +892,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
   // Session bootstrap.
   let sessionId = opts.sessionId ?? state.sessionId;
   if (!sessionId) {
-    const session = await createSession(suite, titleFromInput(input), {
+    const session = await createSession(suite, topicTitle(input), {
       provider: selection.provider,
       model: selection.model,
     });
@@ -2600,7 +2611,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       if (lane === 'B' && !classification.ops && pipe.review && !controller.signal.aborted) {
         think(true, 'Reviewing what was built...');
         const verdict = await reviewFiles(files.map((f) => ({ path: f.path, content: f.content })), (system, user) =>
-          complete({ provider: selection.provider, model: selection.provider === 'nim' ? PLANNER_NIM_MODEL : selection.model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], json: true, maxTokens: 1500, custom }, controller.signal));
+          complete({ provider: selection.provider, model: selection.provider === 'nim' ? PLANNER_NIM_MODEL : selection.model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], json: true, maxTokens: 1500, custom }, controller.signal, undefined, { sideStep: true }));
         if (verdict) {
           const note = { id: uid('msg'), role: 'system' as const, content: verdict, createdAt: Date.now() };
           emit(note);
@@ -2966,7 +2977,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
               maxTokens: 400,
               custom,
               messages: [{ role: 'system', content: LESSON_SYSTEM }, { role: 'user', content: lessonInput({ before: (before?.content ?? '').replace(/```[\s\S]*?```/g, ' code '), correction: said, after: outcome }) }],
-            }, undefined, 30_000);
+            }, undefined, 30_000, { sideStep: true });
             const rules = parseObservations(learned ?? '').map((m) => ({ ...m, kind: 'lesson' as const, pinned: true }));
             if (rules.length) {
               await remember(rules);
@@ -2987,7 +2998,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
               { role: 'system', content: CAPTURE_SYSTEM },
               { role: 'user', content: captureInput({ request: modelInput ?? input, outcome, files: [...state.files.keys()].slice(-12) }) },
             ],
-          }, undefined, 30_000);
+          }, undefined, 30_000, { sideStep: true });
           const found = parseObservations(captured ?? '');
           if (found.length) {
             await remember(found);
