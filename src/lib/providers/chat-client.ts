@@ -263,7 +263,8 @@ function hasImage(messages: ChatMessage[]): boolean {
  */
 function routeFor(body: ChatBody): Candidate[] | null {
   const kind = gatewayKind(body.model, body.provider);
-  if (kind) return plan(kind);
+  // A picture can only be read by a model that sees: any gateway route with an image goes the vision way.
+  if (kind) return plan(kind !== 'vision' && hasImage(body.messages) ? 'vision' : kind);
   const s = useWorkspace.getState();
   if (body.provider !== 'custom' || !body.custom || !s.freeApis) return null;
   const endpoint = s.endpoints.find((e) => e.freeId && e.enabled && e.baseUrl === body.custom!.baseUrl);

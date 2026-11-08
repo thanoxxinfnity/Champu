@@ -63,6 +63,8 @@ export interface ChatMessageView {
   /** Set while the terminal bridge is still writing this reply in the background (the job id). */
   background?: string;
   attachments?: ChatAttachment[];
+  /** A live Computer use run shown as a card in this message (the run's id in the runner store). */
+  computerUse?: string;
   usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
   durationMs?: number;
   /**

@@ -9,14 +9,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSetting, setSetting } from '@/lib/db/history';
 import { useWorkspace } from '@/lib/store';
 import type { Mode } from '@/lib/handoff/actions';
-import { FIELDS, MIN_PIN, createVault, describeForAgent, fieldValue, findByRef, lastFour, newItemId, openVault, sealWith, validateItem, type SealedVault, type VaultItem } from '@/lib/handoff/vault';
+import { FIELDS, MIN_PIN, describeForAgent, fieldValue, findByRef, lastFour, newItemId, validateItem, type VaultItem } from '@/lib/handoff/vault';
+import { useVaultStore } from '@/lib/handoff/vault-store';
 import type { SecretHit, VaultAccess } from '@/lib/handoff/loop';
 import { describeSchedule, isDue, nextRun, queueHandoff, siteOf, validTime, DAYS, type AllowRule, type Schedule } from '@/lib/handoff/specialties';
 
-export const VAULT_KEY = 'handoff.vault.v1';
+export { VAULT_KEY } from '@/lib/handoff/vault-store';
 export const ALLOW_KEY = 'handoff.allow.v1';
 export const SCHEDULES_KEY = 'handoff.schedules.v1';
-const LOCK_AFTER_MS = 10 * 60_000;
 
 const box = { borderColor: 'var(--line)', background: 'var(--panel)' } as const;
 const input = 'w-full rounded-xl border bg-transparent px-3 text-[14px] outline-none';
@@ -45,42 +45,15 @@ export interface VaultState {
 }
 
 export function useVault(): VaultState {
-  const [sealed, setSealed] = useState<SealedVault | null>(null);
-  const [items, setItems] = useState<VaultItem[]>([]);
-  const keyRef = useRef<{ key: CryptoKey; salt: Uint8Array; iterations: number } | null>(null);
-  const [open, setOpen] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const st = useVaultStore();
+  useEffect(() => { void st.load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  return { exists: !!st.sealed, open: st.open, items: st.items, create: st.create, unlock: st.unlock, lock: st.lock, save: st.save, reset: st.reset, touch: st.touch };
+}
 
-  useEffect(() => { void getSetting<SealedVault | null>(VAULT_KEY, null).then((v) => setSealed(v && v.ct ? v : null)); }, []);
-  const lock = useCallback(() => { keyRef.current = null; setItems([]); setOpen(false); if (timer.current) clearTimeout(timer.current); }, []);
-  const touch = useCallback(() => { if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(lock, LOCK_AFTER_MS); }, [lock]);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-
-  return {
-    exists: !!sealed,
-    open,
-    items,
-    touch,
-    lock,
-    create: async (pin) => {
-      const v = await createVault(pin, { items: [] });
-      await setSetting(VAULT_KEY, v.sealed);
-      setSealed(v.sealed); keyRef.current = { key: v.key, salt: v.salt, iterations: v.sealed.iterations }; setItems([]); setOpen(true); touch();
-    },
-    unlock: async (pin) => {
-      if (!sealed) throw new Error('No vault yet.');
-      const v = await openVault(sealed, pin);
-      keyRef.current = { key: v.key, salt: v.salt, iterations: sealed.iterations }; setItems(v.data.items); setOpen(true); touch();
-    },
-    save: async (next) => {
-      const k = keyRef.current;
-      if (!k) throw new Error('The vault is locked.');
-      const s = await sealWith(k.key, k.salt, { items: next }, k.iterations);
-      await setSetting(VAULT_KEY, s);
-      setSealed(s); setItems(next); touch();
-    },
-    reset: async () => { await setSetting(VAULT_KEY, null); setSealed(null); lock(); },
-  };
+/** The same vault outside React (the chat's Computer use runs here). */
+export function vaultNow(): VaultState {
+  const st = useVaultStore.getState();
+  return { get exists() { return !!useVaultStore.getState().sealed; }, get open() { return useVaultStore.getState().open; }, get items() { return useVaultStore.getState().items; }, create: st.create, unlock: st.unlock, lock: st.lock, save: st.save, reset: st.reset, touch: st.touch };
 }
 
 /** What the agent loop gets: names only, values on request, and the secure form. */

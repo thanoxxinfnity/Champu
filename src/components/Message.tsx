@@ -7,6 +7,8 @@ import { buildPackExport, detectPacks } from '@/lib/suites/minecraft/pack';
 import { buildGodotExport } from '@/lib/suites/godot/export';
 import { useEffect, useMemo, useState } from 'react';
 import { markLive, renderMarkdown } from './markdown';
+import { ComputerUseCard } from './ComputerUseCard';
+import { useRunner } from '@/lib/handoff/runner';
 import { TextWithSites } from './SiteChip';
 import './codeActions';
 import type { ChatMessageView } from '@/lib/store';
@@ -208,6 +210,8 @@ export function Message({ message }: { message: ChatMessageView }) {
   }, [message.role, message.content, message.streaming, hasCommands]);
 
   const isUser = message.role === 'user';
+  // While its run is live, a Computer use message is the card; afterwards (or after a reload) it is the saved summary.
+  const cuLive = useRunner((st) => (message.computerUse ? Boolean(st.runs[message.computerUse]) : false));
 
   return (
     <article className="enter-rise flex gap-3 px-4 py-3.5">
@@ -258,7 +262,9 @@ export function Message({ message }: { message: ChatMessageView }) {
           <ReasoningDrawer reasoning={message.reasoning} streaming={message.streaming} />
         ) : null}
 
-        {isUser ? (
+        {cuLive && message.computerUse ? (
+          <ComputerUseCard runId={message.computerUse} />
+        ) : isUser ? (
           <p className="whitespace-pre-wrap text-[14px] leading-[1.6]" style={{ color: 'var(--ink)' }}>
             <TextWithSites text={message.content} />
           </p>

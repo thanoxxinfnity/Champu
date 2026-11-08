@@ -428,3 +428,27 @@ test('allowed steps stay on their site; a job from the chat is handed over once'
   assert.deepEqual(takeQueued(), { task: 'book nothing, just look', mode: 'browser' });
   assert.equal(takeQueued(), null);
 });
+
+// ── computer use and screen share in the chat ──────────────────────────────
+import { parseComputerUseCommand, parseScreenCommand, pickMode, SCREEN_QUESTION } from '../src/lib/handoff/specialties.ts';
+
+test('chat commands: /computer-use and /screen are read the way people type them', () => {
+  assert.deepEqual(parseComputerUseCommand('/computer-use compare AirPods prices'), { task: 'compare AirPods prices' });
+  assert.deepEqual(parseComputerUseCommand('/cu  open github trending '), { task: 'open github trending' });
+  assert.deepEqual(parseComputerUseCommand('/computer use check my site'), { task: 'check my site' });
+  assert.deepEqual(parseComputerUseCommand('/computer-use'), { task: '' });
+  assert.equal(parseComputerUseCommand('/cut this'), null);
+  assert.equal(parseComputerUseCommand('use the computer'), null);
+  assert.deepEqual(parseScreenCommand('/screen'), { kind: 'auto', question: SCREEN_QUESTION });
+  assert.deepEqual(parseScreenCommand('/screen yeh error kya hai?'), { kind: 'auto', question: 'yeh error kya hai?' });
+  assert.deepEqual(parseScreenCommand('/screen agent what is open'), { kind: 'agent', question: 'what is open' });
+  assert.equal(parseScreenCommand('/screen live').kind, 'live');
+  assert.equal(parseScreenCommand('/screen stop').kind, 'stop');
+  assert.equal(parseScreenCommand('/screenshot pick').kind, 'pick');
+  assert.equal(parseScreenCommand('/screen-share mine help').kind, 'mine');
+  assert.equal(parseScreenCommand('/screens'), null);
+  assert.deepEqual(pickMode('desktop: open xclock', true), { mode: 'desktop', task: 'open xclock' });
+  assert.deepEqual(pickMode('desktop: open xclock', false), { mode: 'browser', task: 'open xclock' });
+  assert.equal(pickMode('open the app LibreOffice and write a letter', true).mode, 'desktop');
+  assert.equal(pickMode('compare prices on amazon', true).mode, 'browser');
+});

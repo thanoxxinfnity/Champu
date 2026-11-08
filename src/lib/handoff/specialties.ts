@@ -83,3 +83,38 @@ export function parseHandoffCommand(input: string): { task: string } | null {
   const m = /^\/handoff\b\s*([\s\S]*)$/i.exec(input.trim());
   return m ? { task: m[1]!.trim() } : null;
 }
+
+/** "/computer-use <job>", "/cu <job>", "/computer use <job>" → the job (empty when only the command was typed). */
+export function parseComputerUseCommand(input: string): { task: string } | null {
+  const m = /^\/(computer[-_ ]use|cu)(?=\s|$)\s*([\s\S]*)$/i.exec(input.trim());
+  return m ? { task: m[2]!.trim() } : null;
+}
+
+// ── screen share in the chat ────────────────────────────────────────────────
+
+export type ScreenCommand = { kind: 'auto' | 'mine' | 'agent' | 'pick' | 'live' | 'stop'; question: string };
+export const SCREEN_QUESTION = 'Look at this screenshot of my screen. Tell me what is on it and help me with what I am doing — be specific and practical, and point to where things are on the screen.';
+
+/** "/screen", "/screen agent what is open?", "/screen live", "/screen stop", "/screenshot pick" … */
+export function parseScreenCommand(input: string): ScreenCommand | null {
+  const m = /^\/(screen(?:[-_ ]?share)?|screenshot|ss)(?=\s|$)\s*([\s\S]*)$/i.exec(input.trim());
+  if (!m) return null;
+  let rest = m[2]!.trim();
+  let kind: ScreenCommand['kind'] = 'auto';
+  const w = /^(mine|my|agent|bridge|computer|pick|gallery|file|live|start|stop|off|end)\b\s*/i.exec(rest);
+  if (w) {
+    const k = w[1]!.toLowerCase();
+    kind = k === 'mine' || k === 'my' ? 'mine' : k === 'agent' || k === 'bridge' || k === 'computer' ? 'agent' : k === 'pick' || k === 'gallery' || k === 'file' ? 'pick' : k === 'live' || k === 'start' ? 'live' : 'stop';
+    rest = rest.slice(w[0].length).trim();
+  }
+  return { kind, question: rest || SCREEN_QUESTION };
+}
+
+/** Guess desktop vs browser from the words of the job ("open the app on the screen" → desktop, when the bridge can). */
+export function pickMode(task: string, desktopOk: boolean): { mode: Mode; task: string } {
+  const m = /^(desktop|screen|browser|web)\s*[:\-]?\s+/i.exec(task.trim());
+  if (m) return { mode: /desktop|screen/i.test(m[1]!) && desktopOk ? 'desktop' : 'browser', task: task.trim().slice(m[0].length) };
+  const wantsDesktop = /\b(desktop|linux screen|on the screen|open (the )?app|libreoffice|gimp|terminal window|xclock|file manager)\b/i.test(task);
+  return { mode: wantsDesktop && desktopOk ? 'desktop' : 'browser', task: task.trim() };
+}
+

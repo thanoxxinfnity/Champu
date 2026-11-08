@@ -8,7 +8,8 @@ import { BG_SETTING, sendInBackground } from '@/lib/agent/background';
 import { hasJobs } from '@/lib/bridge/update';
 import { getSetting, setSetting } from '@/lib/db/history';
 import { BUILTIN_SKILLS, expandSkill, parseSlash, searchSkills, type SkillDefinition } from '@/lib/skills/registry';
-import { parseHandoffCommand, queueHandoff } from '@/lib/handoff/specialties';
+import { SCREEN_QUESTION, parseComputerUseCommand, parseHandoffCommand, parseScreenCommand, queueHandoff } from '@/lib/handoff/specialties';
+import { canShareScreen, grabAgentScreen, grabMyScreen, screenAttachment, startScreenShare, stopScreenShare, useScreenShare } from '@/lib/handoff/screenshare';
 import { classifyLocal, resolveSuite } from '@/lib/agent/router';
 import { SkillIcon } from './SkillIcon';
 import { formatBytes } from '@/lib/zip';
@@ -700,11 +701,58 @@ export function CommandDock() {
     [value],
   );
 
+  const screenLive = useScreenShare((st) => st.live);
+  /** Sends a screen frame with a question: the user's own screen where the browser can share it, else the agent's, else a picked screenshot. */
+  const shareScreen = useCallback(async (kind: 'auto' | 'mine' | 'agent' | 'pick' | 'live' | 'stop', question: string) => {
+    const hb = useWorkspace.getState().heartbeat;
+    const bridgeOn = hb.status === 'online' || hb.status === 'degraded';
+    try {
+      if (kind === 'stop') { stopScreenShare(); setBgNote(null); return; }
+      if (kind === 'live') {
+        if (!canShareScreen()) { setBgNote('This app cannot share its screen live here (Android WebView). Use /screen agent, or attach a screenshot.'); return; }
+        await startScreenShare();
+        setBgNote(null);
+        return;
+      }
+      const who = kind === 'mine' ? 'my' : kind === 'agent' ? 'agent' : kind === 'auto' ? (canShareScreen() ? 'my' : bridgeOn ? 'agent' : null) : null;
+      if (!who) {
+        // A phone: take a screenshot the usual way and pick it.
+        setValue(question === SCREEN_QUESTION ? '' : question);
+        setBgNote('Pick a screenshot from your gallery, then send.');
+        fileInputRef.current?.click();
+        return;
+      }
+      const shot = who === 'my' ? await grabMyScreen() : await grabAgentScreen();
+      const text = who === 'agent' && question === SCREEN_QUESTION ? 'This is the screen of my agent computer (the Terminal Bridge). Tell me what is on it and what state it is in.' : question;
+      setBgNote(null);
+      await send({ input: text, attachments: [...attachments, screenAttachment(shot, who)], suite: activeSuite });
+      setAttachments([]);
+    } catch (e) {
+      setBgNote(`Screen share: ${(e as Error).message}`);
+    }
+  }, [attachments, activeSuite]);
+
   const submit = useCallback(async () => {
     // Belt and braces — the button is disabled, but Enter must not bypass it.
     if (hasBlockingSecret(scanForSecrets(value))) return;
     const raw = value.trim();
     if (!raw && !attachments.length) return;
+
+    // "/screen [question]": a frame of the screen goes with the question (yours, the agent's, or a picked screenshot).
+    const scr = parseScreenCommand(raw);
+    if (scr) {
+      setValue('');
+      await shareScreen(scr.kind, scr.question);
+      return;
+    }
+
+    // "/computer-use <job>" runs in this chat as a live card; it is sent as typed (no skill template), the runtime picks it up.
+    if (parseComputerUseCommand(raw)) {
+      setValue('');
+      setAttachments([]);
+      await send({ input: raw, attachments, suite: activeSuite === 'chat' ? 'chat' : activeSuite });
+      return;
+    }
 
     // "/handoff <job>" goes straight to the Handoff area and starts there (like asking a computer-use agent from the chat).
     const handoff = parseHandoffCommand(raw);
@@ -749,9 +797,15 @@ export function CommandDock() {
     setAttachments([]);
     setLaneOverride(null);
 
+    // While the screen is shared live, every message carries a fresh frame of it.
+    let outgoing = attachments;
+    if (useScreenShare.getState().live) {
+      try { outgoing = [...attachments, screenAttachment(await grabMyScreen(), 'my')]; } catch { /* the share ended */ }
+    }
+
     const hb = useWorkspace.getState().heartbeat;
     if (bgMode && (hb.status === 'online' || hb.status === 'degraded') && hasJobs(hb.health)) {
-      const r = await sendInBackground({ input, attachments, suite, forceLane: lane });
+      const r = await sendInBackground({ input, attachments: outgoing, suite, forceLane: lane });
       if (r.ok) {
         setBgNote(null);
         return;
@@ -759,8 +813,8 @@ export function CommandDock() {
       // It could not go to the terminal: say why, and send it the usual way so nothing the user wrote is lost.
       setBgNote(`Sent normally — ${r.reason}`);
     }
-    await send({ input, attachments, suite, forceLane: lane });
-  }, [value, attachments, laneOverride, activeSuite, allSkills, bgMode]);
+    await send({ input, attachments: outgoing, suite, forceLane: lane });
+  }, [value, attachments, laneOverride, activeSuite, allSkills, bgMode, shareScreen]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showPalette && matches.length) {
@@ -959,6 +1013,29 @@ export function CommandDock() {
             >
               ＋
             </button>
+
+            <button
+              type="button"
+              onClick={() => { const q = value.trim(); setValue(''); void shareScreen('auto', q || SCREEN_QUESTION); }}
+              className="press mono flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[11px]"
+              style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
+              title="Share your screen (or the agent's) with the AI — it sees one frame with your message"
+              aria-label="Share screen with the AI"
+            >
+              ⧉ screen
+            </button>
+
+            {screenLive && (
+              <button
+                type="button"
+                onClick={() => stopScreenShare()}
+                className="press mono flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[10.5px]"
+                style={{ borderColor: 'color-mix(in oklab, var(--color-rose) 45%, var(--line))', color: 'var(--color-rose)' }}
+                title="Your screen is shared: each message carries a frame. Tap to stop."
+              >
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: 'var(--color-rose)' }} /> live · stop
+              </button>
+            )}
 
             {/* The Lane A/B chip is hidden: the model picker is the one control that matters here. The lane is still chosen automatically. */}
 

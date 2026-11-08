@@ -20,6 +20,7 @@ import type { Action, Mode } from '@/lib/handoff/actions';
 import { runHandoff, screenshotName, type ApprovalRequest, type HandoffEvent, type Screen, type VaultAccess } from '@/lib/handoff/loop';
 import { guideOf, isAllowed, siteOf, specialtyFromRun, takeQueued, type AllowRule, type Schedule, type Specialty } from '@/lib/handoff/specialties';
 import { newItemId } from '@/lib/handoff/vault';
+import { LiveScreen } from './handoff/LiveScreen';
 import { ALLOW_KEY, SCHEDULES_KEY, SchedulesCard, SecureForm, VaultPanel, skyFor, useVault, vaultAccess, type SecureRequest, type VaultState } from './handoff/Secured';
 import { firstSlot, needsInput, suggestActions, type ActionButton } from '@/lib/handoff/suggest';
 import { BUILT_IN_PANELS, PANEL_SYSTEM, acceptState, extractHtml, nameFrom, newPanelId, panelDocument, panelPrompt, panelReplyPrompt, type Panel } from '@/lib/handoff/panels';
@@ -67,66 +68,6 @@ function Section({ title, right, children }: { title: string; right?: React.Reac
     <section className="space-y-2">
       <div className="flex items-center justify-between px-1"><h3 className="mono text-[10.5px] uppercase tracking-wider" style={{ color: 'var(--ink-faint)' }}>{title}</h3>{right}</div>
       {children}
-    </section>
-  );
-}
-
-/* ── live screen ─────────────────────────────────────────────────────────── */
-function LiveScreen({ screen, mode, canControl, onClick, onType, onKey, live, setLive, refreshing }: {
-  screen: Screen | null; mode: Mode; canControl: boolean; live: boolean; setLive: (v: boolean) => void; refreshing: boolean;
-  onClick: (x: number, y: number) => void; onType: (t: string) => void; onKey: (k: string) => void;
-}) {
-  const img = useRef<HTMLImageElement>(null);
-  const [control, setControl] = useState(false);
-  const [text, setText] = useState('');
-  const [tap, setTap] = useState<{ x: number; y: number } | null>(null);
-  const click = (e: React.MouseEvent<HTMLImageElement>) => {
-    if (!control || !img.current) return;
-    const r = img.current.getBoundingClientRect();
-    const sx = img.current.naturalWidth / r.width, sy = img.current.naturalHeight / r.height;
-    const x = Math.round((e.clientX - r.left) * sx), y = Math.round((e.clientY - r.top) * sy);
-    setTap({ x: ((e.clientX - r.left) / r.width) * 100, y: ((e.clientY - r.top) / r.height) * 100 });
-    setTimeout(() => setTap(null), 600);
-    onClick(x, y);
-  };
-  return (
-    <section className="overflow-hidden rounded-3xl border" style={card}>
-      <header className="flex items-center justify-between gap-2 border-b px-3 py-2" style={{ borderColor: 'var(--line)' }}>
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2.5 w-2.5">{live && <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" style={{ background: 'hsl(4 80% 58%)' }} />}<span className="relative inline-flex h-2.5 w-2.5 rounded-full" style={{ background: live ? 'hsl(4 80% 58%)' : 'var(--ink-faint)' }} /></span>
-          <span className="text-[12.5px] font-semibold" style={{ color: 'var(--ink)' }}>{mode === 'desktop' ? 'Agent’s screen' : 'Agent’s browser'}</span>
-          {screen && <span className="mono text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>{ago(screen.at)}{refreshing ? ' · …' : ''}</span>}
-        </div>
-        <div className="flex gap-1.5">
-          <button type="button" onClick={() => setLive(!live)} className="press mono rounded-lg border px-2.5 text-[11px] font-medium" style={{ minHeight: 32, borderColor: live ? 'hsl(4 80% 58% / .5)' : 'var(--line)', color: live ? 'hsl(4 80% 58%)' : 'var(--ink-dim)' }}>{live ? '● Live' : '○ Live'}</button>
-          {canControl && <button type="button" onClick={() => setControl(!control)} className="press mono rounded-lg border px-2.5 text-[11px] font-medium" style={{ minHeight: 32, borderColor: 'var(--line)', background: control ? GRAD : 'transparent', color: control ? '#fff' : 'var(--ink-dim)' }}>{control ? '✋ On' : '✋ Take over'}</button>}
-        </div>
-      </header>
-      <div className="relative grid min-h-[180px] place-items-center" style={{ background: 'repeating-conic-gradient(rgb(128 128 128 / .08) 0% 25%, transparent 0% 50%) 50% / 18px 18px' }}>
-        {screen ? (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img ref={img} src={screen.dataUrl} alt="What the agent sees" onClick={click} className="block h-auto w-full" style={{ cursor: control ? 'crosshair' : 'default', imageRendering: 'auto' }} />
-            {tap && <span className="pointer-events-none absolute h-8 w-8 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full" style={{ left: `${tap.x}%`, top: `${tap.y}%`, background: 'hsl(18 90% 58% / .6)' }} />}
-          </>
-        ) : (
-          <p className="px-6 py-10 text-center text-[12.5px]" style={{ color: 'var(--ink-faint)' }}>The screen appears here as soon as the agent opens something. Tap “Live” to watch it continuously.</p>
-        )}
-      </div>
-      {control && (
-        <div className="space-y-2 border-t p-2.5" style={{ borderColor: 'var(--line)' }}>
-          <p className="text-[11.5px]" style={{ color: 'var(--ink-dim)' }}>Tap the picture to click there. Type below to send keys to the screen.</p>
-          <div className="flex gap-2">
-            <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && text) { onType(text); setText(''); } }} placeholder="Type text…" className="min-w-0 flex-1 rounded-xl border bg-transparent px-3 text-[14px] outline-none" style={{ borderColor: 'var(--line)', color: 'var(--ink)', minHeight: 44 }} />
-            <Btn onClick={() => { if (text) { onType(text); setText(''); } }}>Send</Btn>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {['Return', 'Tab', 'BackSpace', 'Escape', 'ctrl+l', 'ctrl+c', 'ctrl+v', 'alt+Tab'].map((k) => (
-              <button key={k} type="button" onClick={() => onKey(k)} className="press mono rounded-lg border px-2.5 text-[11px]" style={{ minHeight: 34, borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>{k}</button>
-            ))}
-          </div>
-        </div>
-      )}
     </section>
   );
 }

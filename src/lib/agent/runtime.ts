@@ -55,6 +55,8 @@ import { plannedTextures, texturePrompt, textureArtifact, toPixelArt } from '@/l
 import type { ChatMessage, ProviderId, StreamFrame } from '@/lib/providers/types';
 import type { CustomEndpointConfig } from '@/lib/providers/types';
 import { useWorkspace, type ChatAttachment } from '@/lib/store';
+import { runToMarkdown, startComputerUse } from '@/lib/handoff/runner';
+import { parseComputerUseCommand } from '@/lib/handoff/specialties';
 import { describeCommand, openingPhrase, streamingPhrase } from './narrate.ts';
 import { parsePipeline, renderStatus } from '@/lib/pipeline/commands';
 import { wantsPonytail, PONYTAIL_RULE } from '@/lib/pipeline/ponytail';
@@ -886,6 +888,36 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
     sessionId = session.id;
     freshSessions.add(sessionId);
     useWorkspace.getState().setSessionId(sessionId);
+  }
+
+  // ── Computer use: "/computer-use <job>" runs the agent on the bridge's browser or screen, live inside this chat ──
+  const cu = parseComputerUseCommand(input);
+  if (cu) {
+    const now = Date.now();
+    const userMessage = { id: uid('msg'), role: 'user' as const, content: input, createdAt: now, attachments, lane: 'A' as const };
+    pushMessage(userMessage);
+    void appendMessage({ ...userMessage, sessionId, suite });
+    const aid = uid('msg');
+    const say = (content: string, extra: { computerUse?: string; error?: string } = {}) => {
+      const msg = { id: aid, role: 'assistant' as const, content, createdAt: now + 1, lane: 'B' as const, ...extra };
+      pushMessage(msg);
+      void appendMessage({ id: aid, role: 'assistant', content, createdAt: now + 1, lane: 'B', sessionId, suite, ...(extra.error ? { error: extra.error } : {}) });
+    };
+    if (!cu.task) {
+      say('**Computer use** — I work on a real browser (or the Linux screen) through your Terminal Bridge, right here in the chat. You watch it live, approve anything risky, and logins come from your locked vault.\n\nTry: `/computer-use compare the price of AirPods Pro on Amazon and Flipkart` — or start with `desktop:` to use the screen.');
+      return;
+    }
+    const started = startComputerUse({
+      task: cu.task,
+      onFinish: (r) => {
+        const md = runToMarkdown(r);
+        useWorkspace.getState().patchMessage(aid, { content: md, durationMs: (r.endedAt ?? Date.now()) - r.startedAt });
+        void updateMessage(aid, { content: md, durationMs: (r.endedAt ?? Date.now()) - r.startedAt });
+      },
+    });
+    if (typeof started !== 'string') { say(started.error, { error: 'bridge_offline' }); return; }
+    say(`🖥 Computer use started: ${cu.task}`, { computerUse: started });
+    return;
   }
 
   // A picture plus a request to turn it into a video: the chat agent has no
