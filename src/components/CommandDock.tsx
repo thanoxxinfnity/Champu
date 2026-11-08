@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from './suites/handoff/Icon';
 import { SiteChipRow } from './SiteChip';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isRunningHere, useWorkspace, type ChatAttachment } from '@/lib/store';
@@ -108,7 +109,7 @@ function SecretGuard({
     >
       <div className="flex items-start gap-2.5 px-3 py-2.5">
         <span className="mt-px shrink-0 text-[13px]" aria-hidden>
-          {blocking ? '🔒' : '⚠'}
+          <Icon name={blocking ? 'lock' : 'alert'} size={14} />
         </span>
         <div className="min-w-0 flex-1">
           <p
@@ -1123,7 +1124,7 @@ export function CommandDock() {
                   boxShadow: '0 4px 16px -6px color-mix(in oklab, var(--accent) 70%, transparent)',
                 }}
               >
-                {blocked ? '🔒' : runningHere ? 'queue' : 'run'}
+                {blocked ? <Icon name="lock" size={14} title="Blocked" /> : runningHere ? 'queue' : 'run'}
               </button>
             </div>
           </div>

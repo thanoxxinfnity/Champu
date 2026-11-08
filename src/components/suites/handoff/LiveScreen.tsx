@@ -84,8 +84,8 @@ export function LiveScreen({ screen, mode, canControl, onClick, onType, onKey, l
           {screen && <span className="mono text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>{ago(screen.at)}{refreshing ? ' · …' : ''}</span>}
         </div>
         <div className="flex gap-1.5">
-          <button type="button" onClick={() => setLive(!live)} className="press mono rounded-lg border px-2.5 text-[11px] font-medium" style={{ minHeight: 32, borderColor: live ? 'hsl(4 80% 58% / .5)' : 'var(--line)', color: live ? 'hsl(4 80% 58%)' : 'var(--ink-dim)' }}>{live ? '● Live' : '○ Live'}</button>
-          {canControl && <button type="button" onClick={() => setControl(!control)} className="press mono rounded-lg border px-2.5 text-[11px] font-medium" style={{ minHeight: 32, borderColor: 'var(--line)', background: control ? GRAD : 'transparent', color: control ? '#fff' : 'var(--ink-dim)' }}>{control ? '✋ On' : '✋ Take over'}</button>}
+          <button type="button" onClick={() => setLive(!live)} className="press mono rounded-lg border px-2.5 text-[11px] font-medium" style={{ minHeight: 32, borderColor: live ? 'hsl(4 80% 58% / .5)' : 'var(--line)', color: live ? 'hsl(4 80% 58%)' : 'var(--ink-dim)' }}>Live</button>
+          {canControl && <button type="button" onClick={() => setControl(!control)} className="press mono rounded-lg border px-2.5 text-[11px] font-medium" style={{ minHeight: 32, borderColor: 'var(--line)', background: control ? GRAD : 'transparent', color: control ? '#fff' : 'var(--ink-dim)' }}>{control ? 'Controlling' : 'Take over'}</button>}
         </div>
       </header>
       <div className="relative grid min-h-[180px] place-items-center" style={{ background: 'repeating-conic-gradient(rgb(128 128 128 / .08) 0% 25%, transparent 0% 50%) 50% / 18px 18px' }}>

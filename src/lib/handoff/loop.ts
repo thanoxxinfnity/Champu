@@ -300,6 +300,22 @@ export async function runHandoff(opts: RunOptions, deps: LoopDeps): Promise<RunR
     emit({ kind: 'status', text: `${label}…` });
     let ok = false, text = '';
     const call = toBridge(action, mode);
+    // A key or token from the secure form goes into a command as {{once:api_key}}: the app puts the value in, the model never sees it.
+    if (call.via === 'shell' && /\{\{\s*once:/i.test(call.cmd)) {
+      let missing = '';
+      call.cmd = call.cmd.replace(/\{\{\s*(once:[a-z0-9_]+)\s*\}\}/gi, (_m, ref: string) => {
+        const hit = deps.vault?.get(ref.toLowerCase(), 'value') ?? null;
+        if (!hit) { missing = ref; return ''; }
+        secrets.add(hit.value);
+        return hit.value.replace(/'/g, `'\\''`);
+      });
+      if (missing) {
+        rec.result = `No ${missing} yet.`;
+        emit({ kind: 'result', index, ok: false, text: rec.result });
+        turns.push({ reply: replyJson, observation: `There is no ${missing}. Use request_secret first, then {{${missing}}} in the command.`, label: `${label} (no secret)` });
+        continue;
+      }
+    }
     try {
       if (call.via === 'browser') { const r = await deps.browser(call.tool, call.args); ok = r.ok; text = r.text; }
       else if (call.via === 'desktop') { const r = await deps.desktop(call.body); ok = r.ok; text = r.text; }

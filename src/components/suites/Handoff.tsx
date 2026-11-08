@@ -21,6 +21,7 @@ import { runHandoff, screenshotName, type ApprovalRequest, type HandoffEvent, ty
 import { guideOf, isAllowed, siteOf, specialtyFromRun, takeQueued, type AllowRule, type Schedule, type Specialty } from '@/lib/handoff/specialties';
 import { newItemId } from '@/lib/handoff/vault';
 import { LiveScreen } from './handoff/LiveScreen';
+import { Icon } from './handoff/Icon';
 import { ALLOW_KEY, SCHEDULES_KEY, SchedulesCard, SecureForm, VaultPanel, skyFor, useVault, vaultAccess, type SecureRequest, type VaultState } from './handoff/Secured';
 import { firstSlot, needsInput, suggestActions, type ActionButton } from '@/lib/handoff/suggest';
 import { BUILT_IN_PANELS, PANEL_SYSTEM, acceptState, extractHtml, nameFrom, newPanelId, panelDocument, panelPrompt, panelReplyPrompt, type Panel } from '@/lib/handoff/panels';
@@ -111,7 +112,7 @@ function ShareMyScreen({ model }: { model: ModelPick }) {
   return (
     <section className="space-y-3 rounded-3xl border p-3.5" style={card}>
       <div className="flex items-start gap-3">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl text-[18px] text-white" style={{ background: 'linear-gradient(140deg, hsl(200 85% 55%), hsl(250 75% 58%))' }}>⧉</span>
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl text-[18px] text-white" style={{ background: 'linear-gradient(140deg, hsl(200 85% 55%), hsl(250 75% 58%))' }}><Icon name="screen" size={20} /></span>
         <div className="min-w-0">
           <h3 className="text-[14px] font-semibold" style={{ color: 'var(--ink)' }}>Share my screen</h3>
           <p className="text-[12px]" style={{ color: 'var(--ink-dim)' }}>{supported ? 'Show the AI a window or your whole screen and ask about it. Nothing is recorded; one frame is sent when you ask.' : 'This browser cannot share its screen (Android WebView cannot). Open Chomugiri in Chrome on a computer for this — on the phone, watch the agent’s own screen with Live.'}</p>
@@ -201,8 +202,8 @@ function PanelsTab({ model }: { model: ModelPick }) {
     return (
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex items-center gap-2 border-b px-3 py-2.5" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
-          <button type="button" onClick={() => setOpenId(null)} aria-label="Back to panels" className="press grid h-10 w-10 place-items-center rounded-xl border text-[18px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>‹</button>
-          <span className="text-[20px]">{open.icon}</span>
+          <button type="button" onClick={() => setOpenId(null)} aria-label="Back to panels" className="press grid h-10 w-10 place-items-center rounded-xl border" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}><Icon name="chevronLeft" /></button>
+          <span style={{ color: 'hsl(262 70% 58%)' }}><Icon name={open.icon} size={20} /></span>
           <span className="min-w-0 flex-1 truncate text-[15px] font-semibold" style={{ color: 'var(--ink)' }}>{open.name}</span>
           {!open.builtIn && <Btn danger onClick={() => { if (confirm(`Delete “${open.name}” and its data?`)) remove(open.id); }}>Delete</Btn>}
         </div>
@@ -227,14 +228,14 @@ function PanelsTab({ model }: { model: ModelPick }) {
             <button key={s} type="button" onClick={() => setDesc(s)} className="press rounded-full border px-3 text-[12px]" style={{ minHeight: 32, borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>{s}</button>
           ))}
         </div>
-        <Btn primary onClick={() => void build()} disabled={!!busy || !desc.trim()}>{busy || '✦ Build panel'}</Btn>
+        <Btn primary onClick={() => void build()} disabled={!!busy || !desc.trim()}>{busy || <><Icon name="sparkle" size={16} />Build panel</>}</Btn>
         {err && <p className="text-[12px]" style={{ color: 'hsl(4 75% 56%)' }}>{err}</p>}
       </section>
       <Section title={`Your panels · ${all.length}`}>
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
           {all.map((p) => (
             <button key={p.id} type="button" onClick={() => setOpenId(p.id)} className="press flex flex-col items-start gap-2 rounded-2xl border p-3 text-left" style={{ ...card, minHeight: 104 }}>
-              <span className="grid h-11 w-11 place-items-center rounded-2xl text-[22px]" style={{ background: 'var(--surface)' }}>{p.icon}</span>
+              <span className="grid h-11 w-11 place-items-center rounded-2xl" style={{ background: 'var(--surface)', color: 'hsl(262 70% 58%)' }}><Icon name={p.icon} size={21} /></span>
               <span className="w-full truncate text-[14px] font-semibold" style={{ color: 'var(--ink)' }}>{p.name}</span>
               <span className="mono text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>{p.builtIn ? 'built in' : `edited ${ago(p.updatedAt)}`}</span>
             </button>
@@ -391,7 +392,7 @@ export function Handoff() {
       llm: (msgs, signal) => callModel(model, msgs, signal),
       browser: (tool, args) => bridge.browser(tool, args),
       desktop: (body) => bridge.desktop(body),
-      shell: (cmd) => bridge.runShell(cmd, { signal: ctl.signal }),
+      shell: (cmd) => bridge.runShell(cmd, { signal: ctl.signal, timeoutMs: 20 * 60_000 }),
       image: (name) => bridge.artifactDataUrl(name),
       approve,
       vault: vaultAccess(live, oneTime.current, ask),
@@ -454,7 +455,7 @@ export function Handoff() {
           <div className="min-w-0">
             <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
               <Pill tone={running ? 'warn' : current.status === 'done' ? 'ok' : current.status === 'failed' ? 'bad' : 'dim'}>{running ? 'Working' : current.status === 'done' ? 'Done' : current.status === 'limit' ? 'Step limit' : current.status === 'failed' ? 'Failed' : 'Stopped'}</Pill>
-              <Pill tone="dim">{current.mode === 'desktop' ? '🖥 Desktop' : '🌐 Browser'}</Pill>
+              <Pill tone="dim"><Icon name={current.mode === 'desktop' ? 'monitor' : 'globe'} size={12} />{current.mode === 'desktop' ? 'Desktop' : 'Browser'}</Pill>
               <Pill tone="dim">{current.steps.length} steps</Pill>
             </div>
             <p className="text-[15px] font-semibold leading-snug" style={{ color: 'var(--ink)' }}>{current.task}</p>
@@ -462,7 +463,7 @@ export function Handoff() {
           </div>
         </div>
         <div className="mt-3 flex gap-2">
-          {running ? <Btn danger grow onClick={stop}>■ Stop</Btn> : <><Btn grow onClick={() => setCurrent(null)}>← New job</Btn><Btn primary grow onClick={() => void start(current.task, current.mode)}>↻ Run again</Btn></>}
+          {running ? <Btn danger grow onClick={stop}><Icon name="stop" size={14} />Stop</Btn> : <><Btn grow onClick={() => setCurrent(null)}><Icon name="back" size={16} />New job</Btn><Btn primary grow onClick={() => void start(current.task, current.mode)}><Icon name="refresh" size={16} />Run again</Btn></>}
         </div>
       </section>
 
@@ -472,12 +473,14 @@ export function Handoff() {
           <p className="text-[15px] font-semibold" style={{ color: 'var(--ink)' }}>{approval.label}</p>
           <p className="text-[13px]" style={{ color: 'var(--ink-dim)' }}>{approval.reason}</p>
           {approval.action.type === 'shell' && <pre className="mono overflow-x-auto rounded-xl p-2.5 text-[12px]" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>{approval.action.cmd}</pre>}
+          {approval.action.type === 'install' && <pre className="mono overflow-x-auto rounded-xl p-2.5 text-[12px]" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>{approval.action.app}{approval.action.via !== 'auto' ? `  (${approval.action.via})` : ''}</pre>}
+          {approval.action.type === 'download' && <pre className="mono overflow-x-auto whitespace-pre-wrap break-all rounded-xl p-2.5 text-[12px]" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>{approval.action.url}{'\n'}→ ~/Downloads/{approval.action.name}</pre>}
           {approval.action.type === 'type' && <pre className="mono overflow-x-auto rounded-xl p-2.5 text-[12px]" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>{approval.action.text}</pre>}
-          {approval.secret && <p className="text-[12px]" style={{ color: 'hsl(152 60% 34%)' }}>🔒 Filled straight from your vault — the AI only knows it as {approval.action.type === 'fill_secret' ? approval.action.secret : 'a name'}.</p>}
+          {approval.secret && <p className="flex items-center gap-1.5 text-[12px]" style={{ color: 'hsl(152 60% 34%)' }}><Icon name="shield" size={14} />Filled straight from your vault — the AI only knows it as {approval.action.type === 'fill_secret' ? approval.action.secret : 'a name'}.</p>}
           {approval.rememberable && approval.host && (
             <label className="flex items-center gap-2 text-[12.5px]" style={{ color: 'var(--ink-dim)' }}><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Always allow {approval.kind === 'login' ? 'filling my login' : approval.kind === 'click' ? 'clicks like this' : 'this'} on {siteOf(approval.host)}</label>
           )}
-          <div className="flex gap-2"><Btn grow onClick={() => decide(false)}>✕ No</Btn><Btn primary grow onClick={() => decide(true)}>✓ Approve</Btn></div>
+          <div className="flex gap-2"><Btn grow onClick={() => decide(false)}><Icon name="x" size={15} />No</Btn><Btn primary grow onClick={() => decide(true)}><Icon name="check" size={16} />Approve</Btn></div>
         </section>
       )}
 
@@ -499,7 +502,7 @@ export function Handoff() {
           <div className="flex items-center justify-between"><h3 className="mono text-[10.5px] uppercase tracking-wider" style={{ color: 'var(--ink-faint)' }}>Result</h3><button type="button" onClick={() => void navigator.clipboard?.writeText(current.summary).catch(() => {})} className="press mono rounded-lg border px-2.5 text-[11px]" style={{ minHeight: 32, borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>Copy</button></div>
           <p className="whitespace-pre-wrap text-[14px] leading-relaxed" style={{ color: 'var(--ink)' }}>{current.summary}</p>
           {current.status === 'done' && current.steps.length > 1 && (
-            <button type="button" disabled={savedSpecialty} onClick={() => { setSpecialties([specialtyFromRun(current), ...specialties.filter((x) => x.task !== current.task)].slice(0, 30)); setSavedSpecialty(true); }} className="press mono mt-1 rounded-xl border px-3 text-[12px] font-semibold disabled:opacity-60" style={{ minHeight: 40, borderColor: 'var(--line)', color: 'hsl(18 88% 50%)' }}>{savedSpecialty ? '★ Saved as a Specialty' : '★ Save as Specialty — repeat it in one tap'}</button>
+            <button type="button" disabled={savedSpecialty} onClick={() => { setSpecialties([specialtyFromRun(current), ...specialties.filter((x) => x.task !== current.task)].slice(0, 30)); setSavedSpecialty(true); }} className="press mono mt-1 rounded-xl border px-3 text-[12px] font-semibold disabled:opacity-60" style={{ minHeight: 40, borderColor: 'var(--line)', color: 'hsl(18 88% 50%)' }}><span className="inline-flex items-center gap-1.5"><Icon name="star" size={14} />{savedSpecialty ? 'Saved as a Specialty' : 'Save as Specialty — repeat it in one tap'}</span></button>
           )}
         </section>
       )}
@@ -512,7 +515,7 @@ export function Handoff() {
             <li key={s.index}>
               <details className="group rounded-2xl border" style={card}>
                 <summary className="flex cursor-pointer list-none items-center gap-2.5 px-3 py-2.5" style={{ minHeight: 44 }}>
-                  <span className="mono grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10.5px] font-bold" style={{ background: s.ok === false ? 'hsl(4 75% 56% / .15)' : s.ok ? 'hsl(145 60% 42% / .15)' : 'var(--surface)', color: s.ok === false ? 'hsl(4 75% 56%)' : s.ok ? 'hsl(145 60% 38%)' : 'var(--ink-faint)' }}>{s.ok === undefined ? s.index : s.ok ? '✓' : '!'}</span>
+                  <span className="mono grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10.5px] font-bold" style={{ background: s.ok === false ? 'hsl(4 75% 56% / .15)' : s.ok ? 'hsl(145 60% 42% / .15)' : 'var(--surface)', color: s.ok === false ? 'hsl(4 75% 56%)' : s.ok ? 'hsl(145 60% 38%)' : 'var(--ink-faint)' }}>{s.ok === undefined ? s.index : <Icon name={s.ok ? 'check' : 'x'} size={12} stroke={2.4} />}</span>
                   <span className="min-w-0 flex-1 truncate text-[13.5px]" style={{ color: 'var(--ink)' }}>{s.label}</span>
                   {s.verdict === 'confirm' && <span className="mono text-[10px]" style={{ color: s.approved ? 'hsl(145 60% 38%)' : 'hsl(38 92% 45%)' }}>{s.approved === undefined ? 'needs OK' : s.approved ? 'approved' : 'refused'}</span>}
                   {s.verdict === 'block' && <span className="mono text-[10px]" style={{ color: 'hsl(4 75% 56%)' }}>blocked</span>}
@@ -533,7 +536,7 @@ export function Handoff() {
     <div className="space-y-6 p-3 pb-28">
       <section className="relative space-y-3 overflow-hidden rounded-3xl border p-4" style={{ ...card, background: `${sky.bg}, var(--panel)` }}>
         {sky.night && <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70" style={{ backgroundImage: 'radial-gradient(1px 1px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 32% 8%, #fff, transparent), radial-gradient(1.5px 1.5px at 58% 22%, #fff, transparent), radial-gradient(1px 1px at 78% 12%, #fff, transparent), radial-gradient(1px 1px at 90% 30%, #fff, transparent), radial-gradient(1px 1px at 44% 34%, #fff, transparent)' }} />}
-        <span aria-hidden className="absolute right-4 top-3 text-[26px]">{sky.glyph}</span>
+        <span aria-hidden className="absolute right-4 top-3" style={{ color: sky.night ? 'hsl(230 60% 88%)' : 'hsl(30 90% 50%)' }}><Icon name={sky.glyph} size={26} /></span>
         <div className="relative">
           <p className="mono text-[10.5px] uppercase tracking-wider" style={{ color: sky.night ? 'hsl(230 40% 85%)' : 'var(--ink-faint)' }}>{hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'}</p>
           <h2 className="text-[22px] font-semibold tracking-tight" style={{ color: sky.night ? '#fff' : 'var(--ink)' }}>What should I get done?</h2>
@@ -542,8 +545,8 @@ export function Handoff() {
         <textarea ref={taskBox} value={task} onChange={(e) => setTask(e.target.value)} rows={3} placeholder="e.g. Compare the price of AirPods Pro on Amazon and Flipkart and tell me the cheapest" className="w-full rounded-2xl border bg-transparent px-3.5 py-3 text-[15px] leading-relaxed outline-none" style={{ borderColor: 'var(--line)', color: 'var(--ink)', background: 'var(--surface)' }}
           onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void start(); }} />
         <div className="flex gap-1 rounded-2xl border p-1" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }} role="radiogroup" aria-label="Where the agent works">
-          {([['browser', '🌐 Browser', true], ['desktop', '🖥 Desktop', desktopOk]] as const).map(([id, label, ok]) => (
-            <button key={id} type="button" role="radio" aria-checked={mode === id} disabled={!ok} onClick={() => setMode(id)} className="press flex-1 rounded-xl text-[13px] font-semibold disabled:opacity-40" style={{ minHeight: 40, background: mode === id ? GRAD : 'transparent', color: mode === id ? '#fff' : 'var(--ink-dim)' }}>{label}</button>
+          {([['browser', 'Browser', 'globe', true], ['desktop', 'Desktop', 'monitor', desktopOk]] as const).map(([id, label, icon, ok]) => (
+            <button key={id} type="button" role="radio" aria-checked={mode === id} disabled={!ok} onClick={() => setMode(id)} className="press inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl text-[13px] font-semibold disabled:opacity-40" style={{ minHeight: 40, background: mode === id ? GRAD : 'transparent', color: mode === id ? '#fff' : 'var(--ink-dim)' }}><Icon name={icon} size={15} />{label}</button>
           ))}
         </div>
         <div className="flex items-center gap-2">
@@ -555,14 +558,14 @@ export function Handoff() {
         {!online ? (
           <p className="rounded-2xl border p-3 text-[12.5px]" style={{ borderColor: 'hsl(38 92% 50% / .5)', color: 'var(--ink-dim)' }}>Connect the Terminal Bridge (Settings → Terminal) — Handoff needs a computer to work on. The browser and the screen run there, not on this phone.</p>
         ) : (
-          <Btn primary onClick={() => void start()} disabled={!task.trim()}>→ Hand it off</Btn>
+          <Btn primary onClick={() => void start()} disabled={!task.trim()}>Hand it off<Icon name="next" size={16} /></Btn>
         )}
         {status && !running && <p className="text-[12px]" style={{ color: 'hsl(4 75% 56%)' }}>{status}</p>}
         <div className="flex flex-wrap gap-1.5">
           <Pill tone={online ? 'ok' : 'bad'}>bridge {online ? 'online' : heartbeat.status}</Pill>
           <Pill tone={desktopOk ? 'ok' : 'dim'}>desktop {desktopOk ? 'ready' : 'needs bridge 1.4'}</Pill>
           <Pill tone={sees ? 'ok' : 'dim'}>{sees ? 'model sees images' : 'text-only model'}</Pill>
-          <button type="button" onClick={() => setTab('secured')}><Pill tone={vault.open ? 'ok' : 'dim'}>🔒 vault {vault.open ? 'open' : vault.exists ? 'locked' : 'not set up'}</Pill></button>
+          <button type="button" onClick={() => setTab('secured')}><Pill tone={vault.open ? 'ok' : 'dim'}>vault {vault.open ? 'open' : vault.exists ? 'locked' : 'not set up'}</Pill></button>
         </div>
       </section>
 
@@ -570,7 +573,7 @@ export function Handoff() {
         <div className="grid grid-cols-2 gap-2.5">
           {buttons.map((b) => (
             <button key={b.id} type="button" onClick={() => pickButton(b)} disabled={!online} className="press flex min-h-[86px] flex-col items-start gap-1.5 rounded-2xl border p-3 text-left disabled:opacity-50" style={card}>
-              <span className="text-[20px] leading-none">{b.icon}</span>
+              <span className="grid h-9 w-9 place-items-center rounded-xl" style={{ background: 'var(--surface)', color: 'hsl(18 88% 52%)' }}><Icon name={b.icon} size={19} /></span>
               <span className="text-[13.5px] font-semibold leading-snug" style={{ color: 'var(--ink)' }}>{b.title}</span>
               <span className="mono text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-faint)' }}>{needsInput(b) ? 'fill in & go' : 'one tap'}{b.mode === 'desktop' ? ' · desktop' : ''}</span>
             </button>
@@ -584,9 +587,9 @@ export function Handoff() {
             {specialties.map((sp) => (
               <div key={sp.id} className="flex shrink-0 items-center gap-1 rounded-2xl border pl-3" style={{ ...card, minHeight: 48 }}>
                 <button type="button" disabled={!online || running} onClick={() => { setSpecialties(specialties.map((x) => (x.id === sp.id ? { ...x, uses: x.uses + 1 } : x))); void start(sp.task, sp.mode, guideOf(sp)); }} className="press flex items-center gap-2 py-2 text-left disabled:opacity-50">
-                  <span>★</span><span className="max-w-[160px] truncate text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>{sp.name}</span><span className="mono text-[10px]" style={{ color: 'var(--ink-faint)' }}>{sp.steps.length} steps</span>
+                  <span style={{ color: 'hsl(38 92% 50%)' }}><Icon name="star" size={15} /></span><span className="max-w-[160px] truncate text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>{sp.name}</span><span className="mono text-[10px]" style={{ color: 'var(--ink-faint)' }}>{sp.steps.length} steps</span>
                 </button>
-                <button type="button" aria-label={`Delete ${sp.name}`} onClick={() => setSpecialties(specialties.filter((x) => x.id !== sp.id))} className="grid h-10 w-9 place-items-center text-[12px]" style={{ color: 'var(--ink-faint)' }}>✕</button>
+                <button type="button" aria-label={`Delete ${sp.name}`} onClick={() => setSpecialties(specialties.filter((x) => x.id !== sp.id))} className="grid h-10 w-9 place-items-center" style={{ color: 'var(--ink-faint)' }}><Icon name="x" size={14} /></button>
               </div>
             ))}
           </div>
@@ -609,7 +612,7 @@ export function Handoff() {
             {runs.map((r) => (
               <li key={r.id}>
                 <button type="button" onClick={() => { setCurrent(r); setScreen(null); }} className="press flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left" style={{ ...card, minHeight: 56 }}>
-                  <span className="text-[16px]">{r.status === 'done' ? '✅' : r.status === 'failed' ? '⚠️' : '⏹'}</span>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full" style={{ background: r.status === 'done' ? 'hsl(145 60% 42% / .14)' : r.status === 'failed' ? 'hsl(4 75% 56% / .14)' : 'var(--surface)', color: r.status === 'done' ? 'hsl(145 60% 36%)' : r.status === 'failed' ? 'hsl(4 75% 52%)' : 'var(--ink-faint)' }}><Icon name={r.status === 'done' ? 'check' : r.status === 'failed' ? 'alert' : 'stop'} size={15} /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13.5px] font-medium" style={{ color: 'var(--ink)' }}>{r.task}</span>
                     <span className="block truncate text-[11.5px]" style={{ color: 'var(--ink-faint)' }}>{ago(r.startedAt)} · {r.steps.length} steps · {r.summary || r.status}</span>
@@ -626,14 +629,14 @@ export function Handoff() {
   return (
     <div className="flex h-full min-h-0 flex-col" style={{ background: 'var(--bg)' }}>
       <header className="flex items-center gap-3 border-b px-3 py-2.5" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
-        <span className="grid h-9 w-9 place-items-center rounded-2xl text-[17px] text-white" style={{ background: GRAD, boxShadow: '0 8px 18px -10px hsl(340 80% 45%)' }}>✋</span>
+        <span className="grid h-9 w-9 place-items-center rounded-2xl text-white" style={{ background: GRAD, boxShadow: '0 8px 18px -10px hsl(340 80% 45%)' }}><Icon name="pointer" size={18} /></span>
         <div className="min-w-0 flex-1">
           <h1 className="text-[16px] font-semibold leading-tight" style={{ color: 'var(--ink)' }}>Handoff</h1>
           <p className="mono truncate text-[10.5px]" style={{ color: 'var(--ink-faint)' }}>computer use · secured vault · panels</p>
         </div>
         <div className="flex gap-1 rounded-xl border p-1" style={{ borderColor: 'var(--line)' }} role="tablist">
-          {([['do', 'Do'], ['panels', 'Panels'], ['secured', '🔒']] as const).map(([id, l]) => (
-            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className="press rounded-lg px-3 text-[12.5px] font-semibold" style={{ minHeight: 34, background: tab === id ? 'var(--surface)' : 'transparent', color: tab === id ? 'var(--ink)' : 'var(--ink-faint)' }}>{l}</button>
+          {([['do', 'Do'], ['panels', 'Panels'], ['secured', 'Vault']] as const).map(([id, l]) => (
+            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className="press inline-flex items-center gap-1 rounded-lg px-3 text-[12.5px] font-semibold" style={{ minHeight: 34, background: tab === id ? 'var(--surface)' : 'transparent', color: tab === id ? 'var(--ink)' : 'var(--ink-faint)' }}>{id === 'secured' && <Icon name="lock" size={13} />}{l}</button>
           ))}
         </div>
       </header>

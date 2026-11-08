@@ -66,10 +66,11 @@ const TOKEN = arg('token', process.env.CHOMUGIRI_TOKEN ?? randomBytes(24).toStri
 const ALLOW_CMD = (arg('allow-cmd', process.env.CHOMUGIRI_ALLOW_CMD ?? '') || '')
   .split(',').map((s) => s.trim()).filter(Boolean);
 const MAX_EXEC_MS = Number(arg('max-exec-ms', 45 * 60_000));
-const VERSION = '1.4.0';
-const browser = createBrowser({ outDir: ARTIFACTS });
-const blender = createBlender({ outDir: ARTIFACTS });
+const VERSION = '1.4.1';
 const desktop = createDesktop({ outDir: ARTIFACTS });
+// The browser opens as a real window on the agent's screen when one is running, so the Linux-screen view shows it working.
+const browser = createBrowser({ outDir: ARTIFACTS, displayOf: () => desktop.display });
+const blender = createBlender({ outDir: ARTIFACTS });
 
 // ── Execution registry ──────────────────────────────────────────────────────
 

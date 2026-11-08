@@ -13,6 +13,7 @@ import { FIELDS, MIN_PIN, describeForAgent, fieldValue, findByRef, lastFour, new
 import { useVaultStore } from '@/lib/handoff/vault-store';
 import type { SecretHit, VaultAccess } from '@/lib/handoff/loop';
 import { describeSchedule, isDue, nextRun, queueHandoff, siteOf, validTime, DAYS, type AllowRule, type Schedule } from '@/lib/handoff/specialties';
+import { Icon, SiteLogo, hostOf } from './Icon';
 
 export { VAULT_KEY } from '@/lib/handoff/vault-store';
 export const ALLOW_KEY = 'handoff.allow.v1';
@@ -113,17 +114,17 @@ export function VaultPanel({ v, rules, setRules }: { v: VaultState; rules: Allow
     <div className="space-y-5 p-3 pb-28">
       <section className="space-y-3 rounded-3xl border p-4" style={{ ...box, background: 'radial-gradient(110% 90% at 0% 0%, hsl(152 60% 40% / .16), transparent 60%), var(--panel)' }}>
         <div className="flex items-center gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-2xl text-[20px] text-white" style={{ background: SAFE }}>🔒</span>
+          <span className="grid h-11 w-11 place-items-center rounded-2xl text-white" style={{ background: SAFE }}><Icon name="shield" size={22} /></span>
           <div>
             <h2 className="text-[17px] font-semibold" style={{ color: 'var(--ink)' }}>Secured vault</h2>
             <p className="text-[12px]" style={{ color: 'var(--ink-dim)' }}>{v.open ? `Open · locks itself after 10 minutes` : v.exists ? 'Locked' : 'Not set up yet'}</p>
           </div>
         </div>
-        <ul className="space-y-1 text-[12.5px]" style={{ color: 'var(--ink-dim)' }}>
-          <li>• Encrypted on this phone with your PIN (AES-256). The PIN is never stored.</li>
-          <li>• The AI only sees names like “login:amazon” — the app types the value into the page itself.</li>
-          <li>• A login is only filled on its own website (phishing guard), and only on https pages.</li>
-          <li>• Cards and personal details are filled only after you approve each time.</li>
+        <ul className="list-disc space-y-1 pl-4 text-[12.5px]" style={{ color: 'var(--ink-dim)' }}>
+          <li>Encrypted on this phone with your PIN (AES-256). The PIN is never stored.</li>
+          <li>The AI only sees names like “login:amazon” — the app types the value into the page itself.</li>
+          <li>A login is only filled on its own website (phishing guard), and only on https pages.</li>
+          <li>Cards and personal details are filled only after you approve each time.</li>
         </ul>
         {!v.exists && (
           <div className="space-y-2">
@@ -156,13 +157,13 @@ export function VaultPanel({ v, rules, setRules }: { v: VaultState; rules: Allow
           <ul className="space-y-1.5">
             {v.items.map((it) => (
               <li key={it.id} className="flex items-center gap-3 rounded-2xl border px-3 py-2.5" style={box}>
-                <span className="text-[18px]">{it.kind === 'login' ? '🔑' : it.kind === 'card' ? '💳' : '🏠'}</span>
+                {it.kind === 'login' ? <SiteLogo site={it.site} size={36} /> : <span className="grid h-9 w-9 place-items-center rounded-xl" style={{ background: 'var(--surface)', color: 'var(--ink-dim)' }}><Icon name={it.kind === 'card' ? 'card' : 'user'} /></span>}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13.5px] font-semibold" style={{ color: 'var(--ink)' }}>{it.kind === 'login' ? it.site : it.label}</span>
                   <span className="mono block truncate text-[11px]" style={{ color: 'var(--ink-faint)' }}>{it.kind === 'login' ? `${it.username || '—'} · ••••••` : it.kind === 'card' ? `•••• ${lastFour(it.number)} · ${it.expiry}` : `${it.fullName} · ${it.city}`}</span>
                 </span>
                 <button type="button" onClick={() => setEditing(it)} className="press mono rounded-lg border px-2 text-[11px]" style={{ minHeight: 34, borderColor: 'var(--line)', color: 'var(--ink-dim)' }}>Edit</button>
-                <button type="button" onClick={() => { if (confirm('Delete this from the vault?')) void act(() => v.save(v.items.filter((x) => x.id !== it.id))); }} className="press mono rounded-lg border px-2 text-[11px]" style={{ minHeight: 34, borderColor: 'var(--line)', color: 'hsl(4 75% 56%)' }}>✕</button>
+                <button type="button" onClick={() => { if (confirm('Delete this from the vault?')) void act(() => v.save(v.items.filter((x) => x.id !== it.id))); }} className="press mono rounded-lg border px-2 text-[11px]" style={{ minHeight: 34, borderColor: 'var(--line)', color: 'hsl(4 75% 56%)' }} aria-label="Delete"><Icon name="x" size={14} /></button>
               </li>
             ))}
           </ul>
@@ -191,24 +192,62 @@ export function VaultPanel({ v, rules, setRules }: { v: VaultState; rules: Allow
 /* ── the secure form the agent asks for ──────────────────────────────────── */
 export interface SecureRequest { fields: string[]; why: string; site?: string }
 
+/** What the form is for, from the fields the agent asked for. */
+export function secureKind(fields: string[]): 'login' | 'apikey' | 'code' | 'card' | 'other' {
+  const f = fields.join(' ');
+  if (/pass/.test(f)) return 'login';
+  if (/api|token|key|secret/.test(f)) return 'apikey';
+  if (/otp|code|pin/.test(f)) return 'code';
+  if (/card|cvv|cvc|expiry/.test(f)) return 'card';
+  return 'other';
+}
+const FIELD_LABEL: Record<string, string> = { username: 'Username or email', email: 'Email', user: 'Username', password: 'Password', otp: 'Verification code', code: 'Code', pin: 'PIN', api_key: 'API key', token: 'Access token', secret: 'Secret', cvv: 'CVV', number: 'Card number', card_number: 'Card number', expiry: 'Expiry (MM/YY)' };
+
 export function SecureForm({ req, canSave, onSubmit, onCancel }: { req: SecureRequest; canSave: boolean; onSubmit: (values: Record<string, string>, save: boolean) => void; onCancel: () => void }) {
   const [vals, setVals] = useState<Record<string, string>>({});
   const [save, setSave] = useState(false);
-  const loginish = req.fields.includes('password') && !!req.site;
-  const hidden = (f: string) => /pass|otp|code|pin|cvv|cvc|card|number/.test(f);
+  const [show, setShow] = useState<Record<string, boolean>>({});
+  const kind = secureKind(req.fields);
+  const host = req.site ? hostOf(req.site) : '';
+  const loginish = kind === 'login' && !!req.site;
+  const hidden = (f: string) => /pass|otp|code|pin|cvv|cvc|card|number|key|token|secret/.test(f) && !show[f];
   const all = req.fields.every((f) => vals[f]?.trim());
+  const title = kind === 'login' ? `Sign in to ${host || 'this site'}` : kind === 'apikey' ? `${host ? `${host} ` : ''}API key` : kind === 'code' ? 'Verification code' : kind === 'card' ? 'Card details' : 'Secure details';
   return (
-    <section className="space-y-3 rounded-3xl border-2 p-4" style={{ borderColor: 'hsl(152 60% 40% / .6)', background: 'hsl(152 60% 40% / .07)' }} role="dialog" aria-label="Secure form">
-      <div className="flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-xl text-white" style={{ background: SAFE }}>🔒</span><p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'hsl(152 60% 34%)' }}>Secure form · the AI never sees this</p></div>
-      <p className="text-[14px] font-semibold" style={{ color: 'var(--ink)' }}>{req.why}</p>
-      {req.site && <p className="mono text-[11.5px]" style={{ color: 'var(--ink-dim)' }}>for {req.site}</p>}
-      {req.fields.map((f) => (
-        <input key={f} value={vals[f] ?? ''} onChange={(e) => setVals({ ...vals, [f]: e.target.value })} type={hidden(f) ? 'password' : 'text'} inputMode={/otp|code|pin|cvv/.test(f) ? 'numeric' : undefined} autoComplete={/otp|code/.test(f) ? 'one-time-code' : 'off'} placeholder={LABELS[f] ?? f.replace(/_/g, ' ')} className={input} style={{ ...inputStyle, background: 'var(--panel)' }} />
-      ))}
-      {loginish && canSave && (
-        <label className="flex items-center gap-2 text-[12.5px]" style={{ color: 'var(--ink-dim)' }}><input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} /> Save to my vault as the login for {req.site}</label>
-      )}
-      <div className="flex gap-2"><B grow onClick={onCancel}>Not now</B><B grow primary disabled={!all} onClick={() => onSubmit(vals, save)}>Send securely</B></div>
+    <section className="overflow-hidden rounded-3xl border" style={{ borderColor: 'hsl(152 60% 40% / .45)', background: 'var(--panel)', boxShadow: '0 18px 40px -28px hsl(152 60% 25%)' }} role="dialog" aria-label="Secure form">
+      <div className="flex items-center gap-2 px-4 py-2" style={{ background: 'hsl(152 60% 40% / .10)', color: 'hsl(152 60% 32%)' }}>
+        <Icon name="shield" size={15} />
+        <p className="text-[11px] font-semibold uppercase tracking-wider">Secure form · the AI never sees what you type</p>
+      </div>
+      <div className="space-y-3 p-4">
+        <div className="flex items-center gap-3">
+          {host ? <SiteLogo site={host} size={48} /> : <span className="grid h-12 w-12 place-items-center rounded-2xl text-white" style={{ background: SAFE }}><Icon name={kind === 'apikey' ? 'apikey' : kind === 'card' ? 'card' : kind === 'code' ? 'lock' : 'key'} size={22} /></span>}
+          <div className="min-w-0">
+            <p className="truncate text-[16px] font-semibold" style={{ color: 'var(--ink)' }}>{title}</p>
+            {host && <p className="mono truncate text-[11.5px]" style={{ color: 'var(--ink-faint)' }}>https://{host}</p>}
+          </div>
+        </div>
+        <p className="text-[13px] leading-relaxed" style={{ color: 'var(--ink-dim)' }}>{req.why}</p>
+        {req.fields.map((f, i) => (
+          <label key={f} className="block">
+            <span className="mb-1 block text-[11.5px] font-medium" style={{ color: 'var(--ink-dim)' }}>{FIELD_LABEL[f] ?? LABELS[f] ?? f.replace(/_/g, ' ')}</span>
+            <span className="flex items-center gap-2 rounded-xl border px-3" style={{ borderColor: 'var(--line)', background: 'var(--surface)', minHeight: 46 }}>
+              <input value={vals[f] ?? ''} autoFocus={i === 0} onChange={(e) => setVals({ ...vals, [f]: e.target.value })} type={hidden(f) ? 'password' : 'text'}
+                inputMode={/otp|code|pin|cvv/.test(f) ? 'numeric' : f === 'email' ? 'email' : undefined}
+                autoComplete={/otp|code/.test(f) ? 'one-time-code' : f === 'password' ? 'current-password' : /user|email/.test(f) ? 'username' : 'off'}
+                autoCapitalize="off" spellCheck={false} className={`min-w-0 flex-1 bg-transparent text-[15px] outline-none${kind === 'code' ? ' mono tracking-[.3em]' : ''}`} style={{ color: 'var(--ink)' }} />
+              {/pass|key|token|secret|cvv|pin/.test(f) && (
+                <button type="button" onClick={() => setShow({ ...show, [f]: !show[f] })} aria-label={show[f] ? 'Hide' : 'Show'} className="grid h-8 w-8 place-items-center rounded-lg" style={{ color: 'var(--ink-faint)' }}><Icon name="eye" size={16} /></button>
+              )}
+            </span>
+          </label>
+        ))}
+        {loginish && canSave && (
+          <label className="flex items-center gap-2 text-[12.5px]" style={{ color: 'var(--ink-dim)' }}><input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} /> Save to my vault as the login for {host}</label>
+        )}
+        <div className="flex gap-2 pt-1"><B grow onClick={onCancel}>Not now</B><B grow primary disabled={!all} onClick={() => onSubmit(vals, save)}><Icon name="lock" size={15} />{kind === 'login' ? 'Sign in securely' : 'Send securely'}</B></div>
+        <p className="text-[11px]" style={{ color: 'var(--ink-faint)' }}>{kind === 'login' ? `Typed only into ${host || 'the site'} itself, never anywhere else.` : 'Used for this job only, then forgotten.'}</p>
+      </div>
     </section>
   );
 }
@@ -240,13 +279,13 @@ export function SchedulesCard({ schedules, setSchedules, defaultTask, defaultMod
       )}
       {schedules.map((s, i) => (
         <div key={s.id} className="flex items-center gap-3 rounded-2xl border px-3 py-2.5" style={box}>
-          <span className="text-[16px]">⏰</span>
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ background: 'var(--surface)', color: 'var(--ink-dim)' }}><Icon name="clock" /></span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13.5px] font-medium" style={{ color: 'var(--ink)' }}>{s.task}</span>
             <span className="mono block text-[11px]" style={{ color: 'var(--ink-faint)' }}>{describeSchedule(s)}{s.on ? ` · next ${nextRun(s, now)?.toLocaleString('en-IN', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) ?? '—'}` : ' · paused'}</span>
           </span>
           <button type="button" role="switch" aria-checked={s.on} onClick={() => setSchedules(schedules.map((x, j) => (j === i ? { ...x, on: !x.on } : x)))} className="relative h-6 w-10 shrink-0 rounded-full" style={{ background: s.on ? GRAD : 'var(--line)' }} aria-label={s.on ? 'Pause' : 'Resume'}><span className="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all" style={{ left: s.on ? 18 : 2 }} /></button>
-          <button type="button" onClick={() => setSchedules(schedules.filter((_, j) => j !== i))} aria-label="Delete schedule" className="mono text-[12px]" style={{ color: 'hsl(4 75% 56%)' }}>✕</button>
+          <button type="button" onClick={() => setSchedules(schedules.filter((_, j) => j !== i))} aria-label="Delete schedule" className="grid h-9 w-8 place-items-center" style={{ color: 'hsl(4 75% 56%)' }}><Icon name="x" size={15} /></button>
         </div>
       ))}
       {!adding && !schedules.length && <p className="px-1 text-[12px]" style={{ color: 'var(--ink-faint)' }}>Repeat a job on a timetable — a news brief every morning, a price check every Friday. It runs while Chomugiri is open.</p>}
@@ -282,8 +321,8 @@ export function HandoffScheduler() {
 
 /** The sky behind the Handoff home, following the time of day (dawn, day, dusk, night). */
 export function skyFor(hour: number): { bg: string; night: boolean; glyph: string } {
-  if (hour >= 5 && hour < 8) return { bg: 'linear-gradient(180deg, hsl(28 85% 72% / .55), hsl(330 55% 70% / .25) 55%, transparent)', night: false, glyph: '🌅' };
-  if (hour >= 8 && hour < 17) return { bg: 'linear-gradient(180deg, hsl(205 85% 66% / .45), hsl(195 80% 80% / .18) 60%, transparent)', night: false, glyph: '☀️' };
-  if (hour >= 17 && hour < 20) return { bg: 'linear-gradient(180deg, hsl(18 90% 60% / .5), hsl(290 45% 45% / .28) 60%, transparent)', night: false, glyph: '🌇' };
-  return { bg: 'linear-gradient(180deg, hsl(235 55% 18% / .85), hsl(255 45% 28% / .4) 60%, transparent)', night: true, glyph: '🌙' };
+  if (hour >= 5 && hour < 8) return { bg: 'linear-gradient(180deg, hsl(28 85% 72% / .55), hsl(330 55% 70% / .25) 55%, transparent)', night: false, glyph: 'sunrise' };
+  if (hour >= 8 && hour < 17) return { bg: 'linear-gradient(180deg, hsl(205 85% 66% / .45), hsl(195 80% 80% / .18) 60%, transparent)', night: false, glyph: 'sun' };
+  if (hour >= 17 && hour < 20) return { bg: 'linear-gradient(180deg, hsl(18 90% 60% / .5), hsl(290 45% 45% / .28) 60%, transparent)', night: false, glyph: 'sunset' };
+  return { bg: 'linear-gradient(180deg, hsl(235 55% 18% / .85), hsl(255 45% 28% / .4) 60%, transparent)', night: true, glyph: 'moon' };
 }

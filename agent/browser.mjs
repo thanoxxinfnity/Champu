@@ -82,15 +82,27 @@ export class McpStdio {
 // ── The bridge's one browser ────────────────────────────────────────────────
 
 /** Where Playwright MCP puts screenshots and page snapshots: the bridge's artifacts folder, so a screenshot is downloadable. */
-export function createBrowser({ outDir, env = process.env, spawnSpec = null }) {
+export function createBrowser({ outDir, env = process.env, spawnSpec = null, displayOf = null }) {
   let mcp = null;
   let idle = null;
   let queue = Promise.resolve();
-  const headed = env.CHOMUGIRI_BROWSER_HEADED === '1';
+  /**
+   * A real, visible browser whenever there is a screen to show it on: the agent's private Linux screen (desktop start), the
+   * machine's own desktop (DISPLAY, or Windows/macOS), or CHOMUGIRI_BROWSER_HEADED=1. CHOMUGIRI_BROWSER_HEADLESS=1 forces it off.
+   */
+  const screenFor = () => {
+    if (env.CHOMUGIRI_BROWSER_HEADLESS === '1') return null;
+    const d = (typeof displayOf === 'function' ? displayOf() : '') || env.DISPLAY || '';
+    if (d) return { DISPLAY: d };
+    if (env.CHOMUGIRI_BROWSER_HEADED === '1' || process.platform === 'win32' || process.platform === 'darwin') return {};
+    return null;
+  };
+  let headed = false;
+  let shownOn = '';
 
   const args = () => [
     '-y', PLAYWRIGHT_MCP,
-    ...(headed ? [] : ['--headless']),
+    ...(headed ? ['--viewport-size', '1280,800'] : ['--headless']),
     '--isolated',
     '--output-dir', outDir,
     ...(env.CHOMUGIRI_BROWSER_CHROMIUM ? ['--executable-path', env.CHOMUGIRI_BROWSER_CHROMIUM] : []),
@@ -100,8 +112,20 @@ export function createBrowser({ outDir, env = process.env, spawnSpec = null }) {
   const touch = () => { clearTimeout(idle); idle = setTimeout(() => close(), IDLE_MS); idle.unref?.(); };
   const close = () => { clearTimeout(idle); mcp?.stop(); mcp = null; };
 
+  /** Starts the server, visible on the current screen if there is one; a new screen (desktop start) restarts it there. */
+  function ensure() {
+    const scr = screenFor();
+    const where = scr ? (scr.DISPLAY ?? 'native') : '';
+    if (mcp && where !== shownOn) close();
+    if (!mcp) {
+      headed = !!scr;
+      shownOn = where;
+      mcp = new McpStdio({ command: spawnSpec?.command ?? 'npx', args: spawnSpec?.args ?? args(), cwd: outDir, env: scr ?? {} });
+    }
+  }
+
   async function run(tool, toolArgs) {
-    if (!mcp) mcp = new McpStdio({ command: spawnSpec?.command ?? 'npx', args: spawnSpec?.args ?? args(), cwd: outDir, env: {} });
+    ensure();
     touch();
     try { await mcp.start(); } catch (e) { mcp = null; throw e; }
     const result = await mcp.request('tools/call', { name: tool, arguments: toolArgs ?? {} });
@@ -116,8 +140,10 @@ export function createBrowser({ outDir, env = process.env, spawnSpec = null }) {
       queue = job.catch(() => undefined);
       return job;
     },
+    /** Whether the browser is a real window someone can watch, and on which screen. */
+    get visible() { return headed ? shownOn || 'native' : ''; },
     async tools() {
-      if (!mcp) mcp = new McpStdio({ command: spawnSpec?.command ?? 'npx', args: spawnSpec?.args ?? args(), cwd: outDir, env: {} });
+      ensure();
       await mcp.start();
       return (await mcp.request('tools/list', {})).tools;
     },

@@ -9,12 +9,13 @@ import { siteOf } from '@/lib/handoff/specialties';
 import { useVaultStore } from '@/lib/handoff/vault-store';
 import { LiveScreen, useLiveScreen, GRAD } from './suites/handoff/LiveScreen';
 import { SecureForm } from './suites/handoff/Secured';
+import { Icon } from './suites/handoff/Icon';
 
 const card = { borderColor: 'var(--line)', background: 'var(--panel)' } as const;
 
 function B({ children, onClick, primary, danger, grow }: { children: React.ReactNode; onClick: () => void; primary?: boolean; danger?: boolean; grow?: boolean }) {
   return (
-    <button type="button" onClick={onClick} className={'press inline-flex items-center justify-center whitespace-nowrap rounded-xl px-3.5 text-[13px] font-semibold' + (grow ? ' flex-1' : '')}
+    <button type="button" onClick={onClick} className={'press inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 text-[13px] font-semibold' + (grow ? ' flex-1' : '')}
       style={{ minHeight: 42, ...(primary ? { background: GRAD, color: '#fff' } : danger ? { color: 'hsl(4 75% 56%)', border: '1px solid hsl(4 75% 56% / .35)' } : { border: '1px solid var(--line)', color: 'var(--ink-dim)' }) }}>{children}</button>
   );
 }
@@ -33,7 +34,7 @@ export function ComputerUseCard({ runId }: { runId: string }) {
   return (
     <div className="mt-2 space-y-2.5 rounded-2xl border p-3" style={{ ...card, background: 'linear-gradient(160deg, hsl(18 88% 58% / .08), transparent 55%), var(--panel)' }}>
       <div className="flex items-center gap-2.5">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-[15px] text-white" style={{ background: GRAD }}>🖥</span>
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-white" style={{ background: GRAD }}><Icon name={run.mode === 'desktop' ? 'monitor' : 'globe'} size={16} /></span>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>Computer use · {run.mode === 'desktop' ? 'Linux screen' : 'browser'}</p>
           <p className="flex items-center gap-1.5 truncate text-[11.5px]" style={{ color: 'var(--ink-dim)' }}>
@@ -41,7 +42,7 @@ export function ComputerUseCard({ runId }: { runId: string }) {
             {running ? run.statusText || 'Working…' : run.status === 'done' ? `Done · ${run.steps.length} steps` : run.status === 'failed' ? 'Failed' : run.status === 'limit' ? 'Step limit reached' : 'Stopped'}
           </p>
         </div>
-        {running && <B danger onClick={() => stopComputerUse(runId)}>■ Stop</B>}
+        {running && <B danger onClick={() => stopComputerUse(runId)}><Icon name="stop" size={13} />Stop</B>}
       </div>
 
       {run.approval && (
@@ -49,11 +50,13 @@ export function ComputerUseCard({ runId }: { runId: string }) {
           <p className="text-[10.5px] font-bold uppercase tracking-wider" style={{ color: 'hsl(38 92% 45%)' }}>Needs your OK</p>
           <p className="text-[14px] font-semibold" style={{ color: 'var(--ink)' }}>{run.approval.label}</p>
           <p className="text-[12.5px]" style={{ color: 'var(--ink-dim)' }}>{run.approval.reason}</p>
+          {run.approval.action.type === 'install' && <pre className="mono overflow-x-auto rounded-lg p-2 text-[11.5px]" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>{run.approval.action.app}</pre>}
+          {run.approval.action.type === 'download' && <pre className="mono overflow-x-auto whitespace-pre-wrap break-all rounded-lg p-2 text-[11.5px]" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>{run.approval.action.url}</pre>}
           {run.approval.action.type === 'shell' && <pre className="mono overflow-x-auto rounded-lg p-2 text-[11.5px]" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>{run.approval.action.cmd}</pre>}
           {run.approval.rememberable && run.approval.host && (
             <label className="flex items-center gap-2 text-[12px]" style={{ color: 'var(--ink-dim)' }}><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Always allow on {siteOf(run.approval.host)}</label>
           )}
-          <div className="flex gap-2"><B grow onClick={() => void decideApproval(runId, false)}>✕ No</B><B grow primary onClick={() => { void decideApproval(runId, true, remember); setRemember(false); }}>✓ Approve</B></div>
+          <div className="flex gap-2"><B grow onClick={() => void decideApproval(runId, false)}><Icon name="x" size={14} />No</B><B grow primary onClick={() => { void decideApproval(runId, true, remember); setRemember(false); }}><Icon name="check" size={15} />Approve</B></div>
         </div>
       )}
 
@@ -77,7 +80,7 @@ export function ComputerUseCard({ runId }: { runId: string }) {
           {run.steps.length > 5 && !showAll && <li><button type="button" onClick={() => setShowAll(true)} className="mono text-[11px]" style={{ color: 'var(--ink-faint)' }}>show all {run.steps.length} steps</button></li>}
           {steps.map((s) => (
             <li key={s.index} className="flex items-center gap-2 text-[12.5px]" style={{ color: 'var(--ink)' }}>
-              <span className="mono grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold" style={{ background: s.ok === false ? 'hsl(4 75% 56% / .15)' : s.ok ? 'hsl(145 60% 42% / .15)' : 'var(--surface)', color: s.ok === false ? 'hsl(4 75% 56%)' : s.ok ? 'hsl(145 60% 38%)' : 'var(--ink-faint)' }}>{s.ok === undefined ? s.index : s.ok ? '✓' : '!'}</span>
+              <span className="mono grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold" style={{ background: s.ok === false ? 'hsl(4 75% 56% / .15)' : s.ok ? 'hsl(145 60% 42% / .15)' : 'var(--surface)', color: s.ok === false ? 'hsl(4 75% 56%)' : s.ok ? 'hsl(145 60% 38%)' : 'var(--ink-faint)' }}>{s.ok === undefined ? s.index : <Icon name={s.ok ? 'check' : 'x'} size={11} stroke={2.4} />}</span>
               <span className="min-w-0 flex-1 truncate">{s.label}</span>
               {s.verdict === 'confirm' && s.approved !== undefined && <span className="mono text-[10px]" style={{ color: s.approved ? 'hsl(145 60% 38%)' : 'hsl(38 92% 45%)' }}>{s.approved ? 'approved' : 'refused'}</span>}
             </li>

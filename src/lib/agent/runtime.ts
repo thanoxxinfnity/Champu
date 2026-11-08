@@ -916,7 +916,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       },
     });
     if (typeof started !== 'string') { say(started.error, { error: 'bridge_offline' }); return; }
-    say(`🖥 Computer use started: ${cu.task}`, { computerUse: started });
+    say(`Computer use started: ${cu.task}`, { computerUse: started });
     return;
   }
 

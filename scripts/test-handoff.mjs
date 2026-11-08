@@ -220,7 +220,7 @@ test('Panels: a sandboxed document with its own storage that cannot break out', 
   assert.equal(acceptState({ panelSave: true, id: 'other', state: {} }, 'p1'), null);
   assert.equal(acceptState({ panelSave: true, id: 'p1', state: [1] }, 'p1'), null);
   assert.equal(acceptState({ panelSave: true, id: 'p1', state: { big: 'x'.repeat(300_000) } }, 'p1'), null);
-  assert.deepEqual(nameFrom('make a gym workout log for me'), { name: 'Gym workout log', icon: '🏋️' });
+  assert.deepEqual(nameFrom('make a gym workout log for me'), { name: 'Gym workout log', icon: 'dumbbell' });
   assert.equal(BUILT_IN_PANELS.length, 4);
   for (const p of BUILT_IN_PANELS) {
     assert.match(p.html, /panel\.get\(/, `${p.id} reads its data`);
@@ -468,6 +468,57 @@ test('after typing or a key press (which answer with nothing) the model still se
 });
 
 test('secure steps read like words, not codes', () => {
-  assert.equal(label({ type: 'fill_secret', ref: 'e1', secret: 'once:password', field: 'value' }), 'Fill password securely 🔒');
-  assert.equal(label({ type: 'fill_secret', ref: 'e1', secret: 'login:amazon', field: 'password' }), 'Fill password from login:amazon 🔒');
+  assert.equal(label({ type: 'fill_secret', ref: 'e1', secret: 'once:password', field: 'value' }), 'Fill password securely');
+  assert.equal(label({ type: 'fill_secret', ref: 'e1', secret: 'login:amazon', field: 'password' }), 'Fill password from login:amazon securely');
+});
+
+// ── installing programs, downloading files, keys in commands ────────────────
+import { downloadCommand, downloadName, installCommand } from '../src/lib/handoff/actions.ts';
+
+test('install and download are actions that always need a yes, with safe commands', () => {
+  const a = step('{"action":"install","app":"vlc"}');
+  assert.deepEqual(a.step.action, { type: 'install', app: 'vlc', via: 'auto' });
+  assert.equal(step('{"action":"install","app":"gimp","via":"flatpak"}', 'desktop').step.action.via, 'flatpak');
+  assert.match(step('{"action":"install","app":"vlc; rm -rf ~"}').error, /one package name/);
+  assert.match(step('{"action":"install","app":"$(curl x)"}').error, /one package name/);
+  assert.equal(riskOf(a.step.action).level, 'confirm');
+  assert.match(installCommand('vlc'), /apt-get install -y vlc.*dnf install -y vlc.*brew install vlc.*winget install/);
+  assert.equal(installCommand('left-pad', 'npm'), 'npm install -g left-pad');
+  assert.throws(() => installCommand('a b'));
+  assert.equal(toBridge(a.step.action, 'browser').via, 'shell');
+  assert.equal(label(a.step.action), 'Install vlc');
+
+  const d = step('{"action":"download","url":"https://get.videolan.org/vlc/3.0.21/vlc-3.0.21.tar.xz"}');
+  assert.equal(d.step.action.name, 'vlc-3.0.21.tar.xz');
+  assert.equal(riskOf(d.step.action).level, 'confirm');
+  assert.match(toBridge(d.step.action, 'desktop').cmd, /^mkdir -p "\$HOME\/Downloads" && \(curl -fL .* -o "\$HOME\/Downloads\/vlc-3\.0\.21\.tar\.xz" 'https:\/\/get\.videolan\.org/);
+  assert.match(step('{"action":"download","url":"http://x.com/a"}').error, /https/);
+  assert.match(step("{\"action\":\"download\",\"url\":\"https://x.com/a'b\"}").error, /https/);
+  assert.equal(riskOf(step('{"action":"download","url":"https://192.168.1.4/a.sh"}').step.action).level, 'block');
+  assert.equal(downloadName('https://x.com/', '../../etc/passwd'), 'etc_passwd');
+  assert.throws(() => downloadCommand('https://x.com/$(id)', 'a'));
+  assert.match(systemPrompt('browser'), /"install"[\s\S]*"download"/);
+  assert.equal(label(step('{"action":"request_secret","fields":["username","password"],"why":"x","site":"github.com"}').step.action), 'Secure form: username, password for github.com');
+});
+
+test('a key from the secure form goes into a command without the model seeing it', async () => {
+  const shells = [];
+  const access = {
+    info: () => 'Given for this job: once:api_key.',
+    get: (ref, field) => (ref === 'once:api_key' && field === 'value' ? { value: 'sk-test-SECRET9', kind: 'once', label: 'api_key' } : null),
+    ask: async () => ['once:api_key'],
+  };
+  const h = harness([
+    '{"action":"request_secret","fields":["api_key"],"why":"Needs a key","site":"openai.com"}',
+    '{"action":"shell","cmd":"curl -H \'Authorization: Bearer {{once:api_key}}\' https://api.openai.com/v1/models"}',
+    '{"action":"shell","cmd":"echo {{once:nothing}}"}',
+    '{"action":"done","summary":"ok"}',
+  ], { vault: access, shell: async (cmd) => { shells.push(cmd); return { output: `used sk-test-SECRET9\n`, exitCode: 0 }; } });
+  const r = await runHandoff({ task: 't', mode: 'browser', vision: false }, h.deps);
+  assert.equal(r.status, 'done');
+  assert.equal(shells.length, 1);
+  assert.match(shells[0], /Bearer sk-test-SECRET9/);
+  assert.ok(!JSON.stringify(h.calls.filter((c) => c.llm)).includes('sk-test-SECRET9'), 'the model never sees the key');
+  assert.ok(!JSON.stringify(r.steps).includes('sk-test-SECRET9'), 'nor does the step list');
+  assert.match(r.steps[2].result, /No once:nothing/);
 });

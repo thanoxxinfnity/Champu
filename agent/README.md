@@ -75,7 +75,8 @@ node "$CHOMUGIRI_AGENT" browse help                        # every verb
 
 | Env | Effect |
 |---|---|
-| `CHOMUGIRI_BROWSER_HEADED=1` | show the browser window instead of running headless |
+| `CHOMUGIRI_BROWSER_HEADED=1` | always show a real browser window. Without it the browser is already visible whenever there is a screen (the agent's private screen from `desktop start`, `DISPLAY`, Windows or macOS) |
+| `CHOMUGIRI_BROWSER_HEADLESS=1` | never show a window (run headless even with a screen) |
 | `CHOMUGIRI_BROWSER_CHROMIUM=/path/to/chrome` | use this browser binary |
 | `CHOMUGIRI_BROWSER_ARGS="--no-sandbox …"` | extra Playwright MCP flags |
 

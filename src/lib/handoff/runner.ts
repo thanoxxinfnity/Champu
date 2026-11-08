@@ -128,7 +128,7 @@ export function startComputerUse(opts: { task: string; mode?: Mode; model?: Mode
       llm: (msgs, signal) => callModel(model, msgs, signal),
       browser: (tool, args) => bridge.browser(tool, args),
       desktop: (body) => bridge.desktop(body),
-      shell: (cmd) => bridge.runShell(cmd, { signal: w.abort.signal }),
+      shell: (cmd) => bridge.runShell(cmd, { signal: w.abort.signal, timeoutMs: 20 * 60_000 }),
       image: (name) => bridge.artifactDataUrl(name),
       approve,
       answer: (q) => new Promise((res) => { w.answer = res; set((r) => ({ ...r, question: q })); }),
@@ -189,7 +189,7 @@ export function stopComputerUse(id: string): void {
 
 /** The run, as markdown for the chat history (kept after the live card is gone). */
 export function runToMarkdown(r: LiveRun): string {
-  const head = r.status === 'done' ? '✅ **Computer use — done**' : r.status === 'failed' ? '⚠️ **Computer use — failed**' : r.status === 'limit' ? '⏹ **Computer use — step limit**' : '⏹ **Computer use — stopped**';
-  const steps = r.steps.slice(0, 40).map((s) => `${s.index}. ${s.label}${s.ok === false ? ' ✗' : ''}${s.approved === true ? ' (approved)' : s.approved === false ? ' (refused)' : ''}`).join('\n');
+  const head = r.status === 'done' ? '**Computer use — done**' : r.status === 'failed' ? '**Computer use — failed**' : r.status === 'limit' ? '**Computer use — step limit**' : '**Computer use — stopped**';
+  const steps = r.steps.slice(0, 40).map((s) => `${s.index}. ${s.label}${s.ok === false ? ' (failed)' : ''}${s.approved === true ? ' (approved)' : s.approved === false ? ' (refused)' : ''}`).join('\n');
   return `${head} · ${r.mode === 'desktop' ? 'desktop' : 'browser'} · ${r.steps.length} steps\n\n**Job:** ${r.task}\n\n${r.summary}${steps ? `\n\n**Steps**\n${steps}` : ''}`;
 }
