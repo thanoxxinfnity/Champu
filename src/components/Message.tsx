@@ -14,7 +14,7 @@ import './codeActions';
 import type { ChatMessageView } from '@/lib/store';
 import { GamePlayer } from '@/components/GamePlayer';
 import { CommandRuns } from '@/components/CommandRuns';
-import { commandCount, splitCommandBlocks } from '@/lib/text/command-blocks';
+import { activityCount, diffTotals, splitCommandBlocks, type FileChange } from '@/lib/text/command-blocks';
 import { isImageMime, stripSendBlocks } from '@/lib/text/send-blocks';
 
 function Avatar({ role, lane }: { role: string; lane?: 'A' | 'B' }) {
@@ -92,24 +92,28 @@ function ReasoningDrawer({ reasoning, streaming }: { reasoning: string; streamin
 }
 
 function AttachmentChips({ attachments }: { attachments: NonNullable<ChatMessageView['attachments']> }) {
+  const pics = attachments.filter((a) => a.dataUrl && a.kind.startsWith('image/'));
+  const rest = attachments.filter((a) => !(a.dataUrl && a.kind.startsWith('image/')));
   return (
-    <div className="mb-2 flex flex-wrap gap-1.5">
-      {attachments.map((a) => (
-        <span
-          key={a.id}
-          className="press mono flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10.5px]"
-          style={{ borderColor: 'var(--line)', background: 'var(--surface)', color: 'var(--ink-dim)' }}
-          title={`${a.kind} · ${a.bytes} bytes`}
-        >
-          {a.dataUrl && a.kind.startsWith('image/') ? (
+    <div className="mb-2 space-y-1.5">
+      {pics.length ? (
+        <div className="flex flex-wrap gap-2">
+          {pics.map((a) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={a.dataUrl} alt="" className="h-4 w-4 rounded-sm object-cover" />
-          ) : (
-            <span style={{ color: 'var(--accent)' }}>◆</span>
-          )}
-          {a.name}
-        </span>
-      ))}
+            <img key={a.id} src={a.dataUrl} alt={a.name} title={a.name} className="h-28 w-auto max-w-[70%] rounded-[18px] border object-cover" style={{ borderColor: 'var(--line)' }} />
+          ))}
+        </div>
+      ) : null}
+      {rest.length ? (
+        <div className="flex flex-wrap gap-1.5">
+          {rest.map((a) => (
+            <span key={a.id} className="mono flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10.5px]" style={{ borderColor: 'var(--line)', background: 'var(--surface)', color: 'var(--ink-dim)' }} title={`${a.kind} · ${a.bytes} bytes`}>
+              <span className="rounded border px-1 text-[9.5px] font-semibold" style={{ borderColor: 'var(--line)' }}>{a.name.includes('.') ? a.name.split('.').pop()!.toUpperCase().slice(0, 5) : 'FILE'}</span>
+              {a.name}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -122,48 +126,107 @@ function shown(content: string): string {
 const fmtBytes = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : n ? `${n} B` : '');
 
 /** Pictures the assistant sent show in the chat; every file can be saved. */
+/** The type word on a file card: APK, ZIP, PDF … */
+function kindWord(name: string, kind: string): string {
+  const ext = name.includes('.') ? name.split('.').pop()!.toUpperCase() : '';
+  if (ext && ext.length <= 5) return ext;
+  return (kind.split('/').pop() ?? 'FILE').toUpperCase().slice(0, 5);
+}
+
+/** Files the assistant sent: pictures as rounded thumbnails (tap to open big), other files as cards with their type — tap to save. */
 function SentFiles({ files }: { files: NonNullable<ChatMessageView['attachments']> }) {
   const [note, setNote] = useState<Record<string, string>>({});
   const [share, setShare] = useState(false);
+  const [big, setBig] = useState<string | null>(null);
   useEffect(() => setShare(canShareFiles()), []);
   const say = (id: string, text: string) => setNote((n) => ({ ...n, [id]: text }));
+  const save = (a: (typeof files)[number]) => void downloadSource(a).then((ok) => say(a.id, ok ? 'Saving… check your Downloads. If nothing appears, use Share.' : 'This file is no longer available — ask for it again.'));
+  const shareIt = (a: (typeof files)[number]) => void shareSource(a).then((r) => { if (r === 'unsupported') say(a.id, 'Sharing is not available here — use the download button.'); else if (r === 'missing') say(a.id, 'This file is no longer available — ask for it again.'); });
+  const images = files.filter((a) => isImageMime(a.kind) && a.dataUrl);
+  const others = files.filter((a) => !(isImageMime(a.kind) && a.dataUrl));
   return (
-    <div className="mt-2 space-y-2" data-testid="sent-files">
-      {files.map((a) => {
-        const image = isImageMime(a.kind) && a.dataUrl;
-        const chipStyle = { borderColor: 'color-mix(in oklab, var(--accent) 40%, var(--line))', color: 'var(--accent)' } as const;
-        const chip = 'press mono inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[11.5px]';
-        return (
-          <figure key={a.id} className="max-w-full">
-            {image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={a.dataUrl} alt={a.caption ?? a.name} loading="lazy" className="max-h-[60vh] max-w-full rounded-xl border" style={{ borderColor: 'var(--line)' }} />
-            ) : null}
-            <figcaption className="mt-1 flex flex-wrap items-center gap-2">
+    <div className="mt-2.5 space-y-2.5" data-testid="sent-files">
+      {images.length ? (
+        <div className="flex flex-wrap gap-2.5">
+          {images.map((a) => (
+            <figure key={a.id} className="max-w-[78%]">
+              <button type="button" onClick={() => setBig(a.dataUrl!)} className="press block overflow-hidden rounded-[22px] border" style={{ borderColor: 'var(--line)' }} aria-label={`Open ${a.name}`}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={a.dataUrl} alt={a.caption ?? a.name} loading="lazy" className="block max-h-[240px] w-auto max-w-full object-cover" />
+              </button>
+              {a.caption ? <figcaption className="mt-1 px-1 text-[12px]" style={{ color: 'var(--ink-dim)' }}>{a.caption}</figcaption> : null}
+            </figure>
+          ))}
+        </div>
+      ) : null}
+      {others.length ? (
+        <div className="flex flex-wrap gap-2.5">
+          {others.map((a) => (
+            <div key={a.id} className="w-[168px]">
               <button
                 type="button"
-                className={chip}
-                style={chipStyle}
-                onClick={() => void downloadSource(a).then((ok) => say(a.id, ok ? 'Saving… check your Downloads. If nothing appears, use Share.' : 'This file is no longer available — ask for it again.'))}
+                onClick={() => save(a)}
+                className="press flex h-[150px] w-full flex-col justify-between rounded-[22px] border p-3 text-left"
+                style={{ borderColor: 'color-mix(in oklab, var(--ink) 22%, var(--line))', background: 'var(--panel)' }}
+                aria-label={`Save ${a.name}`}
               >
-                ↓ {a.name}{fmtBytes(a.bytes) ? ` · ${fmtBytes(a.bytes)}` : ''}
+                <span className="mono self-start rounded-lg border px-2 py-0.5 text-[12px] font-semibold" style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)', background: 'var(--surface)' }}>{kindWord(a.name, a.kind)}</span>
+                <span>
+                  <span className="line-clamp-2 break-all text-[14px] font-medium leading-snug" style={{ color: 'var(--ink)' }}>{a.name.replace(/\.[a-z0-9]{1,5}$/i, '')}</span>
+                  {fmtBytes(a.bytes) ? <span className="mono mt-0.5 block text-[11px]" style={{ color: 'var(--ink-faint)' }}>{fmtBytes(a.bytes)}</span> : null}
+                </span>
               </button>
-              {share ? (
-                <button
-                  type="button"
-                  className={chip}
-                  style={chipStyle}
-                  onClick={() => void shareSource(a).then((r) => { if (r === 'unsupported') say(a.id, 'Sharing is not available here — use the download button.'); else if (r === 'missing') say(a.id, 'This file is no longer available — ask for it again.'); })}
-                >
-                  Share / save
-                </button>
-              ) : null}
-              {a.caption ? <span className="text-[11.5px]" style={{ color: 'var(--ink-dim)' }}>{a.caption}</span> : null}
-            </figcaption>
-            {note[a.id] ? <p className="mt-1 text-[10.5px]" style={{ color: 'var(--ink-faint)' }} role="status">{note[a.id]}</p> : null}
-          </figure>
-        );
-      })}
+              <div className="mt-1 flex gap-1.5 px-0.5">
+                <button type="button" onClick={() => save(a)} className="press mono text-[11px]" style={{ color: 'var(--accent)' }}>↓ save</button>
+                {share ? <button type="button" onClick={() => shareIt(a)} className="press mono text-[11px]" style={{ color: 'var(--ink-dim)' }}>share</button> : null}
+              </div>
+              {a.caption ? <p className="mt-0.5 px-0.5 text-[11.5px]" style={{ color: 'var(--ink-dim)' }}>{a.caption}</p> : null}
+              {note[a.id] ? <p className="mt-1 px-0.5 text-[10.5px]" style={{ color: 'var(--ink-faint)' }} role="status">{note[a.id]}</p> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {images.map((a) => (note[a.id] ? <p key={`n${a.id}`} className="text-[10.5px]" style={{ color: 'var(--ink-faint)' }} role="status">{note[a.id]}</p> : null))}
+      {big ? (
+        <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-3 p-4" style={{ background: 'rgba(0,0,0,0.9)' }} role="dialog" aria-modal aria-label="Picture" onClick={() => setBig(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={big} alt="" className="max-h-[80vh] max-w-full rounded-2xl" />
+          <div className="flex gap-3" onClick={(e) => e.stopPropagation()}>
+            {images.filter((a) => a.dataUrl === big).map((a) => (
+              <span key={a.id} className="flex gap-3">
+                <button type="button" onClick={() => save(a)} className="press mono rounded-xl border px-3 py-2 text-[12px]" style={{ borderColor: 'rgba(255,255,255,.3)', color: '#fff' }}>↓ save</button>
+                {share ? <button type="button" onClick={() => shareIt(a)} className="press mono rounded-xl border px-3 py-2 text-[12px]" style={{ borderColor: 'rgba(255,255,255,.3)', color: '#fff' }}>share</button> : null}
+              </span>
+            ))}
+            <button type="button" onClick={() => setBig(null)} className="press mono rounded-xl border px-3 py-2 text-[12px]" style={{ borderColor: 'rgba(255,255,255,.3)', color: '#fff' }}>close</button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** The end-of-work line under a finished build reply: how long, what changed, what ran. */
+function WorkSummary({ segments, durationMs }: { segments: ReturnType<typeof splitCommandBlocks>; durationMs?: number }) {
+  const files: FileChange[] = [];
+  let commands = 0;
+  for (const s of segments) if (s.kind === 'commands') { commands += s.commands.length; files.push(...(s.files ?? [])); }
+  const paths = new Set(files.map((f) => f.path));
+  const t = diffTotals(files);
+  const secs = durationMs ? Math.round(durationMs / 1000) : 0;
+  const took = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : secs ? `${secs}s` : '';
+  const bits = [took && `Worked ${took}`, paths.size && `${paths.size} file${paths.size === 1 ? '' : 's'} changed`, commands && `${commands} command${commands === 1 ? '' : 's'}`].filter(Boolean);
+  if (!bits.length) return null;
+  return (
+    <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t pt-2 text-[12px]" style={{ borderColor: 'var(--line)', color: 'var(--ink-faint)' }} data-testid="work-summary">
+      <span style={{ color: 'var(--accent)' }}>✓</span>
+      <span>{bits.join(' · ')}</span>
+      {paths.size ? (
+        <span className="mono inline-flex overflow-hidden rounded-md text-[11px] font-semibold leading-none">
+          <span className="px-1.5 py-0.5" style={{ background: 'color-mix(in oklab, #22c55e 20%, transparent)', color: '#22c55e' }}>+{t.added}</span>
+          <span className="px-1.5 py-0.5" style={{ background: 'color-mix(in oklab, #ef4444 20%, transparent)', color: '#ef4444' }}>−{t.removed}</span>
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -188,10 +251,10 @@ function BackgroundStrip({ jobId }: { jobId: string }) {
 export function Message({ message }: { message: ChatMessageView }) {
   // The reply as prose, with the commands it ran pulled out into one "Ran N commands" line each (CommandRuns).
   const segments = useMemo(
-    () => (message.role === 'user' ? [] : splitCommandBlocks(shown(message.content), { shellRuns: message.lane === 'B' })),
+    () => (message.role === 'user' ? [] : splitCommandBlocks(shown(message.content), { shellRuns: message.lane === 'B', files: true })),
     [message.content, message.role, message.lane],
   );
-  const hasCommands = commandCount(segments) > 0;
+  const hasCommands = activityCount(segments) > 0;
   const sessionId = useWorkspace((s) => s.sessionId);
   // The block still being written lights up in place.
   const parts = useMemo(
@@ -272,7 +335,7 @@ export function Message({ message }: { message: ChatMessageView }) {
           <div>
             {segments.map((seg, i) =>
               seg.kind === 'commands' ? (
-                <CommandRuns key={i} commands={seg.commands} sessionId={sessionId} since={message.createdAt} />
+                <CommandRuns key={i} commands={seg.commands} files={seg.files} sessionId={sessionId} since={message.createdAt} />
               ) : (
                 <div
                   key={i}
@@ -295,6 +358,8 @@ export function Message({ message }: { message: ChatMessageView }) {
             <span className="skeleton h-3 w-[54%]" style={{ animationDelay: '140ms' }} />
           </div>
         )}
+
+        {!isUser && !message.streaming && hasCommands ? <WorkSummary segments={segments} durationMs={message.durationMs} /> : null}
 
         {message.background ? <BackgroundStrip jobId={message.background} /> : null}
 

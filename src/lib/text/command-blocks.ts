@@ -17,17 +17,63 @@ export interface CommandBlock {
   complete: boolean;
 }
 
+/** A file the reply writes (a path= block) or changes (SEARCH/REPLACE edits), with how many lines it adds and removes. */
+export interface FileChange {
+  path: string;
+  op: 'create' | 'edit';
+  added: number;
+  removed: number;
+  /** The block as written: the whole file, or the SEARCH/REPLACE edits. */
+  body: string;
+  language: string;
+  complete: boolean;
+}
+
 export type ReplySegment =
   | { kind: 'text'; text: string }
-  | { kind: 'commands'; commands: CommandBlock[] };
+  | { kind: 'commands'; commands: CommandBlock[]; files?: FileChange[] };
+
+const EDIT_OPEN = /^[ \t]*<{5,9}[ \t]*SEARCH\b(.*)$/;
+const EDIT_MID = /^[ \t]*={5,9}[ \t]*$/;
+const EDIT_CLOSE = /^[ \t]*>{5,9}[ \t]*REPLACE[ \t]*$/;
+
+/** SEARCH/REPLACE edits → one change per file, lines counted (an empty SEARCH creates the file). */
+export function editChanges(body: string, fallbackPath = '', complete = true): FileChange[] {
+  const out = new Map<string, FileChange>();
+  let path = fallbackPath, mode: 'none' | 'search' | 'replace' = 'none', search = 0, replace = 0, block: string[] = [];
+  const flush = () => {
+    const key = path || '(file)';
+    const prev = out.get(key);
+    const create = search === 0;
+    const text = block.join('\n');
+    if (prev) { prev.added += replace; prev.removed += search; prev.body += `\n${text}`; if (!create) prev.op = 'edit'; }
+    else out.set(key, { path: key, op: create ? 'create' : 'edit', added: replace, removed: search, body: text, language: 'diff', complete });
+    search = 0; replace = 0; block = [];
+  };
+  for (const line of body.split('\n')) {
+    const o = EDIT_OPEN.exec(line);
+    if (o) { mode = 'search'; block = [line]; const m = /path=("[^"]+"|'[^']+'|\S+)/.exec(o[1] ?? ''); if (m) path = m[1]!.replace(/^["']|["']$/g, ''); continue; }
+    if (mode === 'none') continue;
+    block.push(line);
+    if (mode === 'search' && EDIT_MID.test(line)) { mode = 'replace'; continue; }
+    if (mode === 'replace' && EDIT_CLOSE.test(line)) { mode = 'none'; flush(); continue; }
+    if (mode === 'search' && line.trim()) search++;
+    else if (mode === 'replace' && line.trim()) replace++;
+  }
+  if (mode !== 'none') { flush(); for (const c of out.values()) c.complete = false; }
+  return [...out.values()];
+}
+
+const nonEmptyLines = (text: string) => text.split('\n').filter((l) => l.trim()).length;
 
 const FENCE = /^([ \t]*)(`{3,}|~{3,})[ \t]*([^\n]*)$/;
 
-export function splitCommandBlocks(content: string, opts: { shellRuns?: boolean } = {}): ReplySegment[] {
+export function splitCommandBlocks(content: string, opts: { shellRuns?: boolean; files?: boolean } = {}): ReplySegment[] {
   const lines = content.split('\n');
   const segments: ReplySegment[] = [];
   let prose: string[] = [];
-  type Open = { fence: string; indent: string; start: number; isCommand: boolean; cwd?: string; description?: string; body: string[] };
+  type Open = { fence: string; indent: string; start: number; isCommand: boolean; isFile?: { path: string; language: string }; cwd?: string; description?: string; body: string[] };
+  let bareEdit: string[] | null = null;
   let open = null as Open | null;
 
   const flushProse = () => {
@@ -41,6 +87,18 @@ export function splitCommandBlocks(content: string, opts: { shellRuns?: boolean 
     if (last?.kind === 'commands') last.commands.push(block);
     else segments.push({ kind: 'commands', commands: [block] });
   };
+  const pushFiles = (changes: FileChange[]) => {
+    if (!changes.length) return;
+    flushProse();
+    const last = segments[segments.length - 1];
+    if (last?.kind === 'commands') (last.files ??= []).push(...changes);
+    else segments.push({ kind: 'commands', commands: [], files: [...changes] });
+  };
+  const fileOf = (o: Open, complete: boolean): FileChange[] => {
+    const body = o.body.join('\n');
+    if (o.body.some((l) => EDIT_OPEN.test(l))) return editChanges(body, o.isFile!.path, complete);
+    return [{ path: o.isFile!.path, op: 'create', added: nonEmptyLines(body), removed: 0, body, language: o.isFile!.language, complete }];
+  };
   const commandOf = (body: string[]) => {
     let command = body.join('\n').trim();
     // A lone backtick at either end is inline-code quoting leaking into the block, not part of the command.
@@ -49,10 +107,18 @@ export function splitCommandBlocks(content: string, opts: { shellRuns?: boolean 
   };
 
   lines.forEach((line, i) => {
+    // An unfenced SEARCH/REPLACE edit, when files are shown as activity.
+    if (bareEdit) {
+      bareEdit.push(line);
+      if (EDIT_CLOSE.test(line)) { pushFiles(editChanges(bareEdit.join('\n'))); bareEdit = null; }
+      return;
+    }
+    if (opts.files && !open && EDIT_OPEN.test(line)) { bareEdit = [line]; return; }
     const match = FENCE.exec(line);
     if (open) {
       if (match && match[2][0] === open.fence[0] && match[2].length >= open.fence.length && !match[3].trim()) {
         if (open.isCommand) push({ command: commandOf(open.body), cwd: open.cwd, description: open.description, complete: true });
+        else if (open.isFile) pushFiles(fileOf(open, true));
         else prose.push(...lines.slice(open.start, i + 1));
         open = null;
       } else {
@@ -64,7 +130,8 @@ export function splitCommandBlocks(content: string, opts: { shellRuns?: boolean 
       const meta = parseInfoString(match[3]);
       const bareShell = opts.shellRuns && !meta.path && /^(bash|sh|shell|zsh|console)$/i.test(meta.language);
       const isCommand = meta.path === '@terminal' || meta.path === '@shell' || Boolean(bareShell);
-      open = { fence: match[2], indent: match[1], start: i, isCommand, cwd: meta.cwd, description: meta.description, body: [] };
+      const isFile = opts.files && !isCommand && meta.path && !meta.path.startsWith('@') ? { path: meta.path, language: meta.language } : undefined;
+      open = { fence: match[2], indent: match[1], start: i, isCommand, isFile, cwd: meta.cwd, description: meta.description, body: [] };
       return;
     }
     prose.push(line);
@@ -73,8 +140,11 @@ export function splitCommandBlocks(content: string, opts: { shellRuns?: boolean 
   const o = open as Open | null;
   if (o) {
     if (o.isCommand) push({ command: commandOf(o.body), cwd: o.cwd, description: o.description, complete: false });
+    else if (o.isFile) pushFiles(fileOf(o, false));
     else prose.push(...lines.slice(o.start));
   }
+  const be = bareEdit as string[] | null;
+  if (be) pushFiles(editChanges(be.join('\n'), '', false));
   flushProse();
   return segments;
 }
@@ -82,6 +152,34 @@ export function splitCommandBlocks(content: string, opts: { shellRuns?: boolean 
 /** How many commands a reply carries. */
 export function commandCount(segments: ReplySegment[]): number {
   return segments.reduce((n, s) => n + (s.kind === 'commands' ? s.commands.length : 0), 0);
+}
+
+/** Commands and file changes together: anything shown as an activity line. */
+export function activityCount(segments: ReplySegment[]): number {
+  return segments.reduce((n, s) => n + (s.kind === 'commands' ? s.commands.length + (s.files?.length ?? 0) : 0), 0);
+}
+
+/** "Created a file, edited 2 files, browsed the web, ran 3 commands" — the words of an activity line, like a work log. */
+export function activityLabel(a: { commands: Array<{ command: string; complete?: boolean }>; files?: FileChange[]; running?: boolean }): string {
+  const files = a.files ?? [];
+  const created = files.filter((f) => f.op === 'create').length;
+  const edited = files.length - created;
+  const writing = files.some((f) => !f.complete);
+  const web = a.commands.filter((c) => /(\bbrowse\b|webcmd|duckduckgo|crawl4ai|\bcurl\s+-?s?\S*\s*https?:)/i.test(c.command)).length;
+  const other = a.commands.length - web;
+  const n = (k: number, one: string, many: string) => (k === 1 ? one : `${k} ${many}`);
+  const parts: string[] = [];
+  if (created) parts.push(`${writing && !edited ? 'writing' : 'created'} ${n(created, 'a file', 'files')}`);
+  if (edited) parts.push(`${writing ? 'editing' : 'edited'} ${n(edited, 'a file', 'files')}`);
+  if (web) parts.push(a.running ? 'browsing the web' : 'browsed the web');
+  if (other) parts.push(`${a.running ? 'running' : 'ran'} ${n(other, 'a command', 'commands')}`);
+  const text = parts.join(', ') || 'worked';
+  return text[0]!.toUpperCase() + text.slice(1);
+}
+
+/** Lines added and removed across the file changes of a reply. */
+export function diffTotals(files: FileChange[] = []): { added: number; removed: number } {
+  return files.reduce((t, f) => ({ added: t.added + f.added, removed: t.removed + f.removed }), { added: 0, removed: 0 });
 }
 
 export interface RunLike {

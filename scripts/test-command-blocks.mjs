@@ -71,3 +71,47 @@ test('the description in the info string travels with the command', () => {
   assert.equal(segs[0].commands[0].description, 'Install package dependencies');
   assert.equal(segs[0].commands[0].cwd, 'app');
 });
+
+// ── files as activity (Claude Code-style work lines) ────────────────────────
+import { activityCount, activityLabel, diffTotals, editChanges } from '../src/lib/text/command-blocks.ts';
+
+test('file writes and edits become activity with lines added and removed', () => {
+  const reply = [
+    'Ab file banata hoon.',
+    '```ts path=src/a.ts',
+    'export const a = 1;',
+    '',
+    'export const b = 2;',
+    '```',
+    '<<<<<<< SEARCH path=src/b.ts',
+    'old one',
+    'old two',
+    '=======',
+    'new one',
+    '>>>>>>> REPLACE',
+    '```bash path=@terminal cwd=.',
+    'npm test',
+    '```',
+    'Done.',
+  ].join('\n');
+  const segs = splitCommandBlocks(reply, { files: true });
+  assert.deepEqual(segs.map((s) => s.kind), ['text', 'commands', 'text']);
+  const act = segs[1];
+  assert.equal(act.commands.length, 1);
+  assert.deepEqual(act.files.map((f) => [f.path, f.op, f.added, f.removed]), [['src/a.ts', 'create', 2, 0], ['src/b.ts', 'edit', 1, 2]]);
+  assert.equal(activityCount(segs), 3);
+  assert.equal(activityLabel(act), 'Created a file, edited a file, ran a command');
+  assert.deepEqual(diffTotals(act.files), { added: 3, removed: 2 });
+  // without the option, nothing changes for older callers
+  assert.ok(splitCommandBlocks(reply).some((s) => s.kind === 'text' && s.text.includes('path=src/a.ts')));
+});
+
+test('activity words read like a work log', () => {
+  assert.equal(activityLabel({ commands: [{ command: 'node "$CHOMUGIRI_AGENT" browse open https://x.com' }, { command: 'ls' }, { command: 'npm test' }] }), 'Browsed the web, ran 2 commands');
+  assert.equal(activityLabel({ commands: [], files: [{ path: 'a', op: 'create', added: 1, removed: 0, body: '', language: 'ts', complete: false }] }), 'Writing a file');
+  assert.equal(activityLabel({ commands: [{ command: 'npm i' }], running: true }), 'Running a command');
+  const e = editChanges('<<<<<<< SEARCH path=x.ts\n=======\nhello\n>>>>>>> REPLACE\n<<<<<<< SEARCH path=x.ts\na\n=======\nb\nc\n>>>>>>> REPLACE');
+  assert.deepEqual(e.map((f) => [f.path, f.op, f.added, f.removed]), [['x.ts', 'edit', 3, 1]]);
+  const open = splitCommandBlocks('```ts path=src/c.ts\nconst x = 1;\n', { files: true });
+  assert.equal(open[0].files[0].complete, false);
+});

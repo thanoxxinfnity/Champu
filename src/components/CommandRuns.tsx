@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { describeCommand } from '@/lib/agent/narrate';
 import { db, isBrowser, type RunRecord } from '@/lib/db/schema';
-import { matchRuns, type CommandBlock } from '@/lib/text/command-blocks';
+import { activityLabel, diffTotals, matchRuns, type CommandBlock, type FileChange } from '@/lib/text/command-blocks';
 import { useWorkspace } from '@/lib/store';
 import { copyText } from './codeActions';
 
@@ -40,6 +40,8 @@ const BACK = 'M15 6l-6 6 6 6';
 const CLOSE = 'M6 6l12 12M18 6L6 18';
 const COPY = 'M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1zM5 15V5a1 1 0 0 1 1-1h10';
 const CHECK = 'M5 12.5l4.5 4.5L19 7.5';
+const FILE = 'M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7zM14 3v4h4';
+const WEB = 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.6 3.7 5.6 3.7 9s-1.2 6.4-3.7 9c-2.5-2.6-3.7-5.6-3.7-9S9.5 5.6 12 3z';
 
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [done, setDone] = useState(false);
@@ -74,6 +76,44 @@ function Section({ title, copy, copyLabel, children }: { title: string; copy?: s
         {children}
       </div>
     </section>
+  );
+}
+
+/** The green +N / red −N pair, as in a code review. */
+export function DiffChips({ added, removed }: { added: number; removed: number }) {
+  return (
+    <span className="mono inline-flex overflow-hidden rounded-md text-[12px] font-semibold leading-none" aria-label={`${added} lines added, ${removed} removed`}>
+      <span className="px-1.5 py-1" style={{ background: 'color-mix(in oklab, #22c55e 22%, transparent)', color: '#22c55e' }}>+{added}</span>
+      <span className="px-1.5 py-1" style={{ background: 'color-mix(in oklab, #ef4444 22%, transparent)', color: '#ef4444' }}>−{removed}</span>
+    </span>
+  );
+}
+
+function FileDetail({ file }: { file: FileChange }) {
+  const lines = file.body.split('\n');
+  const isEdit = file.language === 'diff';
+  let zone: 'none' | 'old' | 'new' = 'none';
+  return (
+    <div className="px-4 pb-8">
+      <Section title={file.op === 'create' ? 'New file' : 'Changed file'}>
+        <p className="mono break-all text-[13px]">{file.path}</p>
+        <p className="mt-1.5"><DiffChips added={file.added} removed={file.removed} /></p>
+      </Section>
+      <Section title={isEdit ? 'Changes' : 'Contents'} copy={file.body} copyLabel="Copy">
+        <pre className="mono max-h-[55vh] overflow-auto text-[12px] leading-[1.55]">
+          {lines.map((l, i) => {
+            if (isEdit) {
+              if (/^[ \t]*<{5,9}[ \t]*SEARCH\b/.test(l)) { zone = 'old'; return null; }
+              if (/^[ \t]*={5,9}[ \t]*$/.test(l)) { zone = 'new'; return null; }
+              if (/^[ \t]*>{5,9}[ \t]*REPLACE/.test(l)) { zone = 'none'; return <div key={i} className="my-1 border-t" style={{ borderColor: 'var(--line)' }} />; }
+            }
+            const bg = zone === 'old' ? 'color-mix(in oklab, #ef4444 14%, transparent)' : zone === 'new' || (!isEdit && file.op === 'create') ? 'color-mix(in oklab, #22c55e 10%, transparent)' : undefined;
+            const sign = zone === 'old' ? '−' : zone === 'new' ? '+' : ' ';
+            return <div key={i} className="whitespace-pre-wrap break-all px-1" style={{ background: bg }}>{isEdit ? `${sign} ` : ''}{l || ' '}</div>;
+          })}
+        </pre>
+      </Section>
+    </div>
   );
 }
 
@@ -118,21 +158,25 @@ function Detail({ item }: { item: Item }) {
   );
 }
 
-function Sheet({ items, onClose }: { items: Item[]; onClose: () => void }) {
-  const [open, setOpen] = useState<number | null>(items.length === 1 ? 0 : null);
-  const item = open != null ? items[open] : null;
+function Sheet({ items, files, title: listTitle, onClose }: { items: Item[]; files: FileChange[]; title: string; onClose: () => void }) {
+  const total = items.length + files.length;
+  const [open, setOpen] = useState<number | null>(total === 1 ? 0 : null);
+  // Files first, then commands: one index across both.
+  const file = open != null && open < files.length ? files[open] : null;
+  const item = open != null && open >= files.length ? items[open - files.length] : null;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (open != null && items.length > 1) setOpen(null);
+      if (open != null && total > 1) setOpen(null);
       else onClose();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, items.length, onClose]);
+  }, [open, total, onClose]);
 
-  const title = item ? 'Terminal' : `Ran ${items.length} command${items.length === 1 ? '' : 's'}`;
+  const title = file ? (file.op === 'create' ? 'Created' : 'Edited') : item ? 'Terminal' : listTitle;
+  const detail = file || item;
 
   return createPortal(
     <div className="fixed inset-0 z-[80]" role="dialog" aria-modal aria-label={title} data-testid="command-sheet">
@@ -145,26 +189,39 @@ function Sheet({ items, onClose }: { items: Item[]; onClose: () => void }) {
         <header className="flex items-center gap-3 px-4 pb-2 pt-3">
           <button
             type="button"
-            aria-label={item && items.length > 1 ? 'Back' : 'Close'}
+            aria-label={detail && total > 1 ? 'Back' : 'Close'}
             className="press -m-1 p-1"
-            onClick={() => (item && items.length > 1 ? setOpen(null) : onClose())}
+            onClick={() => (detail && total > 1 ? setOpen(null) : onClose())}
           >
-            <Icon d={item && items.length > 1 ? BACK : CLOSE} size={22} />
+            <Icon d={detail && total > 1 ? BACK : CLOSE} size={22} />
           </button>
           <div className="min-w-0 flex-1 text-center">
             <h3 className="text-[16px] font-semibold">{title}</h3>
-            {item ? <p className="text-[12.5px]" style={{ color: item.status === 'failed' ? 'var(--color-rose)' : 'var(--ink-faint)' }}>{STATUS_TEXT[item.status]}</p> : null}
+            {item ? <p className="text-[12.5px]" style={{ color: item.status === 'failed' ? 'var(--color-rose)' : 'var(--ink-faint)' }}>{STATUS_TEXT[item.status]}</p> : file ? <p className="mono truncate text-[12px]" style={{ color: 'var(--ink-faint)' }}>{file.path.split('/').pop()}</p> : null}
           </div>
           <span className="w-[22px]" aria-hidden />
         </header>
         <div className="overflow-y-auto">
-          {item ? (
+          {file ? (
+            <FileDetail file={file} />
+          ) : item ? (
             <Detail item={item} />
           ) : (
             <ul className="px-2 pb-8 pt-1">
+              {files.map((f, i) => (
+                <li key={`f${i}`}>
+                  <button type="button" onClick={() => setOpen(i)} className="press flex w-full items-center gap-3 rounded-xl px-2.5 py-3 text-left">
+                    <span className="shrink-0" style={{ color: 'var(--ink-faint)' }}><Icon d={FILE} size={18} /></span>
+                    <span className="shrink-0 text-[14.5px] font-medium">{f.op === 'create' ? 'Created' : 'Edited'}</span>
+                    <span className="mono min-w-0 flex-1 truncate text-[13px]" style={{ color: 'var(--ink-dim)' }}>{f.path}</span>
+                    <DiffChips added={f.added} removed={f.removed} />
+                    <span className="shrink-0" style={{ color: 'var(--ink-faint)' }}><Icon d={CHEVRON} size={16} /></span>
+                  </button>
+                </li>
+              ))}
               {items.map((it, i) => (
                 <li key={i}>
-                  <button type="button" onClick={() => setOpen(i)} className="press flex w-full items-center gap-3 rounded-xl px-2.5 py-3 text-left">
+                  <button type="button" onClick={() => setOpen(files.length + i)} className="press flex w-full items-center gap-3 rounded-xl px-2.5 py-3 text-left">
                     <span className="shrink-0" style={{ color: 'var(--ink-faint)' }}><Icon d={TERMINAL} size={18} /></span>
                     <span className="shrink-0 text-[14.5px] font-medium">{it.status === 'failed' ? 'Failed' : it.status === 'done' ? 'Ran' : it.status === 'running' ? 'Running' : 'Waiting'}</span>
                     <span className="min-w-0 flex-1 truncate text-[14px]" style={{ color: 'var(--ink-dim)' }}>{it.what}</span>
@@ -182,7 +239,7 @@ function Sheet({ items, onClose }: { items: Item[]; onClose: () => void }) {
 }
 
 /** The "Ran N commands ›" line for one group of commands in a reply. */
-export function CommandRuns({ commands, sessionId, since }: { commands: CommandBlock[]; sessionId: string | null; since: number }) {
+export function CommandRuns({ commands, files = [], sessionId, since }: { commands: CommandBlock[]; files?: FileChange[]; sessionId: string | null; since: number }) {
   const runningCommand = useWorkspace((s) => s.runningCommand);
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [open, setOpen] = useState(false);
@@ -209,11 +266,11 @@ export function CommandRuns({ commands, sessionId, since }: { commands: CommandB
   const failed = items.filter((i) => i.status === 'failed').length;
   const waiting = items.filter((i) => i.status === 'waiting').length;
   const n = items.length;
-  const label = running
-    ? `Running ${n} command${n === 1 ? '' : 's'}`
-    : waiting === n
-      ? `${n} command${n === 1 ? '' : 's'} waiting`
-      : `Ran ${n - waiting} command${n - waiting === 1 ? '' : 's'}${failed ? ` · ${failed} failed` : ''}`;
+  const label = n && waiting === n && !running && !files.length
+    ? `${n} command${n === 1 ? '' : 's'} waiting`
+    : `${activityLabel({ commands, files, running })}${failed ? ` · ${failed} failed` : ''}`;
+  const totals = diffTotals(files);
+  const onlyWeb = n > 0 && !files.length && commands.every((c) => /(\bbrowse\b|webcmd)/i.test(c.command));
 
   return (
     <>
@@ -225,11 +282,12 @@ export function CommandRuns({ commands, sessionId, since }: { commands: CommandB
         style={{ color: failed ? 'var(--color-rose)' : 'var(--ink-dim)' }}
         aria-haspopup="dialog"
       >
-        <span style={{ color: 'var(--ink-faint)' }}><Icon d={TERMINAL} size={16} /></span>
+        <span style={{ color: 'var(--ink-faint)' }}><Icon d={files.length && !n ? FILE : onlyWeb ? WEB : TERMINAL} size={16} /></span>
         <span>{label}</span>
+        {files.length ? <DiffChips added={totals.added} removed={totals.removed} /> : null}
         <Icon d={CHEVRON} size={15} />
       </button>
-      {open ? <Sheet items={items} onClose={() => setOpen(false)} /> : null}
+      {open ? <Sheet items={items} files={files} title={label} onClose={() => setOpen(false)} /> : null}
     </>
   );
 }

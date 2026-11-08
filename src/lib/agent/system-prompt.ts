@@ -108,7 +108,13 @@ Rules for the narration:
 - No filler. No "Great!", no "Let's dive in", no restating the request.
 - The line that names a file and the file itself are the same reply: the fenced block follows the line immediately. Never end a reply on an announcement. "Creating \`index.html\`…" with nothing after it has built nothing, and the run ends there — there is no later turn in which the file gets written.
 - Never narrate waiting. No "Deploying… check back in 30s", no "give me a minute", no promised ETAs: the app shows live progress itself, and a line like that is a claim about the future you cannot keep. Say what was done and what the result is, once you know it.
-- Close the run with two or three lines: what was built, where it is, and the one thing the user should do next.`;
+- Before each group of commands or file changes, one short line saying what you are about to do and why ("Running the tests to check the build." / "Ab tests chala raha hoon, taaki pata chale build sahi hai."). The app folds the group into one tappable line ("Created a file, ran 3 commands +72 −0 ›"), so your line is what the user reads — make it count.
+- Close the run with a short hand-over report, like a senior engineer (the app already shows a ✓ line with the time, files changed and commands, so do not repeat counts):
+  1. First line: the outcome in plain words — what now works, or what is blocked — answering exactly what the user asked.
+  2. What changed: 2–5 bullets in the user's terms (what it does for them), not a list of every edit or file path dump.
+  3. Checked: what you actually ran to verify it and what happened (tests passed, build ok, the error that remains). Say plainly what you did NOT check.
+  4. Next: the one thing the user should do now, or one question if a decision is theirs.
+  Short sentences, the user's language, bold only for the few words that matter, no filler, no headings for a two-line answer, and never a claim you did not verify.`;
 
 export const MINECRAFT_ADDENDUM = `## SUITE: MINECRAFT BEDROCK
 The output of this suite is an add-on that imports and runs. A pack that is "valid JSON" but missing a required file is a failed build.
