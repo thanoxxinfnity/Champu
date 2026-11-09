@@ -35,12 +35,13 @@ const CAPABILITY_SUITE_META: Record<string, { label: string; icon: string; hint:
 };
 
 /** Opens a viewer or editor of its own, so it has no list of chat sessions. */
-const STANDALONE = new Set(['library', 'canvas', 'motion', 'shot2code', 'tools', 'handoff', 'video', 'audio', 'model3d', 'skills']);
+const STANDALONE = new Set(['library', 'canvas', 'motion', 'shot2code', 'tools', 'handoff', 'craft', 'video', 'audio', 'model3d', 'skills']);
 
 const CANVAS_ENTRY: SuiteEntry = { id: 'canvas', label: 'Canvas', icon: 'canvas', hint: 'Design app or website screens on a board and export them' };
 const MOTION_ENTRY: SuiteEntry = { id: 'motion', label: 'Motion Studio', icon: 'motion', hint: 'Layers, keyframes and a timeline — export CSS, GSAP or HTML' };
 const SHOT2CODE_ENTRY: SuiteEntry = { id: 'shot2code', label: 'Screenshot → Code', icon: 'shot2code', hint: 'Turn a screenshot or mock-up into HTML, Tailwind, React or Vue' };
 const HANDOFF_ENTRY: SuiteEntry = { id: 'handoff', label: 'Handoff', icon: 'handoff', hint: 'Give a job to an agent that uses its own browser or computer — watch live, approve, take over; plus Panels' };
+const CRAFT_ENTRY: SuiteEntry = { id: 'craft', label: 'Craft apps', icon: 'craft', hint: 'Open-source PhotoCraft, VectorCraft, FilmCraft ... and Craft Anything, run on your terminal computer' };
 const TOOLS_ENTRY: SuiteEntry = { id: 'tools', label: 'Tools', icon: 'tools', hint: '190+ calculators, converters, generators and developer helpers — all on your device' };
 const LIBRARY_ENTRY: SuiteEntry = { id: 'library', label: 'Library', icon: 'library', hint: 'Everything you generated — open and zoom up to 50×' };
 
@@ -157,6 +158,7 @@ export function Sidebar({ onOpenSettings, onNavigate }: { onOpenSettings: () => 
     LIBRARY_ENTRY,
     CANVAS_ENTRY,
     HANDOFF_ENTRY,
+    CRAFT_ENTRY,
     TOOLS_ENTRY,
     SHOT2CODE_ENTRY,
     MOTION_ENTRY,

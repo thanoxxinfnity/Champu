@@ -48,6 +48,11 @@ export interface BridgeConfig {
   via?: 'direct' | 'proxy';
 }
 
+export interface CraftApp {
+  id: string; name: string; replaces: string; blurb: string; url: string; web: boolean; cli: string | null; agent?: string;
+  installed: { tag: string; path: string; verified: boolean; installedAt: number } | null;
+}
+
 export interface ExecFrame {
   execId: string;
   type: 'start' | 'stdout' | 'stderr' | 'exit';
@@ -301,6 +306,11 @@ export class BridgeClient {
   /** One action on the bridge's Linux screen (xdotool): `image` names a screenshot saved as an artifact (bridge 1.4.0+). */
   desktop(body: Record<string, unknown>) {
     return this.request<{ ok: boolean; text: string; image?: string; width?: number; height?: number }>('/v1/desktop', { method: 'POST', body: JSON.stringify(body) }, 90_000);
+  }
+
+  /** The open-source Craft apps on the bridge computer: what exists and is installed, and opening one on the private screen (bridge 5.1+). */
+  craft(body: { action: 'list' } | { action: 'open'; app: string; file?: string }) {
+    return this.request<{ ok: boolean; text?: string; dir?: string; apps?: CraftApp[]; pid?: number }>('/v1/craft', { method: 'POST', body: JSON.stringify(body) }, 30_000);
   }
 
   /** Runs one command and returns what it printed (for agents that need the answer, not a stream). */

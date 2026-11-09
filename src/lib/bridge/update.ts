@@ -36,6 +36,13 @@ export function hasDesktop(health: { version?: string; features?: string[] } | n
   return !!health.version && compareVersions(health.version, DESKTOP_MIN_VERSION) >= 0;
 }
 
+/** Bridge 5.1 added the Craft apps (install, command line, open on the private screen). */
+export function hasCraft(health: { version?: string; features?: string[] } | null | undefined): boolean {
+  if (!health) return false;
+  if (health.features?.includes('craft')) return true;
+  return !!health.version && compareVersions(health.version, '5.1.0') >= 0;
+}
+
 export function compareVersions(a: string, b: string): number {
   const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
   const pb = b.split('.').map((n) => parseInt(n, 10) || 0);

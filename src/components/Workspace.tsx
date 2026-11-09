@@ -32,6 +32,7 @@ import { CanvasBoard } from './suites/CanvasBoard';
 import { ScreenshotToCode } from './suites/ScreenshotToCode';
 import { ToolsHub } from './suites/ToolsHub';
 import { Handoff } from './suites/Handoff';
+import { CraftApps } from './suites/CraftApps';
 import { HandoffScheduler } from './suites/handoff/Secured';
 import { MotionStudio } from './suites/MotionStudio';
 import { Workdrive } from './suites/Workdrive';
@@ -97,6 +98,7 @@ function FullSuite({ id }: { id: string }) {
     case 'shot2code': return <ScreenshotToCode />;
     case 'tools': return <ToolsHub />;
     case 'handoff': return <Handoff />;
+    case 'craft': return <CraftApps />;
     case 'motion': return <MotionStudio />;
     case 'video': return <VideoFlow />;
     case 'audio': return <AudioStudio />;
@@ -105,7 +107,7 @@ function FullSuite({ id }: { id: string }) {
     default: return null;
   }
 }
-const FULL_SCREEN = new Set(['library', 'canvas', 'shot2code', 'tools', 'handoff', 'motion', 'video', 'audio', 'model3d', 'skills']);
+const FULL_SCREEN = new Set(['library', 'canvas', 'shot2code', 'tools', 'handoff', 'craft', 'motion', 'video', 'audio', 'model3d', 'skills']);
 
 const HAS_TOOL = new Set(['android', 'minecraft', 'studio', 'game', 'image', 'workdrive', 'assets']);
 

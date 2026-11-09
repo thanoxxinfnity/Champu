@@ -42,7 +42,9 @@ export type SuiteId =
   // 190+ small tested utilities (calculators, converters, generators, developer helpers), all on-device.
   | 'tools'
   // Handoff: a computer-use agent (browser / Linux screen on the bridge), Action Buttons and Panels.
-  | 'handoff';
+  | 'handoff'
+  // Craft: the open-source Adobe/Office alternatives (PhotoCraft, VectorCraft, ...) and Craft Anything, installed on the bridge computer.
+  | 'craft';
 
 export interface SessionRecord {
   id: string;
@@ -291,6 +293,7 @@ export const SUITE_LABELS: Record<SuiteId, string> = {
   shot2code: 'Screenshot to Code',
   tools: 'Tools',
   handoff: 'Handoff',
+  craft: 'Craft apps',
   android: 'Android & Cross-Platform',
   minecraft: 'Minecraft Engineering',
   godot: 'Godot Game Studio',
