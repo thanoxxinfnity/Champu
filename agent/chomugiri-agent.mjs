@@ -36,6 +36,7 @@ import { createDesktop, desktopCli } from './desktop.mjs';
 import { blenderCli, createBlender, explainBlenderError } from './blender.mjs';
 import { deleteKeystore, describeKeystore, keysCli, readKeystore, writeKeystore } from './keystore.mjs';
 import { createJobs } from './jobs.mjs';
+import { createCraft, craftCli } from './craft.mjs';
 
 // `node chomugiri-agent.mjs browse …` is the model's way to use the bridge's browser from a terminal block: a client, not a server.
 if (process.argv[2] === 'browse') process.exit(await browseCli(process.argv.slice(3)));
@@ -44,6 +45,8 @@ if (process.argv[2] === 'desktop') process.exit(await desktopCli(process.argv.sl
 if (process.argv[2] === 'blender') process.exit(await blenderCli(process.argv.slice(3)));
 // `node chomugiri-agent.mjs keys list|delete` looks at (or empties) the API keys this terminal holds.
 if (process.argv[2] === 'keys') process.exit(keysCli(process.argv.slice(3)));
+// `node chomugiri-agent.mjs craft list|install|run|anything …` installs and drives the open-source Craft apps (PhotoCraft, Craft Anything, ...).
+if (process.argv[2] === 'craft') process.exit(await craftCli(process.argv.slice(3)));
 
 // ── CLI arguments ───────────────────────────────────────────────────────────
 
@@ -66,7 +69,7 @@ const TOKEN = arg('token', process.env.CHOMUGIRI_TOKEN ?? randomBytes(24).toStri
 const ALLOW_CMD = (arg('allow-cmd', process.env.CHOMUGIRI_ALLOW_CMD ?? '') || '')
   .split(',').map((s) => s.trim()).filter(Boolean);
 const MAX_EXEC_MS = Number(arg('max-exec-ms', 45 * 60_000));
-const VERSION = '5.0.1';
+const VERSION = '5.1.0';
 
 // ── Updates: newer files pushed by the app win; /v1/restart applies them ───
 // The app writes a newer bridge into <workspace>/.chomugiri-agent/. Starting the OLD command again (a restart by hand, or by the
@@ -355,7 +358,7 @@ const routes = {
     agent: 'chomugiri-bridge',
     version: VERSION,
     /** What this bridge can do beyond the basics, so the app knows without trying. */
-    features: ['keys', 'jobs', 'desktop', 'install', 'update'],
+    features: ['keys', 'jobs', 'desktop', 'install', 'update', 'craft'],
     /** Which screen the browser is a real window on (null = headless). */
     browserWindow: browser.visible || null,
     supervised: SUPERVISED,
@@ -521,6 +524,27 @@ routes['POST /v1/desktop'] = async (req) => {
     await mkdir(ARTIFACTS, { recursive: true });
     return await desktop.call(String(body.action ?? ''), body);
   } catch (err) {
+    return { ok: false, text: String(err.message ?? err).slice(0, 400) };
+  }
+};
+
+/**
+ * The open-source Craft apps. `{action:'list'}` says which are installed; `{action:'open', app, file?}` opens one on the private screen
+ * (start it first with the desktop route). Installing runs through the terminal (`craft install <app>`), so its progress streams.
+ */
+routes['POST /v1/craft'] = async (req) => {
+  const body = await readJson(req);
+  const craft = createCraft();
+  try {
+    if (body.action === 'list') return { ok: true, dir: craft.dir, apps: craft.list() };
+    if (body.action === 'open') {
+      const file = body.file ? resolveInWorkspace(String(body.file)) : undefined;
+      const out = craft.open(String(body.app ?? ''), { display: desktop.display, file, cwd: WORKSPACE });
+      return { ok: true, text: `Opened ${body.app} on the private screen (pid ${out.pid}). Take a screenshot to see it.`, ...out };
+    }
+    const e = new Error('`action` must be list or open.'); e.statusCode = 400; throw e;
+  } catch (err) {
+    if (err.statusCode) throw err;
     return { ok: false, text: String(err.message ?? err).slice(0, 400) };
   }
 };
