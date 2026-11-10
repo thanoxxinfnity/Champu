@@ -106,7 +106,7 @@ class ApiRouter(private val secrets: SecretStore) {
     fun handle(request: ApiRequest, response: ResponseWriter) {
         try {
             when (request.path) {
-                "/api/models" -> models(response)
+                "/api/models" -> models(response, Regex("(^|&)all=1(&|$)").containsMatchIn(request.query))
                 "/api/chat" -> chat(request, response)
                 "/api/image" -> image(request, response)
                 "/api/endpoints/probe" -> probe(request, response)
@@ -213,7 +213,7 @@ class ApiRouter(private val secrets: SecretStore) {
 
     // ── /api/models ─────────────────────────────────────────────────────────
 
-    private fun models(response: ResponseWriter) {
+    private fun models(response: ResponseWriter, all: Boolean = false) {
         val out = JSONArray()
         val warnings = JSONArray()
         val key = nimKey
@@ -237,6 +237,24 @@ class ApiRouter(private val secrets: SecretStore) {
                     .put("emitsReasoning", caps.contains("reasoning"))
                     .put("origin", "catalogue")
             )
+        }
+
+        // On request, the ids the filter hides are listed too, marked: entitlements change and the bundled list ages.
+        if (all && liveIds != null) {
+            Nim.hidden.filter { it !in liveIds }.forEach { id ->
+                val caps = ModelMeta.capabilities(id)
+                out.put(
+                    JSONObject()
+                        .put("id", id)
+                        .put("provider", "nim")
+                        .put("label", ModelMeta.label(id))
+                        .put("vendor", ModelMeta.vendor(id))
+                        .put("capabilities", JSONArray(caps))
+                        .put("emitsReasoning", caps.contains("reasoning"))
+                        .put("origin", "unverified")
+                        .put("note", "NVIDIA lists this model, but it may not be switched on for your key. If it answers with an error, pick another.")
+                )
+            }
         }
 
         // Image NIMs live on a different host and never appear in /v1/models.

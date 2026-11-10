@@ -73,6 +73,10 @@ object Nim {
     )
 
     /** Live catalogue. Returns null when the key is absent or the probe fails. */
+    /** Chat ids of the last catalogue read that the filter hides. */
+    @Volatile var hidden: List<String> = emptyList()
+        private set
+
     fun listModels(key: String): List<String>? {
         if (key.isBlank()) return null
         val body = Upstream.get("$BASE/models", headers(key)) ?: return null
@@ -80,6 +84,7 @@ object Nim {
             val data = JSONObject(body).optJSONArray("data") ?: JSONArray()
             val ids = (0 until data.length())
                 .mapNotNull { data.optJSONObject(it)?.optString("id")?.takeIf(String::isNotEmpty) }
+            hidden = Unserved.hiddenChatModels(ids)
             // The catalogue is not a list of models this key can call: over half
             // of it 404s on the first token, and embedding and safety NIMs are
             // not chat models at all. Both were reaching the switcher.

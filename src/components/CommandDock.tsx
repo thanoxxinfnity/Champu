@@ -276,6 +276,11 @@ function ModelSwitcher() {
   const loadModels = useWorkspace((s) => s.loadModels);
   const gatewayLast = useWorkspace((s) => s.gatewayLast);
   const loading = useWorkspace((s) => s.modelsLoading);
+  const nimShowAll = useWorkspace((s) => s.nimShowAll);
+  const setNimShowAll = useWorkspace((s) => s.setNimShowAll);
+  const addNimModel = useWorkspace((s) => s.addNimModel);
+  const removeNimModel = useWorkspace((s) => s.removeNimModel);
+  const hasNim = models.some((m) => m.provider === 'nim');
 
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
@@ -383,7 +388,7 @@ function ModelSwitcher() {
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="filter models…"
+              placeholder={hasNim ? 'filter, or type vendor/model to add' : 'filter models…'}
               autoFocus
               className="mono flex-1 bg-transparent text-[11.5px] outline-none"
               style={{ color: 'var(--ink)' }}
@@ -398,6 +403,24 @@ function ModelSwitcher() {
               {loading ? '…' : <Icon name="refresh" size={14} />}
             </button>
           </div>
+
+          {hasNim && (
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-2.5 py-1.5" style={{ borderColor: 'var(--line)' }}>
+              <button type="button" role="switch" aria-checked={nimShowAll} data-testid="nim-show-all" onClick={() => void setNimShowAll(!nimShowAll)}
+                className="press mono inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px]"
+                style={{ borderColor: nimShowAll ? 'color-mix(in oklab, var(--accent) 55%, var(--line))' : 'var(--line)', color: nimShowAll ? 'var(--accent)' : 'var(--ink-faint)' }}
+                title="Also list the NVIDIA models that are hidden because an earlier check said your key cannot use them. They are marked, and one may answer with an error.">
+                <Icon name="eye" size={12} />all NVIDIA models
+              </button>
+              {/^[\w.-]+\/[\w.-]+$/.test(filter.trim()) && !models.some((m) => m.provider === 'nim' && m.id === filter.trim().toLowerCase()) && (
+                <button type="button" data-testid="nim-add-model" onClick={() => void addNimModel(filter).then((ok) => { if (ok) { setFilter(''); setOpen(false); } })}
+                  className="press mono inline-flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[10px]" style={{ borderColor: 'var(--line)', color: 'var(--ink)' }}
+                  title="Use this exact model id on NVIDIA, for a model NVIDIA serves but does not list yet">
+                  <Icon name="plus" size={12} /><span className="truncate">use {filter.trim().toLowerCase()} on NVIDIA</span>
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto py-1">
             {grouped.length === 0 && (
@@ -463,7 +486,16 @@ Open Settings → API Keys to add
                           )
                         )}
                       </span>
-                      <span className="ml-auto flex shrink-0 gap-1">
+                      <span className="ml-auto flex shrink-0 items-center gap-1">
+                        {model.origin === 'unverified' && (
+                          <span className="mono rounded px-1 text-[8.5px] uppercase" style={{ color: 'var(--color-amber)', border: '1px solid color-mix(in oklab, var(--color-amber) 45%, transparent)' }} title={model.note}>not confirmed</span>
+                        )}
+                        {model.origin === 'manual' && (
+                          <span role="button" tabIndex={0} aria-label={`Remove ${model.id}`} title="Added by you. Tap to remove from the list." className="press mono inline-flex items-center gap-0.5 rounded px-1 text-[8.5px] uppercase" style={{ color: 'var(--ink-faint)', border: '1px solid var(--line)' }}
+                            onClick={(e) => { e.stopPropagation(); void removeNimModel(model.id); }}>
+                            yours<Icon name="x" size={9} />
+                          </span>
+                        )}
                         {model.capabilities.includes('reasoning') && (
                           <span className="text-[9px]" style={{ color: 'var(--color-indigo)' }} title="reasoning">
                             <Icon name="atom" size={13} />

@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { BridgeClient, HeartbeatMonitor, INITIAL_HEARTBEAT, type HeartbeatState } from '@/lib/bridge/client';
 import type { ModelDescriptor, ProviderId } from '@/lib/providers/types';
-import { DEFAULT_NIM_MODEL } from '@/lib/providers/registry';
+import { DEFAULT_NIM_MODEL, inferCapabilities, labelFor, vendorFor } from '@/lib/providers/registry';
 import type { Plan, Task, TaskStatus } from '@/lib/agent/planner';
 import { AntiLoopGuard, type Fingerprint } from '@/lib/agent/fingerprint';
 import type { EndpointRecord, SuiteId } from '@/lib/db/schema';
@@ -256,6 +256,13 @@ interface WorkspaceState {
   modelWarnings: string[];
   selection: ModelSelection;
   modelsLoading: boolean;
+  /** Also list the NVIDIA models the filter hides (marked as not confirmed for this key). */
+  nimShowAll: boolean;
+  setNimShowAll: (on: boolean) => Promise<void>;
+  /** NVIDIA model ids the user typed in, for a model NVIDIA serves but does not list yet. */
+  nimExtraModels: string[];
+  addNimModel: (id: string) => Promise<boolean>;
+  removeNimModel: (id: string) => Promise<void>;
 
   loadModels: (force?: boolean) => Promise<void>;
   setSelection: (selection: ModelSelection) => void;
@@ -518,10 +525,39 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   selection: DEFAULT_SELECTION,
   modelsLoading: false,
 
+  nimShowAll: false,
+  setNimShowAll: async (on) => {
+    set({ nimShowAll: on });
+    await setSetting('nimShowAll', on);
+    await get().loadModels(true);
+  },
+  nimExtraModels: [],
+  addNimModel: async (raw) => {
+    const id = raw.trim().replace(/^https?:\/\/build\.nvidia\.com\//i, '').replace(/\s+/g, '').toLowerCase();
+    // vendor/model, the way NVIDIA writes ids: "moonshotai/kimi-k2.6"
+    if (!/^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/.test(id)) return false;
+    const next = [...new Set([...get().nimExtraModels, id])].slice(-30);
+    set({ nimExtraModels: next });
+    await setSetting('nimExtraModels', next);
+    await get().loadModels(false);
+    get().setSelection({ provider: 'nim', model: id });
+    return true;
+  },
+  removeNimModel: async (id) => {
+    const next = get().nimExtraModels.filter((m) => m !== id);
+    set({ nimExtraModels: next });
+    await setSetting('nimExtraModels', next);
+    await get().loadModels(false);
+  },
+
   loadModels: async (force = false) => {
     set({ modelsLoading: true });
     try {
-      const res = await fetch(`/api/models${force ? '?refresh=1' : ''}`, {
+      const showAll = await getSetting<boolean>('nimShowAll', false).catch(() => false);
+      const extra = await getSetting<string[]>('nimExtraModels', []).catch(() => [] as string[]);
+      set({ nimShowAll: showAll, nimExtraModels: extra });
+      const qs = [force ? 'refresh=1' : '', showAll ? 'all=1' : ''].filter(Boolean).join('&');
+      const res = await fetch(`/api/models${qs ? `?${qs}` : ''}`, {
         // Without the user's key the catalogue comes back with no NIM models at
         // all, so this has to carry it like every other provider call.
         headers: keyHeaders(),
@@ -534,6 +570,12 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
       const data = (await res.json()) as { models: ModelDescriptor[]; warnings: string[] };
       const models = data.models ?? [];
+      // Ids the user typed in themselves: listed as NVIDIA models even though the catalogue does not carry them.
+      for (const id of extra) {
+        if (models.some((m) => m.provider === 'nim' && m.id === id)) continue;
+        const caps = inferCapabilities(id);
+        models.push({ id, provider: 'nim', label: labelFor(id), vendor: vendorFor(id), capabilities: caps, emitsReasoning: caps.includes('reasoning'), origin: 'manual', note: 'Added by you. NVIDIA must serve this exact id for your key.' });
+      }
 
       // The catalogue is server-side and knows nothing about custom endpoints,
       // which live on the device — so they are added back on every reload.
@@ -545,7 +587,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       const current = get().selection;
       const stillValid = withCustom.some((m) => m.provider === current.provider && m.id === current.model);
       if (!stillValid && withCustom.length) {
-        const selectable = withCustom.filter((m) => m.origin !== 'partner-only');
+        const selectable = withCustom.filter((m) => m.origin !== 'partner-only' && m.origin !== 'unverified');
         // Without a key there are no NIM models at all, so a NIM-first fallback
         // would leave a fresh install pointed at something that cannot answer.
         const hasNim = selectable.some((m) => m.provider === 'nim');

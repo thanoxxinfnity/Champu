@@ -247,10 +247,14 @@ class MainActivity : AppCompatActivity() {
      * Done here rather than in the web client so the browser build stays free of
      * Android-specific branches.
      */
+    /** The version this build carries ("3.71"), so the page can tell when a newer one exists. */
+    private fun appVersion(): String =
+        runCatching { packageManager.getPackageInfo(packageName, 0).versionName ?: "" }.getOrDefault("").replace(Regex("[^0-9A-Za-z.\\-]"), "")
+
     private fun bootstrapScript(): String = """
         (function () {
           if (window.__chomugiriShell) return;
-          window.__chomugiriShell = { platform: 'android', token: '${server.sessionToken}' };
+          window.__chomugiriShell = { platform: 'android', token: '${server.sessionToken}', version: '${appVersion()}', appId: '${packageName}' };
 
           // Keep the system bars the colour of the page (light, dark, or whatever the theme is).
           var lastBar = '';

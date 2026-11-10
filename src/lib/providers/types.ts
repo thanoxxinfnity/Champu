@@ -38,8 +38,10 @@ export interface ModelDescriptor {
    * `alias`        — a friendly name that resolves to `resolvesTo`.
    * `partner-only` — real, but not served by the configured base URL. Selectable
    *                  only once the user adds the partner endpoint themselves.
+   * `unverified`   — in the live catalogue, but an earlier probe said this account cannot call it; shown only on request.
+   * `manual`       — an id the user typed in themselves.
    */
-  origin: 'catalogue' | 'static' | 'alias' | 'partner-only';
+  origin: 'catalogue' | 'static' | 'alias' | 'partner-only' | 'unverified' | 'manual';
   resolvesTo?: string;
   /** For a custom-endpoint model: which configured endpoint serves it. */
   endpointId?: string;

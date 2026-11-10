@@ -1,11 +1,25 @@
-name: Chomugiri test APK (installs beside the real app)
+name: Chomugiri Next APK (installs beside the real app)
 
 # The real Chomugiri APK is signed with a private keystore that is not in CI. This builds the same app signed with the public
-# sideload key and a different application id (com.chomugiri.workspace.ag), so it installs NEXT TO the real one — your chats and
+# sideload key and a different application id (com.chomugiri.workspace.next, shown as "Chomugiri Next"), so it installs NEXT TO the real one — your chats and
 # keys in the real app are untouched — and can be thrown away. Use it to try new features without touching the real app.
 on:
-  # Manual only: the signed release APK (releases/Chomugiri.apk) is the normal way to get a build now.
   workflow_dispatch: {}
+  # Every change to the app publishes a new Chomugiri Next, and an installed Chomugiri Next offers it as an update by itself.
+  push:
+    branches:
+      - claude/chomugiri-workspace-design-09sxwa
+    paths:
+      - "src/**"
+      - "android/**"
+      - "agent/**"
+      - "public/**"
+      - "package.json"
+      - ".github/workflows/chomugiri-test-apk.yml"
+
+concurrency:
+  group: chomugiri-next-apk
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -59,25 +73,31 @@ jobs:
             -PCHOMUGIRI_KEYSTORE_PASSWORD=chomugames \
             -PCHOMUGIRI_KEY_ALIAS=chomugames \
             -PCHOMUGIRI_KEY_PASSWORD=chomugames \
-            -PCHOMUGIRI_APP_ID_SUFFIX=.ag
-          ls -la app/build/outputs/apk/release
+            -PCHOMUGIRI_APP_ID_SUFFIX=.next \
+            -PCHOMUGIRI_VERSION_SUFFIX="-next.${{ github.run_number }}" \
+            -PCHOMUGIRI_APP_LABEL="Chomugiri Next"
+          cp app/build/outputs/apk/release/Chomugiri.apk "$GITHUB_WORKSPACE/Chomugiri-Next.apk"
+          echo "NEXT_VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)-next.${{ github.run_number }}" >> "$GITHUB_ENV"
+          ls -la "$GITHUB_WORKSPACE/Chomugiri-Next.apk"
 
       - name: Check it is signed
         run: |
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs android/app/build/outputs/apk/release/Chomugiri.apk | head -5
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs Chomugiri-Next.apk | head -5
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Chomugiri-test-apk
-          path: android/app/build/outputs/apk/release/Chomugiri.apk
+          name: Chomugiri-Next-apk
+          path: Chomugiri-Next.apk
           retention-days: 30
 
       - name: Publish a download release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: chomugiri-test-apk
-          name: Chomugiri test build (installs beside the real app)
+          # The app reads the version from this title to know when an update exists (src/lib/app-update.ts).
+          name: Chomugiri Next v${{ env.NEXT_VERSION }}
           body: |
-            Built from ${{ github.sha }}. Signed with the public sideload key, application id com.chomugiri.workspace.ag, so it installs
-            next to the real Chomugiri and does not touch its data. Enable "install from unknown sources".
-          files: android/app/build/outputs/apk/release/Chomugiri.apk
+            Built from ${{ github.sha }}. Signed with the public sideload key, application id com.chomugiri.workspace.next ("Chomugiri Next"),
+            so it installs next to the real Chomugiri and does not touch its data. Enable "install from unknown sources".
+            An installed Chomugiri Next finds this build by itself and offers it as an update.
+          files: Chomugiri-Next.apk

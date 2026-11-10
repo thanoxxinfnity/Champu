@@ -1,5 +1,6 @@
 'use client';
 
+import { UpdateCheck } from './UpdateBanner';
 import { VoiceTab } from './VoiceTab';
 import { FreeApisSwitch, FreeProviders } from './FreeProviders';
 import { TerminalKeys } from './TerminalKeys';
@@ -2137,6 +2138,7 @@ export function Settings({ open, onClose }: { open: boolean; onClose: () => void
       >
         <header className="flex shrink-0 items-center gap-3 border-b px-4 py-3" style={{ borderColor: 'var(--line)' }}>
           <h2 className="text-[14px] font-semibold tracking-tight">Settings</h2>
+          <UpdateCheck />
           <button type="button" onClick={onClose} className="mono ml-auto text-[12px]" style={{ color: 'var(--ink-faint)' }} aria-label="Close">
             <Icon name="close" size={16} />
           </button>

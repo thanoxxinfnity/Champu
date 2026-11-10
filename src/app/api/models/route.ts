@@ -14,9 +14,10 @@ export const dynamic = 'force-dynamic';
  */
 async function handleGET(req: NextRequest) {
   const force = req.nextUrl.searchParams.get('refresh') === '1';
+  const all = req.nextUrl.searchParams.get('all') === '1';
 
   const [nim, pollinations] = await Promise.allSettled([
-    hasNimKey() ? listNimModels() : Promise.resolve<ModelDescriptor[]>([]),
+    hasNimKey() ? listNimModels({ all }) : Promise.resolve<ModelDescriptor[]>([]),
     listPollinationsModels(),
   ]);
 

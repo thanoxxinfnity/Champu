@@ -90,4 +90,8 @@ object Unserved {
     /** Everything that has no business in a chat switcher. */
     fun keepChatModels(ids: List<String>): List<String> =
         ids.filter { !isUnserved(it) && !NON_CHAT.containsMatchIn(it) }
+
+    /** Chat ids the catalogue lists but the filter hides; shown, marked, only when the user asks for every model. */
+    fun hiddenChatModels(ids: List<String>): List<String> =
+        ids.filter { isUnserved(it) && !NON_CHAT.containsMatchIn(it) }
 }

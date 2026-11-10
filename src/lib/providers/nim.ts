@@ -133,6 +133,9 @@ export function nimChatConfig(modelId?: string): UpstreamConfig {
 
 /** Live catalogue probe. Cached briefly — the list is large and rarely changes. */
 let catalogueCache: { at: number; ids: string[]; tag: string } | null = null;
+/** Chat ids the catalogue lists but the filter hides (an earlier probe, or this session, saw them refuse this account). */
+let hiddenIds: string[] = [];
+export const listHiddenIds = (): string[] => hiddenIds.filter((id) => !catalogueCache?.ids.includes(id));
 const CATALOGUE_TTL_MS = 10 * 60_000;
 
 export async function listCatalogueIds(force = false): Promise<string[]> {
@@ -151,9 +154,11 @@ export async function listCatalogueIds(force = false): Promise<string[]> {
     });
     if (!res.ok) return catalogueCache?.tag === tag ? catalogueCache.ids : [];
     const json = (await res.json()) as { data?: Array<{ id?: string }> };
-    const ids = (json.data ?? [])
+    const all = (json.data ?? [])
       .map((m) => m.id)
-      .filter((id): id is string => Boolean(id))
+      .filter((id): id is string => Boolean(id));
+    hiddenIds = all.filter((id) => isUnserved(id) && !NON_CHAT.test(id));
+    const ids = all
       // The catalogue lists NIMs this account cannot call and models that are
       // not chat models at all. Offering either is what made the switcher a
       // minefield, so neither reaches the UI. See unserved.ts.
@@ -170,7 +175,7 @@ export async function listCatalogueIds(force = false): Promise<string[]> {
  * Live ids win; static entries survive only when the probe is unavailable, and
  * aliases are always kept so the UI can explain the substitution.
  */
-export async function listModels(): Promise<ModelDescriptor[]> {
+export async function listModels(opts: { all?: boolean } = {}): Promise<ModelDescriptor[]> {
   const liveIds = await listCatalogueIds();
   const staticById = new Map(NIM_MODELS.map((m) => [m.id, m]));
   const out: ModelDescriptor[] = [];
@@ -210,6 +215,13 @@ export async function listModels(): Promise<ModelDescriptor[]> {
       leftover.capabilities.some((c) => OFF_CATALOGUE.has(c))
     ) {
       out.push(leftover);
+    }
+  }
+
+  // On request, the ids the filter hides are listed too, marked, so the user can try one: entitlements change and the bundled list ages.
+  if (opts.all) {
+    for (const id of listHiddenIds()) {
+      out.push({ id, provider: 'nim', label: labelFor(id), vendor: vendorFor(id), capabilities: inferCapabilities(id), emitsReasoning: inferCapabilities(id).includes('reasoning'), origin: 'unverified', note: 'NVIDIA lists this model, but it may not be switched on for your key. If it answers with an error, pick another.' });
     }
   }
 
