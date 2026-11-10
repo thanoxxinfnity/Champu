@@ -212,6 +212,21 @@ function applyTheme(theme: ThemePref) {
   }
 }
 
+/** How the conversation is drawn: chat bubbles and avatars, or a terminal transcript (prompt lines, tool lines, monospace). */
+export type LookPref = 'chat' | 'cli';
+
+function applyLook(look: LookPref) {
+  if (typeof document === 'undefined') return;
+  if (look === 'cli') document.documentElement.dataset.look = 'cli';
+  else delete document.documentElement.dataset.look;
+  try {
+    if (look === 'cli') localStorage.setItem('chomugiri:look', 'cli');
+    else localStorage.removeItem('chomugiri:look');
+  } catch {
+    // Blocked storage: the look still applies for this session.
+  }
+}
+
 interface WorkspaceState {
   // ── Navigation ────────────────────────────────────────────────────────────
   activeSuite: SuiteId;
@@ -380,6 +395,8 @@ interface WorkspaceState {
   /** 'system' follows the OS; the other two are an explicit override. */
   theme: ThemePref;
   setTheme: (theme: ThemePref) => void;
+  look: LookPref;
+  setLook: (look: LookPref) => void;
   setDraftsEnabled: (enabled: boolean) => void;
 
   // ── Run control ───────────────────────────────────────────────────────────
@@ -852,6 +869,12 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
 
   theme: 'system',
+  look: 'chat',
+  setLook: (look) => {
+    applyLook(look);
+    set({ look });
+    void setSetting('look', look);
+  },
   setTheme: (theme) => {
     applyTheme(theme);
     set({ theme });
@@ -963,6 +986,9 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const theme = await getSetting<ThemePref>('theme', 'system');
     set({ theme });
     applyTheme(theme);
+    const look = await getSetting<LookPref>('look', 'chat');
+    set({ look });
+    applyLook(look);
 
     get().startHeartbeat();
     await get().loadModels();
@@ -971,3 +997,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     void setSetting('antigravity', null);
   },
 }));
+
+// Development only: lets a browser probe (scripts/probe-*.mjs) put messages on screen without a model.
+if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') (window as unknown as { __ws?: typeof useWorkspace }).__ws = useWorkspace;

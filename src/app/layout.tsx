@@ -30,7 +30,7 @@ export const viewport: Viewport = {
  * localStorage purely as a synchronous boot hint, and a failure to read it just
  * falls through to the OS preference.
  */
-const THEME_BOOT = `(function(){try{var t=localStorage.getItem('chomugiri:theme');if(t==='light'||t==='dark'){document.documentElement.dataset.theme=t;}}catch(e){}})();`;
+const THEME_BOOT = `(function(){try{var t=localStorage.getItem('chomugiri:theme');if(t==='light'||t==='dark'){document.documentElement.dataset.theme=t;}if(localStorage.getItem('chomugiri:look')==='cli'){document.documentElement.dataset.look='cli';}}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

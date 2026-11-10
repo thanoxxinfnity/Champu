@@ -1,6 +1,6 @@
 'use client';
 
-import { useWorkspace, type ThemePref } from '@/lib/store';
+import { useWorkspace, type LookPref, type ThemePref } from '@/lib/store';
 import { Icon } from '@/components/Icon';
 
 /**
@@ -53,6 +53,31 @@ export function ThemeToggle({ className = '' }: { className?: string }) {
               transition: 'background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out)',
             }}
           >
+            <Icon name={opt.glyph} size={13} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const LOOKS: Array<{ value: LookPref; glyph: string; label: string }> = [
+  { value: 'chat', glyph: 'chat', label: 'Chat look' },
+  { value: 'cli', glyph: 'terminal', label: 'Terminal look (like a CLI)' },
+];
+
+/** Chat bubbles or a terminal transcript, as two drawn keys. */
+export function LookToggle({ className = '' }: { className?: string }) {
+  const look = useWorkspace((s) => s.look);
+  const setLook = useWorkspace((s) => s.setLook);
+  return (
+    <div role="radiogroup" aria-label="Conversation look" className={`flex items-center gap-0.5 p-0.5 ${className}`} style={{ border: '1.5px solid var(--stroke)', borderRadius: 'var(--sketch-b)', background: 'var(--surface)' }}>
+      {LOOKS.map((opt) => {
+        const active = look === opt.value;
+        return (
+          <button key={opt.value} type="button" role="radio" aria-checked={active} aria-label={opt.label} title={opt.label} data-testid={`look-${opt.value}`} onClick={() => setLook(opt.value)}
+            className="press flex h-[22px] w-[24px] items-center justify-center leading-none"
+            style={{ borderRadius: opt.value === 'chat' ? 'var(--sketch-a)' : 'var(--sketch-c)', background: active ? 'var(--accent)' : 'transparent', color: active ? 'var(--panel)' : 'var(--ink-faint)', transition: 'background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out)' }}>
             <Icon name={opt.glyph} size={13} />
           </button>
         );

@@ -7,6 +7,7 @@ import { db, isBrowser, type RunRecord } from '@/lib/db/schema';
 import { activityLabel, diffTotals, matchRuns, type CommandBlock, type FileChange } from '@/lib/text/command-blocks';
 import { useWorkspace } from '@/lib/store';
 import { copyText } from './codeActions';
+import { Icon as AppIcon } from './Icon';
 
 /**
  * What ran for a reply, without a code box per command.
@@ -241,6 +242,7 @@ function Sheet({ items, files, title: listTitle, onClose }: { items: Item[]; fil
 /** The "Ran N commands ›" line for one group of commands in a reply. */
 export function CommandRuns({ commands, files = [], sessionId, since }: { commands: CommandBlock[]; files?: FileChange[]; sessionId: string | null; since: number }) {
   const runningCommand = useWorkspace((s) => s.runningCommand);
+  const look = useWorkspace((s) => s.look);
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [open, setOpen] = useState(false);
 
@@ -271,6 +273,30 @@ export function CommandRuns({ commands, files = [], sessionId, since }: { comman
     : `${activityLabel({ commands, files, running })}${failed ? ` · ${failed} failed` : ''}`;
   const totals = diffTotals(files);
   const onlyWeb = n > 0 && !files.length && commands.every((c) => /(\bbrowse\b|webcmd)/i.test(c.command));
+
+  // Terminal look: every command and file change is its own line, the way a CLI agent prints its tool calls.
+  if (look === 'cli') {
+    const sub = (it: Item) => it.status === 'running' ? 'running' : it.status === 'waiting' ? 'waiting' : `${it.run?.exitCode === 0 ? 'exit 0' : `exit ${it.run?.exitCode ?? 'none'}`}${it.run?.durationMs != null ? ` · ${(it.run.durationMs / 1000).toFixed(1)}s` : ''}`;
+    return (
+      <>
+        <div className="cli-runs my-1.5" data-testid="ran-commands">
+          {items.map((it, i) => (
+            <button key={`c${i}`} type="button" onClick={() => setOpen(true)} className="cli-run press" data-status={it.status} aria-haspopup="dialog">
+              <span className="cli-run-line"><span className="cli-ico" aria-hidden><AppIcon name="terminal" size={14} /></span><span className="cli-call"><b>Run</b>({(it.command.command || '').split('\n')[0].slice(0, 120)})</span></span>
+              <span className="cli-run-sub"><span className="cli-elbow" aria-hidden />{sub(it)}{it.what ? ` · ${it.what}` : ''}</span>
+            </button>
+          ))}
+          {files.map((f, i) => (
+            <button key={`f${i}`} type="button" onClick={() => setOpen(true)} className="cli-run press" data-status={f.complete ? 'done' : 'running'} aria-haspopup="dialog">
+              <span className="cli-run-line"><span className="cli-ico" aria-hidden><AppIcon name={f.op === 'create' ? 'file' : 'pen'} size={14} /></span><span className="cli-call"><b>{f.op === 'create' ? 'Write' : 'Edit'}</b>({f.path})</span></span>
+              <span className="cli-run-sub"><span className="cli-elbow" aria-hidden />{f.complete ? `+${f.added}${f.removed ? ` -${f.removed}` : ''} lines` : 'writing'}</span>
+            </button>
+          ))}
+        </div>
+        {open ? <Sheet items={items} files={files} title={label} onClose={() => setOpen(false)} /> : null}
+      </>
+    );
+  }
 
   return (
     <>

@@ -1480,3 +1480,54 @@ html, body { overflow-x: hidden; overscroll-behavior-x: none; max-width: 100vw; 
 
 /* Drawn icons in chat notes (see lib/skills/icons.ts) */
 .prose-chomu .ico { display: inline-block; vertical-align: -3px; margin-right: 6px; color: var(--accent); flex: none; }
+
+
+/* ── Terminal look ──────────────────────────────────────────────────────────
+   The conversation drawn as a CLI agent's transcript: your message is a prompt line, the reply starts with a dot, every command
+   and file change is a tool line with its result hanging under it, all in the monospace face. Chosen with the look keys in the
+   header; the chat look is untouched. */
+[data-look='cli'] .msg { gap: 0; padding: 5px 14px; font-family: var(--font-mono); }
+[data-look='cli'] .msg .msg-avatar { display: none; }
+[data-look='cli'] .msg .msg-name { display: none; }
+[data-look='cli'] .msg .msg-head { margin-bottom: 1px; gap: 8px; min-height: 0; opacity: 0.85; }
+[data-look='cli'] .msg[data-role='user'] .msg-head { display: none; }
+[data-look='cli'] .msg[data-role='user'] { padding-top: 12px; }
+[data-look='cli'] .msg[data-role='user'] .msg-user-text {
+  position: relative; padding: 8px 12px 8px 28px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); font-size: 13px; line-height: 1.55;
+}
+[data-look='cli'] .msg[data-role='user'] .msg-user-text::before {
+  content: '>'; position: absolute; left: 11px; top: 8px; color: var(--accent); font-weight: 700;
+}
+[data-look='cli'] .msg[data-role='assistant'] .msg-body { position: relative; padding-left: 18px; }
+[data-look='cli'] .msg[data-role='assistant'] .msg-body::before {
+  content: ''; position: absolute; left: 2px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+}
+[data-look='cli'] .msg[data-role='system'] { opacity: 0.8; font-size: 12px; }
+[data-look='cli'] .prose-chomu { font-family: var(--font-mono); font-size: 13px; line-height: 1.6; }
+[data-look='cli'] .prose-chomu h1, [data-look='cli'] .prose-chomu h2, [data-look='cli'] .prose-chomu h3 { font-size: 13.5px; margin: 0.9em 0 0.3em; }
+[data-look='cli'] .prose-chomu p { margin: 0.35em 0; }
+
+.cli-runs { display: flex; flex-direction: column; gap: 5px; font-family: var(--font-mono); }
+.cli-run { display: block; width: 100%; text-align: left; font-size: 12.5px; line-height: 1.45; color: var(--ink); }
+.cli-run-line { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.cli-call { color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cli-call b { font-weight: 700; color: var(--ink); }
+.cli-ico { flex: none; display: inline-flex; color: var(--ink-faint); transform: translateY(2px); }
+.cli-run[data-status='done'] .cli-ico { color: var(--accent); }
+.cli-run[data-status='failed'] .cli-ico { color: var(--color-rose); }
+.cli-run[data-status='running'] .cli-ico { color: var(--color-amber); animation: cli-blink 1s steps(2, start) infinite; }
+.cli-run-sub { display: flex; align-items: center; gap: 6px; padding-left: 20px; color: var(--ink-faint); font-size: 11.5px; }
+.cli-run[data-status='failed'] .cli-run-sub { color: var(--color-rose); }
+/* The elbow that hangs a result under its tool line, drawn (no glyph font needed). */
+.cli-elbow { flex: none; width: 9px; height: 8px; border-left: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; border-bottom-left-radius: 3px; transform: translateY(-3px); opacity: 0.7; }
+@keyframes cli-blink { to { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .cli-run[data-status='running'] .cli-ico { animation: none; } }
+.status-line { border-top: 1px solid color-mix(in oklab, var(--line) 60%, transparent); }
+
+/* Lists keep a visible marker in the terminal look, and the message box reads as a prompt. */
+[data-look='cli'] .prose-chomu ul { list-style: none; padding-left: 0; }
+[data-look='cli'] .prose-chomu ul > li { position: relative; padding-left: 16px; }
+[data-look='cli'] .prose-chomu ul > li::before { content: ''; position: absolute; left: 3px; top: 0.72em; width: 6px; height: 1.5px; background: var(--ink-faint); }
+[data-look='cli'] .dock-tagline { display: none; }
+[data-look='cli'] .dock-input { font-family: var(--font-mono); font-size: 13.5px; }

@@ -23,7 +23,7 @@ function Avatar({ role, lane }: { role: string; lane?: 'A' | 'B' }) {
   const isUser = role === 'user';
   return (
     <div
-      className="mono flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold"
+      className="msg-avatar mono flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold"
       style={{
         background: isUser ? 'var(--surface)' : 'transparent',
         border: isUser ? '1px solid var(--line)' : 'none',
@@ -279,12 +279,12 @@ export function Message({ message }: { message: ChatMessageView }) {
   const cuLive = useRunner((st) => (message.computerUse ? Boolean(st.runs[message.computerUse]) : false));
 
   return (
-    <article className="enter-rise flex gap-3 px-4 py-3.5">
+    <article className="msg enter-rise flex gap-3 px-4 py-3.5" data-role={message.role}>
       <Avatar role={message.role} lane={message.lane} />
 
-      <div className="min-w-0 flex-1">
-        <div className="mb-1.5 flex flex-wrap items-center gap-2">
-          <span className="text-[12px] font-semibold">{isUser ? 'You' : 'Chomugiri'}</span>
+      <div className="msg-body min-w-0 flex-1">
+        <div className="msg-head mb-1.5 flex flex-wrap items-center gap-2">
+          <span className="msg-name text-[12px] font-semibold">{isUser ? 'You' : 'Chomugiri'}</span>
 
           {!isUser && message.lane && (
             <span
@@ -330,7 +330,7 @@ export function Message({ message }: { message: ChatMessageView }) {
         {cuLive && message.computerUse ? (
           <ComputerUseCard runId={message.computerUse} />
         ) : isUser ? (
-          <p className="whitespace-pre-wrap text-[14px] leading-[1.6]" style={{ color: 'var(--ink)' }}>
+          <p className="msg-user-text whitespace-pre-wrap text-[14px] leading-[1.6]" style={{ color: 'var(--ink)' }}>
             <TextWithSites text={message.content} />
           </p>
         ) : hasCommands ? (

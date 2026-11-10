@@ -985,7 +985,7 @@ export function CommandDock() {
                 ? 'Running… next message will queue'
                 : 'Ask, or describe what to build…'
             }
-            className="w-full resize-none bg-transparent px-4 py-3 text-[14px] leading-[1.55] outline-none placeholder:opacity-45"
+            className="dock-input w-full resize-none bg-transparent px-4 py-3 text-[14px] leading-[1.55] outline-none placeholder:opacity-45"
             style={{ color: 'var(--ink)' }}
             aria-label="Prompt"
           />
@@ -1133,7 +1133,7 @@ export function CommandDock() {
           </div>
         </div>
 
-        <p className="mono mt-1.5 text-center text-[9.5px]" style={{ color: 'var(--ink-faint)' }}>
+        <p className={`mono mt-1.5 text-center text-[9.5px] ${blocked || (classification && !showPalette) ? '' : 'dock-tagline'}`} style={{ color: 'var(--ink-faint)' }}>
           {blocked
             ? 'blocked — remove or vault the credential above'
             : classification && !showPalette

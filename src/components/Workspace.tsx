@@ -17,7 +17,8 @@ import { hasEntryPoint } from '@/lib/deploy/state';
 import { DraftPicker } from './DraftPicker';
 import { AssetStudio } from './suites/AssetStudio';
 import { LogoMark, LogoWordmark } from './Logo';
-import { ThemeToggle } from './ThemeToggle';
+import { LookToggle, ThemeToggle } from './ThemeToggle';
+import { StatusLine } from './StatusLine';
 import { RunNotices } from './RunNotices';
 import { BedrockBuilder } from './suites/BedrockBuilder';
 import { BlockbenchStudio } from './suites/Blockbench';
@@ -313,6 +314,7 @@ export function Workspace() {
           </span>
 
           <div className="ml-auto flex items-center gap-2">
+            <LookToggle />
             <ThemeToggle />
             {/* Only while there is something to ship: a button that is always there, with nothing behind it, is just noise. */}
             {canDeploy && <DeployButton onOpenSettings={() => setSettingsOpen(true)} />}
@@ -442,6 +444,7 @@ export function Workspace() {
             </nav>
 
             <CommandDock />
+            <StatusLine onOpenSettings={() => setSettingsOpen(true)} />
           </section>
 
           {/* Right pane */}
