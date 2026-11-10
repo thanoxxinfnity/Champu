@@ -50,6 +50,7 @@ export const UNSERVED_IDS: ReadonlySet<string> = new Set([
   'nvidia/llama-3.1-nemotron-ultra-253b-v1',
   'nvidia/llama3-chatqa-1.5-70b',
   'nvidia/mistral-nemo-minitron-8b-8k-instruct',
+  'nvidia/nemotron-3-super-120b-a12b',
   'nvidia/nemotron-4-340b-instruct',
   'nvidia/nemotron-nano-3-30b-a3b',
   'nvidia/neva-22b',
@@ -73,6 +74,7 @@ const learned = new Set<string>();
 
 /** NVIDIA's distinctive "entitlement missing" body. */
 export function isUnservedError(status: number, body: string): boolean {
+  if (status === 410) return true; // retired by NVIDIA ("has reached its end of life")
   return status === 404 && /Function\s+'[0-9a-f-]{8,}'\s*:\s*Not found for account/i.test(body);
 }
 

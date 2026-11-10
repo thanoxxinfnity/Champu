@@ -21,19 +21,6 @@ const CHAT: ModelCapability[] = ['chat', 'tools'];
 const REASON: ModelCapability[] = ['chat', 'tools', 'reasoning'];
 
 export const NIM_MODELS: ModelDescriptor[] = [
-  // ── Moonshot (Kimi) ────────────────────────────────────────────────────────
-  {
-    id: 'moonshotai/kimi-k3',
-    provider: 'nim',
-    label: 'Kimi K3',
-    vendor: 'Moonshot AI',
-    capabilities: ['chat', 'tools', 'reasoning', 'vision'],
-    contextWindow: 256_000,
-    emitsReasoning: true,
-    origin: 'static',
-    note: '~2.8T hybrid KDA+MLA multimodal MoE. Long-horizon coding, agentic tool use, image understanding.',
-  },
-
   // ── DeepSeek ───────────────────────────────────────────────────────────────
   {
     id: 'deepseek-ai/deepseek-v4-pro-0813',
@@ -68,17 +55,6 @@ export const NIM_MODELS: ModelDescriptor[] = [
     contextWindow: 128_000,
     emitsReasoning: true,
     origin: 'static',
-  },
-  {
-    id: 'nvidia/nemotron-3-super-120b-a12b',
-    provider: 'nim',
-    label: 'Nemotron 3 Super 120B',
-    vendor: 'NVIDIA',
-    capabilities: REASON,
-    contextWindow: 128_000,
-    emitsReasoning: true,
-    origin: 'static',
-    note: 'Verified live: answers a completion on integrate.api.nvidia.com.',
   },
   {
     id: 'nvidia/nemotron-3.5-lightning-30b-a3b',
@@ -312,6 +288,7 @@ export function vendorFor(id: string): string {
 }
 
 /** Default model for a fresh workspace — verified reasoning-capable. */
-export const DEFAULT_NIM_MODEL = 'moonshotai/kimi-k3';
+// Kimi K3 was the default until NVIDIA retired it (410 Gone, probed 2026-11-10). Nemotron 3 Ultra answered the same probe in ~5 s.
+export const DEFAULT_NIM_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b';
 /** Cheap, fast model used for intent routing and plan decomposition. */
 export const PLANNER_NIM_MODEL = 'nvidia/nemotron-3.5-lightning-30b-a3b';

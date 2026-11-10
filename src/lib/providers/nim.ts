@@ -80,13 +80,13 @@ export function describeNimError(
       return {
         message:
           `This model is listed by NVIDIA but not available on your key (404). ` +
-          `It has been removed from the switcher — pick another; Kimi K3, Nemotron 3 Super 120B and GPT-OSS 20B are known to work. ${detail}`.trim(),
+          `It has been removed from the switcher — pick another; Nemotron 3 Ultra, Nemotron 3.5 Bolt and Mistral Large 4 are known to work. ${detail}`.trim(),
         code: 'nim_model_unserved',
         retryable: false,
       };
     case 410:
       return {
-        message: `This NIM has been retired by NVIDIA and no longer serves requests. ${detail} Pick another model — hit refresh in the switcher to re-probe the live catalogue.`,
+        message: `NVIDIA has retired this model, so it no longer answers. It has been removed from the list. Pick another; Nemotron 3 Ultra works. ${detail}`,
         code: 'nim_end_of_life',
         retryable: false,
       };

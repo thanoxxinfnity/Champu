@@ -18,13 +18,13 @@ test('the ids that 404d in the live probe are all excluded', () => {
   // The two the user actually hit in the APK.
   assert.ok(isUnserved('meta/llama2-70b'));
   assert.ok(isUnserved('ai21labs/jamba-1.5-large-instruct'));
-  assert.equal(UNSERVED_IDS.size, 43);
+  assert.equal(UNSERVED_IDS.size, 44);
 });
 
 test('models verified to answer are not excluded', () => {
   for (const id of [
-    'moonshotai/kimi-k3',
-    'nvidia/nemotron-3-super-120b-a12b',
+    'nvidia/nemotron-3-ultra-550b-a55b',
+    'minimaxai/minimax-m3.1-flash',
     'openai/gpt-oss-20b',
     'google/gemma-4-31b-it',
     'nvidia/nemotron-3.5-lightning-30b-a3b',
@@ -53,7 +53,7 @@ test('non-chat models are kept out of the chat switcher', () => {
   ]) {
     assert.ok(NON_CHAT.test(id), `${id} is not a chat model`);
   }
-  for (const id of ['moonshotai/kimi-k3', 'openai/gpt-oss-20b', 'google/gemma-4-31b-it']) {
+  for (const id of ['nvidia/nemotron-3-ultra-550b-a55b', 'openai/gpt-oss-20b', 'google/gemma-4-31b-it']) {
     assert.ok(!NON_CHAT.test(id), `${id} is a chat model and must stay`);
   }
 });

@@ -53,6 +53,7 @@ object Unserved {
         "nvidia/llama-3.1-nemotron-ultra-253b-v1",
         "nvidia/llama3-chatqa-1.5-70b",
         "nvidia/mistral-nemo-minitron-8b-8k-instruct",
+        "nvidia/nemotron-3-super-120b-a12b",
         "nvidia/nemotron-4-340b-instruct",
         "nvidia/nemotron-nano-3-30b-a3b",
         "nvidia/neva-22b",
@@ -76,7 +77,7 @@ object Unserved {
 
     /** NVIDIA's distinctive "entitlement missing" body. */
     fun isUnservedError(status: Int, body: String): Boolean =
-        status == 404 &&
+        status == 410 || status == 404 &&
             Regex("""Function\s+'[0-9a-f-]{8,}'\s*:\s*Not found for account""", RegexOption.IGNORE_CASE)
                 .containsMatchIn(body)
 

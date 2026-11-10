@@ -12,7 +12,8 @@ object Nim {
     const val BASE = "https://integrate.api.nvidia.com/v1"
     const val GENAI_BASE = "https://ai.api.nvidia.com/v1/genai"
 
-    const val DEFAULT_MODEL = "moonshotai/kimi-k3"
+    // Kimi K3 was the default until NVIDIA retired it (410 Gone, probed 2026-11-10).
+    const val DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
     const val PLANNER_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
 
     val EMBED_CANDIDATES = listOf(
@@ -42,12 +43,12 @@ object Nim {
                 // id does not exist" — so name a model that does work rather
                 // than leaving the user to guess.
                 ("This model is listed by NVIDIA but not available on your key (404). It has been removed " +
-                    "from the switcher — pick another; Kimi K3, Nemotron 3 Super 120B and GPT-OSS 20B are " +
+                    "from the switcher — pick another; Nemotron 3 Ultra, Nemotron 3.5 Bolt and Mistral Large 4 are " +
                     "known to work. $detail").trim(),
                 "nim_model_unserved", false,
             )
             410 -> Upstream.ErrorInfo(
-                "This NIM has been retired by NVIDIA and no longer serves requests. $detail Pick another model.".trim(),
+                "NVIDIA has retired this model, so it no longer answers. It has been removed from the list. Pick another; Nemotron 3 Ultra works. $detail".trim(),
                 "nim_end_of_life", false,
             )
             429 -> Upstream.ErrorInfo(
