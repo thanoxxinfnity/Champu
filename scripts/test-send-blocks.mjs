@@ -6,12 +6,14 @@ import { baseName, dataUrlOf, isImageMime, mimeFor, parseSendBlocks, stripSendBl
 
 const REPLY = 'Here you go.\n\n```send\nout/logo.png | The new logo\n- dist/app.apk\nhttps://example.com/p.jpg | A photo\n/etc/passwd\n../secret.txt\n```\n\nAnd a command:\n```bash path=@terminal\nls\n```';
 
-test('items come from the block: path, caption, links; absolute and parent paths are refused', () => {
+test('items come from the block: path, caption, links; parent paths are refused, a full path is left to the bridge jail', () => {
   assert.deepEqual(parseSendBlocks(REPLY), [
     { source: 'out/logo.png', caption: 'The new logo', url: false },
     { source: 'dist/app.apk', caption: undefined, url: false },
     { source: 'https://example.com/p.jpg', caption: 'A photo', url: true },
+    { source: '/etc/passwd', caption: undefined, url: false },
   ]);
+  assert.deepEqual(parseSendBlocks('```attach\n/home/u/ws/out/a.png | Shot\n```'), [{ source: '/home/u/ws/out/a.png', caption: 'Shot', url: false }]);
 });
 
 test('a single file can ride on the info string, a block still streaming sends nothing', () => {

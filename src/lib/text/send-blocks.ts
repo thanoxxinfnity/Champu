@@ -25,7 +25,7 @@ const FENCE = /^[ \t]*(`{3,}|~{3,})[ \t]*([^\n]*)$/;
 
 function isSendInfo(info: string): boolean {
   const first = info.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
-  return first === 'send' || /(^|\s)path=@send\b/.test(info);
+  return first === 'send' || first === 'sendfile' || first === 'send-file' || first === 'send_file' || first === 'attach' || /(^|\s)path=@send\b/.test(info);
 }
 
 function itemsFrom(body: string, info: string): SendItem[] {
@@ -41,7 +41,8 @@ function itemsFrom(body: string, info: string): SendItem[] {
     const caption = bar >= 0 ? line.slice(bar + 1).trim() : undefined;
     if (!source) continue;
     const url = /^https?:\/\//i.test(source);
-    if (!url && (source.startsWith('/') || /^[A-Za-z]:/.test(source) || source.split(/[\\/]/).includes('..'))) continue;
+    // A full path is allowed: the terminal bridge only ever reads inside its own workspace, and says so when a path is outside it.
+    if (!url && (/^[A-Za-z]:/.test(source) || source.split(/[\\/]/).includes('..'))) continue;
     out.push({ source: source.replace(/^\.\//, ''), caption: caption || undefined, url });
     if (out.length >= 12) break;
   }

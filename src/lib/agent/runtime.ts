@@ -265,7 +265,9 @@ export async function executeCommand(
   opts: { cwd?: string; sessionId?: string; suite?: SuiteId; signal?: AbortSignal; /** Tell the thinking bubble — only for commands the run itself is executing. */ narrate?: boolean } = {},
 ): Promise<ExecOutcome> {
   const state = useWorkspace.getState();
-  const { bridge, heartbeat, guard, appendTerminal, setRunningExecId, refreshFingerprints } = state;
+  const { bridge, guard, appendTerminal, setRunningExecId, refreshFingerprints } = state;
+  // A stale "offline" (the app just opened, the phone slept) must not park a command the terminal could run: ask once more first.
+  const heartbeat = await freshHeartbeat();
 
   if (heartbeat.status !== 'online' && heartbeat.status !== 'degraded') {
     const message = `Terminal bridge is ${heartbeat.status}. Command parked: ${command}`;
@@ -372,6 +374,18 @@ export async function executeCommand(
 
 // ── Pictures and files the assistant sends ──────────────────────────────────
 
+/**
+ * The heartbeat, asked again when it does not say online. The value the page last saw can be stale (right after the app opens, or after
+ * the phone slept), and acting on it told the model "offline" and parked commands while the sidebar already showed the terminal up.
+ */
+export async function freshHeartbeat(waitMs = 6000) {
+  const state = useWorkspace.getState();
+  const hb = state.heartbeat;
+  if (hb.status === 'online' || hb.status === 'degraded' || !state.monitor || !state.bridge.configured) return hb;
+  await Promise.race([state.monitor.ping().catch(() => undefined), new Promise((r) => setTimeout(r, waitMs))]);
+  return useWorkspace.getState().heartbeat;
+}
+
 const MAX_SEND_BYTES = 10 * 1024 * 1024;
 
 /** Finds one item of a ```send block: a link, a file in the workspace, or a file on the terminal bridge. */
@@ -390,16 +404,30 @@ async function resolveSend(item: SendItem): Promise<{ name: string; kind: string
   }
 
   const bridge = useWorkspace.getState().bridge;
-  const hb = useWorkspace.getState().heartbeat.status;
-  if (hb !== 'online' && hb !== 'degraded') throw new Error('it is not in the workspace and the terminal bridge is offline');
-  const file = await bridge.readFile(item.source);
-  if (file.bytes > MAX_SEND_BYTES) throw new Error('the file is larger than 10 MB');
-  const base64 = file.binary ? (file.base64 ?? '') : textToBase64(file.content ?? '');
-  return { name, kind, bytes: file.bytes, dataUrl: dataUrlOf(kind, base64) };
+  const hb = await freshHeartbeat();
+  if (hb.status !== 'online' && hb.status !== 'degraded') throw new Error('it is not in the workspace and the terminal bridge is offline');
+  // Models often give the full path of a file on the terminal. Inside the workspace it becomes the relative path every bridge accepts.
+  const root = (hb.health?.workspace ?? '').replace(/\/+$/, '');
+  const given = item.source;
+  const rel = root && (given === root || given.startsWith(`${root}/`)) ? given.slice(root.length + 1) || '.' : given;
+  const tries = [...new Set([rel, given, `.artifacts/${name}`])];
+  let last: Error | null = null;
+  for (const path of tries) {
+    try {
+      const file = await bridge.readFile(path);
+      if (file.bytes > MAX_SEND_BYTES) throw new Error('the file is larger than 10 MB');
+      const base64 = file.binary ? (file.base64 ?? '') : textToBase64(file.content ?? '');
+      return { name, kind, bytes: file.bytes, dataUrl: dataUrlOf(kind, base64) };
+    } catch (err) {
+      last = err as Error;
+      if (/larger than 10 MB/.test(last.message)) throw last;
+    }
+  }
+  throw new Error(last?.message?.slice(0, 120) || 'not found on the terminal');
 }
 
 /** Attaches what a reply sent to its message (shown inline or as a file to save), and says plainly what could not be found. */
-async function deliverSends(
+export async function deliverSends(
   content: string,
   messageId: string,
   ctx: { sessionId: string; suite: SuiteId; patch: (id: string, p: { attachments?: ChatAttachment[] }) => void; note: (text: string) => void },
@@ -859,11 +887,7 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
   // The heartbeat the page last saw can be stale: right after the app opens (or after the phone slept) it still says "offline" for the
   // few seconds before the first ping answers, and the model was then told the terminal is down while the sidebar already showed it up.
   // So when it is not online, ask once more and wait briefly for the answer before the status goes into the prompt.
-  let heartbeat = state.heartbeat;
-  if (heartbeat.status !== 'online' && heartbeat.status !== 'degraded' && state.monitor) {
-    await Promise.race([state.monitor.ping().catch(() => undefined), new Promise((r) => setTimeout(r, 5000))]);
-    heartbeat = useWorkspace.getState().heartbeat;
-  }
+  const heartbeat = await freshHeartbeat();
 
   const baseSuite = opts.suite ?? activeSuite;
   const attachments = opts.attachments ?? [];

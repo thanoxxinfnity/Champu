@@ -14,7 +14,7 @@
  */
 
 import { appendMessage, createSession, getSession, listMessages, getSetting, setSetting, titleFromInput, touchSession, uid, upsertArtifact } from '@/lib/db/history';
-import { buildUserContent } from '@/lib/agent/runtime';
+import { buildUserContent, deliverSends } from '@/lib/agent/runtime';
 import { extractArtifacts, filesOf } from '@/lib/agent/artifacts';
 import { buildSystemPrompt } from '@/lib/agent/system-prompt';
 import { classifyLocal } from '@/lib/agent/router';
@@ -35,6 +35,17 @@ export const NTFY_SETTING = 'ntfyTopic';
 export function bridgeTakesJobs(): boolean {
   const { heartbeat } = useWorkspace.getState();
   return (heartbeat.status === 'online' || heartbeat.status === 'degraded') && hasJobs(heartbeat.health);
+}
+
+/**
+ * Does this message need commands to run (or the terminal looked at)? A background reply is one model answer and cannot run a command,
+ * so such a message is sent the usual way, where the run-and-read loop works. English, Hindi and Hinglish wording.
+ */
+export function needsTerminal(input: string, lane?: 'A' | 'B'): boolean {
+  if ((lane ?? classifyLocal(input, { hasAttachments: false }).lane) === 'B') return true;
+  const t = input.toLowerCase();
+  if (/^\s*\//.test(t)) return true; // a slash command drives tools
+  return /\b(terminal|bridge|command|shell|bash|run|execute|install|build|compile|deploy|apk|git|clone|npm|pip|python|node|download|browse|browser|website|screenshot|open\s+(the\s+)?(site|page|app)|file\s+(bhej|send|do)|send\s+(me\s+)?(the\s+)?(file|image|photo|pic|apk|zip)|chala(o|do|na)?|bhej(o|do|na)?|bana(o|do)?|khol(o|do)?|online|offline)\b|टर्मिनल|कमांड|चला|भेज|इंस्टॉल|डाउनलोड|बना|खोल|ऑनलाइन|ऑफलाइन/.test(t);
 }
 
 export type BackgroundResult = { ok: true; jobId: string } | { ok: false; reason: string };
@@ -60,8 +71,9 @@ export async function sendInBackground(opts: { input: string; attachments?: Chat
   const system = buildSystemPrompt({
     lane,
     suite: opts.suite,
-    bridgeStatus: 'offline',
-    bridgeDetail: 'This reply is being written in the background while the user is away. Commands cannot run until they return: give the finished files and a clear explanation instead of command steps.',
+    // The terminal is up (it is the one writing this reply). Saying "offline" here made the model tell the user their terminal was down.
+    bridgeStatus: 'background',
+    bridgeDetail: st.heartbeat.health ? `Host: ${st.heartbeat.health.platform}/${st.heartbeat.health.arch}, workspace root ${st.heartbeat.health.workspace}.` : undefined,
     attachments: attachments.map((a) => ({ name: a.name, kind: a.kind, bytes: a.bytes })),
   });
   const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history, { role: 'user', content: buildUserContent(input, attachments) }];
@@ -216,6 +228,20 @@ async function takeIn(job: JobDetail): Promise<boolean> {
       for (const f of files) st.upsertFile(f);
     }
   }
+  // Pictures and files the reply sends (a ```send block) are attached now, the same as for a reply written in the app.
+  if (ok) {
+    await deliverSends(content, meta.assistantId, {
+      sessionId: meta.sessionId,
+      suite,
+      patch: (id, p) => { if (useWorkspace.getState().sessionId === meta.sessionId) useWorkspace.getState().patchMessage(id, p); },
+      note: (text) => {
+        const note = { id: uid('msg'), role: 'system' as const, content: text, createdAt: Date.now() };
+        if (useWorkspace.getState().sessionId === meta.sessionId) useWorkspace.getState().pushMessage(note);
+        void appendMessage({ ...note, sessionId: meta.sessionId, suite });
+      },
+    }).catch(() => undefined);
+  }
+
   const topic = meta.title ?? session.title;
   st.pushNotice({ sessionId: meta.sessionId, suite, topic, status: ok ? 'done' : 'failed', title: ok ? 'reply ready' : 'background job failed', detail: ok ? `${content.length.toLocaleString()} characters${files.length ? ` · ${files.length} file${files.length === 1 ? '' : 's'}` : ''}` : error });
   void notifyDone(topic, ok ? 'Your reply is ready.' : `Could not finish: ${error}`);

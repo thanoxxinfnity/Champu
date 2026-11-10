@@ -748,7 +748,8 @@ Same rules as \`browse\`: never invent what a command returned, quote text with 
 export interface PromptContext {
   lane: 'A' | 'B';
   suite?: string;
-  bridgeStatus?: 'online' | 'offline' | 'degraded' | 'unknown';
+  /** `background`: the bridge is up, but this one reply is written while the app may be closed, so no command can run during it. */
+  bridgeStatus?: 'online' | 'offline' | 'degraded' | 'unknown' | 'background';
   bridgeDetail?: string;
   todos?: Array<{ id: string; title: string; status: string }>;
   /** Fingerprints of approaches that already failed — hard "do not repeat" list. */
@@ -864,13 +865,15 @@ export function buildSystemPrompt(ctx: PromptContext): string {
   if (ctx.bridgeStatus) {
     const line =
       ctx.bridgeStatus === 'online'
-        ? 'TERMINAL BRIDGE: ONLINE. Shell execution, toolchain installs, native compilation and packaging are available.'
+        ? 'TERMINAL BRIDGE: ONLINE. Shell execution, toolchain installs, native compilation and packaging are available. Use it: when a question can be answered by running a command or reading a file, run it instead of guessing.'
+        : ctx.bridgeStatus === 'background'
+          ? 'TERMINAL BRIDGE: ONLINE, and this one reply is being written in the background (the app may be closed). The terminal is connected, so never say it is offline. Commands cannot run during a background reply: give finished files and the answer in words. If the request truly needs a command, write the terminal block anyway and say in one line that it runs when the user sends the message with Background switched off.'
         : ctx.bridgeStatus === 'degraded'
           ? 'TERMINAL BRIDGE: DEGRADED (heartbeat is intermittent). Prefer short, idempotent commands. Assume any long build may be cut off.'
           : ctx.bridgeStatus === 'offline'
             ? 'TERMINAL BRIDGE: OFFLINE. Emit NO terminal blocks. Produce source artifacts in-browser, mark build/compile steps as BLOCKED, and state plainly which steps resume once the tunnel is up. Do not treat this as an error condition.'
             : 'TERMINAL BRIDGE: UNKNOWN. Verify the heartbeat before proposing any shell step.';
-    parts.push(`## ENVIRONMENT\n${line}${ctx.bridgeDetail ? `\n${ctx.bridgeDetail}` : ''}`);
+    parts.push(`## ENVIRONMENT\n${line}\nThis status was measured for this message, just now. It replaces anything an earlier message, a memory or a note says about the terminal being online or offline.${ctx.bridgeDetail ? `\n${ctx.bridgeDetail}` : ''}`);
   }
 
   if (ctx.capabilities?.length) {

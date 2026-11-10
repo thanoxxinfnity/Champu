@@ -5,7 +5,7 @@ import { SiteChipRow } from './SiteChip';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isRunningHere, useWorkspace, type ChatAttachment } from '@/lib/store';
 import { send } from '@/lib/agent/runtime';
-import { BG_SETTING, sendInBackground } from '@/lib/agent/background';
+import { BG_SETTING, needsTerminal, sendInBackground } from '@/lib/agent/background';
 import { hasJobs } from '@/lib/bridge/update';
 import { getSetting, setSetting } from '@/lib/db/history';
 import { BUILTIN_SKILLS, expandSkill, parseSlash, searchSkills, type SkillDefinition } from '@/lib/skills/registry';
@@ -805,7 +805,10 @@ export function CommandDock() {
     }
 
     const hb = useWorkspace.getState().heartbeat;
-    if (bgMode && (hb.status === 'online' || hb.status === 'degraded') && hasJobs(hb.health)) {
+    if (bgMode && needsTerminal(input, lane)) {
+      // Commands only run in the app's own loop, so work that needs the terminal is not handed to a background reply.
+      setBgNote('Sent normally: this needs the terminal, and commands run only while the app is open.');
+    } else if (bgMode && (hb.status === 'online' || hb.status === 'degraded') && hasJobs(hb.health)) {
       const r = await sendInBackground({ input, attachments: outgoing, suite, forceLane: lane });
       if (r.ok) {
         setBgNote(null);
