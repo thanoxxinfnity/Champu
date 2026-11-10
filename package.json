@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "description": "Chomugiri — autonomous developer workspace. NVIDIA NIM + Pollinations + universal OpenAI-compatible gateway + terminal tunnel bridge.",
+  "bin": { "chomugiri": "cli/chomugiri.mjs" },
   "scripts": {
     "predev": "node scripts/sync-agent-assets.mjs",
     "dev": "next dev",
+    "cli": "node cli/chomugiri.mjs",
     "prebuild": "node scripts/sync-agent-assets.mjs",
     "build": "next build",
     "start": "next start",
