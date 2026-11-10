@@ -19,6 +19,9 @@ android {
         versionName = "3.70"
         // A build that must sit beside the real app rather than replace it (the CI test APK) sets this, e.g. ".ag".
         providers.gradleProperty("CHOMUGIRI_APP_ID_SUFFIX").orNull?.let { applicationIdSuffix = it }
+        // The same kind of build can carry its own version suffix ("-next1") and name on the home screen, so the two apps are told apart.
+        providers.gradleProperty("CHOMUGIRI_VERSION_SUFFIX").orNull?.let { versionNameSuffix = it }
+        manifestPlaceholders["appLabel"] = providers.gradleProperty("CHOMUGIRI_APP_LABEL").orNull ?: "@string/app_name"
     }
 
     /**
