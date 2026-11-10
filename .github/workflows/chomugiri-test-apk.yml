@@ -53,9 +53,6 @@ jobs:
           npm run build
           node scripts/export-static.mjs
 
-      - name: Name the test build so it is not confused with the real app
-        run: sed -i 's#<string name="app_name">Chomugiri</string>#<string name="app_name">Chomugiri (test)</string>#' android/app/src/main/res/values/strings.xml
-
       - name: Android SDK pieces the build pins
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
