@@ -6,6 +6,7 @@ import { hasJobs } from '@/lib/bridge/update';
 import { getSetting, setSetting } from '@/lib/db/history';
 import { enableNotifications, notificationPermission, notificationsEnabled } from '@/lib/notify';
 import { useWorkspace } from '@/lib/store';
+import { BackgroundPower } from './ShellExtras';
 
 const btn = 'press mono rounded-lg border px-2.5 py-1.5 text-[10.5px] disabled:opacity-40';
 
@@ -66,6 +67,7 @@ export function BackgroundWork() {
         reply — text and files — is already in the chat. It needs bridge 1.3.0 and a free provider or your own endpoint (their keys are sent along; with “Auto-push keys” they
         also stay on the terminal).
       </p>
+      <BackgroundPower />
       <label className="flex cursor-pointer items-start gap-2">
         <input type="checkbox" className="mt-0.5" checked={bg} disabled={!capable} onChange={(e) => { setBg(e.target.checked); void setSetting(BG_SETTING, e.target.checked); }} data-testid="background-toggle" />
         <span className="text-[11.5px]" style={{ color: 'var(--ink)' }}>Answer in the background {capable ? '' : '(needs a connected bridge 1.3.0 or newer)'}</span>

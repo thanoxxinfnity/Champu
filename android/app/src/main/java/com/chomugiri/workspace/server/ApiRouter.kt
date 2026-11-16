@@ -115,6 +115,8 @@ class ApiRouter(private val secrets: SecretStore) {
                 "/api/research" -> research(request, response)
                 "/api/shell/keys" -> shellKeys(request, response)
                 "/api/shell/run" -> shellRun(request, response)
+                "/api/shell/save" -> shellSave(request, response)
+                "/api/shell/power" -> shellPower(request, response)
                 else -> response.json(404, err("No route for ${request.path}", "no_route"))
             }
         } catch (e: Exception) {
@@ -132,6 +134,12 @@ class ApiRouter(private val secrets: SecretStore) {
      * answer rather than blow up.
      */
     var onRunState: ((RunState) -> Unit)? = null
+
+    /** Writes a file the page hands over into the phone's Downloads. Returns where it went (shown to the user), or throws. */
+    var onSaveFile: ((name: String, mime: String, bytes: ByteArray) -> String)? = null
+
+    /** Battery and background settings: `status` reports, `ask` shows Android's prompt again, `vendor` opens the maker's own screen. */
+    var onPower: ((action: String) -> JSONObject)? = null
 
     data class RunState(
         val active: Boolean,
@@ -165,6 +173,25 @@ class ApiRouter(private val secrets: SecretStore) {
         )
         onRunState?.invoke(state)
         response.json(200, JSONObject().put("ok", true).put("active", state.active).toString())
+    }
+
+    // ── /api/shell/save — a WebView cannot download a blob: link, so the page posts the bytes here and the shell writes the file.
+    private fun shellSave(request: ApiRequest, response: ResponseWriter) {
+        if (request.method != "POST") { response.json(405, err("POST only.", "bad_method")); return }
+        val name = (request.param("name") ?: "").ifBlank { "file" }
+        val mime = request.headers["content-type"]?.substringBefore(';')?.trim().orEmpty().ifEmpty { "application/octet-stream" }
+        if (request.body.isEmpty()) { response.json(400, err("The file is empty.", "empty_file")); return }
+        val save = onSaveFile ?: run { response.json(501, err("Saving is not available.", "no_save")); return }
+        runCatching { save(name, mime, request.body) }
+            .onSuccess { where -> response.json(200, JSONObject().put("ok", true).put("where", where).put("bytes", request.body.size).toString()) }
+            .onFailure { e -> response.json(500, err("Could not save the file: ${e.message ?: e.javaClass.simpleName}", "save_failed")) }
+    }
+
+    // ── /api/shell/power — is the app allowed to keep working in the background, and the screens that allow it.
+    private fun shellPower(request: ApiRequest, response: ResponseWriter) {
+        val action = if (request.method == "POST") runCatching { JSONObject(request.bodyText).optString("action") }.getOrDefault("") else "status"
+        val out = onPower?.invoke(action.ifEmpty { "status" }) ?: JSONObject().put("supported", false)
+        response.json(200, out.toString())
     }
 
     // ── /api/shell/keys — Android-only, lets the web Settings pane store the key

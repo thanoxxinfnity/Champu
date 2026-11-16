@@ -33,6 +33,8 @@ export interface ChatAttachment {
   text?: string;
   /** For a file the assistant sent: what it is, in its words. */
   caption?: string;
+  /** A large sent file is not stored in the conversation: this is where the terminal keeps it, fetched when the user saves it. */
+  bridgePath?: string;
 }
 
 /** A message sent while a run was already going. It waits its turn instead of being refused. */

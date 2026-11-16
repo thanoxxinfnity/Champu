@@ -496,7 +496,7 @@ export function ToolsHub() {
   return (
     <div className="flex h-full min-h-0 flex-col md:flex-row" style={{ background: 'var(--bg)' }}>
       {/* browser column — hidden on a phone while a tool is open */}
-      <aside className={(current ? 'hidden md:flex ' : 'flex ') + 'min-h-0 w-full shrink-0 flex-col border-r md:w-[380px]'} style={{ borderColor: 'var(--line)' }}>
+      <aside className={(current ? 'hidden md:flex ' : 'flex ') + 'min-h-0 w-full flex-1 flex-col border-r md:w-[380px] md:flex-none'} style={{ borderColor: 'var(--line)' }}>
         <div className="space-y-3 px-3 pb-2 pt-3">
           <div className="flex items-end justify-between">
             <div>

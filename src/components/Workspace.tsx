@@ -20,6 +20,7 @@ import { LogoMark, LogoWordmark } from './Logo';
 import { LookToggle, ThemeToggle } from './ThemeToggle';
 import { StatusLine } from './StatusLine';
 import { UpdateBanner } from './UpdateBanner';
+import { SavedNotice } from './ShellExtras';
 import { RunNotices } from './RunNotices';
 import { BedrockBuilder } from './suites/BedrockBuilder';
 import { BlockbenchStudio } from './suites/Blockbench';
@@ -332,6 +333,7 @@ export function Workspace() {
           </div>
         </header>
         <UpdateBanner />
+        <SavedNotice />
 
         {modelWarnings.length > 0 && !warningsDismissed && (
           <div

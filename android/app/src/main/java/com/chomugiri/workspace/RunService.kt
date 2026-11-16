@@ -12,6 +12,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.net.wifi.WifiManager
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -34,6 +36,31 @@ import androidx.core.content.ContextCompat
 class RunService : Service() {
 
     private val watchdog = Handler(Looper.getMainLooper())
+
+    // A foreground service keeps the process, not the radio: with the screen off the CPU dozes and Wi-Fi drops to power save,
+    // and the model's stream ends with "Software caused connection abort". Both are held awake for the run and no longer.
+    private var wake: PowerManager.WakeLock? = null
+    private var wifi: WifiManager.WifiLock? = null
+
+    private fun holdAwake() {
+        if (wake == null) {
+            wake = (getSystemService(Context.POWER_SERVICE) as? PowerManager)
+                ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "chomugiri:run")?.apply { setReferenceCounted(false) }
+        }
+        runCatching { wake?.acquire(WATCHDOG_MS + 60_000L) }
+        if (wifi == null) {
+            @Suppress("DEPRECATION")
+            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) WifiManager.WIFI_MODE_FULL_LOW_LATENCY else WifiManager.WIFI_MODE_FULL_HIGH_PERF
+            wifi = (applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager)
+                ?.createWifiLock(mode, "chomugiri:run")?.apply { setReferenceCounted(false) }
+        }
+        runCatching { wifi?.acquire() }
+    }
+
+    private fun letSleep() {
+        runCatching { if (wake?.isHeld == true) wake?.release() }
+        runCatching { if (wifi?.isHeld == true) wifi?.release() }
+    }
     private val giveUp = Runnable {
         // The page tells us a run ended by calling back in; if that call never
         // arrives — a hung step upstream with no timeout of its own, a dropped
@@ -92,6 +119,7 @@ class RunService : Service() {
         // window does.
         watchdog.removeCallbacks(giveUp)
         watchdog.postDelayed(giveUp, WATCHDOG_MS)
+        holdAwake()
 
         // If the process is killed mid-run the work is gone with it, so there is
         // nothing useful to restart into — a re-delivered intent would only put
@@ -101,6 +129,7 @@ class RunService : Service() {
 
     override fun onDestroy() {
         watchdog.removeCallbacks(giveUp)
+        letSleep()
         super.onDestroy()
     }
 

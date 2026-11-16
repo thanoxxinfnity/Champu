@@ -38,14 +38,14 @@ export function bridgeTakesJobs(): boolean {
 }
 
 /**
- * Does this message need commands to run (or the terminal looked at)? A background reply is one model answer and cannot run a command,
- * so such a message is sent the usual way, where the run-and-read loop works. English, Hindi and Hinglish wording.
+ * Does this message plainly need a command run now (or the terminal looked at)? A background reply is one model answer and cannot run
+ * a command, so such a message is sent the usual way. Everything else, a build included, goes to the background when the user switched
+ * Background on: there the terminal writes the files even if the phone closes the app. English, Hindi and Hinglish wording.
  */
-export function needsTerminal(input: string, lane?: 'A' | 'B'): boolean {
-  if ((lane ?? classifyLocal(input, { hasAttachments: false }).lane) === 'B') return true;
+export function needsTerminal(input: string, _lane?: 'A' | 'B'): boolean {
   const t = input.toLowerCase();
   if (/^\s*\//.test(t)) return true; // a slash command drives tools
-  return /\b(terminal|bridge|command|shell|bash|run|execute|install|build|compile|deploy|apk|git|clone|npm|pip|python|node|download|browse|browser|website|screenshot|open\s+(the\s+)?(site|page|app)|file\s+(bhej|send|do)|send\s+(me\s+)?(the\s+)?(file|image|photo|pic|apk|zip)|chala(o|do|na)?|bhej(o|do|na)?|bana(o|do)?|khol(o|do)?|online|offline)\b|टर्मिनल|कमांड|चला|भेज|इंस्टॉल|डाउनलोड|बना|खोल|ऑनलाइन|ऑफलाइन/.test(t);
+  return /\b(terminal|bridge|command|shell|bash|run|execute|install|build|compile|deploy|apk|git|clone|npm|pip|python|node|download|browse|browser|website|screenshot|open\s+(the\s+)?(site|page|app)|file\s+(bhej|send|do)|send\s+(me\s+)?(the\s+)?(file|image|photo|pic|apk|zip)|chala(o|do|na)?|bhej(o|do|na)?|khol(o|do)?|online|offline)\b|टर्मिनल|कमांड|चला|भेज|इंस्टॉल|डाउनलोड|खोल|ऑनलाइन|ऑफलाइन/.test(t);
 }
 
 export type BackgroundResult = { ok: true; jobId: string } | { ok: false; reason: string };

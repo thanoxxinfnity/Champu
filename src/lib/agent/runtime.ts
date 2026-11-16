@@ -386,10 +386,30 @@ export async function freshHeartbeat(waitMs = 6000) {
   return useWorkspace.getState().heartbeat;
 }
 
-const MAX_SEND_BYTES = 10 * 1024 * 1024;
+const MAX_SEND_BYTES = 64 * 1024 * 1024;
+/** Above this a sent file is kept as a pointer to the terminal's copy and fetched when it is saved, not stored inside the conversation. */
+const INLINE_SEND_BYTES = 4 * 1024 * 1024;
+
+/** A reply that ended on a network error without a single word of answer. */
+export function droppedBeforeAnswer(r: { error?: string; content: string }): boolean {
+  return Boolean(r.error) && !r.content.trim() && /stream interrupted|connection abort|network|failed to fetch|load failed|econnreset|socket|timed? ?out|unexpected end/i.test(r.error ?? '');
+}
+
+/** Waits for a moment when asking again can work: online, and (after the first quick retry) with the app in front. Gives up after ten minutes. */
+async function waitForConnection(signal: AbortSignal, attempt: number): Promise<void> {
+  const pause = (ms: number) => new Promise<void>((r) => { const t = setTimeout(r, ms); signal.addEventListener('abort', () => { clearTimeout(t); r(); }, { once: true }); });
+  const until = Date.now() + 10 * 60_000;
+  await pause(1500 * attempt);
+  while (!signal.aborted && Date.now() < until) {
+    const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    if (!offline && (!hidden || attempt === 1)) return;
+    await pause(2000);
+  }
+}
 
 /** Finds one item of a ```send block: a link, a file in the workspace, or a file on the terminal bridge. */
-async function resolveSend(item: SendItem): Promise<{ name: string; kind: string; bytes: number; dataUrl: string }> {
+async function resolveSend(item: SendItem): Promise<{ name: string; kind: string; bytes: number; dataUrl?: string; bridgePath?: string }> {
   const name = baseName(item.source);
   const kind = mimeFor(name);
   if (item.url) return { name, kind, bytes: 0, dataUrl: item.source };
@@ -399,7 +419,7 @@ async function resolveSend(item: SendItem): Promise<{ name: string; kind: string
   if (hit && typeof hit.content === 'string') {
     if (hit.content.startsWith('data:')) return { name, kind, bytes: Math.round((hit.content.length * 3) / 4), dataUrl: hit.content };
     const bytes = new TextEncoder().encode(hit.content).length;
-    if (bytes > MAX_SEND_BYTES) throw new Error('the file is larger than 10 MB');
+    if (bytes > MAX_SEND_BYTES) throw new Error('the file is larger than 64 MB');
     return { name, kind, bytes, dataUrl: dataUrlOf(kind, textToBase64(hit.content)) };
   }
 
@@ -415,12 +435,14 @@ async function resolveSend(item: SendItem): Promise<{ name: string; kind: string
   for (const path of tries) {
     try {
       const file = await bridge.readFile(path);
-      if (file.bytes > MAX_SEND_BYTES) throw new Error('the file is larger than 10 MB');
+      if (file.bytes > MAX_SEND_BYTES) throw new Error('the file is larger than 64 MB');
+      // A big file (an APK, a zip, a video) stays on the terminal: the message keeps where it is, and Save fetches it then.
+      if (file.bytes > INLINE_SEND_BYTES && !isImageMime(kind)) return { name, kind, bytes: file.bytes, bridgePath: path };
       const base64 = file.binary ? (file.base64 ?? '') : textToBase64(file.content ?? '');
       return { name, kind, bytes: file.bytes, dataUrl: dataUrlOf(kind, base64) };
     } catch (err) {
       last = err as Error;
-      if (/larger than 10 MB/.test(last.message)) throw last;
+      if (/larger than 64 MB/.test(last.message)) throw last;
     }
   }
   throw new Error(last?.message?.slice(0, 120) || 'not found on the terminal');
@@ -434,7 +456,7 @@ export async function deliverSends(
 ): Promise<void> {
   const items = parseSendBlocks(content);
   if (!items.length) return;
-  const attachments: Array<{ name: string; kind: string; bytes: number; dataUrl: string }> = [];
+  const attachments: Array<{ name: string; kind: string; bytes: number; dataUrl?: string; bridgePath?: string }> = [];
   const missing: string[] = [];
   for (const item of items) {
     try {
@@ -1542,20 +1564,30 @@ async function execute(opts: SendOptions, heavy: boolean): Promise<void> {
       }
     };
 
-    let result = swarming ? await runSwarmReply() : await streamCompletion(
-      {
-        provider: selection.provider,
-        model: selection.model,
-        messages,
-        temperature: lane === 'B' ? 0.25 : 0.5,
-        maxTokens: 8192,
-        // Writing a project is not a puzzle: thinking for minutes first is what made a game take a quarter of an hour.
-        reasoningEffort: lane === 'B' ? 'low' : undefined,
-        custom,
-      },
-      callbacksFor(''),
-      controller.signal,
-    );
+    const firstRequest: Parameters<typeof streamCompletion>[0] = {
+      provider: selection.provider,
+      model: selection.model,
+      messages,
+      temperature: lane === 'B' ? 0.25 : 0.5,
+      maxTokens: 8192,
+      // Writing a project is not a puzzle: thinking for minutes first is what made a game take a quarter of an hour.
+      reasoningEffort: lane === 'B' ? 'low' : undefined,
+      custom,
+    };
+    let result = swarming ? await runSwarmReply() : await streamCompletion(firstRequest, callbacksFor(''), controller.signal);
+
+    // The connection dropped before the reply said anything (the phone went to sleep, the network switched, the app was in the
+    // background): that is not an answer, so it is asked for again instead of ending the turn on "Stream interrupted". The wait
+    // lasts until the app is back in front and online, so a reply cut off in the background resumes when the user returns.
+    let drops = 0;
+    while (!swarming && droppedBeforeAnswer(result) && drops < 3 && !controller.signal.aborted) {
+      drops += 1;
+      patch(assistantId, { error: undefined, content: '', reasoning: '' });
+      useWorkspace.getState().appendTerminal({ stream: 'system', text: `The connection dropped before the reply started. Asking again (${drops} of 3).` });
+      await waitForConnection(controller.signal, drops);
+      if (controller.signal.aborted) break;
+      result = await streamCompletion(firstRequest, callbacksFor(''), controller.signal);
+    }
 
     // A reply that came out as noise (control tokens leaking into the text, hundreds of scraps called files) is not saved or
     // continued: say so and ask once more, cooler.

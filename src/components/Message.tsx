@@ -142,7 +142,7 @@ function SentFiles({ files }: { files: NonNullable<ChatMessageView['attachments'
   const [big, setBig] = useState<string | null>(null);
   useEffect(() => setShare(canShareFiles()), []);
   const say = (id: string, text: string) => setNote((n) => ({ ...n, [id]: text }));
-  const save = (a: (typeof files)[number]) => void downloadSource(a).then((ok) => say(a.id, ok ? 'Saving… check your Downloads. If nothing appears, use Share.' : 'This file is no longer available — ask for it again.'));
+  const save = (a: (typeof files)[number]) => void downloadSource(a).then((ok) => say(a.id, ok ? 'Saved. Look in Downloads (in the app: Download/Chomugiri).' : a.bridgePath ? 'Could not fetch it from the terminal. Check the terminal is online and try again.' : 'This file is no longer available. Ask for it again.'));
   const shareIt = (a: (typeof files)[number]) => void shareSource(a).then((r) => { if (r === 'unsupported') say(a.id, 'Sharing is not available here — use the download button.'); else if (r === 'missing') say(a.id, 'This file is no longer available — ask for it again.'); });
   const images = files.filter((a) => isImageMime(a.kind) && a.dataUrl);
   const others = files.filter((a) => !(isImageMime(a.kind) && a.dataUrl));

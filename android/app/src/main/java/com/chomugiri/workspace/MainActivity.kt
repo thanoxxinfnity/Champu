@@ -91,6 +91,18 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        router.onSaveFile = { name, mime, bytes -> FileSaver.save(this, name, mime, bytes) }
+        router.onPower = { action ->
+            when (action) {
+                "ask" -> runOnUiThread { BatteryOptimization.request(this) }
+                "vendor" -> runOnUiThread { BatteryOptimization.openVendorSettings(this) }
+            }
+            org.json.JSONObject()
+                .put("supported", true)
+                .put("exempt", BatteryOptimization.isExempt(this))
+                .put("maker", android.os.Build.MANUFACTURER ?: "")
+                .put("model", android.os.Build.MODEL ?: "")
+        }
         server = HttpServer(
             AndroidAssetSource(assets),
             router,
@@ -99,6 +111,9 @@ class MainActivity : AppCompatActivity() {
         val port = server.start()
 
         webView = WebView(this).apply {
+            // The page keeps working when the app is not on screen (a reply streaming in, a build running): its renderer keeps
+            // normal priority then, so Android does not treat it as the first thing to kill.
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
             setBackgroundColor(0xFF09090B.toInt())
 
@@ -211,6 +226,31 @@ class MainActivity : AppCompatActivity() {
                 view?.evaluateJavascript(bootstrapScript(), null)
             }
 
+            /**
+             * Android may kill the page's renderer (a separate process) to free memory, most often while the app is in the
+             * background. Unhandled, that takes the whole app down with it ("the app closed before this reply finished").
+             * Handled, the screen is rebuilt with a fresh page: conversations are on disk, so they come back as they were.
+             */
+            override fun onRenderProcessGone(view: WebView?, detail: android.webkit.RenderProcessGoneDetail?): Boolean {
+                android.util.Log.w("Chomugiri", "The page renderer is gone (crashed=${if (android.os.Build.VERSION.SDK_INT >= 26) detail?.didCrash() else null}); rebuilding the screen.")
+                // A renderer that dies again and again (a broken or very old system WebView) must not turn into an endless rebuild.
+                val now = android.os.SystemClock.elapsedRealtime()
+                rendererDeaths.removeAll { now - it > 90_000 }
+                rendererDeaths.add(now)
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    if (rendererDeaths.size >= 3) {
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle("The page keeps stopping")
+                            .setMessage("Android's web component (Android System WebView) stopped three times in a row. Update \"Android System WebView\" and Chrome from the Play Store, then open the app again.")
+                            .setPositiveButton("Close") { _, _ -> finish() }
+                            .setCancelable(false)
+                            .show()
+                    } else recreate()
+                }
+                return true
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url ?: return false
                 if (url.host == "127.0.0.1") return false
@@ -255,6 +295,22 @@ class MainActivity : AppCompatActivity() {
         (function () {
           if (window.__chomugiriShell) return;
           window.__chomugiriShell = { platform: 'android', token: '${server.sessionToken}', version: '${appVersion()}', appId: '${packageName}' };
+
+          // A WebView does not download. Any link the page clicks to save a file (a blob: or data: link with `download`) is
+          // caught here and its bytes are posted to the shell, which writes the file into Download/Chomugiri.
+          document.addEventListener('click', function (e) {
+            try {
+              var a = e.target && e.target.closest ? e.target.closest('a[download]') : null;
+              if (!a || !/^(blob:|data:)/.test(a.href || '')) return;
+              e.preventDefault();
+              var name = a.getAttribute('download') || 'file';
+              fetch(a.href).then(function (r) { return r.blob(); }).then(function (b) {
+                return fetch('/api/shell/save?name=' + encodeURIComponent(name), { method: 'POST', headers: { 'Content-Type': b.type || 'application/octet-stream' }, body: b });
+              }).then(function (r) { return r.json(); }).then(function (j) {
+                if (j && j.ok) window.dispatchEvent(new CustomEvent('chomugiri:saved', { detail: { name: name, where: j.where || 'Downloads' } }));
+              }).catch(function () { /* nothing more can be done from the page */ });
+            } catch (err) { /* leave the click alone */ }
+          }, true);
 
           // Keep the system bars the colour of the page (light, dark, or whatever the theme is).
           var lastBar = '';
@@ -391,6 +447,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+        /** When the page's renderer last died. Kept across a rebuild of the screen, which makes a new activity. */
+        private val rendererDeaths = mutableListOf<Long>()
         private const val MENU_KEYS = 1
         private const val MENU_RELOAD = 2
         private const val MENU_ABOUT = 3

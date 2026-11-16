@@ -30,9 +30,25 @@ export function zipBlob(entries: ZipEntry[], mime = 'application/zip'): Blob {
   return new Blob([bytes as unknown as ArrayBuffer], { type: mime });
 }
 
-/** Triggers a browser download. No-ops during SSR. */
-export function downloadBlob(blob: Blob, filename: string): void {
-  if (typeof document === 'undefined') return;
+/**
+ * Inside the Android app a WebView cannot download: a tap on a blob: link does nothing. The bytes are posted to the app's own
+ * shell instead, which writes the file into Download/Chomugiri and shows a notification. Resolves to where the file went, or null.
+ */
+export async function saveViaShell(blob: Blob, filename: string): Promise<string | null> {
+  const shell = typeof window !== 'undefined' ? (window as unknown as { __chomugiriShell?: { platform?: string } }).__chomugiriShell : undefined;
+  if (shell?.platform !== 'android') return null;
+  try {
+    const res = await fetch(`/api/shell/save?name=${encodeURIComponent(filename)}`, { method: 'POST', headers: { 'Content-Type': blob.type || 'application/octet-stream' }, body: blob });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { ok?: boolean; where?: string };
+    if (j.ok) window.dispatchEvent(new CustomEvent('chomugiri:saved', { detail: { name: filename, where: j.where ?? 'Downloads' } }));
+    return j.ok ? (j.where ?? 'Downloads') : null;
+  } catch {
+    return null;
+  }
+}
+
+function anchorDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -43,6 +59,18 @@ export function downloadBlob(blob: Blob, filename: string): void {
   a.remove();
   // Revoking synchronously cancels the download in Safari.
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/** Saves a file: a browser download, or the app's own save inside the Android app. No-ops during SSR. */
+export function downloadBlob(blob: Blob, filename: string): void {
+  if (typeof document === 'undefined') return;
+  const shell = (window as unknown as { __chomugiriShell?: { platform?: string } }).__chomugiriShell;
+  if (shell?.platform === 'android') {
+    // An older shell without the save route answers with an error: the link is still tried, so nothing gets worse.
+    void saveViaShell(blob, filename).then((where) => { if (!where) anchorDownload(blob, filename); });
+    return;
+  }
+  anchorDownload(blob, filename);
 }
 
 export function downloadZip(entries: ZipEntry[], filename: string, mime?: string): void {

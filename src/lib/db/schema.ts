@@ -78,7 +78,7 @@ export interface MessageRecord {
   lane?: 'A' | 'B';
   /** Serialised plan snapshot at the time of the message. */
   plan?: unknown;
-  attachments?: Array<{ name: string; kind: string; bytes: number; dataUrl?: string; text?: string; caption?: string }>;
+  attachments?: Array<{ name: string; kind: string; bytes: number; dataUrl?: string; text?: string; caption?: string; bridgePath?: string }>;
   error?: string;
   /** The id of the terminal's background job still writing this reply; cleared when the answer arrives. */
   background?: string;

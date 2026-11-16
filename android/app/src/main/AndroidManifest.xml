@@ -12,6 +12,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- While a run is going the CPU and Wi-Fi stay awake, so a reply is not cut off when the screen turns off. Held only during a run. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- An APK the assistant built is saved to Downloads; tapping "saved" opens Android's own installer, which asks before installing. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!--
       Several OEM battery managers (MIUI/HyperOS, ColorOS, OriginOS, Realme UI, ...)
       kill a foreground service anyway the moment the app is swiped from recents,

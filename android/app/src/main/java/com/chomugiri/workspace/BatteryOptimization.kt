@@ -46,4 +46,43 @@ object BatteryOptimization {
             context.startActivity(intent)
         }
     }
+
+    /** Asks again, whenever the user chooses to (the Settings button). Returns false when the phone has no such prompt. */
+    @SuppressLint("BatteryLife")
+    fun request(context: Context): Boolean = runCatching {
+        context.startActivity(
+            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        true
+    }.getOrDefault(false)
+
+    /**
+     * The phone maker's own "let this app run in the background / start by itself" screen. These are not part of Android and
+     * differ per maker and version, so each known screen is tried in turn; the app's own details page is the fallback, where
+     * Battery > Unrestricted (or "Don't restrict background use") does the same job.
+     */
+    fun openVendorSettings(context: Context): String {
+        val screens = listOf(
+            // vivo / iQOO (Funtouch OS, OriginOS)
+            "com.vivo.permissionmanager" to "com.vivo.permissionmanager.activity.BgStartUpManagerActivity",
+            "com.iqoo.secure" to "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager",
+            "com.iqoo.secure" to "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity",
+            "com.vivo.abe" to "com.vivo.applicationbehaviorengine.ui.ExcessivePowerManagerActivity",
+            // Xiaomi / Redmi / POCO
+            "com.miui.securitycenter" to "com.miui.permcenter.autostart.AutoStartManagementActivity",
+            // OPPO / realme / OnePlus
+            "com.coloros.safecenter" to "com.coloros.safecenter.permission.startup.StartupAppListActivity",
+            "com.oplus.battery" to "com.oplus.powermanager.fuelgaue.PowerUsageModelActivity",
+            // Samsung
+            "com.samsung.android.lool" to "com.samsung.android.sm.battery.ui.BatteryActivity",
+            // Huawei / Honor
+            "com.huawei.systemmanager" to "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity",
+        )
+        for ((pkg, cls) in screens) {
+            val intent = Intent().setClassName(pkg, cls).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (context.packageManager.resolveActivity(intent, 0) != null && runCatching { context.startActivity(intent) }.isSuccess) return "vendor"
+        }
+        val details = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return if (runCatching { context.startActivity(details) }.isSuccess) "details" else "none"
+    }
 }

@@ -17,6 +17,8 @@ export interface SaveSource {
   dataUrl?: string;
   /** Plain text content, when the file is text. */
   text?: string;
+  /** A file that stayed on the terminal bridge (too large to keep in the conversation): fetched from there when saved. */
+  bridgePath?: string;
 }
 
 /** A Blob copy that never shares memory with a SharedArrayBuffer (Blob will not take one). */
@@ -31,6 +33,16 @@ export async function blobFrom(src: SaveSource): Promise<Blob | null> {
   const mime = src.kind && src.kind !== 'file' ? src.kind : mimeFor(src.name);
   if (src.dataUrl?.startsWith('data:')) return blobOf(dataUrlToBytes(src.dataUrl), mime);
   if (src.text != null) return blobOf(src.text, mime);
+  if (src.bridgePath) {
+    try {
+      const { useWorkspace } = await import('@/lib/store');
+      const file = await useWorkspace.getState().bridge.readFile(src.bridgePath);
+      if (file.binary) return blobOf(dataUrlToBytes(`data:${mime};base64,${file.base64 ?? ''}`), mime);
+      return blobOf(file.content ?? '', mime);
+    } catch {
+      return null; // the terminal is not reachable, or the file is gone
+    }
+  }
   if (src.dataUrl && /^https?:/i.test(src.dataUrl)) {
     try {
       const res = await fetch(src.dataUrl);
