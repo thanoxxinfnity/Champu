@@ -38,6 +38,13 @@ session continues from here instead of starting over.
 9. **The model stopped to offer options ("months of work, which path?")** on a large request. The build prompt now says to build
    the smallest complete version that runs and to carry on past an obstacle. Wording only; not yet seen to change a real reply.
 
+10. **The user's terminal (a Hugging Face Space) still runs bridge 1.3.0.** Observed: `GET /v1/ping` answers `"version":"1.3.0"`.
+    None of the bridge fixes since (browser, Craft apps, agent jobs) ever reached it, because an update meant uploading eight
+    files by hand. The app now has "Update my Hugging Face terminal": with the user's Hugging Face token it commits a Dockerfile
+    whose start-up script (`agent/docker/boot.mjs`) fetches the newest bridge from GitHub at every start and restarts it when it
+    exits. The start-up script was run here (fetch, run, restart, run again); the commit to Hugging Face was only tested against
+    a scripted server.
+
 ## Plan
 | Step | State |
 |---|---|

@@ -1,0 +1,30 @@
+# Chomugiri terminal on a Hugging Face Docker Space (or any container host).
+# It fetches the newest bridge from the project's public repository every time it starts, so it never needs a manual update:
+# "Restart the terminal" in the app, or a restart of the Space, is the update.
+#
+# Space settings: README header `sdk: docker` and `app_port: 7860`; a Space secret CHOMUGIRI_TOKEN (a long random word).
+# The Space URL plus "#<that token>" is what you paste into Chomugiri.
+FROM node:22-bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      chromium xvfb xdotool imagemagick ca-certificates curl wget git unzip zip jq python3 python3-pip build-essential \
+      fonts-liberation fonts-noto-core \
+    && rm -rf /var/lib/apt/lists/*
+
+# The node image's own ordinary user (uid 1000, what a Space runs as) owns everything the bridge touches.
+RUN mkdir -p /app && chown -R 1000:1000 /app
+USER 1000
+WORKDIR /app
+
+ENV HOME=/app \
+    CHOMUGIRI_HOST=0.0.0.0 \
+    CHOMUGIRI_PORT=7860 \
+    CHOMUGIRI_WORKSPACE=/app/workspace \
+    CHOMUGIRI_BROWSER_CHROMIUM=/usr/bin/chromium \
+    CHOMUGIRI_SOURCE=https://raw.githubusercontent.com/thanoxxinfnity/Champu/claude/chomugiri-workspace-design-09sxwa/agent
+
+# A copy is fetched while the image is built, so the Space still starts when GitHub cannot be reached later.
+RUN curl -fsSL "$CHOMUGIRI_SOURCE/docker/boot.mjs" -o boot.mjs && node boot.mjs --fetch-only
+
+EXPOSE 7860
+CMD ["node", "boot.mjs"]

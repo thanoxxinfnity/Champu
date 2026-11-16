@@ -1,0 +1,14 @@
+{
+  "version": "5.2.0",
+  "files": [
+    "blender.mjs",
+    "browser.mjs",
+    "chomugiri-agent.mjs",
+    "craft.mjs",
+    "desktop.mjs",
+    "jobs.mjs",
+    "keystore.mjs",
+    "zip.mjs"
+  ],
+  "sha256": "5fc2fd7fc6887352"
+}

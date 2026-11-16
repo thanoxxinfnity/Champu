@@ -27,5 +27,9 @@ const version = /const VERSION = '([^']+)'/.exec(main)?.[1];
 if (!version) throw new Error('VERSION not found in agent/chomugiri-agent.mjs');
 const sha = createHash('sha256');
 for (const n of files) sha.update(readFileSync(join(from, n)));
-writeFileSync(join(to, 'manifest.json'), `${JSON.stringify({ version, files, sha256: sha.digest('hex').slice(0, 16) }, null, 2)}\n`);
+const manifest = `${JSON.stringify({ version, files, sha256: sha.digest('hex').slice(0, 16) }, null, 2)}\n`;
+writeFileSync(join(to, 'manifest.json'), manifest);
+// The same manifest sits next to the bridge in the repository: a container's start-up script (agent/docker/boot.mjs) reads it from
+// GitHub to fetch the newest bridge. It is committed, and scripts/test-hf-space.mjs fails when it lags the files.
+writeFileSync(join(from, 'manifest.json'), manifest);
 console.log(`agent ${version}: ${files.length} files → public/agent/`);

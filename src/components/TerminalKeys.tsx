@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useWorkspace } from '@/lib/store';
 import { bridgeOutdated, canRestart, lacksKeyStore, pushAgentFiles, restartCommand } from '@/lib/bridge/update';
 import { copyText } from './codeActions';
+import { SpaceUpdate } from './SpaceUpdate';
+import { spaceSubdomain } from '@/lib/bridge/hf-space';
 import { currentKeyEnv, useAutoPush } from '@/lib/bridge/auto-push';
 
 const btn = 'press mono rounded-lg border px-2.5 py-1.5 text-[10.5px] disabled:opacity-40';
@@ -141,7 +143,8 @@ export function TerminalKeys() {
         </span>
       </label>
       {autoOn && autoLast && <p className="text-[10.5px]" style={{ color: autoLast.ok ? 'var(--color-success)' : 'var(--color-danger)' }} role="status">{autoLast.text}</p>}
-      {old && (
+      {old && spaceSubdomain(bridge.describe().url) && <SpaceUpdate version={heartbeat.health?.version} latest={latest} />}
+      {old && !spaceSubdomain(bridge.describe().url) && (
         <div className="space-y-2 rounded-lg border p-2.5" style={{ borderColor: 'var(--color-amber, #d99a2b)' }} data-testid="bridge-old">
           <p className="text-[11px] leading-[1.5]" style={{ color: 'var(--ink-dim)' }}>
             Your terminal bridge is version {heartbeat.health?.version ?? 'unknown'}{latest ? `; this app carries ${latest}` : ''}{keysOk ? '' : ' and keeping keys needs 1.2.0 or newer'}. The app can send the new bridge to it{latest ? ` (${latest}: visible browser, install and download steps, self-restart)` : ''}.

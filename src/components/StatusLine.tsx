@@ -5,7 +5,8 @@
  * where it works. The terminal part is a button: a tap asks the terminal again right now, so "offline" is never a stale guess, and
  * when nothing is set up yet it opens Settings.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { bridgeOutdated } from '@/lib/bridge/update';
 import { useWorkspace } from '@/lib/store';
 import { Icon } from '@/components/Icon';
 
@@ -24,8 +25,14 @@ export function StatusLine({ onOpenSettings }: { onOpenSettings: () => void }) {
   const configured = useWorkspace((s) => s.bridge.configured);
   const model = useWorkspace((s) => s.selection.model);
   const [asking, setAsking] = useState(false);
+  // The bridge this app carries: an older terminal misses features (background work, the browser fix), so the line says so.
+  const [latest, setLatest] = useState<string | null>(null);
+  useEffect(() => {
+    void fetch('/agent/manifest.json').then((r) => (r.ok ? r.json() : null)).then((m) => setLatest(m?.version ?? null)).catch(() => undefined);
+  }, []);
 
   const status = heartbeat.status;
+  const outdated = configured && status === 'online' && bridgeOutdated(heartbeat.health, latest);
   const word = !configured ? 'terminal not set up'
     : asking ? 'checking terminal'
       : status === 'online' ? `terminal online${heartbeat.latencyMs != null ? ` ${heartbeat.latencyMs}ms` : ''}`
@@ -53,6 +60,12 @@ export function StatusLine({ onOpenSettings }: { onOpenSettings: () => void }) {
         <Icon name="terminal" size={12} />
         <span>{word}</span>
       </button>
+      {outdated && (
+        <button type="button" onClick={onOpenSettings} className="press inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5" style={{ color: 'var(--color-amber)', borderColor: 'color-mix(in oklab, var(--color-amber) 50%, transparent)' }} title={`The terminal runs bridge ${heartbeat.health?.version ?? '?'}; this app needs ${latest}. Open Settings, Terminal, to update it.`} data-testid="status-update-terminal">
+          <Icon name="upload" size={11} />
+          <span>update terminal</span>
+        </button>
+      )}
       <span className="inline-flex min-w-0 items-center gap-1 truncate" title={model}>
         <Icon name="bolt" size={11} />
         <span className="truncate">{model.split('/').pop()}</span>
