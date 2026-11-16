@@ -30,12 +30,21 @@ session continues from here instead of starting over.
    go to the terminal again when Background is on; only a message that plainly needs a command now stays in the app.
 7. **Tools did not scroll on a phone**: the list column had `shrink-0` in a column layout (`ToolsHub.tsx`).
 
+8. **With Background on, commands in a reply stayed "waiting" and never ran.** Seen in a transcript from the phone: the first
+   message ran its commands (it was routed to the app), the next three ("Scroll down…", "Continue", "Ok make a godot game") were
+   background jobs, and a job was one model answer that cannot run anything. Fixed in bridge 5.2: an agent job runs the reply's
+   commands on the terminal, hands the output back to the model and goes on until a reply runs nothing (`agent/jobs.mjs`,
+   `scripts/test-agent-jobs.mjs`). On an older bridge a message is now sent the usual way instead of being left waiting.
+9. **The model stopped to offer options ("months of work, which path?")** on a large request. The build prompt now says to build
+   the smallest complete version that runs and to carry on past an obstacle. Wording only; not yet seen to change a real reply.
+
 ## Plan
 | Step | State |
 |---|---|
 | Files reach the phone (save route, large files) | done, compiled; not yet exercised on a phone |
 | Survive the background (renderer, locks, retry, battery screens) | done; renderer rebuild observed on the emulator |
 | Tools scroll | done |
+| Background runs the whole task on the terminal (bridge 5.2 agent jobs) | done and tested against a scripted model; needs the user's terminal updated to 5.2 |
 | Approval card before a command or a file change in the chat (allow once / always / no) | todo |
 | Task list in the transcript (what is done, what is next) | todo |
 | CHoMU Engine (Godot 4.7.2 base) as the game target: project format, its addons in the prompt, open-on-phone export | todo |

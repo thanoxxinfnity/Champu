@@ -69,7 +69,7 @@ const TOKEN = arg('token', process.env.CHOMUGIRI_TOKEN ?? randomBytes(24).toStri
 const ALLOW_CMD = (arg('allow-cmd', process.env.CHOMUGIRI_ALLOW_CMD ?? '') || '')
   .split(',').map((s) => s.trim()).filter(Boolean);
 const MAX_EXEC_MS = Number(arg('max-exec-ms', 45 * 60_000));
-const VERSION = '5.1.0';
+const VERSION = '5.2.0';
 
 // ── Updates: newer files pushed by the app win; /v1/restart applies them ───
 // The app writes a newer bridge into <workspace>/.chomugiri-agent/. Starting the OLD command again (a restart by hand, or by the
@@ -358,7 +358,7 @@ const routes = {
     agent: 'chomugiri-bridge',
     version: VERSION,
     /** What this bridge can do beyond the basics, so the app knows without trying. */
-    features: ['keys', 'jobs', 'desktop', 'install', 'update', 'craft'],
+    features: ['keys', 'jobs', 'agent-jobs', 'desktop', 'install', 'update', 'craft'],
     /** Which screen the browser is a real window on (null = headless). */
     browserWindow: browser.visible || null,
     supervised: SUPERVISED,
@@ -481,7 +481,11 @@ routes['POST /v1/keys/delete'] = async (req) => {
  * Background jobs: model calls that go on with the app closed (see jobs.mjs). The app lists them when it comes back, takes the finished
  * ones into their conversations and acknowledges them. Ids travel in the query string so every route stays an exact match.
  */
-const jobs = createJobs();
+const jobs = createJobs({
+  workspace: WORKSPACE,
+  allowed: commandAllowed,
+  env: () => ({ ...process.env, ...readKeystore().env, CHOMUGIRI_BRIDGE_URL: `http://127.0.0.1:${PORT}`, CHOMUGIRI_BRIDGE_TOKEN: TOKEN, CHOMUGIRI_AGENT: fileURLToPath(import.meta.url) }),
+});
 routes['POST /v1/jobs'] = async (req) => jobs.start(await readJson(req));
 routes['GET /v1/jobs'] = async () => ({ jobs: jobs.list(), running: jobs.running() });
 routes['GET /v1/job'] = async (_req, url) => jobs.get(url.searchParams.get('id') ?? '');

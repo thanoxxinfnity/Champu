@@ -13,7 +13,8 @@
  * headers hold the API key while the job runs and are never written to disk; a job that was running when the bridge stopped comes back
  * as "interrupted" so the app can offer to resend it.
  */
-import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
@@ -32,6 +33,98 @@ const fail = (message, statusCode = 400) => Object.assign(new Error(message), { 
 // ── Reading a reply ──────────────────────────────────────────────────────────
 
 /** Text out of one parsed reply or stream chunk, in any of the three wire shapes the app speaks. */
+// ── agent jobs: the terminal carries the work on by itself ───────────────────
+//
+// A plain job is one model answer. An agent job (`agent: {}` in the spec, bridge 5.2) goes on from there the way the app does when
+// it is open: files the reply writes are saved into the workspace, its terminal blocks are run here one after another, their
+// output goes back to the model, and that repeats until a reply has no command left (or the step limit). The phone can be
+// closed the whole time; the app takes the finished transcript and the record of every command when it comes back.
+
+const FENCE = /^[ \t]*(`{3,}|~{3,})[ \t]*([^\n]*)$/;
+const MAX_STEPS = 16;
+const MAX_OUTPUT = 8000;
+
+/** What a reply asks for, in order: `{kind:'run', command, cwd}` for a terminal block, `{kind:'file', path, body}` for a path= block. */
+export function actionsOf(reply) {
+  const out = [];
+  let open = null;
+  let edit = null;
+  for (const line of String(reply).split('\n')) {
+    const m = FENCE.exec(line);
+    if (open) {
+      if (m && m[1][0] === open.fence[0] && m[1].length >= open.fence.length && !m[2].trim()) {
+        const p = /(?:^|\s)path=("[^"]+"|'[^']+'|\S+)/.exec(open.info);
+        const target = p ? p[1].replace(/^["']|["']$/g, '') : '';
+        const body = open.body.join('\n');
+        if (target === '@terminal') {
+          const c = /(?:^|\s)cwd=("[^"]+"|'[^']+'|\S+)/.exec(open.info);
+          if (body.trim()) out.push({ kind: 'run', command: body.trim(), cwd: c ? c[1].replace(/^["']|["']$/g, '') : '.' });
+        } else if (target && !target.startsWith('@')) out.push({ kind: 'file', path: target, body });
+        open = null;
+      } else open.body.push(line);
+      continue;
+    }
+    if (m) { open = { fence: m[1], info: m[2], body: [] }; continue; }
+    // The app's edit form, written outside a fence: <<<<<<< SEARCH path=file / old lines / ======= / new lines / >>>>>>> REPLACE
+    const e = /^[ \t]*<{5,9}[ \t]*SEARCH\b[ \t]*(?:path=)?("[^"]+"|'[^']+'|\S+)?/.exec(line);
+    if (e && !edit) { edit = { path: (e[1] ?? '').replace(/^["']|["']$/g, ''), search: [], replace: [], half: 0 }; continue; }
+    if (edit) {
+      if (edit.half === 0 && /^[ \t]*={5,9}[ \t]*$/.test(line)) { edit.half = 1; continue; }
+      if (edit.half === 1 && /^[ \t]*>{5,9}[ \t]*REPLACE\b/.test(line)) {
+        if (edit.path) out.push({ kind: 'edit', path: edit.path, search: edit.search.join('\n'), replace: edit.replace.join('\n') });
+        edit = null;
+        continue;
+      }
+      (edit.half ? edit.replace : edit.search).push(line);
+    }
+  }
+  return out;
+}
+
+/** SEARCH/REPLACE hunks applied to text; each SEARCH must be found exactly once. Returns null when the body has no hunks. */
+export function applyEdits(text, body) {
+  const hunks = [...body.matchAll(/<{5,9}[ \t]*SEARCH[^\n]*\n([\s\S]*?)\n?={5,9}[ \t]*\n([\s\S]*?)\n?>{5,9}[ \t]*REPLACE/g)];
+  if (!hunks.length) return null;
+  let out = text;
+  for (const [i, h] of hunks.entries()) {
+    const n = h[1] ? out.split(h[1]).length - 1 : 0;
+    if (n !== 1) throw new Error(`edit ${i + 1}: the SEARCH text ${n ? `appears ${n} times` : 'was not found'}`);
+    out = out.replace(h[1], () => h[2]);
+  }
+  return out;
+}
+
+/** Commands an unattended run never executes, whatever the model says. */
+const NEVER = [
+  /\brm\s+(-[a-z]*\s+)*-[a-z]*[rf][a-z]*\s+(-[a-z]*\s+)*(\/|~|\$HOME|\/\*|~\/\*)(\s|$)/i,
+  /\bmkfs(\.\w+)?\b/i, /\bdd\b[^\n]*\bof=\/dev\//i, /:\(\)\s*\{\s*:\|:&\s*\}\s*;/, /\b(shutdown|reboot|halt|poweroff)\b/i, />\s*\/dev\/(sd[a-z]|nvme|mmcblk)/i,
+];
+export const neverRun = (cmd) => NEVER.some((r) => r.test(cmd));
+
+function inWorkspace(root, rel) {
+  const abs = path.resolve(root, String(rel || '.').replace(/^\/+/, ''));
+  const base = root.endsWith(path.sep) ? root : root + path.sep;
+  if (abs !== root && !abs.startsWith(base)) throw new Error(`"${rel}" is outside the workspace`);
+  return abs;
+}
+
+function shellOnce(cmd, { cwd, env, signal, timeoutMs }) {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const win = process.platform === 'win32';
+    const child = spawn(win ? process.env.COMSPEC ?? 'cmd.exe' : '/bin/bash', win ? ['/d', '/s', '/c', cmd] : ['-o', 'pipefail', '-lc', cmd], { cwd, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '', done = false;
+    const add = (d) => { out += d.toString('utf8'); if (out.length > 400_000) out = out.slice(-200_000); };
+    child.stdout.on('data', add); child.stderr.on('data', add);
+    const finish = (code, why) => { if (done) return; done = true; clearTimeout(timer); resolve({ code, output: out, why, ms: Date.now() - started }); };
+    const timer = setTimeout(() => { child.kill('SIGKILL'); finish(null, `stopped after ${Math.round(timeoutMs / 1000)} s`); }, timeoutMs);
+    signal?.addEventListener('abort', () => { child.kill('SIGKILL'); finish(null, 'cancelled'); }, { once: true });
+    child.on('error', (e) => finish(127, e.message));
+    child.on('close', (code) => finish(code));
+  });
+}
+const clipOut = (s) => (s.length <= MAX_OUTPUT ? s : `${s.slice(0, MAX_OUTPUT * 0.4)}\n… (${s.length - MAX_OUTPUT} characters cut) …\n${s.slice(-MAX_OUTPUT * 0.6)}`);
+
 export function piecesOf(payload) {
   const out = { text: '', reasoning: '', usage: null, finish: null };
   if (!payload || typeof payload !== 'object') return out;
@@ -87,7 +180,11 @@ function envelopeError(text) {
 
 // ── The runner ───────────────────────────────────────────────────────────────
 
-export function createJobs({ dir = jobsDir(), fetchImpl = fetch, now = () => Date.now(), notify = defaultNotify } = {}) {
+/**
+ * `workspace` is the folder agent jobs work in; without it a job is always one answer. `env()` gives the variables commands get,
+ * `allowed(cmd)` is the bridge's own command allow-list.
+ */
+export function createJobs({ dir = jobsDir(), fetchImpl = fetch, now = () => Date.now(), notify = defaultNotify, workspace = null, env = () => process.env, allowed = () => true, commandTimeoutMs = 15 * 60 * 1000 } = {}) {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const live = new Map(); // id -> { job, controller }
 
@@ -126,7 +223,7 @@ export function createJobs({ dir = jobsDir(), fetchImpl = fetch, now = () => Dat
   sweep();
 
   function summary(job) {
-    return { id: job.id, status: job.status, meta: job.meta, startedAt: job.startedAt, endedAt: job.endedAt ?? null, chars: job.content.length, label: job.label ?? null, error: job.error ?? null };
+    return { id: job.id, status: job.status, meta: job.meta, startedAt: job.startedAt, endedAt: job.endedAt ?? null, chars: job.content.length, label: job.label ?? null, error: job.error ?? null, steps: job.steps ?? 0, commands: job.runs?.length ?? 0, doing: job.doing ?? null };
   }
 
   function validate(spec) {
@@ -217,7 +314,82 @@ export function createJobs({ dir = jobsDir(), fetchImpl = fetch, now = () => Dat
     return { ok: true, finish: finish ?? 'stop' };
   }
 
-  async function run(job, recipes, controller) {
+  /** After the first answer of an agent job: do what it asks, hand the results back, ask again, until a reply runs nothing. */
+  async function carryOn(job, recipe, controller, opts) {
+    const maxSteps = Math.max(1, Math.min(MAX_STEPS, Number(opts?.maxSteps) || 12));
+    let messages = recipe.body.messages.slice();
+    let from = 0;
+    for (let step = 1; step <= maxSteps && !controller.signal.aborted; step++) {
+      job.steps = step;
+      const reply = job.content.slice(from);
+      const results = [];
+      let ran = 0;
+      for (const a of actionsOf(reply)) {
+        if (controller.signal.aborted) break;
+        if (a.kind === 'edit') {
+          try {
+            const file = inWorkspace(workspace, a.path);
+            const before = existsSync(file) ? readFileSync(file, 'utf8') : null;
+            let after;
+            if (!a.search.trim()) after = a.replace.endsWith('\n') ? a.replace : `${a.replace}\n`; // an empty SEARCH creates the file
+            else {
+              if (before === null) throw new Error('the file does not exist');
+              const count = before.split(a.search).length - 1;
+              if (count !== 1) throw new Error(count ? `the SEARCH text appears ${count} times` : 'the SEARCH text was not found');
+              after = before.replace(a.search, () => a.replace);
+            }
+            mkdirSync(path.dirname(file), { recursive: true });
+            writeFileSync(file, after);
+            (job.files ??= []).includes(a.path) || job.files.push(a.path);
+          } catch (err) {
+            results.push(`EDIT ${a.path}: NOT APPLIED (${err.message}). Read the file and copy the lines exactly.`);
+          }
+          continue;
+        }
+        if (a.kind === 'file') {
+          try {
+            const file = inWorkspace(workspace, a.path);
+            const edited = existsSync(file) ? applyEdits(readFileSync(file, 'utf8'), a.body) : null;
+            mkdirSync(path.dirname(file), { recursive: true });
+            writeFileSync(file, edited ?? (a.body.endsWith('\n') ? a.body : `${a.body}\n`));
+            (job.files ??= []).includes(a.path) || job.files.push(a.path);
+          } catch (err) {
+            results.push(`FILE ${a.path}: NOT WRITTEN (${err.message})`);
+          }
+          continue;
+        }
+        ran++;
+        const startedAt = now();
+        let r;
+        if (neverRun(a.command)) r = { code: null, output: 'REFUSED: this command can destroy the system, so the terminal never runs it unattended.', ms: 0 };
+        else if (!allowed(a.command)) r = { code: null, output: 'REFUSED: this terminal only runs the commands on its allow-list.', ms: 0 };
+        else {
+          let cwd;
+          try { cwd = inWorkspace(workspace, a.cwd); if (!existsSync(cwd)) mkdirSync(cwd, { recursive: true }); } catch (err) { cwd = null; r = { code: null, output: `NOT RUN: ${err.message}`, ms: 0 }; }
+          if (cwd) {
+            job.doing = a.command.split('\n')[0].slice(0, 120);
+            save(job);
+            r = await shellOnce(a.command, { cwd, env: { ...env(), CHOMUGIRI: '1', CI: '1', FORCE_COLOR: '0', TERM: 'dumb' }, signal: controller.signal, timeoutMs: commandTimeoutMs });
+            job.doing = null;
+          }
+        }
+        const verdict = r.why ? r.why : r.code === null ? 'not run' : `exit ${r.code}`;
+        (job.runs ??= []).push({ command: a.command, cwd: a.cwd, exitCode: r.code, output: clipOut(r.output.trimEnd()), startedAt, durationMs: r.ms });
+        results.push(`$ ${a.command}\n${clipOut(r.output.trimEnd()) || '(no output)'}\n[${verdict}]`);
+        save(job);
+      }
+      if ((!ran && !results.length) || controller.signal.aborted) return; // a reply that runs nothing (and failed at nothing) is the answer
+      if (step === maxSteps) { job.content += `\n\n(Stopped after ${maxSteps} rounds of commands. Say "continue" to go on.)`; return; }
+      messages = [...messages, { role: 'assistant', content: reply.trim() || '(commands only)' }, { role: 'user', content: `COMMAND RESULTS (run on the terminal just now)\n\n${results.join('\n\n')}\n\nContinue the task from these results. Do not repeat a command that already succeeded. When the task is finished, give the final answer with no terminal block.` }];
+      job.content += '\n\n';
+      from = job.content.length;
+      const r = await callOnce(job, { ...recipe, body: { ...recipe.body, messages } }, controller);
+      if (!r.ok) { job.content += `(The model stopped answering after the commands: ${r.error})`; return; }
+      job.finishReason = r.finish;
+    }
+  }
+
+  async function run(job, recipes, controller, agent) {
     let lastError = 'No model answered.';
     try {
       for (let i = 0; i < recipes.length; i++) {
@@ -228,9 +400,11 @@ export function createJobs({ dir = jobsDir(), fetchImpl = fetch, now = () => Dat
         save(job);
         const r = await callOnce(job, recipes[i], controller);
         if (r.ok && (job.content || job.reasoning)) {
-          job.status = 'done';
           job.finishReason = r.finish;
           job.error = null;
+          if (agent && workspace && Array.isArray(recipes[i].body.messages)) await carryOn(job, recipes[i], controller, agent);
+          if (controller.signal.aborted) throw Object.assign(new Error('Cancelled.'), { cancelled: true });
+          job.status = 'done';
           return;
         }
         lastError = r.ok ? 'The model returned an empty completion.' : r.error;
@@ -278,7 +452,7 @@ export function createJobs({ dir = jobsDir(), fetchImpl = fetch, now = () => Dat
       const controller = new AbortController();
       live.set(job.id, { job, controller });
       // The recipes (with their keys) stay in memory only.
-      void run(job, spec.recipes, controller);
+      void run(job, spec.recipes, controller, spec.agent && typeof spec.agent === 'object' ? spec.agent : null);
       return summary(job);
     },
     list() {
@@ -287,7 +461,7 @@ export function createJobs({ dir = jobsDir(), fetchImpl = fetch, now = () => Dat
     get(id) {
       const job = live.get(id)?.job ?? load(id);
       if (!job) throw fail('Unknown job.', 404);
-      return { ...summary(job), content: job.content, reasoning: job.reasoning, usage: job.usage, finishReason: job.finishReason ?? null };
+      return { ...summary(job), content: job.content, reasoning: job.reasoning, usage: job.usage, finishReason: job.finishReason ?? null, runs: job.runs ?? [], files: job.files ?? [] };
     },
     cancel(id) {
       const l = live.get(id);

@@ -19,5 +19,5 @@ test('plain talk and builds may go to the background (the terminal writes the fi
 });
 test('the background prompt no longer says the terminal is offline', () => {
   assert.ok(!/bridgeStatus: 'offline'/.test(src));
-  assert.ok(/bridgeStatus: 'background'/.test(src));
+  assert.ok(/bridgeStatus: 'agent'/.test(src), 'a background job is told it runs on the terminal');
 });

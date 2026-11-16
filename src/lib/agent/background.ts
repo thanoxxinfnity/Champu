@@ -18,7 +18,7 @@ import { buildUserContent, deliverSends } from '@/lib/agent/runtime';
 import { extractArtifacts, filesOf } from '@/lib/agent/artifacts';
 import { buildSystemPrompt } from '@/lib/agent/system-prompt';
 import { classifyLocal } from '@/lib/agent/router';
-import { hasJobs } from '@/lib/bridge/update';
+import { hasAgentJobs, hasJobs } from '@/lib/bridge/update';
 import type { JobDetail, JobSummary } from '@/lib/bridge/client';
 import { candidatesFor } from '@/lib/providers/chat-client';
 import { endpointConfigFor } from '@/lib/providers/endpoint-models';
@@ -57,6 +57,9 @@ export async function sendInBackground(opts: { input: string; attachments?: Chat
   const attachments = opts.attachments ?? [];
   if (!input && !attachments.length) return { ok: false, reason: 'Nothing to send.' };
   if (!bridgeTakesJobs()) return { ok: false, reason: 'The terminal is not connected, or it is too old for background work (it needs bridge 1.3.0).' };
+  // An older terminal can only write one answer and cannot run the commands in it, which left them "waiting" forever. Until it is
+  // updated the message is sent the usual way, where commands do run.
+  if (!hasAgentJobs(st.heartbeat.health)) return { ok: false, reason: 'Background needs terminal bridge 5.2 to run commands with the app closed. Update the bridge in Settings, Terminal.' };
 
   const selection = st.selection;
   const custom = endpointConfigFor(st.endpoints, selection);
@@ -72,7 +75,7 @@ export async function sendInBackground(opts: { input: string; attachments?: Chat
     lane,
     suite: opts.suite,
     // The terminal is up (it is the one writing this reply). Saying "offline" here made the model tell the user their terminal was down.
-    bridgeStatus: 'background',
+    bridgeStatus: 'agent',
     bridgeDetail: st.heartbeat.health ? `Host: ${st.heartbeat.health.platform}/${st.heartbeat.health.arch}, workspace root ${st.heartbeat.health.workspace}.` : undefined,
     attachments: attachments.map((a) => ({ name: a.name, kind: a.kind, bytes: a.bytes })),
   });
@@ -110,6 +113,7 @@ export async function sendInBackground(opts: { input: string; attachments?: Chat
       meta: { sessionId, assistantId, userId, suite: opts.suite, lane, title: session?.title ?? titleFromInput(input), model: selection.model, provider: selection.provider, startedAt: now },
       recipes,
       ntfy: topic || undefined,
+      agent: { maxSteps: 12 },
     });
   } catch (err) {
     const reason = (err as Error).message;
@@ -195,6 +199,26 @@ async function takeIn(job: JobDetail): Promise<boolean> {
   const ok = job.status === 'done';
   const error = ok ? undefined : job.status === 'cancelled' ? 'Cancelled.' : job.error || 'The terminal could not finish this.';
   const content = job.content || '';
+
+  // Commands the terminal ran for this job are recorded like commands run from the app, so each shows its result and output.
+  if (job.runs?.length) {
+    const { db } = await import('@/lib/db/schema');
+    const base = (meta.startedAt ?? job.startedAt) + 2;
+    await db().runs.bulkPut(job.runs.map((r, i) => ({
+      id: `${job.id}_r${i}`,
+      sessionId: meta.sessionId,
+      suite,
+      command: r.command,
+      cwd: r.cwd,
+      exitCode: r.exitCode ?? 1,
+      stdout: r.output,
+      stderr: '',
+      startedAt: Math.max(base + i, r.startedAt),
+      endedAt: Math.max(base + i, r.startedAt) + r.durationMs,
+      durationMs: r.durationMs,
+    }))).catch(() => undefined);
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('chomugiri:runs'));
+  }
 
   // Files the reply wrote are saved to the conversation, and shown at once when it is open.
   const files = filesOf(extractArtifacts(content)).filter((f) => f.complete);

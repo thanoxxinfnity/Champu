@@ -94,6 +94,9 @@ export interface JobDetail extends JobSummary {
   reasoning: string;
   usage: { promptTokens?: number; completionTokens?: number; totalTokens?: number } | null;
   finishReason: string | null;
+  /** Commands an agent job ran on the terminal, in order (bridge 5.2). */
+  runs?: Array<{ command: string; cwd?: string; exitCode: number | null; output: string; startedAt: number; durationMs: number }>;
+  files?: string[];
 }
 
 export interface JobSpec {
@@ -102,6 +105,8 @@ export interface JobSpec {
   recipes: Array<{ label: string; url: string; headers: Record<string, string>; body: Record<string, unknown>; stream: boolean; timeoutMs?: number }>;
   /** A ntfy.sh topic the bridge should ping when the job ends. */
   ntfy?: string;
+  /** Bridge 5.2: also run the reply's commands on the terminal and carry on until a reply runs nothing. */
+  agent?: { maxSteps?: number };
 }
 
 export class BridgeOfflineError extends Error {

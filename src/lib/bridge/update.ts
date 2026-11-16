@@ -61,6 +61,13 @@ export function lacksKeyStore(health: { version?: string; features?: string[] } 
 }
 
 /** True when the bridge can run background jobs. */
+/** Bridge 5.2: a background job runs the reply's commands on the terminal itself and carries on until the task is done. */
+export function hasAgentJobs(health: { version?: string; features?: string[] } | null | undefined): boolean {
+  if (!health) return false;
+  if (health.features?.includes('agent-jobs')) return true;
+  return !!health.version && compareVersions(health.version, '5.2.0') >= 0;
+}
+
 export function hasJobs(health: { version?: string; features?: string[] } | null | undefined): boolean {
   if (!health) return false;
   if (health.features?.includes('jobs')) return true;

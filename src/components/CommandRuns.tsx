@@ -246,13 +246,20 @@ export function CommandRuns({ commands, files = [], sessionId, since }: { comman
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [open, setOpen] = useState(false);
 
-  // Runs come from the saved history, so they are still here after a reload. Re-read when a command starts or ends.
+  // Runs come from the saved history, so they are still here after a reload. Re-read when a command starts or ends, and when
+  // the terminal hands over the commands it ran by itself for a background job.
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const on = () => setTick((n) => n + 1);
+    window.addEventListener('chomugiri:runs', on);
+    return () => window.removeEventListener('chomugiri:runs', on);
+  }, []);
   useEffect(() => {
     if (!sessionId || !isBrowser()) return;
     let alive = true;
     void db().runs.where('sessionId').equals(sessionId).toArray().then((rows) => alive && setRuns(rows)).catch(() => undefined);
     return () => { alive = false; };
-  }, [sessionId, runningCommand, commands.length]);
+  }, [sessionId, runningCommand, commands.length, tick]);
 
   const items = useMemo<Item[]>(() => {
     const matched = matchRuns(commands, runs, since);

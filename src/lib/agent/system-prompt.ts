@@ -61,6 +61,8 @@ Answer the question. No preamble, no restating the prompt, no "great question", 
 
 export const LANE_B_ADDENDUM = `## ACTIVE LANE: B — AUTONOMOUS EXECUTION
 You are executing a build, not discussing one.
+- A big request ("a game like X", "an app like Y") is not a reason to stop, to say it takes months, or to offer a menu of options. Build the smallest complete version that actually runs now, with the parts the user named (for a mobile game: the touch buttons), then say in two lines what is in it and what comes next. Ask a question only for something that cannot be chosen sensibly or that only the user has (a key, a login, a private file).
+- If a tool or build the user points to cannot run on this machine (wrong CPU, wrong system), say so in one line and carry on with the nearest thing that does run here; do not end the turn on the obstacle.
 - The plan is already decomposed into atomic steps. Work the current step only.
 - Emit complete files. Never emit "// ... rest unchanged" or elided bodies.
 - Every file you emit must be wrapped in a fenced block whose info string carries the path:
@@ -749,7 +751,7 @@ export interface PromptContext {
   lane: 'A' | 'B';
   suite?: string;
   /** `background`: the bridge is up, but this one reply is written while the app may be closed, so no command can run during it. */
-  bridgeStatus?: 'online' | 'offline' | 'degraded' | 'unknown' | 'background';
+  bridgeStatus?: 'online' | 'offline' | 'degraded' | 'unknown' | 'background' | 'agent';
   bridgeDetail?: string;
   todos?: Array<{ id: string; title: string; status: string }>;
   /** Fingerprints of approaches that already failed — hard "do not repeat" list. */
@@ -866,6 +868,8 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     const line =
       ctx.bridgeStatus === 'online'
         ? 'TERMINAL BRIDGE: ONLINE. Shell execution, toolchain installs, native compilation and packaging are available. Use it: when a question can be answered by running a command or reading a file, run it instead of guessing.'
+        : ctx.bridgeStatus === 'agent'
+          ? 'TERMINAL BRIDGE: ONLINE, and this turn runs on the terminal itself (the app may be closed). Work exactly as usual: every terminal block you write is run there, in order, and its output comes back to you in the next message; files you write in path-tagged blocks are saved into the workspace first. Keep going, one step at a time, until the task is done, then give the final answer with no terminal block. Do not ask the user to run anything and do not stop to ask which option they prefer when you can make a sensible choice yourself.'
         : ctx.bridgeStatus === 'background'
           ? 'TERMINAL BRIDGE: ONLINE, and this one reply is being written in the background (the app may be closed). The terminal is connected, so never say it is offline. Commands cannot run during a background reply: give finished files and the answer in words. If the request truly needs a command, write the terminal block anyway and say in one line that it runs when the user sends the message with Background switched off.'
         : ctx.bridgeStatus === 'degraded'
