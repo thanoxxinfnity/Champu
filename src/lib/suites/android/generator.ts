@@ -320,6 +320,9 @@ zipStorePath=wrapper/dists
     alias(libs.plugins.kotlin.compose)
 }
 
+// From -PBACKEND_URL=... or gradle.properties; empty when not given (the app then says so at start-up).
+val backendUrl: String = (project.findProperty("BACKEND_URL") as String?) ?: ""
+
 android {
     namespace = "${pkg}"
     compileSdk = ${targetSdk}
@@ -332,7 +335,8 @@ android {
         applicationId = "${pkg}"
         minSdk = ${minSdk}
         targetSdk = ${targetSdk}
-        versionCode = 1
+        // CI passes the run number, so every build installs over the one before it; 1 for a local build.
+        versionCode = (project.findProperty("versionCodeOverride") as String?)?.toIntOrNull() ?: 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -342,7 +346,7 @@ android {
         // apktool read every constant in it, so a key compiled into BuildConfig
         // is a published key. Secrets live behind this URL on a server you
         // control, and the app authenticates to that instead.
-        buildConfigField("String", "BACKEND_URL", "\"\${BACKEND_URL}\"")
+        buildConfigField("String", "BACKEND_URL", "\\\"\$backendUrl\\\"")
     }
 
     buildTypes {
