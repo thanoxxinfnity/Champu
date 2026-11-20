@@ -246,7 +246,10 @@ ${SIGN_STEP('      ')}
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '${opts.gradleVersion ?? '8.11.1'}'
-      - run: gradle assembleDebug --no-daemon -PversionCodeOverride=\${{ github.run_number }}
+      - name: Build the debug APK (signed with the fixed key)
+        run: |
+          export SIDELOAD_KEYSTORE="$HOME/.android/debug.keystore"
+          gradle assembleDebug --no-daemon -PversionCodeOverride=\${{ github.run_number }}
       - uses: actions/upload-artifact@v4
         with:
           name: apk

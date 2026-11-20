@@ -62,6 +62,9 @@ test('the fixed signing key is a real Java keystore, and both workflows install 
   const gradle = gradleWorkflow({ label: 'Todo', apkName: 'todo' });
   assert.ok(gradle.indexOf('debug.keystore') < gradle.indexOf('gradle assembleDebug'), 'key before the build');
   assert.ok(gradle.includes('platforms;android-35') && gradle.includes('-PversionCodeOverride='));
+  // the generated project is pointed at the key explicitly, not left to whatever Gradle finds under ~/.android
+  assert.ok(gradle.includes('export SIDELOAD_KEYSTORE="$HOME/.android/debug.keystore"'));
+  assert.ok(gradle.indexOf('SIDELOAD_KEYSTORE') > gradle.indexOf('debug.keystore'));
 });
 
 // ── a fake GitHub ───────────────────────────────────────────────────────────

@@ -21,6 +21,14 @@ test('every build can be installed over the last: the version code follows the r
   assert.ok(file('app/build.gradle.kts').includes('findProperty("versionCodeOverride")'));
 });
 
+test('the debug build is signed with the key the workflow points at (SIDELOAD_KEYSTORE), so every build is signed alike', () => {
+  const gradle = file('app/build.gradle.kts');
+  const block = gradle.slice(gradle.indexOf('signingConfigs {'), gradle.indexOf('buildTypes {'));
+  assert.ok(block.includes('System.getenv("SIDELOAD_KEYSTORE")'));
+  assert.ok(block.includes('getByName("debug")') && block.includes('keyAlias = "androiddebugkey"') && block.includes('storePassword = "android"'));
+  assert.ok(gradle.indexOf('signingConfigs {') < gradle.indexOf('buildTypes {'));
+});
+
 test('no template placeholder is left in any generated file', () => {
   for (const f of project().files) assert.ok(!/\$\{(pkg|targetSdk|minSdk|backendUrl)\}/.test(f.content), `${f.path} still has a placeholder`);
 });

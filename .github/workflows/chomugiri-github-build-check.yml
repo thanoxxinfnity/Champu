@@ -74,5 +74,11 @@ jobs:
         run: node --experimental-strip-types scripts/emit-build-sample.mjs gradle /tmp/sample
       - name: Run the generated workflow's steps
         run: python3 scripts/run-generated-workflow.py /tmp/sample/.github/workflows/chomugiri-apk.yml /tmp/sample
+      - name: Where the signing key is, if the check below fails
+        if: failure()
+        run: |
+          env | grep -iE 'android|^home=|gradle_user' || true
+          ls -la ~/.android 2>&1 || true
+          keytool -list -keystore ~/.android/debug.keystore -storepass android 2>&1 | head -5 || true
       - name: The APK has the fixed sideload key and the run-number version
         run: bash scripts/check-sideload-apk.sh /tmp/sample/app/build/outputs/apk/debug/app-debug.apk 7

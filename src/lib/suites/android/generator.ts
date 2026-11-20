@@ -349,6 +349,19 @@ android {
         buildConfigField("String", "BACKEND_URL", "\\\"\$backendUrl\\\"")
     }
 
+    // The workflow Chomugiri writes sets SIDELOAD_KEYSTORE to one fixed key, so every build of the app is signed
+    // alike and a new build installs over the last. Without it Gradle uses its own throwaway debug key.
+    signingConfigs {
+        System.getenv("SIDELOAD_KEYSTORE")?.takeIf { it.isNotBlank() }?.let { keystore ->
+            getByName("debug") {
+                storeFile = file(keystore)
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
