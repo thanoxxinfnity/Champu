@@ -75,9 +75,18 @@ export interface ApiKeys {
    * Their account, their quota — same shape as the Kaggle token.
    */
   huggingface: string;
+  /**
+   * A GitHub personal access token, from github.com/settings/tokens.
+   *
+   * Lets Chomugiri build an APK without a computer: the generated project is pushed to a repository of the
+   * user's own, GitHub Actions builds it, and the download link comes back. Called straight from the page —
+   * api.github.com allows browser requests — so the token only ever goes to GitHub. Classic tokens need the
+   * `repo` and `workflow` scopes; a fine-grained token needs Contents, Workflows and Actions on the repository.
+   */
+  github: string;
 }
 
-const EMPTY: ApiKeys = { nim: '', pollinations: '', tripo: '', meshy: '', sketchfab: '', trellisUrl: '', kaggle: '', huggingface: '' };
+const EMPTY: ApiKeys = { nim: '', pollinations: '', tripo: '', meshy: '', sketchfab: '', trellisUrl: '', kaggle: '', huggingface: '', github: '' };
 
 export const NIM_KEY_HEADER = 'x-chomugiri-nim-key';
 export const POLLINATIONS_KEY_HEADER = 'x-chomugiri-pollinations-token';
@@ -114,6 +123,7 @@ export async function loadKeys(): Promise<ApiKeys> {
           trellisUrl?: string;
           kaggleToken?: string;
           huggingfaceToken?: string;
+          githubToken?: string;
         };
         cache = {
           ...EMPTY,
@@ -123,6 +133,7 @@ export async function loadKeys(): Promise<ApiKeys> {
           trellisUrl: json.trellisUrl ?? '',
           kaggle: json.kaggleToken ?? '',
           huggingface: json.huggingfaceToken ?? '',
+          github: json.githubToken ?? '',
         };
         return cache;
       }
@@ -166,6 +177,7 @@ export async function saveKeys(next: Partial<ApiKeys>): Promise<ApiKeys> {
       trellisUrl: cache.trellisUrl,
       kaggleToken: cache.kaggle,
       huggingfaceToken: cache.huggingface,
+      githubToken: cache.github,
     });
     return cache;
   }

@@ -44,6 +44,14 @@ class ApiRouter(private val secrets: SecretStore) {
         set(value) { secrets.put("vercel_team_id", value) }
 
     /**
+     * A GitHub personal access token, used by the page to build an APK on GitHub Actions. Kept natively like
+     * every other credential so it does not depend on browser storage outliving the app.
+     */
+    var githubToken: String
+        get() = secrets.get("github_token")
+        set(value) { secrets.put("github_token", value) }
+
+    /**
      * 3D model generators, stored for the same reason as the rest.
      *
      * These were kept only in the web layer's in-memory cache once the shell
@@ -210,6 +218,7 @@ class ApiRouter(private val secrets: SecretStore) {
             if (body.has("trellisUrl")) trellisUrl = body.optString("trellisUrl")
             if (body.has("kaggleToken")) kaggleToken = body.optString("kaggleToken")
             if (body.has("huggingfaceToken")) huggingfaceToken = body.optString("huggingfaceToken")
+            if (body.has("githubToken")) githubToken = body.optString("githubToken")
             response.json(200, state().put("ok", true).toString())
         } else {
             response.json(200, state().toString())
@@ -237,6 +246,7 @@ class ApiRouter(private val secrets: SecretStore) {
         .put("trellisUrl", trellisUrl)
         .put("kaggleToken", kaggleToken)
         .put("huggingfaceToken", huggingfaceToken)
+        .put("githubToken", githubToken)
 
     // ── /api/models ─────────────────────────────────────────────────────────
 

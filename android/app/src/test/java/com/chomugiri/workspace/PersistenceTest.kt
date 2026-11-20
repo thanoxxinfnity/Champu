@@ -54,6 +54,7 @@ class PersistenceTest {
             pollinationsToken = "poll-xyz"
             vercelToken = "vercel-123"
             vercelTeamId = "team_9"
+            githubToken = "ghp_abc"
         }
 
         val afterRestart = ApiRouter(store)
@@ -61,6 +62,7 @@ class PersistenceTest {
         assertEquals("poll-xyz", afterRestart.pollinationsToken)
         assertEquals("vercel-123", afterRestart.vercelToken)
         assertEquals("team_9", afterRestart.vercelTeamId)
+        assertEquals("ghp_abc", afterRestart.githubToken)
     }
 
     @Test

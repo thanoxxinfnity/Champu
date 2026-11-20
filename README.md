@@ -24,7 +24,8 @@ endpoint you point it at.
 | **Library** | Everything generated (images, video, audio, 3D) in one place; open an image or video and zoom up to 50× |
 | **Video · Audio · 3D** | Each its own screen — a scene timeline with a monitor, a waveform player, a turntable viewer. They appear only once a provider is added (Settings → Custom Endpoints) and can be hidden under Settings → Media |
 | **Skills** | `/` command palette, custom skills, AI-authored skills, multimodal attachments |
-| **Deploy** | One-click Vercel deployment with preflight validation |
+| **Deploy** | One-click Vercel deployment with preflight validation (websites: needs the Vercel token) |
+| **Build APK on GitHub** | An app (Flutter, or the Android suite's Gradle project) is pushed to a repository of yours and built by GitHub Actions: no computer, no toolchain. Needs the GitHub token |
 | **Storage** | Per-suite IndexedDB history — independent, searchable, exportable |
 
 ---
@@ -198,6 +199,32 @@ verification against a real NVIDIA NIM key:
 
 All keys are server-side except the bridge URL/token, which live in the browser's
 IndexedDB because the browser is what talks to your tunnel. See `.env.example`.
+
+---
+
+## Two tokens, two ways to ship
+
+Settings → API Keys holds both, on the device (the native store in the Android app):
+
+| What you made | How it ships | Token | What you get |
+|---|---|---|---|
+| An **app** (a Flutter project, or the Android suite's Gradle project) | **build APK on GitHub** (the `apk` button in the header, and a card in the Android suite) | **GitHub token**: classic with `repo` and `workflow`, or fine-grained with Contents, Workflows and Actions (read and write) | a download link for the APK |
+| A **website** (`index.html`, `package.json`) | **Deploy** | **Vercel token** (and a team id, optionally) | the live URL |
+
+*Check token* next to the GitHub field tells you who the token belongs to and whether the scopes are enough. The page talks to
+`api.github.com` directly (GitHub allows browser requests), so the token only ever goes to GitHub.
+
+How the APK build works: the project is pushed as one commit to `<you>/<app-name>` (created if missing; public by default so the
+download link opens without signing in, private if you tick the box), together with a workflow Chomugiri writes. Files a model wrote
+under `.github/` (and a Flutter project's `android/`, which is generated) are never pushed. The Actions run is followed to the end;
+on success the APK link comes back, on failure the end of the log does.
+
+Every app built this way is signed with **one fixed, public sideload key** and gets the run number as its version code, so a new
+build installs over the previous one instead of failing with "package invalid". The key is public on purpose (it is in
+`src/lib/deploy/github.ts`): it makes sideloaded updates work, it is not a secret, and it is not for the Play Store.
+
+CI proves it: `.github/workflows/chomugiri-github-build-check.yml` writes exactly what would be pushed for a Flutter sample and for
+the Android suite's generated project, runs every step of the generated workflow, and checks the APK's certificate and version code.
 
 ---
 

@@ -8,6 +8,7 @@ import { executeCommand } from '@/lib/agent/runtime';
 import { downloadZip, formatBytes } from '@/lib/zip';
 import { unzipSync, strFromU8 } from 'fflate';
 import { Icon } from '@/components/Icon';
+import { GithubBuildCard } from '@/components/GithubBuild';
 
 const TEXT_EXT = /\.(js|jsx|ts|tsx|py|cs|java|kt|cpp|c|h|hpp|html|css|xaml|json|xml|txt|md|toml|yml|yaml|ui|qml|pro|gradle)$/i;
 
@@ -281,6 +282,15 @@ export function AndroidStudio() {
                 >
                   {busy === 'building' ? 'building…' : 'build APK'}
                 </button>
+              </div>
+
+              {/* No computer needed: the project is built on GitHub with the user's own token. */}
+              <div className="mt-3 rounded-lg border p-2.5" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
+                <GithubBuildCard
+                  files={generateAndroidProject({ analysis: { ...analysis, appName: appName || analysis.appName } }).files.map((f) => ({ path: f.path, content: f.content }))}
+                  title={appName || analysis.appName}
+                  onOpenSettings={() => window.dispatchEvent(new CustomEvent('chomugiri:open-settings'))}
+                />
               </div>
 
               {generatedCount > 0 && (

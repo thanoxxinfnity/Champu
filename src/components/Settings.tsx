@@ -19,6 +19,7 @@ import { isShellHosted, loadKeys, maskKey, nimConfigured, saveKeys, validateNimK
 import { normalizeBase } from '@/lib/providers/model-list';
 import { parseBridgeInput } from '@/lib/bridge/parse';
 import { Icon } from '@/components/Icon';
+import { checkGitHubToken } from '@/lib/deploy/github';
 
 type Tab = 'guide' | 'keys' | 'free' | 'tools' | 'bridge' | 'secrets' | 'endpoints' | 'media' | 'deploy' | 'drive' | 'voice' | 'guard';
 
@@ -1489,6 +1490,9 @@ function KeysTab() {
   const [sketchfab, setSketchfab] = useState('');
   const [kaggle, setKaggle] = useState('');
   const [huggingface, setHuggingface] = useState('');
+  const [github, setGithub] = useState('');
+  const [githubCheck, setGithubCheck] = useState<{ ok: boolean; message: string } | null>(null);
+  const [githubChecking, setGithubChecking] = useState(false);
   const [trellisUrl, setTrellisUrl] = useState('');
   const [reveal, setReveal] = useState(false);
   const [shell, setShell] = useState(false);
@@ -1517,6 +1521,7 @@ function KeysTab() {
       setSketchfab(keys.sketchfab);
       setKaggle(keys.kaggle);
       setHuggingface(keys.huggingface);
+      setGithub(keys.github);
       setTrellisUrl(keys.trellisUrl);
       setNimSaved(configured);
     })();
@@ -1539,7 +1544,7 @@ function KeysTab() {
     setSaving(true);
     setStatus({ kind: 'info', text: 'Saving, then checking the key against NVIDIA…' });
     try {
-      const modelKeys = { pollinations, tripo, meshy, sketchfab, trellisUrl, kaggle, huggingface };
+      const modelKeys = { pollinations, tripo, meshy, sketchfab, trellisUrl, kaggle, huggingface, github };
       await saveKeys(sendNim ? { nim, ...modelKeys } : modelKeys);
       setVercelCredentials(vercel.trim(), team.trim());
       // The catalogue is the real test: it only returns NIM models if the key
@@ -1561,7 +1566,7 @@ function KeysTab() {
     } finally {
       setSaving(false);
     }
-  }, [nim, pollinations, tripo, meshy, sketchfab, trellisUrl, kaggle, huggingface, vercel, team, nimTouched, nimSaved, loadModels, setVercelCredentials]);
+  }, [nim, pollinations, tripo, meshy, sketchfab, trellisUrl, kaggle, huggingface, github, vercel, team, nimTouched, nimSaved, loadModels, setVercelCredentials]);
 
   const clear = useCallback(async () => {
     setNimTouched(false);
@@ -1573,10 +1578,12 @@ function KeysTab() {
     setSketchfab('');
     setKaggle('');
     setHuggingface('');
+    setGithub('');
+    setGithubCheck(null);
     setTrellisUrl('');
     setVercel('');
     setTeam('');
-    await saveKeys({ nim: '', pollinations: '', tripo: '', meshy: '', sketchfab: '', trellisUrl: '', kaggle: '', huggingface: '' });
+    await saveKeys({ nim: '', pollinations: '', tripo: '', meshy: '', sketchfab: '', trellisUrl: '', kaggle: '', huggingface: '', github: '' });
     setVercelCredentials('', '');
     await loadModels(true);
     setStatus({ kind: 'info', text: 'Keys cleared from this device.' });
@@ -1706,6 +1713,46 @@ function KeysTab() {
           placeholder="hf_…"
           onChange={(e) => setHuggingface(e.target.value)}
         />
+      </Field>
+
+      <Field
+        label="GitHub token (optional) — build an APK on GitHub, no computer needed"
+        hint="Lets Chomugiri build the APK of an app it made: the project is pushed to a repository of yours, GitHub Actions builds it, and the download link comes back here. Create a classic token at github.com/settings/tokens with the repo and workflow scopes (a fine-grained token needs Contents, Workflows and Actions, read and write). It goes only to GitHub, from this device. Websites do not need it: they use the Vercel token above."
+      >
+        <input
+          className={inputClass}
+          style={inputStyle}
+          type={reveal ? 'text' : 'password'}
+          value={github}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder="ghp_… or github_pat_…"
+          onChange={(e) => {
+            setGithub(e.target.value);
+            setGithubCheck(null);
+          }}
+          data-testid="github-token-input"
+        />
+        <div className="mt-1.5 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={githubChecking || !github.trim()}
+            className="press mono rounded border px-2 py-1 text-[10.5px] disabled:opacity-40"
+            style={{ borderColor: 'var(--line)', color: 'var(--ink-dim)' }}
+            onClick={async () => {
+              setGithubChecking(true);
+              setGithubCheck(await checkGitHubToken(github));
+              setGithubChecking(false);
+            }}
+          >
+            {githubChecking ? 'checking…' : 'check token'}
+          </button>
+          {githubCheck && (
+            <span className="text-[10.5px] leading-[1.4]" style={{ color: githubCheck.ok ? 'var(--color-success)' : 'var(--color-danger)' }} role="status">
+              {githubCheck.message}
+            </span>
+          )}
+        </div>
       </Field>
 
       <Field

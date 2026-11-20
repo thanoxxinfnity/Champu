@@ -13,6 +13,8 @@ import { FileManager } from './FileManager';
 import { CommandDock } from './CommandDock';
 import { Settings } from './Settings';
 import { DeployButton } from './DeployButton';
+import { GithubBuildButton } from './GithubBuild';
+import { canBuildApk, detectProject } from '@/lib/deploy/github';
 import { hasEntryPoint } from '@/lib/deploy/state';
 import { DraftPicker } from './DraftPicker';
 import { AssetStudio } from './suites/AssetStudio';
@@ -211,8 +213,14 @@ export function Workspace() {
         toggleSidebar();
       }
     };
+    // Panels deep in a suite (the GitHub build card) cannot reach this state, so they ask by event.
+    const openSettings = () => setSettingsOpen(true);
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    window.addEventListener('chomugiri:open-settings', openSettings);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('chomugiri:open-settings', openSettings);
+    };
   }, [toggleSidebar]);
 
   const suiteHasTool = HAS_TOOL.has(activeSuite);
@@ -319,6 +327,7 @@ export function Workspace() {
             <LookToggle />
             <ThemeToggle />
             {/* Only while there is something to ship: a button that is always there, with nothing behind it, is just noise. */}
+            {canBuildApk(detectProject(Array.from(files.keys()))) && <GithubBuildButton onOpenSettings={() => setSettingsOpen(true)} />}
             {canDeploy && <DeployButton onOpenSettings={() => setSettingsOpen(true)} />}
             <button
               type="button"

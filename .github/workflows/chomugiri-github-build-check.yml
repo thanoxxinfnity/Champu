@@ -1,0 +1,78 @@
+name: GitHub build check (the workflows Chomugiri pushes)
+
+# "Build APK on GitHub" pushes a project and a workflow to the user's own repository. That workflow runs on someone
+# else's repository, so it cannot be tried by pushing it here. Instead this writes exactly what would be pushed
+# (scripts/emit-build-sample.mjs), runs every shell step of the generated workflow as written
+# (scripts/run-generated-workflow.py), and checks the APK: built, versionCode from the run number, and signed with the
+# fixed sideload key, so a new build installs over the last one.
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - claude/chomugiri-workspace-design-09sxwa
+    paths:
+      - "src/lib/deploy/github.ts"
+      - "src/lib/suites/android/generator.ts"
+      - "scripts/emit-build-sample.mjs"
+      - "scripts/run-generated-workflow.py"
+      - ".github/workflows/chomugiri-github-build-check.yml"
+
+concurrency:
+  group: chomugiri-github-build-check
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  flutter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: pip install pyyaml
+      - name: Write what would be pushed
+        run: node --experimental-strip-types scripts/emit-build-sample.mjs flutter /tmp/sample
+      - name: The model-written workflow and android/ files were left out
+        run: |
+          test ! -e /tmp/sample/.github/workflows/evil.yml
+          test ! -e /tmp/sample/android
+          test -f /tmp/sample/.github/workflows/chomugiri-apk.yml
+      - name: Run the generated workflow's steps
+        run: python3 scripts/run-generated-workflow.py /tmp/sample/.github/workflows/chomugiri-apk.yml /tmp/sample
+      - name: The APK has the fixed sideload key and the run-number version
+        run: bash scripts/check-sideload-apk.sh /tmp/sample/build/app/outputs/flutter-apk/app-release.apk 7
+
+  gradle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - run: pip install pyyaml
+      - name: Write what would be pushed (the Android suite's generated project)
+        run: node --experimental-strip-types scripts/emit-build-sample.mjs gradle /tmp/sample
+      - name: Run the generated workflow's steps
+        run: python3 scripts/run-generated-workflow.py /tmp/sample/.github/workflows/chomugiri-apk.yml /tmp/sample
+      - name: The APK has the fixed sideload key and the run-number version
+        run: bash scripts/check-sideload-apk.sh /tmp/sample/app/build/outputs/apk/debug/app-debug.apk 7
